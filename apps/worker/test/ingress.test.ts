@@ -179,4 +179,27 @@ describe("Ingress Router", () => {
 
     ws.close();
   });
+
+  it("accepts auth via ?token= query param (WebSocket client compat)", async () => {
+    const claim: AssignmentClaim = {
+      v: 1,
+      tenant_id: "qp-tenant",
+      config_id: "qp-config",
+      instance_uid: "qpuid123456789ab",
+      generation: 1,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 3600,
+    };
+    const signed = await signClaim(claim, CLAIM_SECRET);
+
+    // Use query param instead of Authorization header
+    const response = await exports.default.fetch(
+      `http://localhost/v1/opamp?token=${encodeURIComponent(signed)}`,
+      { headers: { "Upgrade": "websocket" } },
+    );
+    expect(response.status).toBe(101);
+    expect(response.webSocket).toBeDefined();
+    response.webSocket!.accept();
+    response.webSocket!.close();
+  });
 });

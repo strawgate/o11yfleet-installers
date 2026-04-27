@@ -63,11 +63,21 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     return new Response("WebSocket upgrade required", { status: 426 });
   }
 
+  // Auth: prefer Authorization header, fall back to ?token= query param
+  // Query param is needed because browser/Node.js WebSocket API cannot set custom headers
+  const url = new URL(request.url);
   const auth = request.headers.get("Authorization");
-  if (!auth || !auth.startsWith("Bearer ")) {
+  let token: string | null = null;
+
+  if (auth?.startsWith("Bearer ")) {
+    token = auth.slice(7);
+  } else if (url.searchParams.has("token")) {
+    token = url.searchParams.get("token");
+  }
+
+  if (!token) {
     return Response.json({ error: "Authorization required" }, { status: 401 });
   }
-  const token = auth.slice(7);
 
   // Build clean headers — strip ALL external x-fp-* headers (security: header spoofing prevention)
   const cleanHeaders = new Headers(request.headers);

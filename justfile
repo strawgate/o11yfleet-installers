@@ -43,9 +43,41 @@ proto-gen:
 db-migrate:
     cd apps/worker && pnpm wrangler d1 migrations apply fp-db --local
 
-# Database seed (local)
-db-seed:
-    cd packages/db && pnpm tsx src/seed.ts
+# Seed local dev environment (creates tenant, config, enrollment token)
+seed:
+    npx tsx scripts/seed-local.ts
+
+# Re-seed (destroys and recreates local dev state)
+seed-reset:
+    npx tsx scripts/seed-local.ts --reset
+
+# Start a fake OTel Collector (connects to local worker via OpAMP)
+collector name="fake-collector":
+    npx tsx scripts/fake-collector.ts --name {{name}}
+
+# Start multiple fake collectors
+collectors count="3":
+    #!/usr/bin/env bash
+    for i in $(seq 1 {{count}}); do
+        npx tsx scripts/fake-collector.ts --name "collector-$i" &
+    done
+    echo "Started {{count}} collectors. Press Ctrl+C to stop all."
+    wait
+
+# Upload a YAML config and roll it out to connected agents
+push-config file="configs/basic-otlp.yaml":
+    npx tsx scripts/push-config.ts {{file}}
+
+# Show fleet status (agents, configs, stats)
+fleet:
+    npx tsx scripts/show-fleet.ts
+
+# Health check
+healthz:
+    curl -s http://localhost:8787/healthz | jq .
+
+# Full local dev setup: migrate, seed, show status
+setup: db-migrate seed fleet
 
 # Terraform validate
 tf-validate:
@@ -55,6 +87,6 @@ tf-validate:
 deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
 
-# Health check
-healthz:
-    curl -s http://localhost:8787/healthz | jq .
+# Run benchmarks
+bench:
+    pnpm --filter @o11yfleet/experiments bench

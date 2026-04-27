@@ -10,10 +10,11 @@
     "fmt:check": "prettier --check ."
   },
   "devDependencies": {
+    "eslint": "^9.20.0",
+    "prettier": "^3.5.0",
+    "tsx": "^4.19.0",
     "turbo": "^2.5.0",
     "typescript": "^5.8.0",
-    "prettier": "^3.5.0",
-    "eslint": "^9.20.0",
     "typescript-eslint": "^8.25.0"
   }
 }

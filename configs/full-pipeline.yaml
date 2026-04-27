@@ -1,0 +1,85 @@
+# Sample OTel Collector Config: Full Pipeline
+# Multi-source ingestion with filtering, sampling, and multi-destination export
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "node-exporter"
+          scrape_interval: 15s
+          static_configs:
+            - targets: ["localhost:9100"]
+  hostmetrics:
+    collection_interval: 30s
+    scrapers:
+      cpu: {}
+      memory: {}
+      disk: {}
+      network: {}
+
+processors:
+  batch:
+    timeout: 10s
+    send_batch_size: 2048
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  filter:
+    error_mode: ignore
+    traces:
+      span:
+        - 'attributes["http.target"] == "/healthz"'
+  tail_sampling:
+    decision_wait: 10s
+    policies:
+      - name: errors-always
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow-traces
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: probabilistic
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
+
+exporters:
+  otlp:
+    endpoint: "tempo.monitoring.svc:4317"
+    tls:
+      insecure: true
+  otlphttp:
+    endpoint: "https://api.honeycomb.io"
+    headers:
+      x-honeycomb-team: "${HONEYCOMB_API_KEY}"
+  prometheus:
+    endpoint: "0.0.0.0:8889"
+
+service:
+  telemetry:
+    logs:
+      level: info
+    metrics:
+      address: "0.0.0.0:8888"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, filter, tail_sampling, batch]
+      exporters: [otlp, otlphttp]
+    metrics:
+      receivers: [otlp, prometheus, hostmetrics]
+      processors: [memory_limiter, batch]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlphttp]

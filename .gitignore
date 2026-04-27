@@ -13,3 +13,4 @@ coverage/
 *.tfstate.backup
 .terraform.lock.hcl
 terraform.tfvars
+.local-state.json
