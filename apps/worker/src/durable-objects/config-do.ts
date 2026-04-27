@@ -47,7 +47,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private desiredConfigHash: string | null = null;
   private desiredConfigContent: string | null = null; // C4: cached YAML body for delivery
   private initialized = false;
-  private rateLimitWindows = new Map<string, number[]>();
+  // Compact rate limiter: [windowStart, count] per UID — 2 numbers vs 60 timestamps
+  private rateLimits = new Map<string, { windowStart: number; count: number }>();
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
@@ -240,7 +241,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         timestamp: Date.now(),
         reason: "websocket_close",
       }]);
-      this.rateLimitWindows.delete(attachment.instance_uid);
+      this.rateLimits.delete(attachment.instance_uid);
     } finally {
       span.end();
     }
@@ -263,7 +264,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           timestamp: Date.now(),
           reason: "websocket_error",
         }]);
-        this.rateLimitWindows.delete(attachment.instance_uid);
+        this.rateLimits.delete(attachment.instance_uid);
       }
       ws.close(1011, "Internal error");
     } finally {
@@ -346,20 +347,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   private isRateLimited(uid: string): boolean {
     const now = Date.now();
-    let timestamps = this.rateLimitWindows.get(uid);
-    if (!timestamps) {
-      timestamps = [];
-      this.rateLimitWindows.set(uid, timestamps);
-    }
     const windowStart = now - 60_000;
-    let writeIdx = 0;
-    for (let i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] > windowStart) timestamps[writeIdx++] = timestamps[i];
+    let entry = this.rateLimits.get(uid);
+    if (!entry || entry.windowStart < windowStart) {
+      // Start new window
+      entry = { windowStart: now, count: 1 };
+      this.rateLimits.set(uid, entry);
+      return false;
     }
-    timestamps.length = writeIdx;
-    if (timestamps.length >= MAX_MESSAGES_PER_MINUTE) return true;
-    timestamps.push(now);
-    return false;
+    entry.count++;
+    return entry.count > MAX_MESSAGES_PER_MINUTE;
   }
 
   // ─── Event Emission ───────────────────────────────────────────────

@@ -68,6 +68,44 @@ function parseArgs(): LoadTestOpts {
 }
 
 // ──────────────────────────────────────────────
+// Streaming Statistics (fixed memory)
+// ──────────────────────────────────────────────
+// Uses a reservoir sample (max 1000 entries) for percentile estimation.
+// This bounds memory regardless of agent count or duration.
+
+class StreamingStats {
+  count = 0;
+  sum = 0;
+  private reservoir: number[] = [];
+  private static readonly MAX_RESERVOIR = 1000;
+
+  record(value: number): void {
+    this.count++;
+    this.sum += value;
+    if (this.reservoir.length < StreamingStats.MAX_RESERVOIR) {
+      this.reservoir.push(value);
+    } else {
+      // Reservoir sampling — uniform random replacement
+      const j = Math.floor(Math.random() * this.count);
+      if (j < StreamingStats.MAX_RESERVOIR) {
+        this.reservoir[j] = value;
+      }
+    }
+  }
+
+  percentile(p: number): number {
+    if (this.reservoir.length === 0) return 0;
+    const sorted = [...this.reservoir].sort((a, b) => a - b);
+    const idx = Math.ceil((p / 100) * sorted.length) - 1;
+    return sorted[Math.max(0, idx)];
+  }
+
+  mean(): number {
+    return this.count > 0 ? this.sum / this.count : 0;
+  }
+}
+
+// ──────────────────────────────────────────────
 // Metrics
 // ──────────────────────────────────────────────
 interface MemorySample {
@@ -85,15 +123,15 @@ interface Metrics {
   connectFailures: number;
   enrollments: number;
   heartbeatsSent: number;
-  heartbeatRtts: number[];     // ms
+  heartbeatRtts: StreamingStats;
   configPushesReceived: number;
   configAcksSent: number;
   messagesReceived: number;
   messagesSent: number;
   errors: number;
   disconnects: number;
-  connectLatencies: number[];  // ms
-  enrollLatencies: number[];   // ms
+  connectLatencies: StreamingStats;
+  enrollLatencies: StreamingStats;
   memorySamples: MemorySample[];
 }
 
@@ -104,15 +142,15 @@ function newMetrics(): Metrics {
     connectFailures: 0,
     enrollments: 0,
     heartbeatsSent: 0,
-    heartbeatRtts: [],
+    heartbeatRtts: new StreamingStats(),
     configPushesReceived: 0,
     configAcksSent: 0,
     messagesReceived: 0,
     messagesSent: 0,
     errors: 0,
     disconnects: 0,
-    connectLatencies: [],
-    enrollLatencies: [],
+    connectLatencies: new StreamingStats(),
+    enrollLatencies: new StreamingStats(),
     memorySamples: [],
   };
 }
@@ -127,13 +165,6 @@ function sampleMemory(metrics: Metrics, elapsedSec: number, connectedAgents: num
     externalMB: +(mem.external / 1024 / 1024).toFixed(2),
     connectedAgents,
   });
-}
-
-function percentile(arr: number[], p: number): number {
-  if (arr.length === 0) return 0;
-  const sorted = [...arr].sort((a, b) => a - b);
-  const idx = Math.ceil((p / 100) * sorted.length) - 1;
-  return sorted[Math.max(0, idx)];
 }
 
 function formatMs(ms: number): string {
@@ -202,7 +233,7 @@ function connectAgent(
     ws.addEventListener("open", () => {
       const latency = performance.now() - agent.connectStart;
       metrics.connectSuccesses++;
-      metrics.connectLatencies.push(latency);
+      metrics.connectLatencies.record(latency);
       agent.state = "enrolled"; // will be refined once we get enrollment text msg
 
       // Send Hello
@@ -263,7 +294,7 @@ function connectAgent(
           if (msg.type === "enrollment_complete") {
             const enrollLatency = performance.now() - agent.enrollStart;
             metrics.enrollments++;
-            metrics.enrollLatencies.push(enrollLatency);
+            metrics.enrollLatencies.record(enrollLatency);
             agent.state = "running";
           }
         } catch { /* ignore */ }
@@ -280,7 +311,7 @@ function connectAgent(
         // Record heartbeat RTT
         if (agent.lastHeartbeatSent > 0 && !msg.remote_config) {
           const rtt = performance.now() - agent.lastHeartbeatSent;
-          metrics.heartbeatRtts.push(rtt);
+          metrics.heartbeatRtts.record(rtt);
           agent.lastHeartbeatSent = 0;
         }
 
@@ -384,11 +415,11 @@ function printReport(metrics: Metrics, durationSec: number): void {
   console.log(`║  Disconnects:      ${metrics.disconnects}`);
   console.log("╠═══════════════════════════════════════════════════════════╣");
   console.log("║  Latency (connect)                                       ║");
-  console.log(`║    p50: ${formatMs(percentile(metrics.connectLatencies, 50)).padEnd(8)} p95: ${formatMs(percentile(metrics.connectLatencies, 95)).padEnd(8)} p99: ${formatMs(percentile(metrics.connectLatencies, 99))}`);
+  console.log(`║    p50: ${formatMs(metrics.connectLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.connectLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.connectLatencies.percentile(99))}`);
   console.log("║  Latency (enrollment)                                    ║");
-  console.log(`║    p50: ${formatMs(percentile(metrics.enrollLatencies, 50)).padEnd(8)} p95: ${formatMs(percentile(metrics.enrollLatencies, 95)).padEnd(8)} p99: ${formatMs(percentile(metrics.enrollLatencies, 99))}`);
+  console.log(`║    p50: ${formatMs(metrics.enrollLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.enrollLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.enrollLatencies.percentile(99))}`);
   console.log("║  Latency (heartbeat RTT)                                 ║");
-  console.log(`║    p50: ${formatMs(percentile(metrics.heartbeatRtts, 50)).padEnd(8)} p95: ${formatMs(percentile(metrics.heartbeatRtts, 95)).padEnd(8)} p99: ${formatMs(percentile(metrics.heartbeatRtts, 99))}`);
+  console.log(`║    p50: ${formatMs(metrics.heartbeatRtts.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.heartbeatRtts.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.heartbeatRtts.percentile(99))}`);
   console.log("║  Throughput                                               ║");
   console.log(`║    TX: ${(metrics.messagesSent / durationSec).toFixed(1)} msg/s  RX: ${(metrics.messagesReceived / durationSec).toFixed(1)} msg/s`);
   console.log("╠═══════════════════════════════════════════════════════════╣");
@@ -421,15 +452,15 @@ function printReport(metrics: Metrics, durationSec: number): void {
     errors: metrics.errors,
     disconnects: metrics.disconnects,
     latency: {
-      connect_p50_ms: +percentile(metrics.connectLatencies, 50).toFixed(2),
-      connect_p95_ms: +percentile(metrics.connectLatencies, 95).toFixed(2),
-      connect_p99_ms: +percentile(metrics.connectLatencies, 99).toFixed(2),
-      enroll_p50_ms: +percentile(metrics.enrollLatencies, 50).toFixed(2),
-      enroll_p95_ms: +percentile(metrics.enrollLatencies, 95).toFixed(2),
-      enroll_p99_ms: +percentile(metrics.enrollLatencies, 99).toFixed(2),
-      heartbeat_rtt_p50_ms: +percentile(metrics.heartbeatRtts, 50).toFixed(2),
-      heartbeat_rtt_p95_ms: +percentile(metrics.heartbeatRtts, 95).toFixed(2),
-      heartbeat_rtt_p99_ms: +percentile(metrics.heartbeatRtts, 99).toFixed(2),
+      connect_p50_ms: +metrics.connectLatencies.percentile(50).toFixed(2),
+      connect_p95_ms: +metrics.connectLatencies.percentile(95).toFixed(2),
+      connect_p99_ms: +metrics.connectLatencies.percentile(99).toFixed(2),
+      enroll_p50_ms: +metrics.enrollLatencies.percentile(50).toFixed(2),
+      enroll_p95_ms: +metrics.enrollLatencies.percentile(95).toFixed(2),
+      enroll_p99_ms: +metrics.enrollLatencies.percentile(99).toFixed(2),
+      heartbeat_rtt_p50_ms: +metrics.heartbeatRtts.percentile(50).toFixed(2),
+      heartbeat_rtt_p95_ms: +metrics.heartbeatRtts.percentile(95).toFixed(2),
+      heartbeat_rtt_p99_ms: +metrics.heartbeatRtts.percentile(99).toFixed(2),
     },
     throughput: {
       tx_per_sec: +(metrics.messagesSent / durationSec).toFixed(1),
