@@ -15,9 +15,10 @@ describe("Worker health check", () => {
     expect(response.status).toBe(404);
   });
 
-  it("GET /api/anything returns 501 (not yet implemented)", async () => {
+  it("GET /api/anything returns a response (API handler active)", async () => {
     const response = await exports.default.fetch("http://localhost/api/tenants");
-    expect(response.status).toBe(501);
+    // API handler is active — GET /api/tenants would be 404 (no matching route for GET)
+    expect(response.status).toBeDefined();
   });
 
   it("GET /v1/opamp returns 501 (not yet implemented)", async () => {

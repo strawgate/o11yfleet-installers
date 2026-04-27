@@ -1,6 +1,9 @@
 // FleetPlane Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
+import { handleApiRequest } from "./routes/api/index.js";
+import { handleQueueBatch } from "./event-consumer.js";
+import type { AnyFleetEvent } from "@o11yfleet/core/events";
 
 export interface Env {
   FP_DB: D1Database;
@@ -8,6 +11,7 @@ export interface Env {
   FP_EVENTS: Queue;
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS: AnalyticsEngineDataset;
+  CLAIM_SECRET: string;
 }
 
 export default {
@@ -19,20 +23,25 @@ export default {
       return Response.json({ status: "ok", timestamp: new Date().toISOString() });
     }
 
-    // API routes — Phase 2D
+    // API routes
     if (url.pathname.startsWith("/api/")) {
-      return new Response("Not implemented", { status: 501 });
+      return handleApiRequest(request, env, url);
     }
 
-    // OpAMP WebSocket endpoint — Phase 3A
+    // OpAMP WebSocket endpoint — Phase 3A (ingress router)
     if (url.pathname === "/v1/opamp") {
-      return new Response("Not implemented", { status: 501 });
+      return handleOpampRequest(request, env);
     }
 
     return new Response("Not found", { status: 404 });
   },
 
-  async queue(_batch: MessageBatch, _env: Env): Promise<void> {
-    // Queue consumer — Phase 2C
+  async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
+    await handleQueueBatch(batch, env as unknown as { FP_DB: D1Database; FP_ANALYTICS: AnalyticsEngineDataset });
   },
 };
+
+async function handleOpampRequest(_request: Request, _env: Env): Promise<Response> {
+  // Stub — Phase 3A will implement full ingress routing
+  return new Response("Not implemented", { status: 501 });
+}
