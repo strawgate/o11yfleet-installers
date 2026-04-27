@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "npx serve public -l 3000 -s",
     "lint": "echo 'no-op'",
     "typecheck": "echo 'no-op'"
   }

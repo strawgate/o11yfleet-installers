@@ -81,6 +81,14 @@ export function processFrame(state: AgentState, msg: AgentToServer): ProcessResu
     });
   }
 
+  // C3 fix: Store capabilities from message when present
+  if (msg.capabilities !== undefined && msg.capabilities !== 0) {
+    if (msg.capabilities !== newState.capabilities) {
+      newState.capabilities = msg.capabilities;
+      shouldPersist = true;
+    }
+  }
+
   // Process health
   if (msg.health) {
     const healthChanged = msg.health.healthy !== state.healthy || msg.health.status !== state.status;
@@ -136,11 +144,11 @@ export function processFrame(state: AgentState, msg: AgentToServer): ProcessResu
     }
   }
 
-  // Offer remote config if needed
+  // Offer remote config if needed — use stored capabilities, not just current message
   if (
     newState.desired_config_hash &&
     !arraysEqual(newState.current_config_hash, newState.desired_config_hash) &&
-    (msg.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0
+    (newState.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0
   ) {
     response.remote_config = {
       config: { config_map: {} },

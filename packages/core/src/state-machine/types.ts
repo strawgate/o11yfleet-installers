@@ -17,6 +17,7 @@ export interface AgentState {
   last_seen_at: number;
   connected_at: number;
   agent_description: string | null;
+  capabilities: number; // C3 fix: stored agent capabilities
 }
 
 export interface ProcessResult {

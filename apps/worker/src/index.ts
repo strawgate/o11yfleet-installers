@@ -13,7 +13,15 @@ export interface Env {
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
+  API_SECRET?: string; // C1 fix: optional API auth key
 }
+
+// CORS headers for management UI
+const CORS_HEADERS = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+};
 
 // Headers we use internally — MUST be stripped from external requests
 const INTERNAL_HEADERS = [
@@ -32,9 +40,27 @@ export default {
       return Response.json({ status: "ok", timestamp: new Date().toISOString() });
     }
 
-    // API routes
+    // CORS preflight
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: CORS_HEADERS });
+    }
+
+    // API routes — with auth + CORS
     if (url.pathname.startsWith("/api/")) {
-      return handleApiRequest(request, env, url);
+      // C1 fix: Authenticate API requests when API_SECRET is set
+      if (env.API_SECRET) {
+        const auth = request.headers.get("Authorization");
+        if (!auth || auth !== `Bearer ${env.API_SECRET}`) {
+          return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
+        }
+      }
+      const resp = await handleApiRequest(request, env, url);
+      // Add CORS headers to all API responses
+      const corsResp = new Response(resp.body, resp);
+      for (const [k, v] of Object.entries(CORS_HEADERS)) {
+        corsResp.headers.set(k, v);
+      }
+      return corsResp;
     }
 
     // OpAMP WebSocket endpoint

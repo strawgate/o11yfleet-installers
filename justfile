@@ -35,6 +35,10 @@ fmt-check:
 dev:
     cd apps/worker && pnpm wrangler dev
 
+# Dev mode — start management UI
+ui:
+    cd apps/web && npx serve public -l 3000 -s
+
 # Generate protobuf types
 proto-gen:
     cd packages/core && pnpm buf generate
@@ -78,6 +82,18 @@ healthz:
 
 # Full local dev setup: migrate, seed, show status
 setup: db-migrate seed fleet
+
+# Load test (default: 50 agents, 60s)
+load-test agents="50" duration="60":
+    pnpm tsx scripts/load-test.ts --agents {{agents}} --duration {{duration}}
+
+# Quick smoke load test (10 agents, 15s)
+load-test-smoke:
+    pnpm tsx scripts/load-test.ts --agents 10 --duration 15 --ramp 10
+
+# Heavy load test (200 agents, 120s)
+load-test-heavy:
+    ulimit -n 4096 && pnpm tsx scripts/load-test.ts --agents 200 --duration 120 --ramp 20
 
 # Terraform validate
 tf-validate:

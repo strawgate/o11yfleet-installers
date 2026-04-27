@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FleetPlane — Fleet Management</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --surface2: #232631;
+      --border: #2e3140;
+      --text: #e2e4ea;
+      --text-dim: #8b8fa3;
+      --accent: #6366f1;
+      --accent-dim: #4f46e5;
+      --green: #22c55e;
+      --red: #ef4444;
+      --yellow: #eab308;
+      --radius: 8px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    header h1 {
+      font-size: 18px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    header h1 span { color: var(--accent); }
+
+    .server-url {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .server-url input {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 6px 12px;
+      font-size: 13px;
+      width: 260px;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+    }
+
+    .server-url button {
+      background: var(--accent);
+      color: white;
+      border: none;
+      border-radius: var(--radius);
+      padding: 6px 16px;
+      cursor: pointer;
+      font-size: 13px;
+      font-weight: 500;
+    }
+
+    .server-url button:hover { background: var(--accent-dim); }
+
+    main { padding: 24px; max-width: 1200px; margin: 0 auto; }
+
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .stat-card .label {
+      font-size: 12px;
+      color: var(--text-dim);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 4px;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.yellow { color: var(--yellow); }
+    .stat-card .value.red { color: var(--red); }
+
+    .panel {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 24px;
+      overflow: hidden;
+    }
+
+    .panel-header {
+      padding: 12px 16px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-weight: 600;
+      font-size: 14px;
+    }
+
+    .panel-body { padding: 0; }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    th {
+      text-align: left;
+      padding: 8px 16px;
+      background: var(--surface2);
+      color: var(--text-dim);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 8px 16px;
+      border-top: 1px solid var(--border);
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    tr:hover td { background: var(--surface2); }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-green { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+    .badge-red { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+    .badge-yellow { background: rgba(234, 179, 8, 0.15); color: var(--yellow); }
+    .badge-gray { background: rgba(139, 143, 163, 0.15); color: var(--text-dim); }
+
+    .hash { color: var(--accent); }
+
+    .actions {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      flex-wrap: wrap;
+    }
+
+    .btn {
+      background: var(--surface2);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 6px 14px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: 500;
+      transition: all 0.15s;
+    }
+
+    .btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    .btn-primary {
+      background: var(--accent);
+      color: white;
+      border-color: var(--accent);
+    }
+
+    .btn-primary:hover { background: var(--accent-dim); }
+
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      text-align: center;
+      color: var(--text-dim);
+      cursor: pointer;
+      transition: all 0.2s;
+      margin: 16px;
+    }
+
+    .upload-area:hover {
+      border-color: var(--accent);
+      color: var(--accent);
+    }
+
+    .upload-area input { display: none; }
+
+    .mono { font-family: 'SF Mono', 'Fira Code', monospace; }
+
+    .token-display {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 16px;
+      margin: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      word-break: break-all;
+    }
+
+    .token-display button {
+      margin-left: 12px;
+      flex-shrink: 0;
+    }
+
+    .empty-state {
+      padding: 48px;
+      text-align: center;
+      color: var(--text-dim);
+    }
+
+    .refresh-indicator {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+    }
+
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+
+    dialog h3 { margin-bottom: 16px; }
+
+    dialog label {
+      display: block;
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+
+    dialog input, dialog select, dialog textarea {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text);
+      padding: 8px 12px;
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    dialog textarea {
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      min-height: 200px;
+      resize: vertical;
+    }
+
+    dialog .dialog-actions {
+      margin-top: 20px;
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+    }
+
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      font-size: 13px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.3);
+      z-index: 1000;
+      animation: slideIn 0.3s ease;
+    }
+
+    .toast.success { border-left: 3px solid var(--green); }
+    .toast.error { border-left: 3px solid var(--red); }
+
+    @keyframes slideIn {
+      from { transform: translateY(20px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>⚡ <span>FleetPlane</span></h1>
+    <div class="server-url">
+      <input id="api-url" type="text" value="http://localhost:8787" placeholder="API URL">
+      <button onclick="refresh()">Connect</button>
+      <span class="refresh-indicator" id="last-refresh"></span>
+    </div>
+  </header>
+
+  <main>
+    <!-- Stats -->
+    <div class="grid" id="stats-grid">
+      <div class="stat-card">
+        <div class="label">Total Agents</div>
+        <div class="value" id="stat-total">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Connected</div>
+        <div class="value green" id="stat-connected">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Healthy</div>
+        <div class="value green" id="stat-healthy">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Active WebSockets</div>
+        <div class="value" id="stat-ws">—</div>
+      </div>
+      <div class="stat-card">
+        <div class="label">Desired Config</div>
+        <div class="value hash" id="stat-hash" style="font-size:14px">—</div>
+      </div>
+    </div>
+
+    <!-- Configurations -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>Configurations</span>
+        <div class="actions">
+          <button class="btn" onclick="showCreateConfig()">+ New Config</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>ID</th>
+              <th>Config Hash</th>
+              <th>Created</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody id="configs-table"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Agents -->
+    <div class="panel">
+      <div class="panel-header">
+        <span>Agents</span>
+        <span class="refresh-indicator" id="agent-count"></span>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead>
+            <tr>
+              <th>Instance UID</th>
+              <th>Status</th>
+              <th>Health</th>
+              <th>Config Hash</th>
+              <th>Last Seen</th>
+            </tr>
+          </thead>
+          <tbody id="agents-table"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Upload Config -->
+    <div class="panel" id="upload-panel" style="display:none">
+      <div class="panel-header">
+        <span>Upload Config — <span id="upload-config-name"></span></span>
+        <button class="btn" onclick="hideUpload()">Close</button>
+      </div>
+      <div class="panel-body">
+        <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".yaml,.yml" onchange="handleFileSelect(event)">
+          <p>Click to select a YAML config file, or drag & drop</p>
+        </div>
+        <div id="upload-result" style="display:none" class="token-display"></div>
+      </div>
+    </div>
+
+    <!-- Enrollment Token -->
+    <div class="panel" id="token-panel" style="display:none">
+      <div class="panel-header">
+        <span>Enrollment Token</span>
+        <button class="btn" onclick="document.getElementById('token-panel').style.display='none'">Close</button>
+      </div>
+      <div class="panel-body">
+        <div class="token-display" id="token-display"></div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Create Config Dialog -->
+  <dialog id="create-config-dialog">
+    <h3>Create Configuration</h3>
+    <label for="cfg-tenant">Tenant ID</label>
+    <input id="cfg-tenant" type="text" placeholder="Tenant UUID">
+    <label for="cfg-name">Name</label>
+    <input id="cfg-name" type="text" placeholder="e.g. production-collectors">
+    <div class="dialog-actions">
+      <button class="btn" onclick="document.getElementById('create-config-dialog').close()">Cancel</button>
+      <button class="btn btn-primary" onclick="createConfig()">Create</button>
+    </div>
+  </dialog>
+
+  <!-- Create Tenant Dialog -->
+  <dialog id="create-tenant-dialog">
+    <h3>Create Tenant</h3>
+    <label for="tenant-name">Name</label>
+    <input id="tenant-name" type="text" placeholder="e.g. Acme Corp">
+    <label for="tenant-plan">Plan</label>
+    <select id="tenant-plan">
+      <option value="free">Free</option>
+      <option value="pro">Pro</option>
+      <option value="enterprise">Enterprise</option>
+    </select>
+    <div class="dialog-actions">
+      <button class="btn" onclick="document.getElementById('create-tenant-dialog').close()">Cancel</button>
+      <button class="btn btn-primary" onclick="createTenant()">Create</button>
+    </div>
+  </dialog>
+
+  <script>
+    let currentState = null; // from .local-state.json equivalent
+    let autoRefreshTimer = null;
+
+    function apiUrl() {
+      return document.getElementById('api-url').value.replace(/\/$/, '');
+    }
+
+    async function api(path, opts = {}) {
+      const resp = await fetch(apiUrl() + path, {
+        ...opts,
+        headers: { 'Content-Type': 'application/json', ...opts.headers },
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(err.error || resp.statusText);
+      }
+      return resp.json();
+    }
+
+    function toast(msg, type = 'success') {
+      const el = document.createElement('div');
+      el.className = `toast ${type}`;
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    function shortHash(h) {
+      return h ? h.slice(0, 16) : '—';
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '—';
+      const d = new Date(dateStr);
+      const sec = Math.floor((Date.now() - d.getTime()) / 1000);
+      if (sec < 60) return `${sec}s ago`;
+      if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
+      return d.toLocaleString();
+    }
+
+    function statusBadge(status) {
+      const map = {
+        connected: 'badge-green',
+        running: 'badge-green',
+        disconnected: 'badge-red',
+        unknown: 'badge-gray',
+      };
+      return `<span class="badge ${map[status] || 'badge-gray'}">${status}</span>`;
+    }
+
+    function healthBadge(healthy) {
+      return healthy
+        ? '<span class="badge badge-green">healthy</span>'
+        : '<span class="badge badge-red">unhealthy</span>';
+    }
+
+    // ─── Data Loading ───
+
+    let tenantId = null;
+    let configs = [];
+
+    async function refresh() {
+      try {
+        // Try to get tenant/config from seed state or discover
+        await loadTenantData();
+        await loadStats();
+        await loadAgents();
+        document.getElementById('last-refresh').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+      } catch (err) {
+        toast(`Connection failed: ${err.message}`, 'error');
+      }
+    }
+
+    async function loadTenantData() {
+      // Try all known tenants — in local dev there's usually one
+      // We'll discover by listing configs for any known tenant
+      if (!tenantId) {
+        // Attempt: check if we can read local state info
+        // Fallback: prompt user or use first tenant found
+        // For now, try fetching health to verify connectivity
+        await api('/healthz');
+      }
+
+      if (tenantId) {
+        const result = await api(`/api/tenants/${tenantId}/configurations`);
+        configs = result.configurations || [];
+        renderConfigs();
+      }
+    }
+
+    async function loadStats() {
+      if (configs.length === 0) return;
+      const cfg = configs[0];
+      try {
+        const stats = await api(`/api/configurations/${cfg.id}/stats`);
+        document.getElementById('stat-total').textContent = stats.total_agents ?? 0;
+        document.getElementById('stat-connected').textContent = stats.connected_agents ?? 0;
+        document.getElementById('stat-healthy').textContent = stats.healthy_agents ?? 0;
+        document.getElementById('stat-ws').textContent = stats.active_websockets ?? 0;
+        document.getElementById('stat-hash').textContent = shortHash(stats.desired_config_hash);
+
+        // Color coding
+        const connEl = document.getElementById('stat-connected');
+        connEl.className = `value ${stats.connected_agents > 0 ? 'green' : 'yellow'}`;
+      } catch {
+        // stats endpoint may not exist for this config
+      }
+    }
+
+    async function loadAgents() {
+      if (configs.length === 0) return;
+      const cfg = configs[0];
+      try {
+        const result = await api(`/api/configurations/${cfg.id}/agents`);
+        const agents = result.agents || [];
+        document.getElementById('agent-count').textContent = `${agents.length} agents`;
+        renderAgents(agents);
+      } catch {
+        // ok
+      }
+    }
+
+    // ─── Rendering ───
+
+    function renderConfigs() {
+      const tbody = document.getElementById('configs-table');
+      if (configs.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No configurations. Create a tenant first.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = configs.map(c => `
+        <tr>
+          <td><strong>${esc(c.name)}</strong></td>
+          <td class="mono">${c.id.slice(0, 8)}...</td>
+          <td class="hash mono">${shortHash(c.current_config_hash)}</td>
+          <td>${timeAgo(c.created_at)}</td>
+          <td>
+            <button class="btn" onclick="showUpload('${c.id}', '${esc(c.name)}')">Upload YAML</button>
+            <button class="btn" onclick="generateToken('${c.id}')">Enrollment Token</button>
+            <button class="btn" onclick="rollout('${c.id}')">Rollout</button>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    function renderAgents(agents) {
+      const tbody = document.getElementById('agents-table');
+      if (agents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents connected yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = agents.map(a => `
+        <tr>
+          <td class="mono">${(a.instance_uid || '').slice(0, 16)}</td>
+          <td>${statusBadge(a.status)}</td>
+          <td>${healthBadge(a.healthy)}</td>
+          <td class="hash mono">${shortHash(a.current_config_hash)}</td>
+          <td>${timeAgo(a.last_seen_at || a.updated_at)}</td>
+        </tr>
+      `).join('');
+    }
+
+    // ─── Actions ───
+
+    function showCreateConfig() {
+      if (!tenantId) {
+        document.getElementById('create-tenant-dialog').showModal();
+        return;
+      }
+      document.getElementById('cfg-tenant').value = tenantId;
+      document.getElementById('create-config-dialog').showModal();
+    }
+
+    async function createTenant() {
+      const name = document.getElementById('tenant-name').value;
+      const plan = document.getElementById('tenant-plan').value;
+      if (!name) return;
+
+      try {
+        const result = await api('/api/tenants', {
+          method: 'POST',
+          body: JSON.stringify({ name, plan }),
+        });
+        tenantId = result.id;
+        document.getElementById('create-tenant-dialog').close();
+        toast(`Tenant "${name}" created`);
+        // Now show config dialog
+        document.getElementById('cfg-tenant').value = tenantId;
+        document.getElementById('create-config-dialog').showModal();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function createConfig() {
+      const tid = document.getElementById('cfg-tenant').value;
+      const name = document.getElementById('cfg-name').value;
+      if (!tid || !name) return;
+
+      try {
+        await api('/api/configurations', {
+          method: 'POST',
+          body: JSON.stringify({ tenant_id: tid, name }),
+        });
+        document.getElementById('create-config-dialog').close();
+        toast(`Configuration "${name}" created`);
+        await refresh();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    let uploadConfigId = null;
+
+    function showUpload(configId, configName) {
+      uploadConfigId = configId;
+      document.getElementById('upload-config-name').textContent = configName;
+      document.getElementById('upload-panel').style.display = 'block';
+      document.getElementById('upload-result').style.display = 'none';
+      document.getElementById('upload-panel').scrollIntoView({ behavior: 'smooth' });
+    }
+
+    function hideUpload() {
+      document.getElementById('upload-panel').style.display = 'none';
+    }
+
+    async function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      try {
+        const yaml = await file.text();
+        const resp = await fetch(apiUrl() + `/api/configurations/${uploadConfigId}/versions`, {
+          method: 'POST',
+          body: yaml,
+          headers: { 'Content-Type': 'text/plain' },
+        });
+        const result = await resp.json();
+        if (!resp.ok) throw new Error(result.error);
+
+        document.getElementById('upload-result').style.display = 'flex';
+        document.getElementById('upload-result').innerHTML = `
+          <span>Uploaded! Hash: <span class="hash">${result.hash}</span> (${result.sizeBytes}B, dedup: ${result.deduplicated})</span>
+          <button class="btn btn-primary" onclick="rollout('${uploadConfigId}')">Rollout Now</button>
+        `;
+        toast(`Config uploaded: ${shortHash(result.hash)}`);
+        await refresh();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function generateToken(configId) {
+      try {
+        const result = await api(`/api/configurations/${configId}/enrollment-token`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+
+        const panel = document.getElementById('token-panel');
+        panel.style.display = 'block';
+        document.getElementById('token-display').innerHTML = `
+          <span>${result.token}</span>
+          <button class="btn" onclick="navigator.clipboard.writeText('${result.token}').then(() => toast('Copied!'))">Copy</button>
+        `;
+        panel.scrollIntoView({ behavior: 'smooth' });
+        toast('Enrollment token generated');
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    async function rollout(configId) {
+      try {
+        const result = await api(`/api/configurations/${configId}/rollout`, {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+        toast(`Rolled out to ${result.pushed} agent(s)`);
+        await refresh();
+      } catch (err) {
+        toast(err.message, 'error');
+      }
+    }
+
+    function esc(s) {
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    // ─── Init ───
+
+    // Try to detect tenant from URL hash or auto-discover
+    async function init() {
+      const hash = window.location.hash.slice(1);
+      if (hash) {
+        tenantId = hash;
+      }
+
+      try {
+        await api('/healthz');
+        toast('Connected to FleetPlane');
+
+        // Auto-discover: try to find any tenant by fetching a well-known endpoint
+        // In local dev, the seed script creates a known tenant
+        // We'll try to find configs — if we have a tenant ID in hash, use it
+        if (tenantId) {
+          await refresh();
+        } else {
+          // Show prompt to create tenant
+          renderConfigs();
+        }
+      } catch {
+        toast('Cannot reach server. Start with: just dev', 'error');
+      }
+
+      // Auto-refresh every 5s
+      autoRefreshTimer = setInterval(() => {
+        if (tenantId) refresh().catch(() => {});
+      }, 5000);
+    }
+
+    // Allow setting tenant via console: setTenant('uuid')
+    window.setTenant = function(id) {
+      tenantId = id;
+      window.location.hash = id;
+      refresh();
+    };
+
+    init();
+  </script>
+</body>
+</html>

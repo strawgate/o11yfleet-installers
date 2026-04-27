@@ -24,6 +24,7 @@ function makeDefaultState(overrides: Partial<AgentState> = {}): AgentState {
     last_seen_at: 0,
     connected_at: 0,
     agent_description: null,
+    capabilities: 0,
     ...overrides,
   };
 }
@@ -67,6 +68,7 @@ describe("state-machine/processFrame", () => {
       connected_at: Date.now() - 10000,
       healthy: true,
       status: "running",
+      capabilities: AgentCapabilities.ReportsStatus, // already stored from prior hello
     });
     const msg: AgentToServer = {
       instance_uid: new Uint8Array(16),

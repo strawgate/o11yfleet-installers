@@ -20,7 +20,6 @@ interface WSAttachment {
   instance_uid: string;
   connected_at: number;
   is_enrollment?: boolean;
-  msg_timestamps?: number[]; // sliding window for rate limiting
 }
 
 const MAX_MESSAGES_PER_MINUTE = 60;
@@ -32,6 +31,8 @@ const MAX_AGENTS_PER_CONFIG = 50_000;
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private desiredConfigHash: string | null = null;
   private initialized = false;
+  // M1: In-memory rate limiting — not persisted to storage on every message
+  private rateLimitWindows = new Map<string, number[]>();
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
@@ -52,7 +53,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         current_config_hash TEXT,
         last_seen_at INTEGER NOT NULL DEFAULT 0,
         connected_at INTEGER NOT NULL DEFAULT 0,
-        agent_description TEXT
+        agent_description TEXT,
+        capabilities INTEGER NOT NULL DEFAULT 0
       )
     `);
 
@@ -173,8 +175,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           timestamp: Date.now(),
           generation: 1,
         }]);
-      } catch {
-        // Enrollment claim generation failed — still connected, just no claim
+      } catch (err) {
+        // C5 fix: Enrollment claim generation failed — close WebSocket with error
+        server.close(4500, "Enrollment failed");
+        return new Response(null, { status: 101, webSocket: client });
       }
     }
 
@@ -184,31 +188,40 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     await this.ensureInit();
 
+    // M2 fix: Reject text frames — OpAMP uses binary only
+    if (typeof message === "string") {
+      ws.close(4000, "Binary frames only");
+      return;
+    }
+
     const attachment = ws.deserializeAttachment() as WSAttachment;
     if (!attachment) {
       ws.close(1008, "Missing attachment");
       return;
     }
 
-    // Rate limit: sliding window of message timestamps
+    // M1 fix: Rate limit using in-memory Map instead of serializing on every message
     const now = Date.now();
+    const uid = attachment.instance_uid;
+    let timestamps = this.rateLimitWindows.get(uid);
+    if (!timestamps) {
+      timestamps = [];
+      this.rateLimitWindows.set(uid, timestamps);
+    }
     const windowStart = now - 60_000;
-    const timestamps = (attachment.msg_timestamps ?? []).filter((t) => t > windowStart);
+    // Filter in place
+    let writeIdx = 0;
+    for (let i = 0; i < timestamps.length; i++) {
+      if (timestamps[i] > windowStart) timestamps[writeIdx++] = timestamps[i];
+    }
+    timestamps.length = writeIdx;
     if (timestamps.length >= MAX_MESSAGES_PER_MINUTE) {
       ws.close(4029, "Rate limit exceeded");
       return;
     }
     timestamps.push(now);
-    attachment.msg_timestamps = timestamps;
-    ws.serializeAttachment(attachment);
 
-    // Decode the frame
-    let buf: ArrayBuffer;
-    if (typeof message === "string") {
-      buf = new TextEncoder().encode(message).buffer as ArrayBuffer;
-    } else {
-      buf = message;
-    }
+    const buf = message;
 
     const agentMsg = decodeAgentToServer(buf);
 
@@ -258,10 +271,32 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         reason: "websocket_close",
       },
     ]);
+
+    // Clean up rate limit window
+    this.rateLimitWindows.delete(attachment.instance_uid);
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-    // Treat as disconnect
+    // C6 fix: Treat as disconnect — update status and emit event
+    await this.ensureInit();
+    const attachment = ws.deserializeAttachment() as WSAttachment | null;
+    if (attachment) {
+      this.ctx.storage.sql.exec(
+        `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
+        Date.now(),
+        attachment.instance_uid,
+      );
+      await this.emitEvents([{
+        type: "agent_disconnected" as const,
+        tenant_id: attachment.tenant_id,
+        config_id: attachment.config_id,
+        instance_uid: attachment.instance_uid,
+        timestamp: Date.now(),
+        reason: "websocket_error",
+      }]);
+      // Clean up rate limit window
+      this.rateLimitWindows.delete(attachment.instance_uid);
+    }
     ws.close(1011, "Internal error");
   }
 
@@ -283,8 +318,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       const attachment = ws.deserializeAttachment() as WSAttachment | null;
       if (!attachment) continue;
 
+      // C7 fix: Use the agent's actual instance_uid, not zeroed bytes
       const response = encodeServerToAgent({
-        instance_uid: new Uint8Array(16), // Will be ignored for broadcast
+        instance_uid: hexToUint8Array(attachment.instance_uid),
         flags: 0,
         capabilities: 0x00000003, // AcceptsStatus | OffersRemoteConfig
         remote_config: {
@@ -356,6 +392,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         last_seen_at: row.last_seen_at as number,
         connected_at: row.connected_at as number,
         agent_description: row.agent_description as string | null,
+        capabilities: (row.capabilities as number) ?? 0,
       };
     }
 
@@ -376,6 +413,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       last_seen_at: 0,
       connected_at: 0,
       agent_description: null,
+      capabilities: 0,
     };
   }
 
@@ -384,8 +422,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const configHash = state.current_config_hash ? uint8ToHex(state.current_config_hash) : null;
 
     this.ctx.storage.sql.exec(
-      `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description, capabilities)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
        ON CONFLICT(instance_uid) DO UPDATE SET
          sequence_num = excluded.sequence_num,
          generation = excluded.generation,
@@ -395,7 +433,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
          current_config_hash = excluded.current_config_hash,
          last_seen_at = excluded.last_seen_at,
          connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
-         agent_description = COALESCE(excluded.agent_description, agents.agent_description)`,
+         agent_description = COALESCE(excluded.agent_description, agents.agent_description),
+         capabilities = excluded.capabilities`,
       uid,
       state.tenant_id,
       state.config_id,
@@ -408,6 +447,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       state.last_seen_at,
       state.connected_at,
       state.agent_description,
+      state.capabilities,
     );
   }
 
