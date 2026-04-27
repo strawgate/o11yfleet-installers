@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Getting started — O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-narrow">
+      <div class="page-head">
+        <div>
+          <h1>Getting started</h1>
+          <div class="sub">Connect your first collector. You'll be done in about a minute.</div>
+        </div>
+      </div>
+
+      <div class="banner info mb-6">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.01" stroke-linecap="round"/></svg>
+        <div><div class="b-title">Workspace ID</div><div class="b-body t-mono">ws_acme_5f3a91d2</div></div>
+        <div class="b-actions"><button class="copy" data-copy="ws_acme_5f3a91d2">copy</button></div>
+      </div>
+
+      <h3 style="font-size: 15px; font-weight: 500; margin-bottom: 10px;">1. Pick your platform</h3>
+      <div data-tabs="install" class="tabs">
+        <button class="tab active" data-tab="docker">Docker</button>
+        <button class="tab" data-tab="k8s">Kubernetes</button>
+        <button class="tab" data-tab="systemd">systemd</button>
+        <button class="tab" data-tab="binary">Binary</button>
+      </div>
+
+      <div data-tab-panel="docker" data-tabs-group="install" class="tab-panel active">
+        <div class="code-block"><button class="copy" data-copy="docker run">copy</button>docker run -d --name otel-collector \
+  -e O11Y_TOKEN=<span style="color: var(--accent);">tok_live_a91f3b2c8e</span> \
+  -e O11Y_LABELS=<span class="s">"env=staging,role=edge"</span> \
+  -p 4317:4317 -p 4318:4318 \
+  ghcr.io/o11yfleet/otelcol-managed:0.105</div>
+      </div>
+      <div data-tab-panel="k8s" data-tabs-group="install" class="tab-panel">
+        <div class="code-block"><button class="copy" data-copy="kubectl">copy</button>kubectl create secret generic o11y-token \
+  --from-literal=token=<span style="color: var(--accent);">tok_live_a91f3b2c8e</span>
+
+helm install otel-collector o11yfleet/otelcol-managed \
+  --set workspace=ws_acme_5f3a91d2 \
+  --set labels.env=staging</div>
+      </div>
+      <div data-tab-panel="systemd" data-tabs-group="install" class="tab-panel">
+        <div class="code-block"><button class="copy" data-copy="curl">copy</button>curl -fsSL https://get.o11yfleet.com | bash -s -- \
+  --token <span style="color: var(--accent);">tok_live_a91f3b2c8e</span> \
+  --labels env=staging,role=edge</div>
+      </div>
+      <div data-tab-panel="binary" data-tabs-group="install" class="tab-panel">
+        <div class="code-block"><button class="copy" data-copy="otelcol">copy</button>./otelcol-managed \
+  --workspace ws_acme_5f3a91d2 \
+  --token <span style="color: var(--accent);">tok_live_a91f3b2c8e</span></div>
+      </div>
+
+      <h3 style="font-size: 15px; font-weight: 500; margin: 28px 0 10px;">2. Waiting for first heartbeat…</h3>
+      <div class="card card-pad" style="padding: 18px; display: flex; align-items: center; gap: 14px;">
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); display: flex; align-items: center; justify-content: center;">
+          <span class="dot dot-ok dot-pulse"></span>
+        </div>
+        <div style="flex: 1;">
+          <div class="t-mono text-sm">listening for collector check-in…</div>
+          <div class="t-muted text-sm">This page will update automatically.</div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="this.closest('.card').querySelector('.t-mono').textContent='✓ otel-edge-01.staging connected'; this.closest('.card').style.borderColor='var(--accent-line)'; toast('Collector connected', 'otel-edge-01.staging is online.');">Simulate</button>
+      </div>
+
+      <div class="flex-row justify-between mt-8">
+        <a href="overview.html" class="btn btn-ghost">Skip</a>
+        <a href="overview.html" class="btn btn-primary">Done →</a>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script>FB.shell({ current: 'getting-started', crumbs: [{label:'Setup'},{label:'Getting started'}] });</script>
+</body>
+</html>

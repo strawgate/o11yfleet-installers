@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Workspace settings — O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+<link rel="stylesheet" href="../portal-pipeline.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-narrow">
+      <div class="page-head"><div><h1>Workspace settings</h1><div class="sub">General configuration for Acme Platform.</div></div></div>
+
+      <div class="admin-banner">
+        <span class="pulse"></span>
+        <span>Admin mode</span>
+        <span class="lbl">Changes here affect all 6 team members.</span>
+        <span class="who">Maya · Owner</span>
+      </div>
+
+      <div class="card card-pad" style="padding: 22px;">
+        <h3 style="font-size: 15px; font-weight: 500;">General</h3>
+        <div class="field mt-4"><label>Workspace name</label><input class="input" value="Acme Platform" /></div>
+        <div class="field mt-3"><label>Slug</label><input class="input mono" value="acme" /><div class="help">URL: o11yfleet.com/<span class="t-mono" style="color: var(--accent);">acme</span></div></div>
+        <div class="field mt-3"><label>Default rollout strategy</label><select class="select"><option>Canary 10% → 50% → 100%</option><option>50% → 100%</option><option>All at once</option></select></div>
+        <div class="flex-row mt-4" style="justify-content: flex-end;"><button class="btn btn-primary btn-sm" onclick="toast('Saved','Workspace settings updated.')">Save</button></div>
+      </div>
+
+      <div class="card card-pad mt-6" style="padding: 22px;">
+        <h3 style="font-size: 15px; font-weight: 500;">Notifications</h3>
+        <p class="t-muted text-sm mt-2">Where rollout outcomes, drift alerts, and offline collectors are announced.</p>
+        <div class="mt-4" style="display: flex; flex-direction: column; gap: 10px;">
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> Email maya@acmeplatform.com</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> Slack <span class="t-mono t-muted">#platform-otel</span></label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" /> PagerDuty (offline collectors only)</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" /> Webhook</label>
+        </div>
+      </div>
+
+      <div class="danger-zone mt-6">
+        <div class="dz-head">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13zM8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          Danger zone
+        </div>
+        <div class="row">
+          <div class="desc">
+            <strong>Pause all rollouts</strong>
+            <div>Halts in-flight rollouts and blocks new ones. Effective configs on collectors are unchanged.</div>
+          </div>
+          <button class="btn btn-sm btn-danger">Pause rollouts</button>
+        </div>
+        <div class="row">
+          <div class="desc">
+            <strong>Revoke all API tokens</strong>
+            <div>Every token in this workspace stops working immediately. CI pipelines will fail until new tokens are issued.</div>
+          </div>
+          <button class="btn btn-sm btn-danger">Revoke tokens</button>
+        </div>
+        <div class="row">
+          <div class="desc">
+            <strong>Delete workspace</strong>
+            <div>Permanently removes all configurations, rollouts, and audit history. Collectors keep their last effective config. <span class="t-mono" style="color: var(--err);">irreversible.</span></div>
+          </div>
+          <button class="btn btn-sm btn-danger-solid">Delete workspace</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script src="../portal-api.js"></script>
+<script>
+FB.shell({ current: 'settings', crumbs: [{label:'Settings'},{label:'Workspace'}] });
+FP.showConnectBarIfNeeded();
+(async function () {
+  if (!FP.ready()) return;
+  try {
+    const t = await FP.get('/api/v1/tenant');
+    document.querySelector('.page-head .sub').textContent = 'General configuration for ' + t.name + '.';
+    const nameInput = document.querySelector('.card .field .input');
+    if (nameInput && t.name) nameInput.value = t.name;
+    // Show tenant ID + plan
+    const idField = document.querySelector('.card .field .input.mono');
+    if (idField) idField.value = t.id || '';
+  } catch (e) { console.error('Failed to load tenant', e); }
+})();
+</script>
+</body>
+</html>

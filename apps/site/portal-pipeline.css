@@ -1,0 +1,554 @@
+/* =========================================================
+   portal-pipeline.css
+   Visualizer + builder for OTel collector pipelines.
+   Horizontal flow: receivers → processors → exporters.
+   Used by agent detail (read-only) and builder (editable).
+   ========================================================= */
+
+/* ---------- Outer canvas ---------- */
+.pipe-canvas {
+  position: relative;
+  background:
+    radial-gradient(circle at 1px 1px, var(--line) 1px, transparent 1px) 0 0 / 18px 18px,
+    var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  min-height: 380px;
+}
+.pipe-canvas.tall { min-height: 560px; }
+
+.pipe-canvas .pipe-toolbar {
+  position: absolute; top: 12px; right: 12px;
+  display: flex; gap: 6px; z-index: 4;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+}
+.pipe-canvas .pipe-legend {
+  position: absolute; bottom: 12px; left: 12px; z-index: 4;
+  display: flex; gap: 12px;
+  background: color-mix(in oklab, var(--bg) 70%, transparent);
+  backdrop-filter: blur(6px);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  color: var(--fg-3);
+}
+.pipe-canvas .pipe-legend .swatch {
+  display: inline-block; width: 10px; height: 2px; vertical-align: middle;
+  margin-right: 5px; border-radius: 2px;
+}
+
+/* ---------- Stage (the SVG-overlay + node containers) ---------- */
+.pipe-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 36px;
+  padding: 24px 22px 32px;
+  min-height: 380px;
+}
+.pipe-stage .pipe-svg {
+  position: absolute; inset: 0;
+  pointer-events: none; /* nodes catch events */
+  width: 100%; height: 100%;
+  z-index: 1;
+}
+.pipe-stage .pipe-col {
+  position: relative; z-index: 2;
+  display: flex; flex-direction: column; gap: 14px;
+}
+.pipe-stage .pipe-col-head {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  color: var(--fg-4);
+  padding: 0 4px 4px;
+  display: flex; align-items: center; gap: 8px;
+}
+.pipe-stage .pipe-col-head .count {
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--fg-3); padding: 1px 6px; border-radius: 999px;
+  font-size: 10px;
+}
+.pipe-stage .pipe-col-head .add {
+  margin-left: auto;
+  width: 20px; height: 20px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface); border: 1px dashed var(--line-strong);
+  color: var(--fg-3); border-radius: 5px; cursor: pointer;
+  font-family: inherit; font-size: 12px;
+}
+.pipe-stage .pipe-col-head .add:hover { color: var(--accent); border-color: var(--accent-line); border-style: solid; }
+
+/* ---------- Nodes ---------- */
+.pipe-node {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  padding: 11px 12px;
+  display: flex; flex-direction: column; gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 120ms ease, transform 100ms ease, box-shadow 120ms ease;
+}
+.pipe-node:hover { border-color: var(--line-strong); }
+.pipe-node[data-selected="1"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+.pipe-node .name {
+  font-family: var(--font-mono);
+  font-weight: 500;
+  font-size: 13px;
+  color: var(--fg);
+  display: flex; align-items: center; gap: 8px;
+  min-width: 0;
+}
+.pipe-node .name .icon {
+  width: 18px; height: 18px;
+  display: inline-flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  border-radius: 4px;
+  background: var(--surface-2);
+  color: var(--fg-2);
+}
+.pipe-node .name .icon svg { width: 12px; height: 12px; }
+.pipe-node .name .text { min-width: 0; flex: 1; overflow-wrap: anywhere; line-height: 1.3; }
+.pipe-node .sub {
+  font-size: 11.5px;
+  font-family: var(--font-mono);
+  color: var(--fg-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  line-height: 1.4;
+}
+.pipe-node .sig-row {
+  display: flex; gap: 4px;
+  margin-top: 2px;
+}
+.pipe-node .sig {
+  font-family: var(--font-mono); font-size: 9.5px; letter-spacing: 0.05em;
+  padding: 1px 5px; border-radius: 3px;
+  background: var(--surface-2); border: 1px solid var(--line);
+  color: var(--fg-4);
+  text-transform: uppercase;
+}
+.pipe-node .sig.sig-logs { color: oklch(0.74 0.10 230); border-color: color-mix(in oklab, oklch(0.74 0.10 230) 35%, var(--line)); }
+.pipe-node .sig.sig-metrics { color: var(--accent); border-color: var(--accent-line); }
+.pipe-node .sig.sig-traces { color: oklch(0.78 0.13 300); border-color: color-mix(in oklab, oklch(0.78 0.13 300) 35%, var(--line)); }
+
+.pipe-node .insight {
+  position: absolute; top: -7px; right: -7px;
+  width: 16px; height: 16px;
+  border-radius: 50%;
+  background: var(--warn);
+  color: var(--bg);
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: var(--font-mono); font-weight: 700; font-size: 10px;
+  border: 2px solid var(--bg-soft);
+  cursor: pointer;
+  z-index: 3;
+}
+.pipe-node .insight.err { background: var(--err); }
+.pipe-node .insight.info { background: var(--info, var(--accent)); }
+
+.pipe-node[data-status="warn"] { border-color: color-mix(in oklab, var(--warn) 40%, var(--line)); }
+.pipe-node[data-status="err"] { border-color: color-mix(in oklab, var(--err) 40%, var(--line)); }
+
+/* Drag affordance (builder) */
+.pipe-node[draggable="true"] { cursor: grab; }
+.pipe-node[draggable="true"]:active { cursor: grabbing; }
+.pipe-node.is-dragging { opacity: 0.4; }
+.pipe-node.drop-target { border-style: dashed; border-color: var(--accent); }
+
+/* Empty placeholder in a column */
+.pipe-empty {
+  border: 1px dashed var(--line-strong);
+  border-radius: 9px;
+  padding: 18px 12px;
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--fg-4);
+  cursor: pointer;
+}
+.pipe-empty:hover { border-color: var(--accent-line); color: var(--accent); }
+
+/* ---------- SVG connector lines ---------- */
+.pipe-svg path.line {
+  fill: none;
+  stroke: var(--line-strong);
+  stroke-width: 1.5;
+  stroke-linecap: round;
+}
+.pipe-svg path.line.logs { stroke: oklch(0.74 0.10 230); }
+.pipe-svg path.line.metrics { stroke: var(--accent); }
+.pipe-svg path.line.traces { stroke: oklch(0.78 0.13 300); }
+.pipe-svg path.line.dim { opacity: 0.35; }
+.pipe-svg path.line.flow {
+  stroke-dasharray: 4 5;
+  animation: pipe-dash 1.2s linear infinite;
+}
+@keyframes pipe-dash { to { stroke-dashoffset: -18; } }
+
+/* Hit-target overlay so user can click a wire to delete it */
+.pipe-svg path.line-hit {
+  fill: none; stroke: transparent; stroke-width: 14;
+  pointer-events: stroke;
+  cursor: pointer;
+}
+
+/* ---------- Inspector panel (slide-in right) ---------- */
+.pipe-with-inspector {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 360px;
+  gap: 16px;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .pipe-with-inspector { grid-template-columns: 1fr; }
+}
+.pipe-inspector {
+  position: sticky; top: 0;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+  max-height: calc(100vh - 120px);
+}
+.pipe-inspector .head {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 10px;
+}
+.pipe-inspector .head .name {
+  font-family: var(--font-mono); font-weight: 500; font-size: 14px; color: var(--fg);
+  flex: 1; min-width: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pipe-inspector .head .role {
+  font-family: var(--font-mono); font-size: 10px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--fg-4);
+  padding: 2px 6px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+}
+.pipe-inspector .body {
+  padding: 14px 16px;
+  overflow-y: auto;
+  flex: 1;
+}
+.pipe-inspector .body .group { margin-bottom: 16px; }
+.pipe-inspector .body .group:last-child { margin-bottom: 0; }
+.pipe-inspector .body .group-title {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--fg-4);
+  margin-bottom: 8px;
+}
+.pipe-inspector .field { margin-bottom: 10px; }
+.pipe-inspector .field label {
+  display: block; font-size: 12px; color: var(--fg-3); margin-bottom: 4px;
+  font-family: var(--font-mono);
+}
+.pipe-inspector .field input,
+.pipe-inspector .field select,
+.pipe-inspector .field textarea {
+  width: 100%;
+  background: var(--bg-soft);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  padding: 7px 10px;
+  font-size: 12.5px;
+  font-family: var(--font-mono);
+  color: var(--fg);
+}
+.pipe-inspector .field textarea {
+  min-height: 78px;
+  resize: vertical;
+}
+.pipe-inspector .field input:focus,
+.pipe-inspector .field select:focus,
+.pipe-inspector .field textarea:focus {
+  outline: none; border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft);
+}
+.pipe-inspector .yaml-snippet {
+  background: var(--bg-elev);
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--fg-2);
+  padding: 10px 12px;
+  white-space: pre;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+.pipe-inspector .yaml-snippet .k { color: var(--accent); }
+.pipe-inspector .yaml-snippet .s { color: oklch(0.78 0.13 300); }
+.pipe-inspector .yaml-snippet .n { color: oklch(0.74 0.10 230); }
+.pipe-inspector .yaml-snippet .c { color: var(--fg-4); }
+.pipe-inspector .foot {
+  padding: 10px 12px;
+  border-top: 1px solid var(--line);
+  display: flex; gap: 6px;
+}
+.pipe-inspector .foot .btn { flex: 1; }
+.pipe-inspector .danger {
+  color: var(--err); border-color: color-mix(in oklab, var(--err) 35%, var(--line));
+}
+.pipe-inspector .danger:hover { background: color-mix(in oklab, var(--err) 10%, transparent); }
+
+/* ---------- Palette (builder) ---------- */
+.pipe-palette {
+  border: 1px solid var(--line);
+  background: var(--surface);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.pipe-palette .head {
+  padding: 12px 14px; border-bottom: 1px solid var(--line);
+  display: flex; align-items: center; gap: 8px;
+}
+.pipe-palette .head input {
+  flex: 1; height: 28px;
+  background: var(--bg-soft); border: 1px solid var(--line);
+  border-radius: 6px; padding: 0 10px;
+  font-size: 12.5px; color: var(--fg);
+  font-family: inherit;
+}
+.pipe-palette .group-head {
+  padding: 10px 14px 6px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--fg-4);
+}
+.pipe-palette .item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  border-top: 1px solid color-mix(in oklab, var(--line) 50%, transparent);
+  cursor: grab;
+  font-size: 12.5px;
+}
+.pipe-palette .item:hover { background: var(--surface-2); }
+.pipe-palette .item .name { font-family: var(--font-mono); color: var(--fg); }
+.pipe-palette .item .desc { color: var(--fg-3); font-size: 11.5px; margin-left: auto; font-family: var(--font-mono); }
+.pipe-palette .item .icon {
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: 1px solid var(--line); border-radius: 5px;
+  flex-shrink: 0;
+  color: var(--fg-2);
+}
+.pipe-palette .item .icon svg { width: 12px; height: 12px; }
+
+.pipe-palette .item.dragging { opacity: 0.4; }
+
+/* ---------- Wire-mode (drawing connections) ---------- */
+.pipe-stage[data-wire-mode="1"] .pipe-node {
+  cursor: crosshair;
+}
+.pipe-stage[data-wire-mode="1"] .pipe-node[data-wire-from="1"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+/* ---------- YAML output (builder) ---------- */
+.pipe-yaml {
+  border: 1px solid var(--line);
+  background: var(--bg-elev);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex; flex-direction: column;
+}
+.pipe-yaml .head {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-2);
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--fg-3);
+}
+.pipe-yaml .head .ok { color: var(--ok); }
+.pipe-yaml .head .err { color: var(--err); }
+.pipe-yaml pre {
+  margin: 0; padding: 14px 16px;
+  font-family: var(--font-mono); font-size: 12px; line-height: 1.65;
+  color: var(--fg-2);
+  overflow-x: auto;
+  max-height: 440px;
+  overflow-y: auto;
+}
+.pipe-yaml .k { color: var(--accent); }
+.pipe-yaml .s { color: oklch(0.78 0.13 300); }
+.pipe-yaml .n { color: oklch(0.74 0.10 230); }
+.pipe-yaml .c { color: var(--fg-4); }
+.pipe-yaml .head .actions { margin-left: auto; display: flex; gap: 6px; }
+
+/* ---------- Insight callouts (contextual) ---------- */
+.insight-tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  padding: 2px 7px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  color: var(--warn);
+  background: color-mix(in oklab, var(--warn) 10%, transparent);
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+  border-radius: 4px;
+  cursor: pointer;
+}
+.insight-tag.err {
+  color: var(--err);
+  background: color-mix(in oklab, var(--err) 10%, transparent);
+  border-color: color-mix(in oklab, var(--err) 30%, var(--line));
+}
+.insight-tag.info {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.insight-tag svg { width: 11px; height: 11px; }
+
+.insight-callout {
+  position: relative;
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 11px 14px;
+  background: color-mix(in oklab, var(--warn) 7%, var(--surface));
+  border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+  border-radius: 8px;
+  font-size: 13px;
+  color: var(--fg-2);
+}
+.insight-callout.err {
+  background: color-mix(in oklab, var(--err) 7%, var(--surface));
+  border-color: color-mix(in oklab, var(--err) 30%, var(--line));
+}
+.insight-callout.info {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+}
+.insight-callout .ico {
+  flex-shrink: 0;
+  width: 22px; height: 22px;
+  display: inline-flex; align-items: center; justify-content: center;
+  background: color-mix(in oklab, var(--warn) 18%, transparent);
+  color: var(--warn);
+  border-radius: 5px;
+}
+.insight-callout.err .ico { background: color-mix(in oklab, var(--err) 18%, transparent); color: var(--err); }
+.insight-callout.info .ico { background: var(--accent-soft); color: var(--accent); }
+.insight-callout .body { flex: 1; min-width: 0; }
+.insight-callout .body .t {
+  font-weight: 500; color: var(--fg); font-size: 13px;
+}
+.insight-callout .body .d {
+  color: var(--fg-3); font-size: 12.5px; margin-top: 2px;
+}
+.insight-callout .body .src {
+  font-family: var(--font-mono); font-size: 10.5px; color: var(--fg-4);
+  margin-top: 8px;
+  display: flex; align-items: center; gap: 6px;
+  flex-wrap: wrap;
+  line-height: 1.7;
+}
+.insight-callout .body .src > * { flex-shrink: 0; }
+.insight-callout .body .src a { color: var(--fg-3); }
+.insight-callout .body .src .sep { color: var(--fg-4); opacity: 0.5; }
+.insight-callout .body .src .ai-glyph {
+  display: inline-flex; align-items: center; gap: 3px;
+  padding: 0px 5px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface-2);
+  color: var(--fg-3);
+  line-height: 1.5;
+}
+.insight-callout .actions {
+  flex-shrink: 0;
+  display: flex; gap: 6px;
+}
+.insight-callout .dismiss {
+  background: transparent; border: 0; color: var(--fg-4);
+  cursor: pointer; padding: 2px 6px; font-family: inherit;
+  border-radius: 4px;
+}
+.insight-callout .dismiss:hover { color: var(--fg-2); background: var(--surface-2); }
+
+/* ---------- Admin specific ---------- */
+.admin-banner {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px 14px;
+  background: color-mix(in oklab, var(--accent) 10%, var(--bg-soft));
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  font-family: var(--font-mono); font-size: 11.5px;
+  color: var(--accent);
+  margin-bottom: 16px;
+}
+.admin-banner .pulse {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--accent) 25%, transparent);
+}
+.admin-banner .lbl { color: var(--fg-2); margin-left: 4px; }
+.admin-banner .who { margin-left: auto; color: var(--fg-3); }
+
+.danger-zone {
+  border: 1px solid color-mix(in oklab, var(--err) 30%, var(--line));
+  border-radius: var(--radius-lg);
+  background:
+    repeating-linear-gradient(
+      135deg,
+      transparent 0,
+      transparent 12px,
+      color-mix(in oklab, var(--err) 4%, transparent) 12px,
+      color-mix(in oklab, var(--err) 4%, transparent) 13px
+    ),
+    var(--surface);
+  padding: 16px 18px;
+}
+.danger-zone .dz-head {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--font-mono); font-size: 10.5px;
+  text-transform: uppercase; letter-spacing: 0.1em;
+  color: var(--err);
+  margin-bottom: 10px;
+}
+.danger-zone .dz-head svg { width: 12px; height: 12px; }
+.danger-zone .row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid color-mix(in oklab, var(--err) 12%, var(--line));
+}
+.danger-zone .row:last-child { border-bottom: none; }
+.danger-zone .row .desc { flex: 1; }
+.danger-zone .row .desc strong { color: var(--fg); font-weight: 500; }
+.danger-zone .row .desc div { color: var(--fg-3); font-size: 12.5px; margin-top: 2px; }
+.btn-danger {
+  background: transparent;
+  color: var(--err);
+  border-color: color-mix(in oklab, var(--err) 35%, var(--line));
+}
+.btn-danger:hover {
+  background: color-mix(in oklab, var(--err) 12%, transparent);
+  border-color: var(--err);
+  color: var(--err);
+}
+.btn-danger-solid {
+  background: var(--err); color: #fff; border-color: var(--err);
+}
+.btn-danger-solid:hover {
+  background: oklch(0.62 0.18 24); border-color: oklch(0.62 0.18 24);
+}

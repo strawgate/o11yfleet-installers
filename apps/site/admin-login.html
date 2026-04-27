@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Admin sign in — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="portal-shared.css" />
+<link rel="stylesheet" href="admin.css" />
+</head>
+<body class="auth">
+<div class="admin-stripe"></div>
+<div class="auth-shell">
+  <div class="auth-card">
+    <a href="index.html" class="brand">
+      <svg viewBox="0 0 24 24" fill="none"><path d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z" stroke="currentColor" stroke-width="1.6"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/></svg>
+      O11yFleet
+      <span style="font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.1em; padding: 2px 6px; border-radius: 4px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); margin-left: 4px;">ADMIN</span>
+    </a>
+    <h1>Staff sign in</h1>
+    <p class="sub">Internal operations console. Access is logged.</p>
+    <form onsubmit="event.preventDefault(); window.location.href='admin/overview.html';">
+      <div class="field"><label>Staff email</label><input class="input" type="email" placeholder="you@o11yfleet.com" required /></div>
+      <div class="field"><label>Password</label><input class="input" type="password" required /></div>
+      <div class="field"><label>2FA code</label><input class="input mono" placeholder="123 456" required /></div>
+      <button type="submit" class="btn btn-primary" style="height: 38px;">Sign in</button>
+    </form>
+    <div class="foot">Not a staff member? <a href="login.html">Customer sign in</a></div>
+  </div>
+</div>
+<script src="portal-shell.js"></script>
+</body>
+</html>

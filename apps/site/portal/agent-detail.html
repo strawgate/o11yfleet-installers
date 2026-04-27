@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agent · O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+<link rel="stylesheet" href="../portal-pipeline.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-wide">
+
+      <div class="page-head">
+        <div>
+          <div class="flex-row" style="gap: 10px; align-items: center;">
+            <span class="tag tag-ok"><span class="dot dot-ok"></span>healthy</span>
+            <span class="tag t-mono" style="color: var(--fg-3);">otel-edge-01.iad</span>
+          </div>
+          <h1 style="margin-top: 6px;" id="agent-h1">otel-edge-01.iad</h1>
+          <div class="sub">
+            v0.105.0 · last heartbeat <span class="t-mono" style="color: var(--fg);">2s ago</span> ·
+            assigned <a href="configuration-detail.html" style="color: var(--accent);" id="cfg-link">prod-ingress@v14</a>
+          </div>
+        </div>
+        <div class="actions">
+          <select class="select" id="agent-picker" style="width: auto; height: 32px;"></select>
+          <button class="btn btn-secondary btn-sm">Re-apply config</button>
+          <button class="btn btn-secondary btn-sm">Restart</button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <button class="tab active">Pipeline</button>
+        <button class="tab">Effective YAML</button>
+        <button class="tab">Logs <span class="count">stream</span></button>
+        <button class="tab">Resources</button>
+        <button class="tab">History</button>
+      </div>
+
+      <!-- Insights panel — page-scoped, dismissable -->
+      <div id="insights-stack" style="display: flex; flex-direction: column; gap: 10px; margin-bottom: 18px;"></div>
+
+      <div class="pipe-with-inspector">
+        <div>
+          <div class="pipe-canvas tall">
+            <div class="pipe-toolbar">
+              <button class="btn btn-ghost btn-sm" title="Reset view">Reset</button>
+              <button class="btn btn-ghost btn-sm" title="Fit">Fit</button>
+            </div>
+            <div class="pipe-legend">
+              <span><span class="swatch" style="background: oklch(0.74 0.10 230);"></span>logs</span>
+              <span><span class="swatch" style="background: var(--accent);"></span>metrics</span>
+              <span><span class="swatch" style="background: oklch(0.78 0.13 300);"></span>traces</span>
+            </div>
+            <div class="pipe-stage" id="pipe-stage"></div>
+          </div>
+
+          <div style="margin-top: 14px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;">
+            <div class="stat"><div class="label">Throughput</div><div class="val">12.4k<small>ev/s</small></div><div class="delta">last 1m</div></div>
+            <div class="stat"><div class="label">CPU</div><div class="val">14<small>%</small></div><div class="delta">avg</div></div>
+            <div class="stat"><div class="label">RSS</div><div class="val">312<small>MB</small></div><div class="delta">limit 1024</div></div>
+            <div class="stat"><div class="label">Drops (1h)</div><div class="val ok">0</div><div class="delta">all sigs</div></div>
+          </div>
+        </div>
+
+        <div class="pipe-inspector" id="pipe-inspector"></div>
+      </div>
+
+    </div>
+  </main>
+</div>
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script src="../portal-pipeline.js"></script>
+<script>
+FB.shell({ current: 'agents', crumbs: [{label:'Agents', href:'agents.html'}, {label:'otel-edge-01.iad'}] });
+
+// --- Pick which example pipeline to show ---
+const SCENES = [
+  { agent: 'otel-edge-01.iad', shape: 'edge-gateway' },
+  { agent: 'otel-k8s-03.fra',  shape: 'k8s-daemon' },
+  { agent: 'otel-host-12.sin', shape: 'host-monitor' },
+  { agent: 'otel-gateway-01.iad', shape: 'ingest-gateway' },
+];
+
+const params = new URLSearchParams(location.search);
+let idx = parseInt(params.get('a') || '0', 10);
+if (isNaN(idx) || idx < 0 || idx >= SCENES.length) idx = 0;
+
+const picker = document.getElementById('agent-picker');
+SCENES.forEach((s, i) => {
+  const o = document.createElement('option');
+  o.value = i; o.textContent = `${s.agent} · ${OPipeline.EXAMPLES[s.shape].label}`;
+  if (i === idx) o.selected = true;
+  picker.appendChild(o);
+});
+picker.addEventListener('change', () => {
+  location.search = '?a=' + picker.value;
+});
+
+const scene = SCENES[idx];
+const model = JSON.parse(JSON.stringify(OPipeline.EXAMPLES[scene.shape])); // clone
+const insights = OPipeline.PIPELINE_INSIGHTS[scene.shape] || [];
+
+document.getElementById('agent-h1').textContent = scene.agent;
+
+// Render insights stack
+const stack = document.getElementById('insights-stack');
+function renderInsights() {
+  if (!insights.length) {
+    stack.innerHTML = `
+      <div class="insight-callout info">
+        <div class="ico"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2v4M8 9v.01M2.5 13.5L8 3l5.5 10.5z" stroke-linecap="round"/></svg></div>
+        <div class="body">
+          <div class="t">Nothing to flag</div>
+          <div class="d">This collector is humming along. Insights re-evaluate every 10 minutes.</div>
+          <div class="src"><span class="ai-glyph">✦ AI</span> last checked 4m ago</div>
+        </div>
+      </div>`;
+    return;
+  }
+  stack.innerHTML = insights.map(i => `
+    <div class="insight-callout ${i.kind}" data-insight-id="${i.id}">
+      <div class="ico">
+        ${i.kind === 'err'
+          ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M6 6l4 4M10 6l-4 4" stroke-linecap="round"/></svg>'
+          : i.kind === 'warn'
+          ? '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13zM8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>'
+          : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v3M8 11v.01" stroke-linecap="round"/></svg>'}
+      </div>
+      <div class="body">
+        <div class="t">${i.title}</div>
+        <div class="d">${i.desc}</div>
+        <div class="src">
+          <span class="ai-glyph">✦ AI insight</span>
+          <span>on node</span>
+          <a href="#" data-jump="${i.node}">${i.node}</a>
+          <span class="sep">·</span>
+          <span>6m ago</span>
+        </div>
+      </div>
+      <div class="actions">
+        <button class="btn btn-secondary btn-sm" data-jump-btn="${i.node}">View on pipeline</button>
+        <button class="dismiss" data-dismiss="${i.id}">×</button>
+      </div>
+    </div>
+  `).join('');
+  stack.querySelectorAll('[data-dismiss]').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-dismiss');
+      const i = insights.findIndex(x => x.id === id);
+      if (i >= 0) insights.splice(i, 1);
+      renderPipeline();
+      renderInsights();
+    });
+  });
+  stack.querySelectorAll('[data-jump], [data-jump-btn]').forEach(el => {
+    el.addEventListener('click', (e) => {
+      e.preventDefault();
+      const id = el.getAttribute('data-jump') || el.getAttribute('data-jump-btn');
+      const node = stage.querySelector(`.pipe-node[data-id="${id}"]`);
+      if (node) {
+        node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        node.click();
+        node.style.transition = 'box-shadow 0.4s ease';
+        node.style.boxShadow = '0 0 0 4px var(--accent-soft)';
+        setTimeout(() => { node.style.boxShadow = ''; }, 1200);
+      }
+    });
+  });
+}
+
+const stage = document.getElementById('pipe-stage');
+const inspector = document.getElementById('pipe-inspector');
+let selected = null;
+
+function renderPipeline() {
+  OPipeline.renderPipeline(stage, model, {
+    editable: false,
+    insights,
+    onSelect(node) {
+      selected = node;
+      OPipeline.renderInspector(inspector, node, { editable: false });
+    },
+    onInsightClick(insight, nodeEl) {
+      // selecting node automatically and scroll to insight in stack
+      nodeEl.click();
+      const card = stack.querySelector(`[data-insight-id="${insight.id}"]`);
+      card?.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      if (card) {
+        card.style.transition = 'box-shadow 0.4s ease';
+        card.style.boxShadow = '0 0 0 4px var(--accent-soft)';
+        setTimeout(() => { card.style.boxShadow = ''; }, 1200);
+      }
+    },
+  });
+  // Initial selection
+  if (model.processors[0]) {
+    const firstProc = stage.querySelector(`.pipe-node[data-id="${model.processors[0].id}"]`);
+    firstProc?.click();
+  } else {
+    OPipeline.renderInspector(inspector, null);
+  }
+}
+
+renderPipeline();
+renderInsights();
+OPipeline.attachResizeRedraw(stage, model);
+window.addEventListener('resize', () => OPipeline.drawWires(stage, model));
+</script>
+</body>
+</html>

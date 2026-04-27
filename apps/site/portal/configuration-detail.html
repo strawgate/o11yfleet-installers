@@ -1,0 +1,278 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>prod-ingress — O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-wide">
+      <div class="page-head">
+        <div>
+          <div class="flex-row gap-sm" style="margin-bottom: 6px;">
+            <span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Git · otel-configs/main</span>
+            <span class="tag tag-ok"><span class="dot dot-ok"></span>12/12 in sync</span>
+          </div>
+          <h1><span contenteditable class="inline-edit">prod-ingress</span></h1>
+          <div class="sub">Latest <span class="t-mono">v14</span> · 12 collectors targeted by <span class="t-mono">env=production,role=ingress</span></div>
+        </div>
+        <div class="actions">
+          <a href="builder.html" class="btn btn-secondary btn-sm" style="text-decoration:none;">Edit pipeline</a>
+          <button class="btn btn-primary btn-sm" data-open-modal="rollout-modal">Roll out</button>
+        </div>
+      </div>
+
+      <div data-tabs="cfg" class="tabs">
+        <button class="tab active" data-tab="agents">Agents <span class="count">12</span></button>
+        <button class="tab" data-tab="versions">Versions <span class="count">14</span></button>
+        <button class="tab" data-tab="rollouts">Rollouts <span class="count">23</span></button>
+        <button class="tab" data-tab="yaml">YAML</button>
+        <button class="tab" data-tab="settings">Settings</button>
+      </div>
+
+      <div data-tab-panel="agents" data-tabs-group="cfg" class="tab-panel active">
+        <div class="dt-card">
+          <div class="dt-toolbar">
+            <span class="count">12 collectors · 12 in sync · 0 drift</span>
+            <div class="spacer"></div>
+            <input class="input" placeholder="Filter…" style="width: 200px; height: 30px;" />
+          </div>
+          <table class="dt">
+            <thead><tr><th>Instance UID</th><th>Status</th><th>Health</th><th>Config Hash</th><th>Last Seen</th></tr></thead>
+            <tbody id="agents-rows">
+              <tr><td colspan="5" class="meta" style="text-align:center; padding:32px;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div data-tab-panel="versions" data-tabs-group="cfg" class="tab-panel">
+        <div class="dt-card">
+          <div class="dt-toolbar"><span class="count">14 versions</span></div>
+          <table class="dt">
+            <thead><tr><th>Config Hash</th><th>Size</th><th>Created By</th><th>Created</th><th>Status</th></tr></thead>
+            <tbody id="versions-rows">
+              <tr><td colspan="5" class="meta" style="text-align:center; padding:32px;">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div data-tab-panel="rollouts" data-tabs-group="cfg" class="tab-panel">
+        <div class="dt-card">
+          <div class="dt-toolbar"><span class="count">23 rollouts</span></div>
+          <table class="dt">
+            <thead><tr><th>Started</th><th>Version</th><th>Strategy</th><th>Result</th><th></th></tr></thead>
+            <tbody>
+              <tr><td class="meta">6m ago</td><td class="mono-cell">v14</td><td>10% → 50% → 100%</td><td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);"><span class="dot dot-ok dot-pulse"></span>rolling</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">Pause</button></td></tr>
+              <tr><td class="meta">2d ago</td><td class="mono-cell">v13</td><td>50% → 100%</td><td><span class="tag tag-ok">42/42</span></td><td></td></tr>
+              <tr><td class="meta">4d ago</td><td class="mono-cell">v12</td><td>10%</td><td><span class="tag tag-err">rolled back · 4/42</span></td><td></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div data-tab-panel="yaml" data-tabs-group="cfg" class="tab-panel">
+        <div class="code-block"><button class="copy" data-copy="receivers...">copy</button><span class="c"># prod-ingress.yaml · v14</span>
+<span class="k">receivers</span>:
+  <span class="k">otlp</span>:
+    <span class="k">protocols</span>:
+      <span class="k">grpc</span>:
+        <span class="k">endpoint</span>: <span class="s">0.0.0.0:4317</span>
+      <span class="k">http</span>:
+        <span class="k">endpoint</span>: <span class="s">0.0.0.0:4318</span>
+
+<span class="k">processors</span>:
+  <span class="k">batch</span>:
+    <span class="k">timeout</span>: <span class="s">200ms</span>
+    <span class="k">send_batch_size</span>: <span class="s">4096</span>
+    <span class="k">send_batch_max_size</span>: <span class="s">4096</span>
+  <span class="k">memory_limiter</span>:
+    <span class="k">check_interval</span>: <span class="s">1s</span>
+    <span class="k">limit_mib</span>: <span class="s">1500</span>
+
+<span class="k">exporters</span>:
+  <span class="k">otlp</span>:
+    <span class="k">endpoint</span>: <span class="s">your-backend:4317</span>
+
+<span class="k">service</span>:
+  <span class="k">pipelines</span>:
+    <span class="k">traces</span>:
+      <span class="k">receivers</span>: [<span class="s">otlp</span>]
+      <span class="k">processors</span>: [<span class="s">memory_limiter</span>, <span class="s">batch</span>]
+      <span class="k">exporters</span>: [<span class="s">otlp</span>]
+        </div>
+      </div>
+
+      <div data-tab-panel="settings" data-tabs-group="cfg" class="tab-panel">
+        <div class="card card-pad" style="padding: 24px; max-width: 720px;">
+          <h3 style="font-size: 16px; font-weight: 500;">Source</h3>
+          <p class="t-muted text-sm mt-2">This configuration is backed by GitHub. Changes flow through pull requests in <span class="t-mono">otel-configs/main</span>.</p>
+          <div style="margin-top: 16px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 8px; display: flex; align-items: center; gap: 12px;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="color: var(--fg-2);"><path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.8c.85.004 1.7.115 2.5.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.16.57.67.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"/></svg>
+            <div style="flex: 1;">
+              <div class="t-mono text-sm">otel-configs/main</div>
+              <div class="t-muted text-sm">configs/prod-ingress.yaml</div>
+            </div>
+            <button class="btn btn-ghost btn-sm">Switch to UI</button>
+          </div>
+          <h3 style="font-size: 16px; font-weight: 500; margin-top: 28px;">Rollout strategy</h3>
+          <p class="t-muted text-sm mt-2">Default plan when applying new versions to targeted collectors.</p>
+          <select class="select mt-3" style="max-width: 360px;"><option>Canary 10% → 50% → 100% (recommended)</option><option>50% → 100%</option><option>All at once</option></select>
+          <h3 style="font-size: 16px; font-weight: 500; margin-top: 28px; color: var(--err);">Danger zone</h3>
+          <button class="btn btn-secondary btn-sm mt-3" data-open-modal="del-cfg" style="border-color: color-mix(in oklab, var(--err) 30%, var(--line)); color: var(--err);">Delete configuration</button>
+        </div>
+      </div>
+    </div>
+  </main>
+</div>
+
+<div class="modal-backdrop" id="rollout-modal">
+  <div class="modal">
+    <div class="modal-head"><h3>Roll out v14</h3><button class="modal-close" data-close-modal>×</button></div>
+    <div class="modal-body">
+      <div class="field"><label>Strategy</label><select class="select"><option>Canary · 10% → 50% → 100%</option><option>50% → 100%</option><option>All at once</option></select></div>
+      <div class="field"><label>Targets</label><div class="banner info"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div class="b-title">12 collectors will receive v14</div><div class="b-body t-muted">env=production,role=ingress</div></div></div></div>
+      <div class="field"><label>Notify</label><label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> #platform-otel on Slack</label></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Rollout started', 'v14 → 12 collectors. Canary at 10%.');">Start rollout</button></div>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="del-cfg">
+  <div class="modal danger">
+    <div class="modal-head"><h3>Delete prod-ingress?</h3><button class="modal-close" data-close-modal>×</button></div>
+    <div class="modal-body">
+      <p class="t-muted text-sm">12 collectors are using this configuration. They'll keep their last effective config but will no longer receive updates.</p>
+      <div class="field"><label>Type <span class="t-mono">prod-ingress</span> to confirm</label><input class="input mono" /></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-danger" data-close-modal>Delete configuration</button></div>
+  </div>
+</div>
+
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script src="../portal-api.js"></script>
+<script>
+(function () {
+  const configId = new URLSearchParams(window.location.search).get('id');
+  FP.showConnectBarIfNeeded();
+
+  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  // Load config metadata
+  async function loadConfig() {
+    if (!FP.ready() || !configId) return;
+    try {
+      const c = await FP.get('/api/v1/configurations/' + configId);
+      document.querySelector('.inline-edit').textContent = c.name || configId;
+      document.title = (c.name || configId) + ' — O11yFleet';
+      document.querySelector('.page-head .sub').textContent = 'Config hash: ' + (c.current_config_hash || 'none');
+      FB.shell({ current: 'configurations', crumbs: [{label:'Configurations', href:'configurations.html'},{label: c.name || configId}] });
+    } catch (e) {
+      console.error('Failed to load config', e);
+    }
+  }
+
+  // Load agents tab
+  async function loadAgents() {
+    if (!FP.ready() || !configId) return;
+    const tbody = document.getElementById('agents-rows');
+    const countEl = document.querySelector('[data-tab="agents"] .count');
+    try {
+      const data = await FP.get('/api/v1/configurations/' + configId + '/agents');
+      const agents = data.agents || [];
+      if (countEl) countEl.textContent = agents.length;
+      document.querySelector('[data-tab-panel="agents"] .dt-toolbar .count').textContent = agents.length + ' collector' + (agents.length !== 1 ? 's' : '');
+      if (agents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No agents connected yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = agents.map(a => {
+        const status = a.status || 'unknown';
+        const statusClass = status === 'connected' ? 'tag-ok' : status === 'disconnected' ? 'tag-err' : '';
+        const healthClass = a.healthy ? 'tag-ok' : 'tag-err';
+        const healthLabel = a.healthy ? 'healthy' : 'unhealthy';
+        const dotClass = status === 'connected' ? 'dot-ok' : status === 'disconnected' ? 'dot-err' : '';
+        const lastSeen = a.last_seen_at ? FP.relTime(new Date(a.last_seen_at).toISOString()) : '—';
+        return `<tr>
+          <td class="mono-cell" title="${esc(a.instance_uid)}">${FP.trunc(a.instance_uid, 16)}</td>
+          <td><span class="tag ${statusClass}"><span class="dot ${dotClass}"></span>${status}</span></td>
+          <td><span class="tag ${healthClass}">${healthLabel}</span></td>
+          <td class="mono-cell">${a.current_config_hash ? FP.trunc(a.current_config_hash, 12) : '—'}</td>
+          <td class="meta">${lastSeen}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" class="meta" style="color:var(--err);">Failed to load agents</td></tr>';
+    }
+  }
+
+  // Load versions tab
+  async function loadVersions() {
+    if (!FP.ready() || !configId) return;
+    const tbody = document.getElementById('versions-rows');
+    const countEl = document.querySelector('[data-tab="versions"] .count');
+    try {
+      const data = await FP.get('/api/v1/configurations/' + configId + '/versions');
+      const versions = data.versions || [];
+      const current = data.current_config_hash;
+      if (countEl) countEl.textContent = versions.length;
+      if (versions.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No versions uploaded yet.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = versions.map(v => {
+        const isCurrent = v.config_hash === current;
+        const badge = isCurrent ? '<span class="tag tag-ok">current</span>' : '<span class="tag">previous</span>';
+        return `<tr>
+          <td class="mono-cell">${FP.trunc(v.config_hash, 16)}</td>
+          <td class="meta">${v.size_bytes ? (v.size_bytes / 1024).toFixed(1) + ' KB' : '—'}</td>
+          <td class="meta">${esc(v.created_by || '—')}</td>
+          <td class="meta">${FP.relTime(v.created_at)}</td>
+          <td>${badge}</td>
+        </tr>`;
+      }).join('');
+    } catch (e) {
+      tbody.innerHTML = '<tr><td colspan="5" class="meta" style="color:var(--err);">Failed to load versions</td></tr>';
+    }
+  }
+
+  // Rollout button
+  document.querySelector('#rollout-modal .btn-primary').addEventListener('click', async () => {
+    if (!FP.ready() || !configId) return;
+    try {
+      const result = await FP.post('/api/v1/configurations/' + configId + '/rollout', {});
+      closeModal('rollout-modal');
+      toast('Rollout started', 'Pushed to ' + (result.pushed || 0) + ' agents');
+      loadAgents();
+    } catch (e) {
+      toast('Rollout failed', e.message, 'err');
+    }
+  });
+
+  // Delete button
+  document.querySelector('#del-cfg .btn-danger').addEventListener('click', async () => {
+    if (!FP.ready() || !configId) return;
+    try {
+      await FP.del('/api/v1/configurations/' + configId);
+      closeModal('del-cfg');
+      toast('Configuration deleted', '');
+      setTimeout(() => { window.location.href = 'configurations.html'; }, 800);
+    } catch (e) {
+      toast('Delete failed', e.message, 'err');
+    }
+  });
+
+  loadConfig();
+  FP.autoRefresh(() => { loadAgents(); loadVersions(); }, 10000);
+})();
+</script>
+</body>
+</html>

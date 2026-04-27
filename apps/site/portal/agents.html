@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Agents — O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-wide">
+      <div class="page-head"><div><h1>Agents</h1><div class="sub">42 collectors phoning home. Filter, group, take action.</div></div><div class="actions"><a href="getting-started.html" class="btn btn-primary btn-sm">Add collector</a></div></div>
+      <div class="dt-card">
+        <div class="dt-toolbar">
+          <input class="input" placeholder="Filter by name, label, version…" style="width: 280px; height: 30px;" />
+          <select class="select" style="width: auto; height: 30px;"><option>All status</option><option>Healthy</option><option>Degraded</option><option>Offline</option></select>
+          <select class="select" style="width: auto; height: 30px;"><option>All envs</option><option>production</option><option>staging</option><option>dev</option></select>
+          <span class="count" style="margin-left: 8px;">42 collectors</span>
+          <div class="spacer"></div>
+          <button class="btn btn-ghost btn-sm">Export CSV</button>
+        </div>
+        <table class="dt">
+          <thead><tr><th>Name</th><th>Labels</th><th>Version</th><th>Config</th><th>Heartbeat</th><th>Status</th></tr></thead>
+          <tbody id="agent-rows"></tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script>
+FB.shell({ current: 'agents', crumbs: [{label:'Agents'}] });
+const rows = [];
+const regions = ['iad','sfo','fra','sin'];
+const roles = [['edge','prod-ingress','v14'],['gateway','prod-gateway','v9'],['k8s','k8s-daemon','v22']];
+let i = 0;
+for (const r of regions) {
+  for (const [role, cfg, ver] of roles) {
+    for (let n = 1; n <= 4 && i < 42; n++, i++) {
+      const status = i % 11 === 7 ? ['warn','queue 84%'] : (i % 17 === 0 ? ['err','offline 14m'] : ['ok','healthy']);
+      rows.push(`<tr class="clickable" onclick="window.location.href='agent-detail.html?a=${i % 4}'"><td class="name">otel-${role}-0${n}.${r}</td><td class="meta">env=production,role=${role},region=${r}</td><td class="mono-cell">0.105.0</td><td class="mono-cell"><a href="configuration-detail.html" style="color: var(--accent);" onclick="event.stopPropagation()">${cfg}@${ver}</a></td><td class="meta">${status[0]==='err'?'14m':'2s'} ago</td><td><span class="tag tag-${status[0]}"><span class="dot dot-${status[0]}"></span>${status[1]}</span></td></tr>`);
+    }
+  }
+}
+document.getElementById('agent-rows').innerHTML = rows.join('');
+</script>
+</body>
+</html>

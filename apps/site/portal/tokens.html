@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>API tokens — O11yFleet</title>
+<link rel="stylesheet" href="../styles.css" />
+<link rel="stylesheet" href="../portal-shared.css" />
+</head>
+<body>
+<div class="app">
+  <div id="shell-sidebar"></div>
+  <div id="shell-topbar"></div>
+  <main class="main">
+    <div class="main-wide">
+      <div class="page-head"><div><h1>API tokens</h1><div class="sub">Used by collectors to authenticate, and by CI to call the API.</div></div><div class="actions"><button class="btn btn-primary btn-sm" data-open-modal="new-tok">New token</button></div></div>
+      <div class="dt-card">
+        <table class="dt">
+          <thead><tr><th>Name</th><th>Token</th><th>Scope</th><th>Last used</th><th>Created</th><th></th></tr></thead>
+          <tbody>
+            <tr><td class="name">prod-collectors</td><td class="mono-cell">tok_live_a91f3b…<button class="copy" data-copy="tok_live_a91f3b2c8e">copy</button></td><td><span class="tag">collector</span></td><td class="meta">2s ago</td><td class="meta">Mar 12</td><td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td></tr>
+            <tr><td class="name">staging-collectors</td><td class="mono-cell">tok_live_7c2ed1…<button class="copy" data-copy="tok_live_7c2ed11">copy</button></td><td><span class="tag">collector</span></td><td class="meta">1m ago</td><td class="meta">Feb 4</td><td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td></tr>
+            <tr><td class="name">ci-deploy</td><td class="mono-cell">tok_live_3a01f9…<button class="copy" data-copy="tok_live_3a01f9e">copy</button></td><td><span class="tag">api · admin</span></td><td class="meta">3h ago</td><td class="meta">Jan 20</td><td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </main>
+</div>
+<div class="modal-backdrop" id="new-tok"><div class="modal"><div class="modal-head"><h3>New API token</h3><button class="modal-close" data-close-modal>×</button></div><div class="modal-body">
+  <div class="field"><label>Name</label><input class="input" placeholder="e.g. prod-collectors" /></div>
+  <div class="field"><label>Scope</label><select class="select"><option>collector — connect a collector</option><option>api · read</option><option>api · admin</option></select></div>
+</div><div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Token created','Save it now — it won\\'t be shown again.')">Create token</button></div></div></div>
+<script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script>FB.shell({ current: 'tokens', crumbs: [{label:'Setup'},{label:'API tokens'}] });</script>
+</body>
+</html>

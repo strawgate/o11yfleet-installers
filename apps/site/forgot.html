@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Reset your password — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<link rel="stylesheet" href="portal-shared.css" />
+</head>
+<body class="auth">
+<div class="auth-shell">
+  <div class="auth-card">
+    <a href="index.html" class="brand">
+      <svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><circle cx="12" cy="11" r="2.2" fill="currentColor"/><path d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>
+      O11yFleet
+    </a>
+    <h1>Reset your password</h1>
+    <p class="sub">We'll email you a link to set a new password.</p>
+    <form onsubmit="event.preventDefault(); toast('Email sent', 'Check your inbox for a reset link.');">
+      <div class="field">
+        <label>Work email</label>
+        <input class="input" type="email" placeholder="you@company.com" required />
+      </div>
+      <button type="submit" class="btn btn-primary" style="height: 38px;">Send reset link</button>
+    </form>
+    <div class="foot"><a href="login.html">← Back to sign in</a></div>
+  </div>
+</div>
+<script src="portal-shell.js"></script>
+</body>
+</html>
