@@ -1,10 +1,20 @@
 import { DurableObject } from "cloudflare:workers";
 import { decodeAgentToServer, encodeServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
-import type { AgentState } from "@o11yfleet/core/state-machine";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
+import { hexToUint8Array } from "@o11yfleet/core/hex";
+import {
+  initSchema,
+  loadAgentState,
+  saveAgentState,
+  getAgentCount,
+  agentExists,
+  markDisconnected,
+  getStats,
+  listAgents,
+} from "./agent-state-repo.js";
 
 export interface ConfigDOEnv {
   FP_DB: D1Database;
@@ -25,13 +35,12 @@ interface WSAttachment {
 const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_AGENTS_PER_CONFIG = 50_000;
 
-// Config Durable Object — Phase 2B
-// Central stateful actor for OpAMP agent management
+// Config Durable Object — per tenant:config stateful actor for OpAMP agent management
 // Uses WebSocket Hibernation API — no timers, no alarms, no intervals
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private desiredConfigHash: string | null = null;
+  private desiredConfigContent: string | null = null; // C4: cached YAML body for delivery
   private initialized = false;
-  // M1: In-memory rate limiting — not persisted to storage on every message
   private rateLimitWindows = new Map<string, number[]>();
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
@@ -40,25 +49,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   private async ensureInit(): Promise<void> {
     if (this.initialized) return;
-    this.ctx.storage.sql.exec(`
-      CREATE TABLE IF NOT EXISTS agents (
-        instance_uid TEXT PRIMARY KEY,
-        tenant_id TEXT NOT NULL,
-        config_id TEXT NOT NULL,
-        sequence_num INTEGER NOT NULL DEFAULT 0,
-        generation INTEGER NOT NULL DEFAULT 1,
-        healthy INTEGER NOT NULL DEFAULT 1,
-        status TEXT NOT NULL DEFAULT 'unknown',
-        last_error TEXT NOT NULL DEFAULT '',
-        current_config_hash TEXT,
-        last_seen_at INTEGER NOT NULL DEFAULT 0,
-        connected_at INTEGER NOT NULL DEFAULT 0,
-        agent_description TEXT,
-        capabilities INTEGER NOT NULL DEFAULT 0
-      )
-    `);
+    initSchema(this.ctx.storage.sql);
 
-    // Load desired config hash from storage
     const stored = await this.ctx.storage.get<string>("desired_config_hash");
     if (stored) {
       this.desiredConfigHash = stored;
@@ -66,16 +58,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.initialized = true;
   }
 
+  // ─── HTTP Dispatch ────────────────────────────────────────────────
+
   async fetch(request: Request): Promise<Response> {
     await this.ensureInit();
     const url = new URL(request.url);
 
-    // WebSocket upgrade for OpAMP connections
     if (request.headers.get("Upgrade") === "websocket") {
       return this.handleWebSocket(request);
     }
 
-    // HTTP commands
     if (url.pathname === "/command/set-desired-config" && request.method === "POST") {
       return this.handleSetDesiredConfig(request);
     }
@@ -91,37 +83,28 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     return new Response("Not found", { status: 404 });
   }
 
+  // ─── WebSocket Lifecycle ──────────────────────────────────────────
+
   private async handleWebSocket(request: Request): Promise<Response> {
-    // Extract context from internal headers (set by ingress router)
     const tenantId = request.headers.get("x-fp-tenant-id") ?? "unknown";
     const configId = request.headers.get("x-fp-config-id") ?? "unknown";
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
 
     // Enforce max agents per config
-    const agentCount = this.ctx.storage.sql
-      .exec("SELECT COUNT(*) as count FROM agents")
-      .one().count as number;
-    if (agentCount >= MAX_AGENTS_PER_CONFIG) {
-      // Check if this is a reconnect (existing agent)
-      const existing = this.ctx.storage.sql
-        .exec("SELECT 1 FROM agents WHERE instance_uid = ?", instanceUid)
-        .toArray();
-      if (existing.length === 0) {
-        return Response.json(
-          { error: "Agent limit reached for this configuration" },
-          { status: 429 },
-        );
-      }
+    const count = getAgentCount(this.ctx.storage.sql);
+    if (count >= MAX_AGENTS_PER_CONFIG && !agentExists(this.ctx.storage.sql, instanceUid)) {
+      return Response.json(
+        { error: "Agent limit reached for this configuration" },
+        { status: 429 },
+      );
     }
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
-    // Accept with hibernation API
     this.ctx.acceptWebSocket(server);
 
-    // Serialize attachment for hibernation restore
     const attachment: WSAttachment = {
       tenant_id: tenantId,
       config_id: configId,
@@ -131,7 +114,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     };
     server.serializeAttachment(attachment);
 
-    // If this is an enrollment, generate and send a signed claim
     if (isEnrollment) {
       const claim: AssignmentClaim = {
         v: 1,
@@ -140,33 +122,27 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         instance_uid: instanceUid,
         generation: 1,
         iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+        exp: Math.floor(Date.now() / 1000) + 86400 * 30,
       };
 
       try {
         const signedClaim = await signClaim(claim, this.env.CLAIM_SECRET);
 
-        // Send the claim in the initial ServerToAgent response
-        const enrollmentResponse = encodeServerToAgent({
-          instance_uid: hexToUint8Array(instanceUid),
-          flags: 0,
-          capabilities: 0x00000003, // AcceptsStatus | OffersRemoteConfig
-          agent_identification: {
-            new_instance_uid: hexToUint8Array(instanceUid),
-          },
-        });
-
-        // We send the claim as a separate text message to keep binary protocol clean
         server.send(JSON.stringify({
           type: "enrollment_complete",
           assignment_claim: signedClaim,
           instance_uid: instanceUid,
         }));
 
-        // Also send the initial OpAMP response
-        server.send(enrollmentResponse);
+        server.send(encodeServerToAgent({
+          instance_uid: hexToUint8Array(instanceUid),
+          flags: 0,
+          capabilities: 0x00000003,
+          agent_identification: {
+            new_instance_uid: hexToUint8Array(instanceUid),
+          },
+        }));
 
-        // Emit enrollment event
         await this.emitEvents([{
           type: "agent_enrolled" as const,
           tenant_id: tenantId,
@@ -175,8 +151,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           timestamp: Date.now(),
           generation: 1,
         }]);
-      } catch (err) {
-        // C5 fix: Enrollment claim generation failed — close WebSocket with error
+      } catch {
         server.close(4500, "Enrollment failed");
         return new Response(null, { status: 101, webSocket: client });
       }
@@ -188,7 +163,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     await this.ensureInit();
 
-    // M2 fix: Reject text frames — OpAMP uses binary only
     if (typeof message === "string") {
       ws.close(4000, "Binary frames only");
       return;
@@ -200,51 +174,34 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    // M1 fix: Rate limit using in-memory Map instead of serializing on every message
-    const now = Date.now();
-    const uid = attachment.instance_uid;
-    let timestamps = this.rateLimitWindows.get(uid);
-    if (!timestamps) {
-      timestamps = [];
-      this.rateLimitWindows.set(uid, timestamps);
-    }
-    const windowStart = now - 60_000;
-    // Filter in place
-    let writeIdx = 0;
-    for (let i = 0; i < timestamps.length; i++) {
-      if (timestamps[i] > windowStart) timestamps[writeIdx++] = timestamps[i];
-    }
-    timestamps.length = writeIdx;
-    if (timestamps.length >= MAX_MESSAGES_PER_MINUTE) {
+    // Rate limit
+    if (this.isRateLimited(attachment.instance_uid)) {
       ws.close(4029, "Rate limit exceeded");
       return;
     }
-    timestamps.push(now);
 
-    const buf = message;
+    const agentMsg = decodeAgentToServer(message);
 
-    const agentMsg = decodeAgentToServer(buf);
+    const state = loadAgentState(
+      this.ctx.storage.sql,
+      attachment.instance_uid,
+      attachment.tenant_id,
+      attachment.config_id,
+      this.desiredConfigHash,
+    );
 
-    // Load agent state from DO SQLite
-    const state = this.loadAgentState(attachment);
+    const result = processFrame(state, agentMsg, this.desiredConfigContent);
 
-    // Process through state machine
-    const result = processFrame(state, agentMsg);
-
-    // Persist if needed
     if (result.shouldPersist) {
-      this.saveAgentState(result.newState);
+      saveAgentState(this.ctx.storage.sql, result.newState);
     }
 
-    // Emit events to queue
     if (result.events.length > 0) {
       await this.emitEvents(result.events);
     }
 
-    // Send response
     if (result.response) {
-      const responseBuf = encodeServerToAgent(result.response);
-      ws.send(responseBuf);
+      ws.send(encodeServerToAgent(result.response));
     }
   }
 
@@ -253,39 +210,25 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const attachment = ws.deserializeAttachment() as WSAttachment | null;
     if (!attachment) return;
 
-    // Mark agent as disconnected in DO SQLite
-    this.ctx.storage.sql.exec(
-      `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
-      Date.now(),
-      attachment.instance_uid,
-    );
+    markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
 
-    // Emit disconnect event
-    await this.emitEvents([
-      {
-        type: "agent_disconnected" as const,
-        tenant_id: attachment.tenant_id,
-        config_id: attachment.config_id,
-        instance_uid: attachment.instance_uid,
-        timestamp: Date.now(),
-        reason: "websocket_close",
-      },
-    ]);
+    await this.emitEvents([{
+      type: "agent_disconnected" as const,
+      tenant_id: attachment.tenant_id,
+      config_id: attachment.config_id,
+      instance_uid: attachment.instance_uid,
+      timestamp: Date.now(),
+      reason: "websocket_close",
+    }]);
 
-    // Clean up rate limit window
     this.rateLimitWindows.delete(attachment.instance_uid);
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-    // C6 fix: Treat as disconnect — update status and emit event
     await this.ensureInit();
     const attachment = ws.deserializeAttachment() as WSAttachment | null;
     if (attachment) {
-      this.ctx.storage.sql.exec(
-        `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
-        Date.now(),
-        attachment.instance_uid,
-      );
+      markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
       await this.emitEvents([{
         type: "agent_disconnected" as const,
         tenant_id: attachment.tenant_id,
@@ -294,43 +237,44 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         timestamp: Date.now(),
         reason: "websocket_error",
       }]);
-      // Clean up rate limit window
       this.rateLimitWindows.delete(attachment.instance_uid);
     }
     ws.close(1011, "Internal error");
   }
 
+  // ─── Internal Commands ────────────────────────────────────────────
+
   private async handleSetDesiredConfig(request: Request): Promise<Response> {
-    const body = await request.json<{ config_hash: string }>();
+    const body = await request.json<{ config_hash: string; config_content?: string }>();
     if (!body.config_hash) {
       return Response.json({ error: "config_hash required" }, { status: 400 });
     }
 
     this.desiredConfigHash = body.config_hash;
+    this.desiredConfigContent = body.config_content ?? null;
     await this.ctx.storage.put("desired_config_hash", body.config_hash);
 
-    // Push to all connected agents
     const sockets = this.ctx.getWebSockets();
     const desiredHashBytes = hexToUint8Array(body.config_hash);
     let pushed = 0;
+
+    // C4 fix: Include config content in config_map so agents get the actual YAML
+    const configMap = this.buildConfigMap();
 
     for (const ws of sockets) {
       const attachment = ws.deserializeAttachment() as WSAttachment | null;
       if (!attachment) continue;
 
-      // C7 fix: Use the agent's actual instance_uid, not zeroed bytes
-      const response = encodeServerToAgent({
-        instance_uid: hexToUint8Array(attachment.instance_uid),
-        flags: 0,
-        capabilities: 0x00000003, // AcceptsStatus | OffersRemoteConfig
-        remote_config: {
-          config: { config_map: {} },
-          config_hash: desiredHashBytes,
-        },
-      });
-
       try {
-        ws.send(response);
+        ws.send(encodeServerToAgent({
+          instance_uid: hexToUint8Array(attachment.instance_uid),
+          flags: 0,
+          capabilities: 0x00000003,
+          remote_config: {
+            config: { config_map: configMap },
+            config_hash: desiredHashBytes,
+          },
+        }));
         pushed++;
       } catch {
         // Socket may have closed
@@ -340,116 +284,56 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     return Response.json({ pushed, config_hash: body.config_hash });
   }
 
-  private handleGetStats(): Response {
-    const row = this.ctx.storage.sql
-      .exec(
-        `SELECT
-          COUNT(*) as total,
-          SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) as connected,
-          SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END) as healthy
-        FROM agents`,
-      )
-      .one();
+  /**
+   * Build the config_map with actual YAML content if available.
+   */
+  private buildConfigMap(): Record<string, { body: Uint8Array; content_type: string }> {
+    if (!this.desiredConfigContent) return {};
+    return {
+      "": {
+        body: new TextEncoder().encode(this.desiredConfigContent),
+        content_type: "text/yaml",
+      },
+    };
+  }
 
+  private handleGetStats(): Response {
+    const stats = getStats(this.ctx.storage.sql);
     return Response.json({
-      total_agents: row.total ?? 0,
-      connected_agents: row.connected ?? 0,
-      healthy_agents: row.healthy ?? 0,
+      total_agents: stats.total,
+      connected_agents: stats.connected,
+      healthy_agents: stats.healthy,
       desired_config_hash: this.desiredConfigHash,
       active_websockets: this.ctx.getWebSockets().length,
     });
   }
 
   private handleGetAgents(): Response {
-    const rows = this.ctx.storage.sql
-      .exec(`SELECT * FROM agents ORDER BY last_seen_at DESC LIMIT 1000`)
-      .toArray();
-
-    return Response.json({ agents: rows });
+    const agents = listAgents(this.ctx.storage.sql);
+    return Response.json({ agents });
   }
 
-  private loadAgentState(attachment: WSAttachment): AgentState {
-    const row = this.ctx.storage.sql
-      .exec(`SELECT * FROM agents WHERE instance_uid = ?`, attachment.instance_uid)
-      .toArray()[0];
+  // ─── Rate Limiting ────────────────────────────────────────────────
 
-    if (row) {
-      return {
-        instance_uid: hexToUint8Array(row.instance_uid as string),
-        tenant_id: row.tenant_id as string,
-        config_id: row.config_id as string,
-        sequence_num: row.sequence_num as number,
-        generation: row.generation as number,
-        healthy: (row.healthy as number) === 1,
-        status: row.status as string,
-        last_error: row.last_error as string,
-        current_config_hash: row.current_config_hash
-          ? hexToUint8Array(row.current_config_hash as string)
-          : null,
-        desired_config_hash: this.desiredConfigHash
-          ? hexToUint8Array(this.desiredConfigHash)
-          : null,
-        last_seen_at: row.last_seen_at as number,
-        connected_at: row.connected_at as number,
-        agent_description: row.agent_description as string | null,
-        capabilities: (row.capabilities as number) ?? 0,
-      };
+  private isRateLimited(uid: string): boolean {
+    const now = Date.now();
+    let timestamps = this.rateLimitWindows.get(uid);
+    if (!timestamps) {
+      timestamps = [];
+      this.rateLimitWindows.set(uid, timestamps);
     }
-
-    // New agent
-    return {
-      instance_uid: hexToUint8Array(attachment.instance_uid),
-      tenant_id: attachment.tenant_id,
-      config_id: attachment.config_id,
-      sequence_num: 0,
-      generation: 1,
-      healthy: true,
-      status: "unknown",
-      last_error: "",
-      current_config_hash: null,
-      desired_config_hash: this.desiredConfigHash
-        ? hexToUint8Array(this.desiredConfigHash)
-        : null,
-      last_seen_at: 0,
-      connected_at: 0,
-      agent_description: null,
-      capabilities: 0,
-    };
+    const windowStart = now - 60_000;
+    let writeIdx = 0;
+    for (let i = 0; i < timestamps.length; i++) {
+      if (timestamps[i] > windowStart) timestamps[writeIdx++] = timestamps[i];
+    }
+    timestamps.length = writeIdx;
+    if (timestamps.length >= MAX_MESSAGES_PER_MINUTE) return true;
+    timestamps.push(now);
+    return false;
   }
 
-  private saveAgentState(state: AgentState): void {
-    const uid = uint8ToHex(state.instance_uid);
-    const configHash = state.current_config_hash ? uint8ToHex(state.current_config_hash) : null;
-
-    this.ctx.storage.sql.exec(
-      `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description, capabilities)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-       ON CONFLICT(instance_uid) DO UPDATE SET
-         sequence_num = excluded.sequence_num,
-         generation = excluded.generation,
-         healthy = excluded.healthy,
-         status = excluded.status,
-         last_error = excluded.last_error,
-         current_config_hash = excluded.current_config_hash,
-         last_seen_at = excluded.last_seen_at,
-         connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
-         agent_description = COALESCE(excluded.agent_description, agents.agent_description),
-         capabilities = excluded.capabilities`,
-      uid,
-      state.tenant_id,
-      state.config_id,
-      state.sequence_num,
-      state.generation,
-      state.healthy ? 1 : 0,
-      state.status,
-      state.last_error,
-      configHash,
-      state.last_seen_at,
-      state.connected_at,
-      state.agent_description,
-      state.capabilities,
-    );
-  }
+  // ─── Event Emission ───────────────────────────────────────────────
 
   private async emitEvents(events: AnyFleetEvent[]): Promise<void> {
     try {
@@ -460,19 +344,4 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       // Queue failure should not break WS handling
     }
   }
-}
-
-function hexToUint8Array(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) hex = "0" + hex;
-  const bytes = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < bytes.length; i++) {
-    bytes[i] = parseInt(hex.substring(i * 2, i * 2 + 2), 16);
-  }
-  return bytes;
-}
-
-function uint8ToHex(arr: Uint8Array): string {
-  return Array.from(arr)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }

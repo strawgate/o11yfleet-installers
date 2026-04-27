@@ -11,6 +11,7 @@ import {
 } from "../codec/types.js";
 import { FleetEventType } from "../events.js";
 import type { AnyFleetEvent } from "../events.js";
+import { uint8ToHex } from "../hex.js";
 
 function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   if (a === null && b === null) return true;
@@ -22,7 +23,7 @@ function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   return true;
 }
 
-export function processFrame(state: AgentState, msg: AgentToServer): ProcessResult {
+export function processFrame(state: AgentState, msg: AgentToServer, configContent?: string | null): ProcessResult {
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
   const now = Date.now();
@@ -150,8 +151,16 @@ export function processFrame(state: AgentState, msg: AgentToServer): ProcessResu
     !arraysEqual(newState.current_config_hash, newState.desired_config_hash) &&
     (newState.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0
   ) {
+    // C4 fix: Include config content in config_map when available
+    const configMap: Record<string, { body: Uint8Array; content_type: string }> = {};
+    if (configContent) {
+      configMap[""] = {
+        body: new TextEncoder().encode(configContent),
+        content_type: "text/yaml",
+      };
+    }
     response.remote_config = {
-      config: { config_map: {} },
+      config: { config_map: configMap },
       config_hash: newState.desired_config_hash,
     };
   }
@@ -162,8 +171,4 @@ export function processFrame(state: AgentState, msg: AgentToServer): ProcessResu
   return { newState, response, events, shouldPersist };
 }
 
-function uint8ToHex(arr: Uint8Array): string {
-  return Array.from(arr)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+

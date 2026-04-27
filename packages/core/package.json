@@ -10,7 +10,8 @@
     "./codec": "./src/codec/index.ts",
     "./state-machine": "./src/state-machine/index.ts",
     "./auth": "./src/auth/index.ts",
-    "./events": "./src/events.ts"
+    "./events": "./src/events.ts",
+    "./hex": "./src/hex.ts"
   },
   "scripts": {
     "lint": "eslint src/ test/",

@@ -285,7 +285,15 @@ async function handleRollout(
   const doId = env.CONFIG_DO.idFromName(doName);
   const stub = env.CONFIG_DO.get(doId);
 
-  const body = JSON.stringify({ config_hash: config.current_config_hash });
+  // C4 fix: Fetch config content from R2 to include in rollout push
+  const r2Key = `configs/sha256/${config.current_config_hash}.yaml`;
+  const r2Obj = await env.FP_CONFIGS.get(r2Key);
+  const configContent = r2Obj ? await r2Obj.text() : null;
+
+  const body = JSON.stringify({
+    config_hash: config.current_config_hash,
+    config_content: configContent,
+  });
   const response = await stub.fetch(
     new Request("http://internal/command/set-desired-config", {
       method: "POST",
