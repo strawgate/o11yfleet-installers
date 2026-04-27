@@ -20,7 +20,11 @@ interface WSAttachment {
   instance_uid: string;
   connected_at: number;
   is_enrollment?: boolean;
+  msg_timestamps?: number[]; // sliding window for rate limiting
 }
+
+const MAX_MESSAGES_PER_MINUTE = 60;
+const MAX_AGENTS_PER_CONFIG = 50_000;
 
 // Config Durable Object — Phase 2B
 // Central stateful actor for OpAMP agent management
@@ -91,6 +95,23 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const configId = request.headers.get("x-fp-config-id") ?? "unknown";
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
+
+    // Enforce max agents per config
+    const agentCount = this.ctx.storage.sql
+      .exec("SELECT COUNT(*) as count FROM agents")
+      .one().count as number;
+    if (agentCount >= MAX_AGENTS_PER_CONFIG) {
+      // Check if this is a reconnect (existing agent)
+      const existing = this.ctx.storage.sql
+        .exec("SELECT 1 FROM agents WHERE instance_uid = ?", instanceUid)
+        .toArray();
+      if (existing.length === 0) {
+        return Response.json(
+          { error: "Agent limit reached for this configuration" },
+          { status: 429 },
+        );
+      }
+    }
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
@@ -168,6 +189,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       ws.close(1008, "Missing attachment");
       return;
     }
+
+    // Rate limit: sliding window of message timestamps
+    const now = Date.now();
+    const windowStart = now - 60_000;
+    const timestamps = (attachment.msg_timestamps ?? []).filter((t) => t > windowStart);
+    if (timestamps.length >= MAX_MESSAGES_PER_MINUTE) {
+      ws.close(4029, "Rate limit exceeded");
+      return;
+    }
+    timestamps.push(now);
+    attachment.msg_timestamps = timestamps;
+    ws.serializeAttachment(attachment);
 
     // Decode the frame
     let buf: ArrayBuffer;
