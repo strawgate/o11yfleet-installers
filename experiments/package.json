@@ -1,0 +1,15 @@
+{
+  "name": "@o11yfleet/experiments",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "npx tsx src/benchmark.ts"
+  },
+  "dependencies": {
+    "@o11yfleet/core": "workspace:*"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.0"
+  }
+}
