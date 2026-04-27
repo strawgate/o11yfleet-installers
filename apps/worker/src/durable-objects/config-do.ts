@@ -6,6 +6,12 @@ import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array } from "@o11yfleet/core/hex";
 import {
+  startWsMessageSpan,
+  startWsLifecycleSpan,
+  recordSpanError,
+  SpanStatusCode,
+} from "../tracing.js";
+import {
   initSchema,
   loadAgentState,
   saveAgentState,
@@ -180,28 +186,41 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    const agentMsg = decodeAgentToServer(message);
+    const span = startWsMessageSpan(attachment.instance_uid, attachment.tenant_id, attachment.config_id);
+    try {
+      const agentMsg = decodeAgentToServer(message);
+      span.setAttribute("opamp.sequence_num", agentMsg.sequence_num);
 
-    const state = loadAgentState(
-      this.ctx.storage.sql,
-      attachment.instance_uid,
-      attachment.tenant_id,
-      attachment.config_id,
-      this.desiredConfigHash,
-    );
+      const state = loadAgentState(
+        this.ctx.storage.sql,
+        attachment.instance_uid,
+        attachment.tenant_id,
+        attachment.config_id,
+        this.desiredConfigHash,
+      );
 
-    const result = processFrame(state, agentMsg, this.desiredConfigContent);
+      const result = processFrame(state, agentMsg, this.desiredConfigContent);
 
-    if (result.shouldPersist) {
-      saveAgentState(this.ctx.storage.sql, result.newState);
-    }
+      if (result.shouldPersist) {
+        saveAgentState(this.ctx.storage.sql, result.newState);
+      }
 
-    if (result.events.length > 0) {
-      await this.emitEvents(result.events);
-    }
+      if (result.events.length > 0) {
+        span.setAttribute("opamp.events_emitted", result.events.length);
+        await this.emitEvents(result.events);
+      }
 
-    if (result.response) {
-      ws.send(encodeServerToAgent(result.response));
+      if (result.response) {
+        ws.send(encodeServerToAgent(result.response));
+        if (result.response.remote_config) {
+          span.setAttribute("opamp.config_offered", true);
+        }
+      }
+    } catch (err) {
+      recordSpanError(span, err);
+      throw err;
+    } finally {
+      span.end();
     }
   }
 
@@ -210,24 +229,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const attachment = ws.deserializeAttachment() as WSAttachment | null;
     if (!attachment) return;
 
-    markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
-
-    await this.emitEvents([{
-      type: "agent_disconnected" as const,
-      tenant_id: attachment.tenant_id,
-      config_id: attachment.config_id,
-      instance_uid: attachment.instance_uid,
-      timestamp: Date.now(),
-      reason: "websocket_close",
-    }]);
-
-    this.rateLimitWindows.delete(attachment.instance_uid);
-  }
-
-  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-    await this.ensureInit();
-    const attachment = ws.deserializeAttachment() as WSAttachment | null;
-    if (attachment) {
+    const span = startWsLifecycleSpan("close", attachment.instance_uid);
+    try {
       markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
       await this.emitEvents([{
         type: "agent_disconnected" as const,
@@ -235,11 +238,37 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         config_id: attachment.config_id,
         instance_uid: attachment.instance_uid,
         timestamp: Date.now(),
-        reason: "websocket_error",
+        reason: "websocket_close",
       }]);
       this.rateLimitWindows.delete(attachment.instance_uid);
+    } finally {
+      span.end();
     }
-    ws.close(1011, "Internal error");
+  }
+
+  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+    await this.ensureInit();
+    const attachment = ws.deserializeAttachment() as WSAttachment | null;
+
+    const span = startWsLifecycleSpan("error", attachment?.instance_uid ?? "unknown");
+    span.setStatus({ code: SpanStatusCode.ERROR });
+    try {
+      if (attachment) {
+        markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
+        await this.emitEvents([{
+          type: "agent_disconnected" as const,
+          tenant_id: attachment.tenant_id,
+          config_id: attachment.config_id,
+          instance_uid: attachment.instance_uid,
+          timestamp: Date.now(),
+          reason: "websocket_error",
+        }]);
+        this.rateLimitWindows.delete(attachment.instance_uid);
+      }
+      ws.close(1011, "Internal error");
+    } finally {
+      span.end();
+    }
   }
 
   // ─── Internal Commands ────────────────────────────────────────────

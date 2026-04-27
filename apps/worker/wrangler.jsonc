@@ -2,6 +2,7 @@
   "name": "o11yfleet-worker",
   "main": "src/index.ts",
   "compatibility_date": "2026-04-26",
+  "compatibility_flags": ["nodejs_compat"],
   "vars": {
     "CLAIM_SECRET": "dev-secret-key-for-testing-only-32ch"
   },
