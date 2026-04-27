@@ -54,5 +54,22 @@
       "binding": "FP_ANALYTICS",
       "dataset": "fp_analytics"
     }
-  ]
+  ],
+  // ─── Environment overrides ─────────────────────────────────────────
+  // Staging and production use the instrumented entry point for OTel auto-tracing.
+  // Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
+  "env": {
+    "staging": {
+      "main": "src/instrumented.ts",
+      "vars": {
+        "CLAIM_SECRET": ""
+      }
+    },
+    "production": {
+      "main": "src/instrumented.ts",
+      "vars": {
+        "CLAIM_SECRET": ""
+      }
+    }
+  }
 }

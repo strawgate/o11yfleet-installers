@@ -6,6 +6,7 @@
 import type { AgentToServer, ServerToAgent } from "./types.js";
 
 const HEADER_SIZE = 4; // 4-byte big-endian length prefix
+const MAX_FRAME_BYTES = 256 * 1024; // 256 KB max payload to prevent OOM/CPU timeout
 const TEXT_ENCODER = new TextEncoder();
 const TEXT_DECODER = new TextDecoder();
 
@@ -40,6 +41,9 @@ export function decodeFrame<T = AgentToServer | ServerToAgent>(buf: ArrayBuffer)
     throw new Error(`Frame too short: ${buf.byteLength} bytes`);
   }
   const payloadLen = view.getUint32(0, false);
+  if (payloadLen > MAX_FRAME_BYTES) {
+    throw new Error(`Frame payload too large: ${payloadLen} bytes (max ${MAX_FRAME_BYTES})`);
+  }
   if (buf.byteLength < HEADER_SIZE + payloadLen) {
     throw new Error(`Incomplete frame: expected ${payloadLen} payload bytes, got ${buf.byteLength - HEADER_SIZE}`);
   }

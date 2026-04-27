@@ -23,6 +23,7 @@ import {
   loadDesiredConfig,
   saveDesiredConfig,
   checkRateLimit,
+  sweepStaleAgents,
 } from "./agent-state-repo.js";
 
 export interface ConfigDOEnv {
@@ -44,8 +45,14 @@ interface WSAttachment {
 const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_AGENTS_PER_CONFIG = 50_000;
 
+// Stale agent detection: agents not seen for this long are marked disconnected.
+// Default: 3× heartbeat interval (heartbeats expected every 30s → 90s threshold).
+const STALE_AGENT_THRESHOLD_MS = 90_000;
+// How often the alarm fires to sweep stale agents (60s).
+const STALE_SWEEP_INTERVAL_MS = 60_000;
+
 // Config Durable Object — per tenant:config stateful actor for OpAMP agent management
-// Uses WebSocket Hibernation API — no timers, no alarms, no intervals
+// Uses WebSocket Hibernation API with DO alarm for stale agent detection.
 //
 // Design: ZERO meaningful instance state. All mutable data lives in DO-local
 // SQLite (sync, ~µs per query). This makes the DO fully hibernation-proof —
@@ -61,6 +68,14 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (this.initialized) return;
     initSchema(this.ctx.storage.sql);
     this.initialized = true;
+  }
+
+  /** Schedule the stale-agent sweep alarm if not already set. */
+  private async ensureAlarm(): Promise<void> {
+    const existing = await this.ctx.storage.getAlarm();
+    if (!existing) {
+      await this.ctx.storage.setAlarm(Date.now() + STALE_SWEEP_INTERVAL_MS);
+    }
   }
 
   // ─── HTTP Dispatch ────────────────────────────────────────────────
@@ -161,6 +176,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         return new Response(null, { status: 101, webSocket: client });
       }
     }
+
+    // Start stale sweep alarm when agents connect
+    await this.ensureAlarm();
 
     return new Response(null, { status: 101, webSocket: client });
   }
@@ -266,9 +284,44 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           reason: "websocket_error",
         }]);
       }
-      ws.close(1011, "Internal error");
+      try {
+        ws.close(1011, "Internal error");
+      } catch {
+        // Socket may already be closed by the runtime after an error
+      }
     } finally {
       span.end();
+    }
+  }
+
+  // ─── Stale Agent Alarm ────────────────────────────────────────────
+
+  async alarm(): Promise<void> {
+    this.ensureInit();
+
+    const staleUids = sweepStaleAgents(this.ctx.storage.sql, STALE_AGENT_THRESHOLD_MS);
+
+    // Emit disconnect events for stale agents
+    if (staleUids.length > 0) {
+      const events = staleUids.map((agent) => ({
+        type: "agent_disconnected" as const,
+        tenant_id: agent.tenant_id,
+        config_id: agent.config_id,
+        instance_uid: agent.instance_uid,
+        timestamp: Date.now(),
+        reason: "stale_timeout",
+      }));
+
+      await this.emitEvents(events);
+    }
+
+    // Reschedule if there are still active (non-disconnected) agents
+    const activeCount = this.ctx.storage.sql
+      .exec(`SELECT COUNT(*) as count FROM agents WHERE status != 'disconnected'`)
+      .one().count as number;
+
+    if (activeCount > 0 || this.ctx.getWebSockets().length > 0) {
+      await this.ctx.storage.setAlarm(Date.now() + STALE_SWEEP_INTERVAL_MS);
     }
   }
 
@@ -347,9 +400,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   private async emitEvents(events: AnyFleetEvent[]): Promise<void> {
     try {
-      for (const event of events) {
-        await this.env.FP_EVENTS.send(event);
-      }
+      // Send each event independently so a single failure doesn't drop the rest
+      await Promise.allSettled(
+        events.map((event) => this.env.FP_EVENTS.send(event)),
+      );
     } catch {
       // Queue failure should not break WS handling
     }

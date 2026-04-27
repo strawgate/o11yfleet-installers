@@ -40,6 +40,9 @@ export function initSchema(sql: SqlStorage): void {
   `);
   // Ensure singleton row exists
   sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
+  // Indexes for alarm sweep and stats queries
+  sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`);
+  sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`);
 }
 
 // ─── Config State ───────────────────────────────────────────────────
@@ -250,4 +253,33 @@ export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknow
   return sql
     .exec(`SELECT * FROM agents ORDER BY last_seen_at DESC LIMIT ?`, limit)
     .toArray();
+}
+
+// ─── Stale Agent Detection ──────────────────────────────────────────
+
+/**
+ * Mark agents as disconnected if their last_seen_at is older than the
+ * given threshold (in ms). Returns the UIDs of agents that were marked stale.
+ */
+export interface StaleAgent {
+  instance_uid: string;
+  tenant_id: string;
+  config_id: string;
+}
+
+export function sweepStaleAgents(sql: SqlStorage, staleThresholdMs: number): StaleAgent[] {
+  const cutoff = Date.now() - staleThresholdMs;
+  const stale = sql
+    .exec(
+      `UPDATE agents SET status = 'disconnected'
+       WHERE status != 'disconnected' AND last_seen_at > 0 AND last_seen_at < ?
+       RETURNING instance_uid, tenant_id, config_id`,
+      cutoff,
+    )
+    .toArray();
+  return stale.map((r) => ({
+    instance_uid: r.instance_uid as string,
+    tenant_id: r.tenant_id as string,
+    config_id: r.config_id as string,
+  }));
 }

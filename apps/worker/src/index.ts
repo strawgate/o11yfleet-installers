@@ -19,7 +19,7 @@ export interface Env {
 // CORS headers for management UI
 const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
 };
 
@@ -30,6 +30,15 @@ const INTERNAL_HEADERS = [
   "x-fp-instance-uid",
   "x-fp-enrollment",
 ];
+
+/** Timing-safe comparison of API secrets to prevent timing attacks. */
+function timingSafeEqual(a: string, b: string): boolean {
+  const enc = new TextEncoder();
+  const aBuf = enc.encode(a);
+  const bBuf = enc.encode(b);
+  if (aBuf.byteLength !== bBuf.byteLength) return false;
+  return crypto.subtle.timingSafeEqual(aBuf, bBuf);
+}
 
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
@@ -47,10 +56,11 @@ export default {
 
     // API routes — with auth + CORS
     if (url.pathname.startsWith("/api/")) {
-      // C1 fix: Authenticate API requests when API_SECRET is set
+      // Authenticate API requests when API_SECRET is set
       if (env.API_SECRET) {
         const auth = request.headers.get("Authorization");
-        if (!auth || auth !== `Bearer ${env.API_SECRET}`) {
+        const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+        if (!token || !timingSafeEqual(token, env.API_SECRET)) {
           return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
         }
       }

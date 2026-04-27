@@ -2,6 +2,8 @@
 // SHA-256 → R2 key `configs/sha256/{hash}.yaml`
 // D1 upsert for config versions
 
+import { parse as parseYaml } from "yaml";
+
 export interface ConfigStoreEnv {
   FP_CONFIGS: R2Bucket;
   FP_DB: D1Database;
@@ -12,6 +14,23 @@ export interface UploadResult {
   r2Key: string;
   sizeBytes: number;
   deduplicated: boolean;
+}
+
+/**
+ * Validate that the input is parseable YAML. Returns null if valid,
+ * or an error message string if invalid.
+ */
+export function validateYaml(content: string): string | null {
+  try {
+    const parsed = parseYaml(content);
+    // Must parse to an object (not a scalar string/number/null)
+    if (parsed === null || parsed === undefined || typeof parsed !== "object") {
+      return "YAML must parse to a mapping (object), not a scalar value";
+    }
+    return null;
+  } catch (err) {
+    return err instanceof Error ? err.message : "Invalid YAML";
+  }
 }
 
 async function sha256Hex(data: Uint8Array): Promise<string> {

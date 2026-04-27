@@ -126,6 +126,104 @@ export async function listTenants(): Promise<{
   return data as any;
 }
 
+/** Get a tenant by ID. */
+export async function getTenant(
+  tenantId: string,
+): Promise<Record<string, unknown>> {
+  const { status, data } = await api(`/api/tenants/${tenantId}`);
+  if (status !== 200) throw new Error(`Failed to get tenant: ${status}`);
+  return data as any;
+}
+
+/** Update a tenant. */
+export async function updateTenant(
+  tenantId: string,
+  body: { name?: string },
+): Promise<{ id: string; name: string }> {
+  const { status, data } = await api<{ id: string; name: string }>(
+    `/api/tenants/${tenantId}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+  if (status !== 200) throw new Error(`Failed to update tenant: ${status}`);
+  return data;
+}
+
+/** Delete a tenant. */
+export async function deleteTenant(tenantId: string): Promise<number> {
+  const res = await fetch(`${BASE_URL}/api/tenants/${tenantId}`, {
+    method: "DELETE",
+  });
+  return res.status;
+}
+
+/** Update a configuration. */
+export async function updateConfig(
+  configId: string,
+  body: { name?: string; description?: string },
+): Promise<Record<string, unknown>> {
+  const { status, data } = await api(
+    `/api/configurations/${configId}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+  if (status !== 200) throw new Error(`Failed to update config: ${status}`);
+  return data as any;
+}
+
+/** Delete a configuration. */
+export async function deleteConfig(configId: string): Promise<number> {
+  const res = await fetch(`${BASE_URL}/api/configurations/${configId}`, {
+    method: "DELETE",
+  });
+  return res.status;
+}
+
+/** List config versions. */
+export async function listConfigVersions(configId: string): Promise<{
+  versions: Array<{ config_hash: string; created_at: string }>;
+  current_config_hash: string;
+}> {
+  const { status, data } = await api(
+    `/api/configurations/${configId}/versions`,
+  );
+  if (status !== 200) throw new Error(`Failed to list versions: ${status}`);
+  return data as any;
+}
+
+/** List enrollment tokens. */
+export async function listEnrollmentTokens(configId: string): Promise<{
+  tokens: Array<{ id: string; label: string | null; revoked_at: string | null }>;
+}> {
+  const { status, data } = await api(
+    `/api/configurations/${configId}/enrollment-tokens`,
+  );
+  if (status !== 200) throw new Error(`Failed to list tokens: ${status}`);
+  return data as any;
+}
+
+/** Revoke an enrollment token. */
+export async function revokeEnrollmentToken(
+  configId: string,
+  tokenId: string,
+): Promise<{ status: number; data: unknown }> {
+  return api(
+    `/api/configurations/${configId}/enrollment-tokens/${tokenId}`,
+    { method: "DELETE" },
+  );
+}
+
+/** Upload invalid content and return the status + error. */
+export async function uploadRaw(
+  configId: string,
+  body: string,
+): Promise<{ status: number; error?: string }> {
+  const res = await fetch(
+    `${BASE_URL}/api/configurations/${configId}/versions`,
+    { method: "POST", body, headers: { "Content-Type": "text/yaml" } },
+  );
+  const data = await res.json().catch(() => ({}));
+  return { status: res.status, ...(data as any) };
+}
+
 /** List configurations for a tenant. */
 export async function listConfigs(
   tenantId: string,

@@ -68,8 +68,12 @@ export async function verifyClaim(token: string, secret: string): Promise<Assign
     throw new Error(`Unsupported claim version: ${claim.v}`);
   }
 
-  if (claim.exp < Date.now() / 1000) {
+  if (typeof claim.exp !== "number" || claim.exp < Date.now() / 1000) {
     throw new Error("Claim expired");
+  }
+
+  if (!claim.tenant_id || !claim.config_id || !claim.instance_uid) {
+    throw new Error("Claim missing required fields");
   }
 
   return claim;
