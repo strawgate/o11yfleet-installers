@@ -1,0 +1,316 @@
+- generic [ref=e1]:
+  - banner [ref=e2]:
+    - heading "⚡ FleetPlane" [level=1] [ref=e3]:
+      - text: ⚡
+      - generic [ref=e4]: FleetPlane
+    - generic [ref=e5]:
+      - textbox "API URL" [ref=e6]: http://localhost:8787
+      - button "Connect" [ref=e7] [cursor=pointer]
+      - generic [ref=e238]: Updated 1:48:38 PM
+  - main [ref=e8]:
+    - generic [ref=e9]:
+      - generic [ref=e10]:
+        - generic [ref=e11]: Tenants
+        - button "+ New Tenant" [ref=e13] [cursor=pointer]
+      - table [ref=e15]:
+        - rowgroup [ref=e16]:
+          - row "Name Plan ID Created" [ref=e17]:
+            - columnheader "Name" [ref=e18]
+            - columnheader "Plan" [ref=e19]
+            - columnheader "ID" [ref=e20]
+            - columnheader "Created" [ref=e21]
+        - rowgroup [ref=e22]:
+          - row "e2e-stats-1777307736916 free b517ec0f… just now" [ref=e286821] [cursor=pointer]:
+            - cell "e2e-stats-1777307736916" [ref=e286822]:
+              - strong [ref=e286823]: e2e-stats-1777307736916
+            - cell "free" [ref=e286824]:
+              - generic [ref=e286825]: free
+            - cell "b517ec0f…" [ref=e286826]
+            - cell "just now" [ref=e286827]
+          - row "e2e-scale-1777307735670 free 619de7bc… just now" [ref=e286828] [cursor=pointer]:
+            - cell "e2e-scale-1777307735670" [ref=e286829]:
+              - strong [ref=e286830]: e2e-scale-1777307735670
+            - cell "free" [ref=e286831]:
+              - generic [ref=e286832]: free
+            - cell "619de7bc…" [ref=e286833]
+            - cell "just now" [ref=e286834]
+          - row "e2e-iso-A-1777307733267 free 1a4cdc61… just now" [ref=e286835] [cursor=pointer]:
+            - cell "e2e-iso-A-1777307733267" [ref=e286836]:
+              - strong [ref=e286837]: e2e-iso-A-1777307733267
+            - cell "free" [ref=e286838]:
+              - generic [ref=e286839]: free
+            - cell "1a4cdc61…" [ref=e286840]
+            - cell "just now" [ref=e286841]
+          - row "e2e-iso-B-1777307733307 free 8a4b1039… just now" [ref=e286842] [cursor=pointer]:
+            - cell "e2e-iso-B-1777307733307" [ref=e286843]:
+              - strong [ref=e286844]: e2e-iso-B-1777307733307
+            - cell "free" [ref=e286845]:
+              - generic [ref=e286846]: free
+            - cell "8a4b1039…" [ref=e286847]
+            - cell "just now" [ref=e286848]
+          - row "e2e-crud-1777307732267 free 7afc7fc2… just now" [ref=e286849] [cursor=pointer]:
+            - cell "e2e-crud-1777307732267" [ref=e286850]:
+              - strong [ref=e286851]: e2e-crud-1777307732267
+            - cell "free" [ref=e286852]:
+              - generic [ref=e286853]: free
+            - cell "7afc7fc2…" [ref=e286854]
+            - cell "just now" [ref=e286855]
+          - row "e2e-config-1777307732290 free dce31943… just now" [ref=e286856] [cursor=pointer]:
+            - cell "e2e-config-1777307732290" [ref=e286857]:
+              - strong [ref=e286858]: e2e-config-1777307732290
+            - cell "free" [ref=e286859]:
+              - generic [ref=e286860]: free
+            - cell "dce31943…" [ref=e286861]
+            - cell "just now" [ref=e286862]
+          - row "e2e-upload-1777307732342 free 0a216bd3… just now" [ref=e286863] [cursor=pointer]:
+            - cell "e2e-upload-1777307732342" [ref=e286864]:
+              - strong [ref=e286865]: e2e-upload-1777307732342
+            - cell "free" [ref=e286866]:
+              - generic [ref=e286867]: free
+            - cell "0a216bd3…" [ref=e286868]
+            - cell "just now" [ref=e286869]
+          - row "e2e-enroll-1777307732423 free 91dc8bfb… just now" [ref=e286870] [cursor=pointer]:
+            - cell "e2e-enroll-1777307732423" [ref=e286871]:
+              - strong [ref=e286872]: e2e-enroll-1777307732423
+            - cell "free" [ref=e286873]:
+              - generic [ref=e286874]: free
+            - cell "91dc8bfb…" [ref=e286875]
+            - cell "just now" [ref=e286876]
+          - row "e2e-dedup-1777307732457 free b317b085… just now" [ref=e286877] [cursor=pointer]:
+            - cell "e2e-dedup-1777307732457" [ref=e286878]:
+              - strong [ref=e286879]: e2e-dedup-1777307732457
+            - cell "free" [ref=e286880]:
+              - generic [ref=e286881]: free
+            - cell "b317b085…" [ref=e286882]
+            - cell "just now" [ref=e286883]
+          - row "e2e-lifecycle-1777307732521 free 07bad749… just now" [ref=e286884] [cursor=pointer]:
+            - cell "e2e-lifecycle-1777307732521" [ref=e286885]:
+              - strong [ref=e286886]: e2e-lifecycle-1777307732521
+            - cell "free" [ref=e286887]:
+              - generic [ref=e286888]: free
+            - cell "07bad749…" [ref=e286889]
+            - cell "just now" [ref=e286890]
+          - row "e2e-push-1777307732767 free f057af31… just now" [ref=e286891] [cursor=pointer]:
+            - cell "e2e-push-1777307732767" [ref=e286892]:
+              - strong [ref=e286893]: e2e-push-1777307732767
+            - cell "free" [ref=e286894]:
+              - generic [ref=e286895]: free
+            - cell "f057af31…" [ref=e286896]
+            - cell "just now" [ref=e286897]
+          - row "e2e-reconnect-1777307732872 free 0c8bcc64… just now" [ref=e286898] [cursor=pointer]:
+            - cell "e2e-reconnect-1777307732872" [ref=e286899]:
+              - strong [ref=e286900]: e2e-reconnect-1777307732872
+            - cell "free" [ref=e286901]:
+              - generic [ref=e286902]: free
+            - cell "0c8bcc64…" [ref=e286903]
+            - cell "just now" [ref=e286904]
+          - row "e2e-stats-1777307647855 free 1f964d45… just now" [ref=e286905] [cursor=pointer]:
+            - cell "e2e-stats-1777307647855" [ref=e286906]:
+              - strong [ref=e286907]: e2e-stats-1777307647855
+            - cell "free" [ref=e286908]:
+              - generic [ref=e286909]: free
+            - cell "1f964d45…" [ref=e286910]
+            - cell "just now" [ref=e286911]
+          - row "e2e-scale-1777307646731 free b315f781… just now" [ref=e286912] [cursor=pointer]:
+            - cell "e2e-scale-1777307646731" [ref=e286913]:
+              - strong [ref=e286914]: e2e-scale-1777307646731
+            - cell "free" [ref=e286915]:
+              - generic [ref=e286916]: free
+            - cell "b315f781…" [ref=e286917]
+            - cell "just now" [ref=e286918]
+          - row "e2e-crud-1777307644069 free 3d38be99… just now" [ref=e286919] [cursor=pointer]:
+            - cell "e2e-crud-1777307644069" [ref=e286920]:
+              - strong [ref=e286921]: e2e-crud-1777307644069
+            - cell "free" [ref=e286922]:
+              - generic [ref=e286923]: free
+            - cell "3d38be99…" [ref=e286924]
+            - cell "just now" [ref=e286925]
+          - row "e2e-config-1777307644092 free 825ac622… just now" [ref=e286926] [cursor=pointer]:
+            - cell "e2e-config-1777307644092" [ref=e286927]:
+              - strong [ref=e286928]: e2e-config-1777307644092
+            - cell "free" [ref=e286929]:
+              - generic [ref=e286930]: free
+            - cell "825ac622…" [ref=e286931]
+            - cell "just now" [ref=e286932]
+          - row "e2e-upload-1777307644108 free 5ff93097… just now" [ref=e286933] [cursor=pointer]:
+            - cell "e2e-upload-1777307644108" [ref=e286934]:
+              - strong [ref=e286935]: e2e-upload-1777307644108
+            - cell "free" [ref=e286936]:
+              - generic [ref=e286937]: free
+            - cell "5ff93097…" [ref=e286938]
+            - cell "just now" [ref=e286939]
+          - row "e2e-enroll-1777307644158 free 1b5e8c3b… just now" [ref=e286940] [cursor=pointer]:
+            - cell "e2e-enroll-1777307644158" [ref=e286941]:
+              - strong [ref=e286942]: e2e-enroll-1777307644158
+            - cell "free" [ref=e286943]:
+              - generic [ref=e286944]: free
+            - cell "1b5e8c3b…" [ref=e286945]
+            - cell "just now" [ref=e286946]
+          - row "e2e-dedup-1777307644178 free 481cf952… just now" [ref=e286947] [cursor=pointer]:
+            - cell "e2e-dedup-1777307644178" [ref=e286948]:
+              - strong [ref=e286949]: e2e-dedup-1777307644178
+            - cell "free" [ref=e286950]:
+              - generic [ref=e286951]: free
+            - cell "481cf952…" [ref=e286952]
+            - cell "just now" [ref=e286953]
+          - row "e2e-lifecycle-1777307644201 free 55a6a98d… just now" [ref=e286954] [cursor=pointer]:
+            - cell "e2e-lifecycle-1777307644201" [ref=e286955]:
+              - strong [ref=e286956]: e2e-lifecycle-1777307644201
+            - cell "free" [ref=e286957]:
+              - generic [ref=e286958]: free
+            - cell "55a6a98d…" [ref=e286959]
+            - cell "just now" [ref=e286960]
+          - row "e2e-push-1777307644266 free bd0cfa5f… just now" [ref=e286961] [cursor=pointer]:
+            - cell "e2e-push-1777307644266" [ref=e286962]:
+              - strong [ref=e286963]: e2e-push-1777307644266
+            - cell "free" [ref=e286964]:
+              - generic [ref=e286965]: free
+            - cell "bd0cfa5f…" [ref=e286966]
+            - cell "just now" [ref=e286967]
+          - row "e2e-reconnect-1777307644310 free 5f243611… just now" [ref=e286968] [cursor=pointer]:
+            - cell "e2e-reconnect-1777307644310" [ref=e286969]:
+              - strong [ref=e286970]: e2e-reconnect-1777307644310
+            - cell "free" [ref=e286971]:
+              - generic [ref=e286972]: free
+            - cell "5f243611…" [ref=e286973]
+            - cell "just now" [ref=e286974]
+          - row "e2e-iso-A-1777307644641 free 5c7d84f1… just now" [ref=e286975] [cursor=pointer]:
+            - cell "e2e-iso-A-1777307644641" [ref=e286976]:
+              - strong [ref=e286977]: e2e-iso-A-1777307644641
+            - cell "free" [ref=e286978]:
+              - generic [ref=e286979]: free
+            - cell "5c7d84f1…" [ref=e286980]
+            - cell "just now" [ref=e286981]
+          - row "e2e-iso-B-1777307644655 free 8703b90a… just now" [ref=e286982] [cursor=pointer]:
+            - cell "e2e-iso-B-1777307644655" [ref=e286983]:
+              - strong [ref=e286984]: e2e-iso-B-1777307644655
+            - cell "free" [ref=e286985]:
+              - generic [ref=e286986]: free
+            - cell "8703b90a…" [ref=e286987]
+            - cell "just now" [ref=e286988]
+          - row "Local Dev free 1d7748bf… 8h ago" [ref=e286989] [cursor=pointer]:
+            - cell "Local Dev" [ref=e286990]:
+              - strong [ref=e286991]: Local Dev
+            - cell "free" [ref=e286992]:
+              - generic [ref=e286993]: free
+            - cell "1d7748bf…" [ref=e286994]
+            - cell "8h ago" [ref=e286995]
+          - row "Local Dev free 9ec7b6ba… 8h ago" [ref=e286996] [cursor=pointer]:
+            - cell "Local Dev" [ref=e286997]:
+              - strong [ref=e286998]: Local Dev
+            - cell "free" [ref=e286999]:
+              - generic [ref=e287000]: free
+            - cell "9ec7b6ba…" [ref=e287001]
+            - cell "8h ago" [ref=e287002]
+    - generic [ref=e205]:
+      - generic [ref=e206]:
+        - generic [ref=e207]: Total Agents
+        - generic [ref=e208]: "1405"
+      - generic [ref=e209]:
+        - generic [ref=e210]: Connected
+        - generic [ref=e211]: "0"
+      - generic [ref=e212]:
+        - generic [ref=e213]: Healthy
+        - generic [ref=e214]: "1405"
+      - generic [ref=e215]:
+        - generic [ref=e216]: Active WebSockets
+        - generic [ref=e217]: "3"
+      - generic [ref=e218]:
+        - generic [ref=e219]: Desired Config
+        - generic [ref=e220]: 026db5486d57fb67
+    - generic [ref=e221]:
+      - generic [ref=e222]:
+        - generic [ref=e223]: Configurations — Local Dev
+        - button "+ New Config" [ref=e225] [cursor=pointer]
+      - table [ref=e227]:
+        - rowgroup [ref=e228]:
+          - row "Name ID Config Hash Created Actions" [ref=e229]:
+            - columnheader "Name" [ref=e230]
+            - columnheader "ID" [ref=e231]
+            - columnheader "Config Hash" [ref=e232]
+            - columnheader "Created" [ref=e233]
+            - columnheader "Actions" [ref=e234]
+        - rowgroup [ref=e235]:
+          - row "dev-collectors 1ab89105… 026db5486d57fb67 8h ago Upload YAML Token Rollout" [ref=e287003] [cursor=pointer]:
+            - cell "dev-collectors" [ref=e287004]:
+              - strong [ref=e287005]: dev-collectors
+            - cell "1ab89105…" [ref=e287006]
+            - cell "026db5486d57fb67" [ref=e287007]
+            - cell "8h ago" [ref=e287008]
+            - cell "Upload YAML Token Rollout" [ref=e287009]:
+              - button "Upload YAML" [ref=e287010]
+              - button "Token" [ref=e287011]
+              - button "Rollout" [ref=e287012]
+    - generic [ref=e431]:
+      - generic [ref=e432]:
+        - generic [ref=e433]: Agents — dev-collectors
+        - generic [ref=e434]:
+          - combobox [ref=e435] [cursor=pointer]:
+            - option "All"
+            - option "Connected" [selected]
+            - option "Disconnected"
+          - generic [ref=e436]: 1593 agents
+      - table [ref=e438]:
+        - rowgroup [ref=e439]:
+          - row "Instance UID Status Health Config Hash Last Seen" [ref=e440]:
+            - columnheader "Instance UID" [ref=e441]
+            - columnheader "Status" [ref=e442]
+            - columnheader "Health" [ref=e443]
+            - columnheader "Config Hash" [ref=e444]
+            - columnheader "Last Seen" [ref=e445]
+        - rowgroup [ref=e446]:
+          - row "d83ef2560ad94aba… connected healthy — just now" [ref=e287013]:
+            - cell "d83ef2560ad94aba…" [ref=e287014]
+            - cell "connected" [ref=e287015]:
+              - generic [ref=e287016]: connected
+            - cell "healthy" [ref=e287017]:
+              - generic [ref=e287018]: healthy
+            - cell "—" [ref=e287019]
+            - cell "just now" [ref=e287020]
+          - row "9b9adc8e68064a84… connected healthy — just now" [ref=e287021]:
+            - cell "9b9adc8e68064a84…" [ref=e287022]
+            - cell "connected" [ref=e287023]:
+              - generic [ref=e287024]: connected
+            - cell "healthy" [ref=e287025]:
+              - generic [ref=e287026]: healthy
+            - cell "—" [ref=e287027]
+            - cell "just now" [ref=e287028]
+          - row "83d7f58bcbc242ae… connected healthy — just now" [ref=e287029]:
+            - cell "83d7f58bcbc242ae…" [ref=e287030]
+            - cell "connected" [ref=e287031]:
+              - generic [ref=e287032]: connected
+            - cell "healthy" [ref=e287033]:
+              - generic [ref=e287034]: healthy
+            - cell "—" [ref=e287035]
+            - cell "just now" [ref=e287036]
+    - generic [ref=e168864]:
+      - generic [ref=e168865]:
+        - generic [ref=e168866]: Upload Config — dev-collectors
+        - button "Close" [ref=e168867] [cursor=pointer]
+      - generic [ref=e168868]:
+        - paragraph [ref=e168870] [cursor=pointer]: Click to select a YAML config file, or drag & drop
+        - generic [ref=e207679]:
+          - generic [ref=e207680]: "Uploaded! Hash: 026db5486d57fb67c708b4f59ca2504887986f7f929d5df63a453f99e78b26ad (613B, dedup: true)"
+          - button "Rollout Now" [ref=e207681] [cursor=pointer]
+    - generic [ref=e142983]:
+      - generic [ref=e142984]:
+        - generic [ref=e142985]: Enrollment Token
+        - button "Close" [ref=e142986] [cursor=pointer]
+      - generic [ref=e142988]:
+        - generic [ref=e142989]: fp_enroll_qME1Gn5uUynV0D2JqxAL2NeUc_-P8UEd7iGRLtivr1U
+        - button "Copy" [ref=e142990] [cursor=pointer]
+  - dialog [ref=e286596]:
+    - heading "Create Tenant" [level=3] [ref=e286597]
+    - generic [ref=e286598]: Name
+    - textbox "Name" [active] [ref=e286599]:
+      - /placeholder: e.g. Acme Corp
+      - text: Playwright Test Corp
+    - generic [ref=e286600]: Plan
+    - combobox "Plan" [ref=e286601]:
+      - option "Free" [selected]
+      - option "Pro"
+      - option "Enterprise"
+    - generic [ref=e286602]:
+      - button "Cancel" [ref=e286603] [cursor=pointer]
+      - button "Create" [ref=e286604] [cursor=pointer]
+  - status

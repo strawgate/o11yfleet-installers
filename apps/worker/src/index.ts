@@ -2,6 +2,8 @@
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
 import { handleApiRequest } from "./routes/api/index.js";
+import { handleAdminRequest } from "./routes/admin/index.js";
+import { handleV1Request } from "./routes/v1/index.js";
 import { handleQueueBatch } from "./event-consumer.js";
 import { verifyClaim, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
@@ -46,7 +48,7 @@ export default {
 
     // Health check
     if (url.pathname === "/healthz") {
-      return Response.json({ status: "ok", timestamp: new Date().toISOString() });
+      return Response.json({ status: "ok", timestamp: new Date().toISOString() }, { headers: CORS_HEADERS });
     }
 
     // CORS preflight
@@ -64,7 +66,30 @@ export default {
           return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
         }
       }
-      const resp = await handleApiRequest(request, env, url);
+
+      let resp: Response;
+
+      // Admin routes — /api/admin/*
+      if (url.pathname.startsWith("/api/admin/")) {
+        resp = await handleAdminRequest(request, env, url);
+      }
+      // Tenant-scoped routes — /api/v1/*
+      else if (url.pathname.startsWith("/api/v1/")) {
+        // Extract tenant context from header (stub auth — will be SSO later)
+        const tenantId = request.headers.get("X-Tenant-Id");
+        if (!tenantId) {
+          return Response.json(
+            { error: "X-Tenant-Id header required" },
+            { status: 401, headers: CORS_HEADERS },
+          );
+        }
+        resp = await handleV1Request(request, env, url, tenantId);
+      }
+      // Legacy routes — /api/* (backward compat, delegates to old handler)
+      else {
+        resp = await handleApiRequest(request, env, url);
+      }
+
       // Add CORS headers to all API responses
       const corsResp = new Response(resp.body, resp);
       for (const [k, v] of Object.entries(CORS_HEADERS)) {
@@ -82,7 +107,7 @@ export default {
   },
 
   async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
-    await handleQueueBatch(batch, env as unknown as { FP_DB: D1Database; FP_ANALYTICS: AnalyticsEngineDataset });
+    await handleQueueBatch(batch, env as unknown as { FP_ANALYTICS: AnalyticsEngineDataset });
   },
 };
 

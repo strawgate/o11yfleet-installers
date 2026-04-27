@@ -1,0 +1,1274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FleetPlane</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --surface: #12131a;
+      --surface2: #1a1c25;
+      --surface3: #22242e;
+      --border: #2a2d3a;
+      --border-light: #353849;
+      --text: #e8eaf0;
+      --text-secondary: #9197ad;
+      --text-dim: #6b7194;
+      --accent: #6366f1;
+      --accent-hover: #818cf8;
+      --accent-bg: rgba(99, 102, 241, 0.08);
+      --accent-border: rgba(99, 102, 241, 0.25);
+      --green: #22c55e;
+      --green-bg: rgba(34, 197, 94, 0.1);
+      --red: #ef4444;
+      --red-bg: rgba(239, 68, 68, 0.1);
+      --yellow: #eab308;
+      --yellow-bg: rgba(234, 179, 8, 0.1);
+      --radius: 8px;
+      --radius-lg: 12px;
+      --sidebar-w: 240px;
+      --header-h: 52px;
+      --transition: 150ms ease;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ─── Layout ────────────────────────────────────────────── */
+
+    .app { display: flex; height: 100vh; }
+
+    .sidebar {
+      width: var(--sidebar-w);
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      flex-shrink: 0;
+    }
+
+    .sidebar-brand {
+      height: var(--header-h);
+      display: flex;
+      align-items: center;
+      padding: 0 16px;
+      border-bottom: 1px solid var(--border);
+      gap: 8px;
+      font-weight: 600;
+      font-size: 15px;
+    }
+
+    .sidebar-brand .logo { font-size: 20px; }
+    .sidebar-brand .name { color: var(--accent); }
+
+    .sidebar-nav { padding: 12px 8px; flex: 1; overflow-y: auto; }
+
+    .sidebar-section {
+      font-size: 10px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      padding: 16px 12px 6px;
+    }
+
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 8px 12px;
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-secondary);
+      font-size: 13px;
+      font-weight: 500;
+      transition: all var(--transition);
+      text-decoration: none;
+    }
+
+    .nav-item:hover { background: var(--surface2); color: var(--text); }
+    .nav-item.active { background: var(--accent-bg); color: var(--accent); border: 1px solid var(--accent-border); }
+    .nav-item .icon { width: 18px; text-align: center; font-size: 14px; }
+
+    .sidebar-footer {
+      padding: 12px 16px;
+      border-top: 1px solid var(--border);
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .main-area {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .top-bar {
+      height: var(--header-h);
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 24px;
+      flex-shrink: 0;
+    }
+
+    .breadcrumbs {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .breadcrumbs .sep { color: var(--text-dim); }
+    .breadcrumbs .current { color: var(--text); font-weight: 500; }
+
+    .top-actions { display: flex; align-items: center; gap: 12px; }
+
+    .content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* ─── Components ────────────────────────────────────────── */
+
+    .page-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 24px;
+    }
+
+    .page-header h2 {
+      font-size: 20px;
+      font-weight: 600;
+    }
+
+    .page-header .subtitle {
+      font-size: 13px;
+      color: var(--text-secondary);
+      margin-top: 2px;
+    }
+
+    /* Stat Cards */
+    .stats-row {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+    }
+
+    .stat-card .label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      margin-bottom: 6px;
+    }
+
+    .stat-card .value {
+      font-size: 28px;
+      font-weight: 700;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat-card .value.green { color: var(--green); }
+    .stat-card .value.red { color: var(--red); }
+    .stat-card .value.yellow { color: var(--yellow); }
+    .stat-card .value.hash { font-size: 13px; font-family: monospace; color: var(--text-secondary); word-break: break-all; }
+
+    /* Cards / Panels */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 14px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .card-header h3 {
+      font-size: 14px;
+      font-weight: 600;
+    }
+
+    .card-body { padding: 0; }
+    .card-body.padded { padding: 18px; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+
+    th {
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-dim);
+      padding: 10px 16px;
+      background: var(--surface2);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    td {
+      padding: 10px 16px;
+      font-size: 13px;
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 300px;
+    }
+
+    tr.clickable { cursor: pointer; transition: background var(--transition); }
+    tr.clickable:hover { background: var(--surface2); }
+    tr.selected { background: var(--accent-bg) !important; }
+
+    .empty-state {
+      text-align: center;
+      color: var(--text-dim);
+      padding: 40px 16px !important;
+      font-size: 13px;
+    }
+
+    /* Badges */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+    }
+
+    .badge-connected { background: var(--green-bg); color: var(--green); }
+    .badge-disconnected { background: var(--red-bg); color: var(--red); }
+    .badge-healthy { background: var(--green-bg); color: var(--green); }
+    .badge-unhealthy { background: var(--red-bg); color: var(--red); }
+    .badge-free { background: var(--surface3); color: var(--text-dim); }
+    .badge-pro { background: var(--accent-bg); color: var(--accent); }
+    .badge-enterprise { background: var(--yellow-bg); color: var(--yellow); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      background: var(--surface2);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all var(--transition);
+      white-space: nowrap;
+    }
+
+    .btn:hover { background: var(--surface3); border-color: var(--border-light); }
+    .btn-primary { background: var(--accent); border-color: var(--accent); color: white; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-sm { padding: 4px 10px; font-size: 11px; }
+    .btn-danger { color: var(--red); }
+    .btn-danger:hover { background: var(--red-bg); }
+
+    /* Mono text */
+    .mono { font-family: 'SF Mono', 'Cascadia Code', 'Fira Code', monospace; font-size: 12px; }
+
+    /* Truncated hash */
+    .hash-short { font-family: monospace; font-size: 12px; color: var(--text-secondary); }
+
+    /* Toast */
+    .toast {
+      position: fixed;
+      bottom: 20px;
+      right: 20px;
+      background: var(--surface3);
+      color: var(--text);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: var(--radius);
+      font-size: 13px;
+      z-index: 1000;
+      animation: fadeIn 0.2s ease;
+    }
+
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; } }
+
+    /* Dialog */
+    dialog {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      color: var(--text);
+      padding: 24px;
+      min-width: 400px;
+      max-width: 480px;
+    }
+
+    dialog::backdrop { background: rgba(0,0,0,0.6); }
+
+    dialog h3 { font-size: 16px; font-weight: 600; margin-bottom: 16px; }
+
+    dialog label {
+      display: block;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+      margin-top: 12px;
+    }
+
+    dialog input, dialog select, dialog textarea {
+      width: 100%;
+      padding: 8px 12px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 13px;
+      outline: none;
+    }
+
+    dialog input:focus, dialog select:focus, dialog textarea:focus {
+      border-color: var(--accent);
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    /* Upload area */
+    .upload-area {
+      border: 2px dashed var(--border);
+      border-radius: var(--radius);
+      padding: 32px;
+      text-align: center;
+      cursor: pointer;
+      transition: all var(--transition);
+      color: var(--text-dim);
+    }
+
+    .upload-area:hover, .upload-area.drag-over {
+      border-color: var(--accent);
+      background: var(--accent-bg);
+      color: var(--text);
+    }
+
+    .upload-area input[type="file"] { display: none; }
+
+    /* Token display */
+    .token-box {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-family: monospace;
+      font-size: 12px;
+      word-break: break-all;
+      position: relative;
+    }
+
+    /* Config detail tabs */
+    .tabs {
+      display: flex;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+      padding: 0 18px;
+    }
+
+    .tab {
+      padding: 10px 16px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all var(--transition);
+    }
+
+    .tab:hover { color: var(--text); }
+    .tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    /* Filter bar */
+    .filter-bar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 18px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .filter-bar select {
+      padding: 5px 10px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 12px;
+    }
+
+    .filter-bar .count {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-left: auto;
+    }
+
+    /* Scrollable table container */
+    .table-scroll { max-height: calc(100vh - 380px); overflow-y: auto; }
+
+    /* Status indicator dot */
+    .status-dot {
+      display: inline-block;
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .status-dot.connected { background: var(--green); }
+    .status-dot.disconnected { background: var(--red); }
+
+    /* Refresh indicator */
+    .refresh-time {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    /* Enrollment instructions */
+    .instructions {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 16px;
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .instructions code {
+      background: var(--surface3);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-family: monospace;
+    }
+
+    .instructions pre {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      margin: 8px 0;
+      overflow-x: auto;
+      font-size: 12px;
+      font-family: monospace;
+      color: var(--text-secondary);
+    }
+
+    /* Hidden helper */
+    .hidden { display: none !important; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <!-- Sidebar -->
+    <nav class="sidebar">
+      <div class="sidebar-brand">
+        <span class="logo">⚡</span>
+        <span class="name">FleetPlane</span>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-item active" data-page="overview" onclick="navigate('overview')">
+          <span class="icon">📊</span> Overview
+        </div>
+        <div class="nav-item" data-page="configurations" onclick="navigate('configurations')">
+          <span class="icon">📋</span> Configurations
+        </div>
+        <div class="nav-item" data-page="getting-started" onclick="navigate('getting-started')">
+          <span class="icon">🚀</span> Getting Started
+        </div>
+        <div class="sidebar-section">Account</div>
+        <div class="nav-item" data-page="settings" onclick="navigate('settings')">
+          <span class="icon">⚙️</span> Settings
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div id="sidebar-tenant" style="color:var(--text-secondary)">—</div>
+        <div class="refresh-time" id="sidebar-refresh">—</div>
+      </div>
+    </nav>
+
+    <!-- Main -->
+    <div class="main-area">
+      <div class="top-bar">
+        <div class="breadcrumbs" id="breadcrumbs">
+          <span>FleetPlane</span>
+          <span class="sep">›</span>
+          <span class="current" id="breadcrumb-page">Overview</span>
+        </div>
+        <div class="top-actions">
+          <span class="refresh-time" id="top-refresh"></span>
+        </div>
+      </div>
+
+      <div class="content" id="content">
+        <!-- Pages rendered here by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Create Config Dialog -->
+  <dialog id="create-config-dialog">
+    <h3>New Configuration</h3>
+    <label>Name</label>
+    <input id="cfg-name" type="text" placeholder="e.g. production-collectors">
+    <label>Description (optional)</label>
+    <input id="cfg-desc" type="text" placeholder="Collectors for production workloads">
+    <div class="dialog-actions">
+      <button class="btn" onclick="document.getElementById('create-config-dialog').close()">Cancel</button>
+      <button class="btn btn-primary" onclick="createConfig()">Create</button>
+    </div>
+  </dialog>
+
+  <!-- Generate Token Dialog -->
+  <dialog id="token-dialog">
+    <h3>Generate Enrollment Token</h3>
+    <label>Label (optional)</label>
+    <input id="token-label" type="text" placeholder="e.g. k8s-cluster-1">
+    <label>Expires (optional)</label>
+    <select id="token-expiry">
+      <option value="">Never</option>
+      <option value="1">1 hour</option>
+      <option value="24">24 hours</option>
+      <option value="168">7 days</option>
+      <option value="720">30 days</option>
+      <option value="8760">1 year</option>
+    </select>
+    <div id="token-result" class="hidden" style="margin-top:16px">
+      <label>Enrollment Token</label>
+      <div class="token-box" id="token-value"></div>
+      <div style="margin-top:8px;font-size:11px;color:var(--red)">⚠ Copy this token now — it won't be shown again.</div>
+    </div>
+    <div class="dialog-actions">
+      <button class="btn" onclick="closeTokenDialog()">Close</button>
+      <button class="btn btn-primary" id="token-generate-btn" onclick="generateToken()">Generate</button>
+    </div>
+  </dialog>
+
+  <script>
+    // ─── State ──────────────────────────────────────────────
+
+    let API_URL = '';
+    let TENANT_ID = '';
+    let currentPage = 'overview';
+    let selectedConfigId = null;
+    let selectedConfigName = null;
+    let allAgents = [];
+    let refreshTimer = null;
+
+    // ─── Init ───────────────────────────────────────────────
+
+    function init() {
+      // Parse from URL: /app/{tenantId}#page or just use hash
+      const params = new URLSearchParams(window.location.search);
+      API_URL = params.get('api') || localStorage.getItem('fp_api_url') || 'http://localhost:8787';
+      TENANT_ID = params.get('tenant') || localStorage.getItem('fp_tenant_id') || '';
+
+      if (!TENANT_ID) {
+        document.getElementById('content').innerHTML = `
+          <div style="max-width:400px;margin:80px auto;text-align:center">
+            <h2 style="margin-bottom:16px">Welcome to FleetPlane</h2>
+            <p style="color:var(--text-secondary);margin-bottom:24px">Enter your tenant ID and API URL to get started.</p>
+            <label style="display:block;text-align:left;font-size:12px;color:var(--text-secondary);margin-bottom:4px">API URL</label>
+            <input id="setup-api" type="text" value="${esc(API_URL)}" style="width:100%;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:12px">
+            <label style="display:block;text-align:left;font-size:12px;color:var(--text-secondary);margin-bottom:4px">Tenant ID</label>
+            <input id="setup-tenant" type="text" placeholder="your-tenant-uuid" style="width:100%;padding:8px 12px;background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:13px;margin-bottom:16px">
+            <button class="btn btn-primary" onclick="setupConnect()" style="width:100%">Connect</button>
+          </div>`;
+        return;
+      }
+
+      localStorage.setItem('fp_api_url', API_URL);
+      localStorage.setItem('fp_tenant_id', TENANT_ID);
+
+      // Restore page from hash
+      const hash = window.location.hash.slice(1);
+      if (hash) {
+        const parts = hash.split('/');
+        currentPage = parts[0] || 'overview';
+        if (parts[1]) selectedConfigId = parts[1];
+      }
+
+      loadTenantInfo();
+      navigate(currentPage, false);
+      startAutoRefresh();
+    }
+
+    function setupConnect() {
+      API_URL = document.getElementById('setup-api').value.replace(/\/$/, '');
+      TENANT_ID = document.getElementById('setup-tenant').value.trim();
+      if (!TENANT_ID) { toast('Tenant ID required'); return; }
+      localStorage.setItem('fp_api_url', API_URL);
+      localStorage.setItem('fp_tenant_id', TENANT_ID);
+      init();
+    }
+
+    // ─── Navigation ─────────────────────────────────────────
+
+    function navigate(page, pushState = true) {
+      currentPage = page;
+
+      // Update nav items
+      document.querySelectorAll('.nav-item').forEach(el => {
+        el.classList.toggle('active', el.dataset.page === page);
+      });
+
+      // Update breadcrumbs
+      const names = { overview: 'Overview', configurations: 'Configurations', 'getting-started': 'Getting Started', settings: 'Settings', 'config-detail': selectedConfigName || 'Configuration' };
+      document.getElementById('breadcrumb-page').textContent = names[page] || page;
+
+      // Update hash
+      if (pushState) {
+        const hash = page === 'config-detail' && selectedConfigId ? `config-detail/${selectedConfigId}` : page;
+        window.location.hash = hash;
+      }
+
+      // Render page
+      renderPage(page);
+    }
+
+    function renderPage(page) {
+      const content = document.getElementById('content');
+      switch (page) {
+        case 'overview': renderOverview(content); break;
+        case 'configurations': renderConfigurations(content); break;
+        case 'config-detail': renderConfigDetail(content); break;
+        case 'getting-started': renderGettingStarted(content); break;
+        case 'settings': renderSettings(content); break;
+        default: content.innerHTML = '<div class="empty-state">Page not found</div>';
+      }
+    }
+
+    // ─── API ────────────────────────────────────────────────
+
+    async function api(path, opts = {}) {
+      const url = `${API_URL}/api/v1${path}`;
+      const headers = { 'X-Tenant-Id': TENANT_ID, ...opts.headers };
+      const resp = await fetch(url, { ...opts, headers });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(err.error || 'Request failed');
+      }
+      return resp.json();
+    }
+
+    async function apiText(path, body) {
+      const url = `${API_URL}/api/v1${path}`;
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'X-Tenant-Id': TENANT_ID, 'Content-Type': 'text/yaml' },
+        body,
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({ error: resp.statusText }));
+        throw new Error(err.error || 'Request failed');
+      }
+      return resp.json();
+    }
+
+    // ─── Tenant Info ────────────────────────────────────────
+
+    async function loadTenantInfo() {
+      try {
+        const tenant = await api('/tenant');
+        document.getElementById('sidebar-tenant').textContent = tenant.name || tenant.id;
+      } catch {
+        document.getElementById('sidebar-tenant').textContent = TENANT_ID.slice(0, 8) + '…';
+      }
+    }
+
+    // ─── Overview Page ──────────────────────────────────────
+
+    async function renderOverview(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h2>Overview</h2>
+            <div class="subtitle">Fleet health at a glance</div>
+          </div>
+        </div>
+        <div class="stats-row" id="overview-stats">
+          <div class="stat-card"><div class="label">Configurations</div><div class="value" id="ov-configs">—</div></div>
+          <div class="stat-card"><div class="label">Total Agents</div><div class="value" id="ov-agents">—</div></div>
+          <div class="stat-card"><div class="label">Connected</div><div class="value green" id="ov-connected">—</div></div>
+          <div class="stat-card"><div class="label">Healthy</div><div class="value green" id="ov-healthy">—</div></div>
+          <div class="stat-card"><div class="label">Active WebSockets</div><div class="value" id="ov-ws">—</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header">
+            <h3>Configurations</h3>
+            <button class="btn btn-sm btn-primary" onclick="document.getElementById('create-config-dialog').showModal()">+ New</button>
+          </div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Name</th><th>Config Hash</th><th>Created</th><th></th></tr></thead>
+              <tbody id="ov-config-table"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>`;
+
+      try {
+        const { configurations } = await api('/configurations');
+        document.getElementById('ov-configs').textContent = configurations.length;
+
+        const tbody = document.getElementById('ov-config-table');
+        if (configurations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No configurations yet. Create one to get started.</td></tr>';
+        } else {
+          tbody.innerHTML = configurations.map(c => `
+            <tr class="clickable" onclick="openConfig('${c.id}', '${esc(c.name)}')">
+              <td><strong>${esc(c.name)}</strong></td>
+              <td><span class="hash-short">${c.current_config_hash ? c.current_config_hash.slice(0, 16) : '—'}</span></td>
+              <td>${timeAgo(c.created_at)}</td>
+              <td><button class="btn btn-sm" onclick="event.stopPropagation();openConfig('${c.id}', '${esc(c.name)}')">View →</button></td>
+            </tr>`).join('');
+        }
+
+        // Aggregate stats from all configs
+        let totalAgents = 0, totalConnected = 0, totalHealthy = 0, totalWs = 0;
+        await Promise.all(configurations.map(async c => {
+          try {
+            const stats = await api(`/configurations/${c.id}/stats`);
+            totalAgents += stats.total_agents || 0;
+            totalConnected += stats.connected_agents || 0;
+            totalHealthy += stats.healthy_agents || 0;
+            totalWs += stats.active_websockets || 0;
+          } catch { /* config may not have a DO yet */ }
+        }));
+
+        document.getElementById('ov-agents').textContent = totalAgents.toLocaleString();
+        const connEl = document.getElementById('ov-connected');
+        connEl.textContent = totalConnected.toLocaleString();
+        connEl.className = 'value ' + (totalConnected > 0 ? 'green' : totalAgents > 0 ? 'red' : '');
+        document.getElementById('ov-healthy').textContent = totalHealthy.toLocaleString();
+        document.getElementById('ov-ws').textContent = totalWs.toLocaleString();
+
+        updateRefreshTime();
+      } catch (err) {
+        toast('Failed to load overview: ' + err.message);
+      }
+    }
+
+    // ─── Configurations Page ────────────────────────────────
+
+    async function renderConfigurations(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h2>Configurations</h2>
+            <div class="subtitle">Manage collector configuration groups</div>
+          </div>
+          <button class="btn btn-primary" onclick="document.getElementById('create-config-dialog').showModal()">+ New Configuration</button>
+        </div>
+        <div class="card">
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Name</th><th>ID</th><th>Config Hash</th><th>Description</th><th>Created</th></tr></thead>
+              <tbody id="configs-list"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>`;
+
+      try {
+        const { configurations } = await api('/configurations');
+        const tbody = document.getElementById('configs-list');
+        if (configurations.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No configurations yet.</td></tr>';
+        } else {
+          tbody.innerHTML = configurations.map(c => `
+            <tr class="clickable" onclick="openConfig('${c.id}', '${esc(c.name)}')">
+              <td><strong>${esc(c.name)}</strong></td>
+              <td><span class="hash-short">${c.id.slice(0, 8)}…</span></td>
+              <td><span class="hash-short">${c.current_config_hash ? c.current_config_hash.slice(0, 16) : '—'}</span></td>
+              <td style="color:var(--text-secondary)">${esc(c.description || '—')}</td>
+              <td>${timeAgo(c.created_at)}</td>
+            </tr>`).join('');
+        }
+      } catch (err) {
+        toast('Failed to load configurations: ' + err.message);
+      }
+    }
+
+    // ─── Config Detail Page ─────────────────────────────────
+
+    async function openConfig(id, name) {
+      selectedConfigId = id;
+      selectedConfigName = name;
+      navigate('config-detail');
+    }
+
+    async function renderConfigDetail(el) {
+      if (!selectedConfigId) { navigate('configurations'); return; }
+
+      el.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h2 id="cd-name">${esc(selectedConfigName || 'Configuration')}</h2>
+            <div class="subtitle"><span class="mono">${selectedConfigId}</span></div>
+          </div>
+          <div style="display:flex;gap:8px">
+            <button class="btn" onclick="navigate('configurations')">← Back</button>
+            <button class="btn" onclick="showUploadDialog()">Upload YAML</button>
+            <button class="btn" onclick="showTokenDialog()">Enrollment Token</button>
+            <button class="btn btn-primary" onclick="confirmRollout()">Rollout</button>
+          </div>
+        </div>
+        <div class="stats-row" id="cd-stats">
+          <div class="stat-card"><div class="label">Total Agents</div><div class="value" id="cd-total">—</div></div>
+          <div class="stat-card"><div class="label">Connected</div><div class="value green" id="cd-connected">—</div></div>
+          <div class="stat-card"><div class="label">Healthy</div><div class="value green" id="cd-healthy">—</div></div>
+          <div class="stat-card"><div class="label">Active WebSockets</div><div class="value" id="cd-ws">—</div></div>
+          <div class="stat-card"><div class="label">Desired Config</div><div class="value hash" id="cd-hash">—</div></div>
+        </div>
+        <div class="card">
+          <div class="tabs" id="cd-tabs">
+            <div class="tab active" data-tab="agents" onclick="switchTab('agents')">Agents</div>
+            <div class="tab" data-tab="tokens" onclick="switchTab('tokens')">Enrollment Tokens</div>
+            <div class="tab" data-tab="versions" onclick="switchTab('versions')">Config Versions</div>
+          </div>
+          <div class="tab-content active" id="tab-agents">
+            <div class="filter-bar">
+              <select id="agent-filter" onchange="applyAgentFilter()">
+                <option value="">All</option>
+                <option value="connected">Connected</option>
+                <option value="disconnected">Disconnected</option>
+              </select>
+              <span class="count" id="agent-count">—</span>
+            </div>
+            <div class="table-scroll">
+              <table>
+                <thead><tr><th>Instance UID</th><th>Status</th><th>Health</th><th>Config Hash</th><th>Last Seen</th></tr></thead>
+                <tbody id="agents-tbody"><tr><td colspan="5" class="empty-state">Loading…</td></tr></tbody>
+              </table>
+            </div>
+          </div>
+          <div class="tab-content" id="tab-tokens">
+            <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
+              <button class="btn btn-sm btn-primary" onclick="showTokenDialog()">+ Generate Token</button>
+            </div>
+            <table>
+              <thead><tr><th>Label</th><th>ID</th><th>Expires</th><th>Status</th><th>Created</th><th></th></tr></thead>
+              <tbody id="tokens-tbody"><tr><td colspan="6" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+          </div>
+          <div class="tab-content" id="tab-versions">
+            <div style="padding:14px 18px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
+              <button class="btn btn-sm btn-primary" onclick="showUploadDialog()">Upload New Version</button>
+            </div>
+            <table>
+              <thead><tr><th>Config Hash</th><th>Size</th><th>Created</th><th>Status</th></tr></thead>
+              <tbody id="versions-tbody"><tr><td colspan="4" class="empty-state">Loading…</td></tr></tbody>
+            </table>
+          </div>
+        </div>
+        <div id="upload-section" class="hidden" style="margin-top:16px">
+          <div class="card">
+            <div class="card-header"><h3>Upload Configuration YAML</h3><button class="btn btn-sm" onclick="document.getElementById('upload-section').classList.add('hidden')">Close</button></div>
+            <div class="card-body padded">
+              <div class="upload-area" id="upload-area" onclick="document.getElementById('file-input').click()">
+                <input type="file" id="file-input" accept=".yaml,.yml" onchange="handleFileSelect(event)">
+                <p>📁 Click to select or drag & drop a YAML file</p>
+              </div>
+              <div id="upload-result" class="hidden" style="margin-top:12px"></div>
+            </div>
+          </div>
+        </div>`;
+
+      loadConfigStats();
+      loadAgents();
+      loadTokens();
+      loadVersions();
+      initDragDrop();
+    }
+
+    function switchTab(tab) {
+      document.querySelectorAll('#cd-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
+      document.querySelectorAll('.tab-content').forEach(tc => tc.classList.toggle('active', tc.id === 'tab-' + tab));
+    }
+
+    async function loadConfigStats() {
+      try {
+        const stats = await api(`/configurations/${selectedConfigId}/stats`);
+        document.getElementById('cd-total').textContent = (stats.total_agents || 0).toLocaleString();
+        const connEl = document.getElementById('cd-connected');
+        connEl.textContent = (stats.connected_agents || 0).toLocaleString();
+        connEl.className = 'value ' + (stats.connected_agents > 0 ? 'green' : stats.total_agents > 0 ? 'red' : '');
+        document.getElementById('cd-healthy').textContent = (stats.healthy_agents || 0).toLocaleString();
+        document.getElementById('cd-ws').textContent = (stats.active_websockets || 0).toLocaleString();
+        document.getElementById('cd-hash').textContent = stats.desired_config_hash ? stats.desired_config_hash.slice(0, 16) : '—';
+      } catch { /* DO may not exist yet */ }
+    }
+
+    async function loadAgents() {
+      try {
+        const { agents } = await api(`/configurations/${selectedConfigId}/agents`);
+        allAgents = agents;
+        applyAgentFilter();
+      } catch {
+        allAgents = [];
+        applyAgentFilter();
+      }
+    }
+
+    function applyAgentFilter() {
+      const filter = document.getElementById('agent-filter')?.value || '';
+      const filtered = filter ? allAgents.filter(a => a.status === filter) : allAgents;
+      const tbody = document.getElementById('agents-tbody');
+      if (!tbody) return;
+
+      const countEl = document.getElementById('agent-count');
+      if (countEl) countEl.textContent = `${filtered.length.toLocaleString()} agents`;
+
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No agents found</td></tr>';
+        return;
+      }
+
+      // Show max 500 to keep the DOM fast
+      const shown = filtered.slice(0, 500);
+      tbody.innerHTML = shown.map(a => `
+        <tr>
+          <td><span class="mono">${esc(a.instance_uid?.slice(0, 16) || '—')}…</span></td>
+          <td><span class="status-dot ${a.status}"></span><span class="badge badge-${a.status}">${a.status}</span></td>
+          <td><span class="badge badge-${a.healthy ? 'healthy' : 'unhealthy'}">${a.healthy ? 'healthy' : 'unhealthy'}</span></td>
+          <td><span class="hash-short">${a.current_config_hash ? a.current_config_hash.slice(0, 16) : '—'}</span></td>
+          <td>${a.last_seen_at ? timeAgo(a.last_seen_at) : '—'}</td>
+        </tr>`).join('');
+
+      if (filtered.length > 500) {
+        tbody.innerHTML += `<tr><td colspan="5" class="empty-state">Showing 500 of ${filtered.length.toLocaleString()} agents</td></tr>`;
+      }
+    }
+
+    async function loadTokens() {
+      try {
+        const { tokens } = await api(`/configurations/${selectedConfigId}/enrollment-tokens`);
+        const tbody = document.getElementById('tokens-tbody');
+        if (!tbody) return;
+        if (tokens.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="6" class="empty-state">No enrollment tokens yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = tokens.map(t => {
+          const expired = t.expires_at && new Date(t.expires_at) < new Date();
+          const revoked = !!t.revoked_at;
+          const status = revoked ? 'revoked' : expired ? 'expired' : 'active';
+          const badgeClass = status === 'active' ? 'badge-connected' : 'badge-disconnected';
+          return `<tr>
+            <td>${esc(t.label || '(no label)')}</td>
+            <td><span class="mono">${t.id.slice(0, 8)}…</span></td>
+            <td>${t.expires_at ? new Date(t.expires_at).toLocaleDateString() : 'Never'}</td>
+            <td><span class="badge ${badgeClass}">${status}</span></td>
+            <td>${timeAgo(t.created_at)}</td>
+            <td>${!revoked ? `<button class="btn btn-sm btn-danger" onclick="revokeToken('${t.id}')">Revoke</button>` : ''}</td>
+          </tr>`;
+        }).join('');
+      } catch { /* ok */ }
+    }
+
+    async function loadVersions() {
+      try {
+        const data = await api(`/configurations/${selectedConfigId}/versions`);
+        const tbody = document.getElementById('versions-tbody');
+        if (!tbody) return;
+        if (data.versions.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No config versions uploaded yet</td></tr>';
+          return;
+        }
+        tbody.innerHTML = data.versions.map(v => `
+          <tr>
+            <td><span class="mono">${v.config_hash.slice(0, 16)}</span></td>
+            <td>${formatBytes(v.size_bytes)}</td>
+            <td>${timeAgo(v.created_at)}</td>
+            <td>${v.config_hash === data.current_config_hash ? '<span class="badge badge-connected">current</span>' : '<span class="badge badge-free">previous</span>'}</td>
+          </tr>`).join('');
+      } catch { /* ok */ }
+    }
+
+    // ─── Getting Started Page ───────────────────────────────
+
+    function renderGettingStarted(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h2>Getting Started</h2>
+            <div class="subtitle">Connect your first OpenTelemetry Collector</div>
+          </div>
+        </div>
+        <div class="instructions">
+          <h3 style="margin-bottom:12px;font-size:16px">1. Create a Configuration</h3>
+          <p>Go to <a href="#" onclick="navigate('configurations');return false" style="color:var(--accent)">Configurations</a> and create a new configuration group for your collectors.</p>
+
+          <h3 style="margin:20px 0 12px;font-size:16px">2. Upload a YAML Config</h3>
+          <p>Upload your OpenTelemetry Collector YAML configuration. This will be distributed to all connected collectors in that configuration group.</p>
+
+          <h3 style="margin:20px 0 12px;font-size:16px">3. Generate an Enrollment Token</h3>
+          <p>Create an enrollment token for the configuration. Collectors use this token to authenticate and connect.</p>
+
+          <h3 style="margin:20px 0 12px;font-size:16px">4. Connect a Collector</h3>
+          <p>Point your collector at the FleetPlane endpoint with the enrollment token:</p>
+          <pre>opamp:
+  endpoint: ws://${window.location.hostname}:8787/v1/opamp?token=YOUR_ENROLLMENT_TOKEN</pre>
+
+          <h3 style="margin:20px 0 12px;font-size:16px">5. Rollout Config Changes</h3>
+          <p>Upload a new YAML version and click <strong>Rollout</strong> to push it to all connected collectors instantly.</p>
+        </div>`;
+    }
+
+    // ─── Settings Page ──────────────────────────────────────
+
+    async function renderSettings(el) {
+      el.innerHTML = `
+        <div class="page-header">
+          <div>
+            <h2>Settings</h2>
+            <div class="subtitle">Tenant configuration</div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-body padded">
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Tenant ID</label>
+            <div class="mono" style="margin-bottom:16px">${esc(TENANT_ID)}</div>
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">API URL</label>
+            <div class="mono" style="margin-bottom:16px">${esc(API_URL)}</div>
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Tenant Name</label>
+            <div id="settings-name" style="margin-bottom:16px">Loading…</div>
+            <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:4px">Plan</label>
+            <div id="settings-plan" style="margin-bottom:24px">Loading…</div>
+            <button class="btn btn-danger" onclick="disconnect()">Disconnect</button>
+          </div>
+        </div>`;
+
+      try {
+        const tenant = await api('/tenant');
+        document.getElementById('settings-name').textContent = tenant.name;
+        document.getElementById('settings-plan').innerHTML = `<span class="badge badge-${tenant.plan}">${tenant.plan}</span>`;
+      } catch { /* ok */ }
+    }
+
+    function disconnect() {
+      localStorage.removeItem('fp_tenant_id');
+      localStorage.removeItem('fp_api_url');
+      window.location.reload();
+    }
+
+    // ─── Actions ────────────────────────────────────────────
+
+    async function createConfig() {
+      const name = document.getElementById('cfg-name').value.trim();
+      if (!name) { toast('Name is required'); return; }
+      try {
+        const result = await api('/configurations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, description: document.getElementById('cfg-desc').value.trim() || undefined }),
+        });
+        document.getElementById('create-config-dialog').close();
+        document.getElementById('cfg-name').value = '';
+        document.getElementById('cfg-desc').value = '';
+        toast('Configuration created');
+        openConfig(result.id, result.name);
+      } catch (err) { toast(err.message); }
+    }
+
+    function showTokenDialog() {
+      document.getElementById('token-result').classList.add('hidden');
+      document.getElementById('token-generate-btn').classList.remove('hidden');
+      document.getElementById('token-label').value = '';
+      document.getElementById('token-expiry').value = '';
+      document.getElementById('token-dialog').showModal();
+    }
+
+    function closeTokenDialog() {
+      document.getElementById('token-dialog').close();
+    }
+
+    async function generateToken() {
+      const label = document.getElementById('token-label').value.trim() || undefined;
+      const expiry = document.getElementById('token-expiry').value;
+      try {
+        const result = await api(`/configurations/${selectedConfigId}/enrollment-token`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ label, expires_in_hours: expiry ? Number(expiry) : undefined }),
+        });
+        document.getElementById('token-value').textContent = result.token;
+        document.getElementById('token-result').classList.remove('hidden');
+        document.getElementById('token-generate-btn').classList.add('hidden');
+        toast('Token generated');
+        loadTokens();
+      } catch (err) { toast(err.message); }
+    }
+
+    async function revokeToken(tokenId) {
+      if (!confirm('Revoke this token? Collectors using it will not be able to enroll.')) return;
+      try {
+        await api(`/configurations/${selectedConfigId}/enrollment-tokens/${tokenId}`, { method: 'DELETE' });
+        toast('Token revoked');
+        loadTokens();
+      } catch (err) { toast(err.message); }
+    }
+
+    function showUploadDialog() {
+      document.getElementById('upload-section')?.classList.remove('hidden');
+      document.getElementById('upload-result')?.classList.add('hidden');
+    }
+
+    function handleFileSelect(event) {
+      const file = event.target.files[0];
+      if (file) uploadFile(file);
+    }
+
+    async function uploadFile(file) {
+      try {
+        const text = await file.text();
+        const result = await apiText(`/configurations/${selectedConfigId}/versions`, text);
+        const resultEl = document.getElementById('upload-result');
+        resultEl.classList.remove('hidden');
+        resultEl.innerHTML = `<div style="color:var(--green)">✓ Uploaded successfully</div>
+          <div style="margin-top:4px;font-size:12px;color:var(--text-secondary)">Hash: <span class="mono">${result.config_hash}</span> · ${formatBytes(result.size_bytes)}</div>`;
+        toast('Config uploaded');
+        loadConfigStats();
+        loadVersions();
+      } catch (err) { toast(err.message); }
+    }
+
+    function initDragDrop() {
+      const area = document.getElementById('upload-area');
+      if (!area) return;
+      area.addEventListener('dragover', e => { e.preventDefault(); area.classList.add('drag-over'); });
+      area.addEventListener('dragleave', () => area.classList.remove('drag-over'));
+      area.addEventListener('drop', e => { e.preventDefault(); area.classList.remove('drag-over'); if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]); });
+    }
+
+    async function confirmRollout() {
+      const stats = await api(`/configurations/${selectedConfigId}/stats`).catch(() => null);
+      const wsCount = stats?.active_websockets || 0;
+      if (!confirm(`Push current config to ${wsCount} connected collector(s)?`)) return;
+      try {
+        const result = await api(`/configurations/${selectedConfigId}/rollout`, { method: 'POST' });
+        toast(`Rollout started — ${result.pushed || 0} agents updated`);
+        loadConfigStats();
+      } catch (err) { toast(err.message); }
+    }
+
+    // ─── Refresh ────────────────────────────────────────────
+
+    function startAutoRefresh() {
+      if (refreshTimer) clearInterval(refreshTimer);
+      refreshTimer = setInterval(() => {
+        if (currentPage === 'overview') renderOverview(document.getElementById('content'));
+        else if (currentPage === 'config-detail' && selectedConfigId) {
+          loadConfigStats();
+          loadAgents();
+        }
+      }, 10000);
+    }
+
+    function updateRefreshTime() {
+      const now = new Date().toLocaleTimeString();
+      const el1 = document.getElementById('sidebar-refresh');
+      const el2 = document.getElementById('top-refresh');
+      if (el1) el1.textContent = 'Updated ' + now;
+      if (el2) el2.textContent = 'Updated ' + now;
+    }
+
+    // ─── Utilities ──────────────────────────────────────────
+
+    function esc(s) {
+      if (!s) return '';
+      const d = document.createElement('div');
+      d.textContent = String(s);
+      return d.innerHTML;
+    }
+
+    function timeAgo(dateStr) {
+      if (!dateStr) return '—';
+      const sec = Math.floor((Date.now() - new Date(dateStr).getTime()) / 1000);
+      if (sec < 0) return 'just now';
+      if (sec < 60) return sec + 's ago';
+      if (sec < 3600) return Math.floor(sec / 60) + 'm ago';
+      if (sec < 86400) return Math.floor(sec / 3600) + 'h ago';
+      return Math.floor(sec / 86400) + 'd ago';
+    }
+
+    function formatBytes(bytes) {
+      if (!bytes) return '—';
+      if (bytes < 1024) return bytes + ' B';
+      if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+      return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    function toast(msg) {
+      const el = document.createElement('div');
+      el.className = 'toast';
+      el.textContent = msg;
+      document.body.appendChild(el);
+      setTimeout(() => el.remove(), 3000);
+    }
+
+    // ─── Boot ───────────────────────────────────────────────
+
+    window.addEventListener('hashchange', () => {
+      const hash = window.location.hash.slice(1);
+      const parts = hash.split('/');
+      const page = parts[0] || 'overview';
+      if (parts[1]) {
+        selectedConfigId = parts[1];
+        selectedConfigName = null; // Will be loaded
+      }
+      if (page !== currentPage || page === 'config-detail') navigate(page, false);
+    });
+
+    init();
+  </script>
+</body>
+</html>

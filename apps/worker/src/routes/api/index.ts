@@ -360,9 +360,6 @@ async function handleDeleteConfiguration(env: Env, configId: string): Promise<Re
   await env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`)
     .bind(configId)
     .run();
-  await env.FP_DB.prepare(`DELETE FROM agent_summaries WHERE config_id = ?`)
-    .bind(configId)
-    .run();
   await env.FP_DB.prepare(`DELETE FROM configurations WHERE id = ?`)
     .bind(configId)
     .run();
@@ -523,17 +520,13 @@ async function handleRevokeEnrollmentToken(
 // ─── Agent & Stats Handlers ─────────────────────────────────────────
 
 async function handleListAgents(env: Env, configId: string): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT id FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
-  if (!config) return jsonError("Configuration not found", 404);
+  const doName = await getDoNameForConfig(env, configId);
+  if (!doName) return jsonError("Configuration not found", 404);
 
-  const result = await env.FP_DB.prepare(
-    `SELECT * FROM agent_summaries WHERE config_id = ? ORDER BY last_seen_at DESC`,
-  )
-    .bind(configId)
-    .all();
-  return Response.json({ agents: result.results });
+  const doId = env.CONFIG_DO.idFromName(doName);
+  const stub = env.CONFIG_DO.get(doId);
+  const response = await stub.fetch(new Request("http://internal/agents"));
+  return response;
 }
 
 async function handleGetStats(env: Env, configId: string): Promise<Response> {
