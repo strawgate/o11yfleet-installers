@@ -1,0 +1,53 @@
+{
+  "name": "o11yfleet-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-26",
+  "d1_databases": [
+    {
+      "binding": "FP_DB",
+      "database_name": "fp-db",
+      "database_id": "placeholder-will-be-set-by-terraform"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FP_CONFIGS",
+      "bucket_name": "fp-configs"
+    }
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FP_EVENTS",
+        "queue": "fp-events"
+      }
+    ],
+    "consumers": [
+      {
+        "queue": "fp-events",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5
+      }
+    ]
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONFIG_DO",
+        "class_name": "ConfigDurableObject"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ConfigDurableObject"]
+    }
+  ],
+  "analytics_engine_datasets": [
+    {
+      "binding": "FP_ANALYTICS",
+      "dataset": "fp_analytics"
+    }
+  ]
+}

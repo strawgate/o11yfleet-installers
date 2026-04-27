@@ -1,0 +1,25 @@
+{
+  "name": "@o11yfleet/worker",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "lint": "eslint src/ test/",
+    "typecheck": "wrangler types && tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@o11yfleet/core": "workspace:*",
+    "@o11yfleet/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.15.0",
+    "@cloudflare/workers-types": "^4.20250410.0",
+    "vitest": "^4.1.0",
+    "wrangler": "^4.14.0",
+    "typescript": "^5.8.0"
+  }
+}

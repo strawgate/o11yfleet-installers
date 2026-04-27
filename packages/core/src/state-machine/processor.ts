@@ -1,0 +1,161 @@
+// OpAMP state machine — processFrame
+// Pure function: (state, msg) → { newState, response, events, shouldPersist }
+
+import type { AgentState, ProcessResult } from "./types.js";
+import type { AgentToServer, ServerToAgent } from "../codec/types.js";
+import {
+  ServerCapabilities,
+  ServerToAgentFlags,
+  RemoteConfigStatuses,
+  AgentCapabilities,
+} from "../codec/types.js";
+import { FleetEventType } from "../events.js";
+import type { AnyFleetEvent } from "../events.js";
+
+function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
+  if (a === null && b === null) return true;
+  if (a === null || b === null) return false;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+export function processFrame(state: AgentState, msg: AgentToServer): ProcessResult {
+  const events: AnyFleetEvent[] = [];
+  let shouldPersist = false;
+  const now = Date.now();
+
+  // Clone state
+  const newState: AgentState = { ...state, last_seen_at: now };
+
+  // Build base response
+  const response: ServerToAgent = {
+    instance_uid: msg.instance_uid,
+    flags: ServerToAgentFlags.Unspecified,
+    capabilities:
+      ServerCapabilities.AcceptsStatus |
+      ServerCapabilities.OffersRemoteConfig |
+      ServerCapabilities.AcceptsEffectiveConfig,
+  };
+
+  // Check for sequence gap
+  const expectedSeq = state.sequence_num + 1;
+  if (msg.sequence_num !== 0 && msg.sequence_num !== expectedSeq) {
+    // Sequence gap detected — request full state report
+    response.flags |= ServerToAgentFlags.ReportFullState;
+    newState.sequence_num = msg.sequence_num;
+    shouldPersist = true;
+    return { newState, response, events, shouldPersist };
+  }
+
+  newState.sequence_num = msg.sequence_num;
+
+  // Handle disconnect
+  if (msg.agent_disconnect) {
+    events.push({
+      type: FleetEventType.AGENT_DISCONNECTED,
+      tenant_id: state.tenant_id,
+      config_id: state.config_id,
+      instance_uid: uint8ToHex(state.instance_uid),
+      timestamp: now,
+      reason: "agent_disconnect_message",
+    });
+    shouldPersist = true;
+    return { newState, response: null, events, shouldPersist };
+  }
+
+  // Is this a hello (first message, seq=0 or state has no connected_at)?
+  const isHello = msg.sequence_num === 0 || state.connected_at === 0;
+
+  if (isHello) {
+    newState.connected_at = now;
+    shouldPersist = true;
+    events.push({
+      type: FleetEventType.AGENT_CONNECTED,
+      tenant_id: state.tenant_id,
+      config_id: state.config_id,
+      instance_uid: uint8ToHex(state.instance_uid),
+      timestamp: now,
+    });
+  }
+
+  // Process health
+  if (msg.health) {
+    const healthChanged = msg.health.healthy !== state.healthy || msg.health.status !== state.status;
+    if (healthChanged) {
+      newState.healthy = msg.health.healthy;
+      newState.status = msg.health.status;
+      newState.last_error = msg.health.last_error;
+      shouldPersist = true;
+      events.push({
+        type: FleetEventType.AGENT_HEALTH_CHANGED,
+        tenant_id: state.tenant_id,
+        config_id: state.config_id,
+        instance_uid: uint8ToHex(state.instance_uid),
+        timestamp: now,
+        healthy: msg.health.healthy,
+        status: msg.health.status,
+        last_error: msg.health.last_error,
+      });
+    }
+  }
+
+  // Process agent description
+  if (msg.agent_description) {
+    newState.agent_description = JSON.stringify(msg.agent_description);
+    shouldPersist = true;
+  }
+
+  // Process remote config status
+  if (msg.remote_config_status) {
+    const hash = msg.remote_config_status.last_remote_config_hash;
+    if (msg.remote_config_status.status === RemoteConfigStatuses.APPLIED) {
+      newState.current_config_hash = hash;
+      shouldPersist = true;
+      events.push({
+        type: FleetEventType.CONFIG_APPLIED,
+        tenant_id: state.tenant_id,
+        config_id: state.config_id,
+        instance_uid: uint8ToHex(state.instance_uid),
+        timestamp: now,
+        config_hash: uint8ToHex(hash),
+      });
+    } else if (msg.remote_config_status.status === RemoteConfigStatuses.FAILED) {
+      shouldPersist = true;
+      events.push({
+        type: FleetEventType.CONFIG_REJECTED,
+        tenant_id: state.tenant_id,
+        config_id: state.config_id,
+        instance_uid: uint8ToHex(state.instance_uid),
+        timestamp: now,
+        config_hash: uint8ToHex(hash),
+        error_message: msg.remote_config_status.error_message,
+      });
+    }
+  }
+
+  // Offer remote config if needed
+  if (
+    newState.desired_config_hash &&
+    !arraysEqual(newState.current_config_hash, newState.desired_config_hash) &&
+    (msg.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0
+  ) {
+    response.remote_config = {
+      config: { config_map: {} },
+      config_hash: newState.desired_config_hash,
+    };
+  }
+
+  // Pure heartbeat (no health change, no config status, no description) — no persist
+  // shouldPersist remains false if nothing above triggered
+
+  return { newState, response, events, shouldPersist };
+}
+
+function uint8ToHex(arr: Uint8Array): string {
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
