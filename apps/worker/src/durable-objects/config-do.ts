@@ -20,6 +20,9 @@ import {
   markDisconnected,
   getStats,
   listAgents,
+  loadDesiredConfig,
+  saveDesiredConfig,
+  checkRateLimit,
 } from "./agent-state-repo.js";
 
 export interface ConfigDOEnv {
@@ -43,40 +46,27 @@ const MAX_AGENTS_PER_CONFIG = 50_000;
 
 // Config Durable Object — per tenant:config stateful actor for OpAMP agent management
 // Uses WebSocket Hibernation API — no timers, no alarms, no intervals
+//
+// Design: ZERO meaningful instance state. All mutable data lives in DO-local
+// SQLite (sync, ~µs per query). This makes the DO fully hibernation-proof —
+// no async rehydration needed on wake-up.
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
-  private desiredConfigHash: string | null = null;
-  private desiredConfigContent: string | null = null; // C4: cached YAML body for delivery
-  private desiredConfigBytes: Uint8Array | null = null; // Pre-encoded to avoid per-message TextEncoder
   private initialized = false;
-  // Compact rate limiter: [windowStart, count] per UID — 2 numbers vs 60 timestamps
-  private rateLimits = new Map<string, { windowStart: number; count: number }>();
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
   }
 
-  private async ensureInit(): Promise<void> {
+  private ensureInit(): void {
     if (this.initialized) return;
     initSchema(this.ctx.storage.sql);
-
-    const [storedHash, storedContent] = await Promise.all([
-      this.ctx.storage.get<string>("desired_config_hash"),
-      this.ctx.storage.get<string>("desired_config_content"),
-    ]);
-    if (storedHash) {
-      this.desiredConfigHash = storedHash;
-    }
-    if (storedContent) {
-      this.desiredConfigContent = storedContent;
-      this.desiredConfigBytes = new TextEncoder().encode(storedContent);
-    }
     this.initialized = true;
   }
 
   // ─── HTTP Dispatch ────────────────────────────────────────────────
 
   async fetch(request: Request): Promise<Response> {
-    await this.ensureInit();
+    this.ensureInit();
     const url = new URL(request.url);
 
     if (request.headers.get("Upgrade") === "websocket") {
@@ -176,7 +166,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
-    await this.ensureInit();
+    this.ensureInit();
 
     if (typeof message === "string") {
       ws.close(4000, "Binary frames only");
@@ -189,11 +179,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    // Rate limit
-    if (this.isRateLimited(attachment.instance_uid)) {
+    // Rate limit — atomic check-and-increment in SQLite
+    if (checkRateLimit(this.ctx.storage.sql, attachment.instance_uid, MAX_MESSAGES_PER_MINUTE)) {
       ws.close(4029, "Rate limit exceeded");
       return;
     }
+
+    // Load config from SQLite (sync, ~µs)
+    const config = loadDesiredConfig(this.ctx.storage.sql);
+    const configBytes = config.content ? new TextEncoder().encode(config.content) : null;
 
     const span = startWsMessageSpan(attachment.instance_uid, attachment.tenant_id, attachment.config_id);
     try {
@@ -205,10 +199,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         attachment.instance_uid,
         attachment.tenant_id,
         attachment.config_id,
-        this.desiredConfigHash,
+        config.hash,
       );
 
-      const result = processFrame(state, agentMsg, this.desiredConfigBytes);
+      const result = processFrame(state, agentMsg, configBytes);
 
       if (result.shouldPersist) {
         saveAgentState(this.ctx.storage.sql, result.newState);
@@ -234,7 +228,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   }
 
   async webSocketClose(ws: WebSocket, _code: number, _reason: string): Promise<void> {
-    await this.ensureInit();
+    this.ensureInit();
     const attachment = ws.deserializeAttachment() as WSAttachment | null;
     if (!attachment) return;
 
@@ -249,14 +243,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         timestamp: Date.now(),
         reason: "websocket_close",
       }]);
-      this.rateLimits.delete(attachment.instance_uid);
     } finally {
       span.end();
     }
   }
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
-    await this.ensureInit();
+    this.ensureInit();
     const attachment = ws.deserializeAttachment() as WSAttachment | null;
 
     const span = startWsLifecycleSpan("error", attachment?.instance_uid ?? "unknown");
@@ -272,7 +265,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           timestamp: Date.now(),
           reason: "websocket_error",
         }]);
-        this.rateLimits.delete(attachment.instance_uid);
       }
       ws.close(1011, "Internal error");
     } finally {
@@ -288,24 +280,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return Response.json({ error: "config_hash required" }, { status: 400 });
     }
 
-    this.desiredConfigHash = body.config_hash;
-    this.desiredConfigContent = body.config_content ?? null;
-    this.desiredConfigBytes = body.config_content
-      ? new TextEncoder().encode(body.config_content)
-      : null;
-    await Promise.all([
-      this.ctx.storage.put("desired_config_hash", body.config_hash),
-      body.config_content
-        ? this.ctx.storage.put("desired_config_content", body.config_content)
-        : this.ctx.storage.delete("desired_config_content"),
-    ]);
+    // Persist to SQLite (sync, ~µs)
+    saveDesiredConfig(this.ctx.storage.sql, body.config_hash, body.config_content ?? null);
 
     const sockets = this.ctx.getWebSockets();
     const desiredHashBytes = hexToUint8Array(body.config_hash);
     let pushed = 0;
 
-    // C4 fix: Include config content in config_map so agents get the actual YAML
-    const configMap = this.buildConfigMap();
+    // Build config_map with YAML content if available
+    const configMap = this.buildConfigMap(body.config_content ?? null);
 
     for (const ws of sockets) {
       const attachment = ws.deserializeAttachment() as WSAttachment | null;
@@ -333,11 +316,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   /**
    * Build the config_map with actual YAML content if available.
    */
-  private buildConfigMap(): Record<string, { body: Uint8Array; content_type: string }> {
-    if (!this.desiredConfigBytes) return {};
+  private buildConfigMap(content: string | null): Record<string, { body: Uint8Array; content_type: string }> {
+    if (!content) return {};
     return {
       "": {
-        body: this.desiredConfigBytes,
+        body: new TextEncoder().encode(content),
         content_type: "text/yaml",
       },
     };
@@ -345,11 +328,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   private handleGetStats(): Response {
     const stats = getStats(this.ctx.storage.sql);
+    const config = loadDesiredConfig(this.ctx.storage.sql);
     return Response.json({
       total_agents: stats.total,
       connected_agents: stats.connected,
       healthy_agents: stats.healthy,
-      desired_config_hash: this.desiredConfigHash,
+      desired_config_hash: config.hash,
       active_websockets: this.ctx.getWebSockets().length,
     });
   }
@@ -357,22 +341,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private handleGetAgents(): Response {
     const agents = listAgents(this.ctx.storage.sql);
     return Response.json({ agents });
-  }
-
-  // ─── Rate Limiting ────────────────────────────────────────────────
-
-  private isRateLimited(uid: string): boolean {
-    const now = Date.now();
-    const windowStart = now - 60_000;
-    let entry = this.rateLimits.get(uid);
-    if (!entry || entry.windowStart < windowStart) {
-      // Start new window
-      entry = { windowStart: now, count: 1 };
-      this.rateLimits.set(uid, entry);
-      return false;
-    }
-    entry.count++;
-    return entry.count > MAX_MESSAGES_PER_MINUTE;
   }
 
   // ─── Event Emission ───────────────────────────────────────────────

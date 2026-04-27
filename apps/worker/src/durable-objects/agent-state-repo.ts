@@ -1,11 +1,15 @@
 // Agent State Repository — DO-local SQLite persistence for agent state
 // Extracted from config-do.ts for testability and separation of concerns
+//
+// Design: ALL mutable state lives in SQLite. The DO class has zero instance
+// fields that need to survive hibernation. SQLite queries are synchronous
+// in DO-local storage (~µs per query), so this is effectively free.
 
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 
 /**
- * Initialize the agents table in DO-local SQLite.
+ * Initialize all tables in DO-local SQLite.
  */
 export function initSchema(sql: SqlStorage): void {
   sql.exec(`
@@ -22,9 +26,76 @@ export function initSchema(sql: SqlStorage): void {
       last_seen_at INTEGER NOT NULL DEFAULT 0,
       connected_at INTEGER NOT NULL DEFAULT 0,
       agent_description TEXT,
-      capabilities INTEGER NOT NULL DEFAULT 0
+      capabilities INTEGER NOT NULL DEFAULT 0,
+      rate_window_start INTEGER NOT NULL DEFAULT 0,
+      rate_window_count INTEGER NOT NULL DEFAULT 0
     )
   `);
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS do_config (
+      id INTEGER PRIMARY KEY CHECK (id = 1),
+      desired_config_hash TEXT,
+      desired_config_content TEXT
+    )
+  `);
+  // Ensure singleton row exists
+  sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
+}
+
+// ─── Config State ───────────────────────────────────────────────────
+
+export interface DesiredConfig {
+  hash: string | null;
+  content: string | null;
+}
+
+/**
+ * Load desired config from SQLite (sync, ~µs).
+ */
+export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
+  const row = sql.exec(`SELECT desired_config_hash, desired_config_content FROM do_config WHERE id = 1`).one();
+  return {
+    hash: (row.desired_config_hash as string) ?? null,
+    content: (row.desired_config_content as string) ?? null,
+  };
+}
+
+/**
+ * Save desired config to SQLite (sync, ~µs).
+ */
+export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string | null): void {
+  sql.exec(
+    `UPDATE do_config SET desired_config_hash = ?, desired_config_content = ? WHERE id = 1`,
+    hash,
+    content,
+  );
+}
+
+// ─── Rate Limiting ──────────────────────────────────────────────────
+
+/**
+ * Check rate limit for an agent. Returns true if the agent is rate-limited.
+ * Atomic check-and-increment in a single SQL statement.
+ * Resets the window if it has expired (sliding 60s window).
+ */
+export function checkRateLimit(sql: SqlStorage, uid: string, maxPerMinute: number): boolean {
+  const now = Date.now();
+  const windowStart = now - 60_000;
+
+  // Atomic: reset expired window or increment count, return new count
+  const row = sql.exec(
+    `UPDATE agents SET
+       rate_window_start = CASE WHEN rate_window_start < ? THEN ? ELSE rate_window_start END,
+       rate_window_count = CASE WHEN rate_window_start < ? THEN 1 ELSE rate_window_count + 1 END
+     WHERE instance_uid = ?
+     RETURNING rate_window_count`,
+    windowStart, now,
+    windowStart,
+    uid,
+  ).toArray()[0];
+
+  if (!row) return false; // Agent not in DB yet — allow
+  return (row.rate_window_count as number) > maxPerMinute;
 }
 
 /**
@@ -93,8 +164,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
   const configHash = state.current_config_hash ? uint8ToHex(state.current_config_hash) : null;
 
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description, capabilities)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
