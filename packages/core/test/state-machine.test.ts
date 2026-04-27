@@ -254,3 +254,91 @@ describe("state-machine/processFrame", () => {
     expect(result.newState.agent_description).toContain("otel-collector");
   });
 });
+
+// ========================
+// Config Content Delivery (C4 fix)
+// ========================
+describe("Config Content Delivery", () => {
+  it("includes config content in response when configContent is provided", () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      desired_config_hash: new Uint8Array([1, 2, 3]),
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+    };
+
+    const yamlContent = "receivers:\n  otlp:\n    protocols:\n      grpc:";
+    const result = processFrame(state, msg, yamlContent);
+
+    expect(result.response?.remote_config).toBeDefined();
+    expect(result.response!.remote_config!.config.config_map).toBeDefined();
+    const configMap = result.response!.remote_config!.config.config_map as Record<string, { body: Uint8Array; content_type: string }>;
+    expect(configMap[""]).toBeDefined();
+    expect(configMap[""].content_type).toBe("text/yaml");
+    expect(new TextDecoder().decode(configMap[""].body)).toBe(yamlContent);
+  });
+
+  it("sends empty config_map when configContent is null", () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      desired_config_hash: new Uint8Array([1, 2, 3]),
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+    };
+
+    const result = processFrame(state, msg, null);
+    expect(result.response?.remote_config).toBeDefined();
+    const configMap = result.response!.remote_config!.config.config_map as Record<string, unknown>;
+    expect(Object.keys(configMap)).toHaveLength(0);
+  });
+
+  it("does not offer config when current matches desired", () => {
+    const hash = new Uint8Array([1, 2, 3]);
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      desired_config_hash: hash,
+      current_config_hash: hash,
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+    };
+
+    const result = processFrame(state, msg, "should not appear");
+    expect(result.response?.remote_config).toBeUndefined();
+  });
+
+  it("does not offer config when agent lacks AcceptsRemoteConfig capability", () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      desired_config_hash: new Uint8Array([1, 2, 3]),
+      capabilities: AgentCapabilities.ReportsStatus, // no AcceptsRemoteConfig
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+
+    const result = processFrame(state, msg, "should not appear");
+    expect(result.response?.remote_config).toBeUndefined();
+  });
+});

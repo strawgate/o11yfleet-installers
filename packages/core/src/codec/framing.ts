@@ -33,7 +33,6 @@ export function encodeFrame(msg: AgentToServer | ServerToAgent): ArrayBuffer {
 
 /**
  * Decode a frame from WebSocket binary data.
- * Returns parsed message and remaining buffer offset.
  */
 export function decodeFrame<T = AgentToServer | ServerToAgent>(buf: ArrayBuffer): T {
   const view = new DataView(buf);
