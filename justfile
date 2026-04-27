@@ -99,9 +99,29 @@ load-test-heavy:
 load-test-scale:
     ulimit -n 8192 && pnpm tsx scripts/load-test.ts --agents 500 --duration 180 --ramp 25
 
+# CI load test with pass/fail criteria (25 agents, 30s)
+load-test-ci:
+    pnpm tsx scripts/load-test.ts --agents 25 --duration 30 --ramp 10 --ci
+
 # CPU profile load test (200 agents, 60s, generates .cpuprofile)
 load-test-profile:
     ulimit -n 4096 && node --cpu-prof --cpu-prof-dir=./profiles --import tsx/esm scripts/load-test.ts --agents 200 --duration 60 --ramp 20
+
+# ─── E2E & UI Testing ───────────────────────────────────────────────
+
+# Full-stack E2E tests (requires `just dev` running)
+test-e2e:
+    cd tests/e2e && pnpm run test:e2e
+
+# UI tests with Playwright (requires `just dev` + `just ui` running)
+test-ui:
+    cd tests/ui && pnpm run test:e2e
+
+# Install Playwright browsers (one-time setup)
+playwright-install:
+    cd tests/ui && npx playwright install --with-deps chromium
+
+# ─── Infrastructure ──────────────────────────────────────────────────
 
 # Terraform validate
 tf-validate:
@@ -114,3 +134,9 @@ deploy-staging:
 # Run benchmarks
 bench:
     pnpm --filter @o11yfleet/experiments bench
+
+# ─── Full CI Pipeline ────────────────────────────────────────────────
+
+# Run the full CI pipeline locally (lint + typecheck + unit tests)
+ci-full: lint typecheck test
+    @echo "✓ CI pipeline passed"

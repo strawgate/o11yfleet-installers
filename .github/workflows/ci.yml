@@ -30,7 +30,7 @@ jobs:
       - name: Type check
         run: pnpm turbo typecheck
 
-      - name: Test
+      - name: Unit & Integration Tests
         run: pnpm turbo test
 
       - name: Terraform validate
@@ -77,10 +77,51 @@ jobs:
       - name: Smoke test
         run: |
           WORKER_URL="${{ vars.STAGING_WORKER_URL }}"
-          # Health check
+          echo "=== Health check ==="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL/healthz")
           if [ "$STATUS" != "200" ]; then
             echo "Health check failed: $STATUS"
             exit 1
           fi
-          echo "Staging smoke test passed"
+          echo "✓ Health check passed"
+
+          echo "=== API smoke: create tenant ==="
+          TENANT=$(curl -s -X POST "$WORKER_URL/api/tenants" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"ci-smoke-test"}')
+          TENANT_ID=$(echo "$TENANT" | jq -r '.id')
+          if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
+            echo "Failed to create tenant: $TENANT"
+            exit 1
+          fi
+          echo "✓ Created tenant: $TENANT_ID"
+
+          echo "=== API smoke: create config ==="
+          CONFIG=$(curl -s -X POST "$WORKER_URL/api/configurations" \
+            -H "Content-Type: application/json" \
+            -d "{\"tenant_id\":\"$TENANT_ID\",\"name\":\"ci-smoke-config\"}")
+          CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
+          if [ "$CONFIG_ID" = "null" ] || [ -z "$CONFIG_ID" ]; then
+            echo "Failed to create config: $CONFIG"
+            exit 1
+          fi
+          echo "✓ Created config: $CONFIG_ID"
+
+          echo "=== API smoke: create enrollment token ==="
+          TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/configurations/$CONFIG_ID/enrollment-token" \
+            -H "Content-Type: application/json" \
+            -d '{"label":"ci-smoke"}')
+          TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
+          if [ -z "$TOKEN" ] || ! echo "$TOKEN" | grep -q "^fp_enroll_"; then
+            echo "Failed to create enrollment token: $TOKEN_RESP"
+            exit 1
+          fi
+          echo "✓ Created enrollment token"
+
+          echo "=== API smoke: config stats ==="
+          STATS=$(curl -s "$WORKER_URL/api/configurations/$CONFIG_ID/stats")
+          echo "Stats: $STATS"
+          echo "✓ Stats endpoint responding"
+
+          echo ""
+          echo "✓ All staging smoke tests passed"

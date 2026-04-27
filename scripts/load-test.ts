@@ -30,7 +30,25 @@ interface LoadTestOpts {
   heartbeatMs: number;
   token: string;
   endpoint: string;
+  ci: boolean;           // CI mode: JSON output + exit code based on thresholds
 }
+
+// Pass/fail thresholds for CI mode
+interface CIThresholds {
+  maxConnectFailRate: number;    // max % of connect failures (default 5%)
+  maxErrorRate: number;          // max % of errors vs total messages (default 1%)
+  maxP99ConnectMs: number;       // max p99 connect latency (default 5000ms)
+  maxP99HeartbeatMs: number;     // max p99 heartbeat RTT (default 2000ms)
+  minEnrollmentRate: number;     // min % of agents that must enroll (default 95%)
+}
+
+const CI_THRESHOLDS: CIThresholds = {
+  maxConnectFailRate: 5,
+  maxErrorRate: 1,
+  maxP99ConnectMs: 5000,
+  maxP99HeartbeatMs: 2000,
+  minEnrollmentRate: 95,
+};
 
 function parseArgs(): LoadTestOpts {
   const args = process.argv.slice(2);
@@ -41,6 +59,7 @@ function parseArgs(): LoadTestOpts {
     heartbeatMs: 5_000, // faster than normal for load testing
     token: "",
     endpoint: BASE_URL.replace(/^http/, "ws") + "/v1/opamp",
+    ci: false,
   };
 
   for (let i = 0; i < args.length; i++) {
@@ -51,6 +70,7 @@ function parseArgs(): LoadTestOpts {
       case "--heartbeat": opts.heartbeatMs = parseInt(args[++i], 10); break;
       case "--token": opts.token = args[++i]; break;
       case "--endpoint": opts.endpoint = args[++i]; break;
+      case "--ci": opts.ci = true; break;
     }
   }
 
@@ -566,7 +586,75 @@ async function main(): Promise<void> {
   const totalDuration = (performance.now() - startTime) / 1000;
   printReport(metrics, Math.round(totalDuration));
 
+  // CI mode: evaluate pass/fail criteria
+  if (opts.ci) {
+    const exitCode = evaluateCIThresholds(metrics, opts);
+    process.exit(exitCode);
+  }
+
   process.exit(0);
+}
+
+/** Evaluate metrics against CI thresholds. Returns 0 for pass, 1 for fail. */
+function evaluateCIThresholds(metrics: Metrics, opts: LoadTestOpts): number {
+  const failures: string[] = [];
+
+  // Connect failure rate
+  const connectFailRate = metrics.connectAttempts > 0
+    ? (metrics.connectFailures / metrics.connectAttempts) * 100
+    : 0;
+  if (connectFailRate > CI_THRESHOLDS.maxConnectFailRate) {
+    failures.push(`Connect failure rate ${connectFailRate.toFixed(1)}% > ${CI_THRESHOLDS.maxConnectFailRate}%`);
+  }
+
+  // Error rate
+  const totalMessages = metrics.messagesSent + metrics.messagesReceived;
+  const errorRate = totalMessages > 0 ? (metrics.errors / totalMessages) * 100 : 0;
+  if (errorRate > CI_THRESHOLDS.maxErrorRate) {
+    failures.push(`Error rate ${errorRate.toFixed(2)}% > ${CI_THRESHOLDS.maxErrorRate}%`);
+  }
+
+  // p99 connect latency
+  const p99Connect = metrics.connectLatencies.percentile(99);
+  if (p99Connect > CI_THRESHOLDS.maxP99ConnectMs) {
+    failures.push(`p99 connect latency ${p99Connect.toFixed(0)}ms > ${CI_THRESHOLDS.maxP99ConnectMs}ms`);
+  }
+
+  // p99 heartbeat RTT
+  const p99Hb = metrics.heartbeatRtts.percentile(99);
+  if (p99Hb > CI_THRESHOLDS.maxP99HeartbeatMs) {
+    failures.push(`p99 heartbeat RTT ${p99Hb.toFixed(0)}ms > ${CI_THRESHOLDS.maxP99HeartbeatMs}ms`);
+  }
+
+  // Enrollment rate
+  const enrollRate = opts.agents > 0
+    ? (metrics.enrollments / opts.agents) * 100
+    : 100;
+  if (enrollRate < CI_THRESHOLDS.minEnrollmentRate) {
+    failures.push(`Enrollment rate ${enrollRate.toFixed(1)}% < ${CI_THRESHOLDS.minEnrollmentRate}%`);
+  }
+
+  if (failures.length > 0) {
+    console.log("\n\x1b[31m╔═══════════════════════════════════════════════════════════╗");
+    console.log("║  CI LOAD TEST FAILED                                     ║");
+    console.log("╠═══════════════════════════════════════════════════════════╣");
+    for (const f of failures) {
+      console.log(`║  ✗ ${f}`);
+    }
+    console.log("╚═══════════════════════════════════════════════════════════╝\x1b[0m");
+    return 1;
+  }
+
+  console.log("\n\x1b[32m╔═══════════════════════════════════════════════════════════╗");
+  console.log("║  CI LOAD TEST PASSED                                     ║");
+  console.log("╠═══════════════════════════════════════════════════════════╣");
+  console.log(`║  ✓ Connect failures: ${connectFailRate.toFixed(1)}% ≤ ${CI_THRESHOLDS.maxConnectFailRate}%`);
+  console.log(`║  ✓ Error rate:       ${errorRate.toFixed(2)}% ≤ ${CI_THRESHOLDS.maxErrorRate}%`);
+  console.log(`║  ✓ p99 connect:      ${p99Connect.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99ConnectMs}ms`);
+  console.log(`║  ✓ p99 heartbeat:    ${p99Hb.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99HeartbeatMs}ms`);
+  console.log(`║  ✓ Enrollment rate:  ${enrollRate.toFixed(1)}% ≥ ${CI_THRESHOLDS.minEnrollmentRate}%`);
+  console.log("╚═══════════════════════════════════════════════════════════╝\x1b[0m");
+  return 0;
 }
 
 main().catch((err) => {

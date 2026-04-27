@@ -1,0 +1,19 @@
+{
+  "name": "@o11yfleet/e2e-tests",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "echo 'E2E tests require a live server. Run: just test-e2e'",
+    "test:e2e": "vitest run",
+    "test:e2e:watch": "vitest"
+  },
+  "dependencies": {
+    "@o11yfleet/core": "workspace:*",
+    "@o11yfleet/test-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0",
+    "typescript": "^5.8.0"
+  }
+}
