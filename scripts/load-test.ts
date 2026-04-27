@@ -70,6 +70,15 @@ function parseArgs(): LoadTestOpts {
 // ──────────────────────────────────────────────
 // Metrics
 // ──────────────────────────────────────────────
+interface MemorySample {
+  timestamp: number;       // seconds since start
+  heapUsedMB: number;
+  heapTotalMB: number;
+  rssMB: number;
+  externalMB: number;
+  connectedAgents: number;
+}
+
 interface Metrics {
   connectAttempts: number;
   connectSuccesses: number;
@@ -85,6 +94,7 @@ interface Metrics {
   disconnects: number;
   connectLatencies: number[];  // ms
   enrollLatencies: number[];   // ms
+  memorySamples: MemorySample[];
 }
 
 function newMetrics(): Metrics {
@@ -103,7 +113,20 @@ function newMetrics(): Metrics {
     disconnects: 0,
     connectLatencies: [],
     enrollLatencies: [],
+    memorySamples: [],
   };
+}
+
+function sampleMemory(metrics: Metrics, elapsedSec: number, connectedAgents: number): void {
+  const mem = process.memoryUsage();
+  metrics.memorySamples.push({
+    timestamp: +elapsedSec.toFixed(1),
+    heapUsedMB: +(mem.heapUsed / 1024 / 1024).toFixed(2),
+    heapTotalMB: +(mem.heapTotal / 1024 / 1024).toFixed(2),
+    rssMB: +(mem.rss / 1024 / 1024).toFixed(2),
+    externalMB: +(mem.external / 1024 / 1024).toFixed(2),
+    connectedAgents,
+  });
 }
 
 function percentile(arr: number[], p: number): number {
@@ -332,11 +355,14 @@ function closeAgent(agent: LoadAgent): void {
 function printProgress(agents: LoadAgent[], metrics: Metrics, elapsed: number): void {
   const connected = agents.filter(a => a.state === "running" || a.state === "enrolled").length;
   const closed = agents.filter(a => a.state === "closed").length;
+  const mem = process.memoryUsage();
+  const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
+  const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
 
   process.stdout.write(
     `\r  ${connected} connected | ${closed} closed | ` +
     `${metrics.heartbeatsSent} heartbeats | ${metrics.configPushesReceived} config pushes | ` +
-    `${metrics.errors} errors | ${Math.round(elapsed)}s elapsed   `,
+    `${metrics.errors} errors | heap ${heapMB}MB rss ${rssMB}MB | ${Math.round(elapsed)}s elapsed   `,
   );
 }
 
@@ -365,6 +391,22 @@ function printReport(metrics: Metrics, durationSec: number): void {
   console.log(`║    p50: ${formatMs(percentile(metrics.heartbeatRtts, 50)).padEnd(8)} p95: ${formatMs(percentile(metrics.heartbeatRtts, 95)).padEnd(8)} p99: ${formatMs(percentile(metrics.heartbeatRtts, 99))}`);
   console.log("║  Throughput                                               ║");
   console.log(`║    TX: ${(metrics.messagesSent / durationSec).toFixed(1)} msg/s  RX: ${(metrics.messagesReceived / durationSec).toFixed(1)} msg/s`);
+  console.log("╠═══════════════════════════════════════════════════════════╣");
+  console.log("║  Memory (client process)                                  ║");
+  if (metrics.memorySamples.length > 0) {
+    const peakHeap = Math.max(...metrics.memorySamples.map(s => s.heapUsedMB));
+    const peakRss = Math.max(...metrics.memorySamples.map(s => s.rssMB));
+    const finalSample = metrics.memorySamples[metrics.memorySamples.length - 1];
+    const firstSample = metrics.memorySamples[0];
+    const heapGrowth = finalSample.heapUsedMB - firstSample.heapUsedMB;
+    const perAgentKB = metrics.connectSuccesses > 0
+      ? ((finalSample.heapUsedMB - firstSample.heapUsedMB) * 1024 / metrics.connectSuccesses).toFixed(1)
+      : "N/A";
+    console.log(`║    Peak heap:    ${peakHeap.toFixed(1)} MB`);
+    console.log(`║    Peak RSS:     ${peakRss.toFixed(1)} MB`);
+    console.log(`║    Heap growth:  ${heapGrowth >= 0 ? "+" : ""}${heapGrowth.toFixed(1)} MB`);
+    console.log(`║    Per agent:    ~${perAgentKB} KB heap`);
+  }
   console.log("╚═══════════════════════════════════════════════════════════╝");
 
   // JSON output for programmatic use
@@ -392,6 +434,15 @@ function printReport(metrics: Metrics, durationSec: number): void {
     throughput: {
       tx_per_sec: +(metrics.messagesSent / durationSec).toFixed(1),
       rx_per_sec: +(metrics.messagesReceived / durationSec).toFixed(1),
+    },
+    memory: {
+      peak_heap_mb: metrics.memorySamples.length > 0
+        ? Math.max(...metrics.memorySamples.map(s => s.heapUsedMB))
+        : 0,
+      peak_rss_mb: metrics.memorySamples.length > 0
+        ? Math.max(...metrics.memorySamples.map(s => s.rssMB))
+        : 0,
+      samples: metrics.memorySamples,
     },
   }, null, 2));
 }
@@ -450,9 +501,11 @@ async function main(): Promise<void> {
     }
   }, 1_000);
 
-  // Progress reporting
+  // Progress reporting + memory sampling
   const progressInterval = setInterval(() => {
     const elapsed = (performance.now() - startTime) / 1000;
+    const connected = agents.filter(a => a.state === "running" || a.state === "enrolled").length;
+    sampleMemory(metrics, elapsed, connected);
     printProgress(agents, metrics, elapsed);
   }, 2_000);
 

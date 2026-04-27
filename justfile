@@ -95,6 +95,14 @@ load-test-smoke:
 load-test-heavy:
     ulimit -n 4096 && pnpm tsx scripts/load-test.ts --agents 200 --duration 120 --ramp 20
 
+# Scale load test (500 agents, 180s)
+load-test-scale:
+    ulimit -n 8192 && pnpm tsx scripts/load-test.ts --agents 500 --duration 180 --ramp 25
+
+# CPU profile load test (200 agents, 60s, generates .cpuprofile)
+load-test-profile:
+    ulimit -n 4096 && node --cpu-prof --cpu-prof-dir=./profiles --import tsx/esm scripts/load-test.ts --agents 200 --duration 60 --ramp 20
+
 # Terraform validate
 tf-validate:
     cd infra/terraform && terraform validate
