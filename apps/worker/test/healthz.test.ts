@@ -21,8 +21,8 @@ describe("Worker health check", () => {
     expect(response.status).toBeDefined();
   });
 
-  it("GET /v1/opamp returns 501 (not yet implemented)", async () => {
+  it("GET /v1/opamp without upgrade returns 426", async () => {
     const response = await exports.default.fetch("http://localhost/v1/opamp");
-    expect(response.status).toBe(501);
+    expect(response.status).toBe(426);
   });
 });

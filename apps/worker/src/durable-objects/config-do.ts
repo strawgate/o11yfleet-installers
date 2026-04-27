@@ -3,12 +3,15 @@ import { decodeAgentToServer, encodeServerToAgent } from "@o11yfleet/core/codec"
 import { processFrame } from "@o11yfleet/core/state-machine";
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
+import { signClaim } from "@o11yfleet/core/auth";
+import type { AssignmentClaim } from "@o11yfleet/core/auth";
 
 export interface ConfigDOEnv {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
   FP_EVENTS: Queue;
   FP_ANALYTICS: AnalyticsEngineDataset;
+  CLAIM_SECRET: string;
 }
 
 interface WSAttachment {
@@ -16,6 +19,7 @@ interface WSAttachment {
   config_id: string;
   instance_uid: string;
   connected_at: number;
+  is_enrollment?: boolean;
 }
 
 // Config Durable Object — Phase 2B
@@ -86,6 +90,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const tenantId = request.headers.get("x-fp-tenant-id") ?? "unknown";
     const configId = request.headers.get("x-fp-config-id") ?? "unknown";
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
+    const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
@@ -99,8 +104,58 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       config_id: configId,
       instance_uid: instanceUid,
       connected_at: Date.now(),
+      is_enrollment: isEnrollment,
     };
     server.serializeAttachment(attachment);
+
+    // If this is an enrollment, generate and send a signed claim
+    if (isEnrollment) {
+      const claim: AssignmentClaim = {
+        v: 1,
+        tenant_id: tenantId,
+        config_id: configId,
+        instance_uid: instanceUid,
+        generation: 1,
+        iat: Math.floor(Date.now() / 1000),
+        exp: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+      };
+
+      try {
+        const signedClaim = await signClaim(claim, this.env.CLAIM_SECRET);
+
+        // Send the claim in the initial ServerToAgent response
+        const enrollmentResponse = encodeServerToAgent({
+          instance_uid: hexToUint8Array(instanceUid),
+          flags: 0,
+          capabilities: 0x00000003, // AcceptsStatus | OffersRemoteConfig
+          agent_identification: {
+            new_instance_uid: hexToUint8Array(instanceUid),
+          },
+        });
+
+        // We send the claim as a separate text message to keep binary protocol clean
+        server.send(JSON.stringify({
+          type: "enrollment_complete",
+          assignment_claim: signedClaim,
+          instance_uid: instanceUid,
+        }));
+
+        // Also send the initial OpAMP response
+        server.send(enrollmentResponse);
+
+        // Emit enrollment event
+        await this.emitEvents([{
+          type: "agent_enrolled" as const,
+          tenant_id: tenantId,
+          config_id: configId,
+          instance_uid: instanceUid,
+          timestamp: Date.now(),
+          generation: 1,
+        }]);
+      } catch {
+        // Enrollment claim generation failed — still connected, just no claim
+      }
+    }
 
     return new Response(null, { status: 101, webSocket: client });
   }
