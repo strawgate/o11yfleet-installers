@@ -4,6 +4,7 @@
 
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { FleetEventType } from "@o11yfleet/core/events";
+import { assertNever } from "@o11yfleet/core";
 
 export interface ConsumerEnv {
   FP_DB: D1Database;
@@ -117,6 +118,6 @@ function eventToStatement(
         .bind(event.instance_uid, event.tenant_id, event.config_id);
 
     default:
-      return null;
+      assertNever(event, `Unhandled event type: ${(event as AnyFleetEvent).type}`);
   }
 }

@@ -5,6 +5,7 @@ import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array } from "@o11yfleet/core/hex";
+import { FleetEventType } from "@o11yfleet/core/events";
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
@@ -40,6 +41,27 @@ interface WSAttachment {
   instance_uid: string;
   connected_at: number;
   is_enrollment?: boolean;
+}
+
+/** Runtime validation for WS attachment deserialized from hibernation storage. */
+function parseAttachment(raw: unknown): WSAttachment | null {
+  if (raw === null || raw === undefined || typeof raw !== "object") return null;
+  const obj = raw as Record<string, unknown>;
+  if (
+    typeof obj["tenant_id"] !== "string" ||
+    typeof obj["config_id"] !== "string" ||
+    typeof obj["instance_uid"] !== "string" ||
+    typeof obj["connected_at"] !== "number"
+  ) {
+    return null;
+  }
+  return {
+    tenant_id: obj["tenant_id"],
+    config_id: obj["config_id"],
+    instance_uid: obj["instance_uid"],
+    connected_at: obj["connected_at"],
+    is_enrollment: typeof obj["is_enrollment"] === "boolean" ? obj["is_enrollment"] : undefined,
+  };
 }
 
 const MAX_MESSAGES_PER_MINUTE = 60;
@@ -164,7 +186,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         }));
 
         await this.emitEvents([{
-          type: "agent_enrolled" as const,
+          type: FleetEventType.AGENT_ENROLLED,
           tenant_id: tenantId,
           config_id: configId,
           instance_uid: instanceUid,
@@ -191,7 +213,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    const attachment = ws.deserializeAttachment() as WSAttachment;
+    const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) {
       ws.close(1008, "Missing attachment");
       return;
@@ -247,14 +269,14 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   async webSocketClose(ws: WebSocket, _code: number, _reason: string): Promise<void> {
     this.ensureInit();
-    const attachment = ws.deserializeAttachment() as WSAttachment | null;
+    const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) return;
 
     const span = startWsLifecycleSpan("close", attachment.instance_uid);
     try {
       markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
       await this.emitEvents([{
-        type: "agent_disconnected" as const,
+        type: FleetEventType.AGENT_DISCONNECTED,
         tenant_id: attachment.tenant_id,
         config_id: attachment.config_id,
         instance_uid: attachment.instance_uid,
@@ -268,7 +290,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
     this.ensureInit();
-    const attachment = ws.deserializeAttachment() as WSAttachment | null;
+    const attachment = parseAttachment(ws.deserializeAttachment());
 
     const span = startWsLifecycleSpan("error", attachment?.instance_uid ?? "unknown");
     span.setStatus({ code: SpanStatusCode.ERROR });
@@ -276,7 +298,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (attachment) {
         markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
         await this.emitEvents([{
-          type: "agent_disconnected" as const,
+          type: FleetEventType.AGENT_DISCONNECTED,
           tenant_id: attachment.tenant_id,
           config_id: attachment.config_id,
           instance_uid: attachment.instance_uid,
@@ -303,8 +325,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     // Emit disconnect events for stale agents
     if (staleUids.length > 0) {
-      const events = staleUids.map((agent) => ({
-        type: "agent_disconnected" as const,
+      const events: AnyFleetEvent[] = staleUids.map((agent) => ({
+        type: FleetEventType.AGENT_DISCONNECTED as const,
         tenant_id: agent.tenant_id,
         config_id: agent.config_id,
         instance_uid: agent.instance_uid,
@@ -318,7 +340,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     // Reschedule if there are still active (non-disconnected) agents
     const activeCount = this.ctx.storage.sql
       .exec(`SELECT COUNT(*) as count FROM agents WHERE status != 'disconnected'`)
-      .one().count as number;
+      .one()["count"] as number;
 
     if (activeCount > 0 || this.ctx.getWebSockets().length > 0) {
       await this.ctx.storage.setAlarm(Date.now() + STALE_SWEEP_INTERVAL_MS);
@@ -344,7 +366,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const configMap = this.buildConfigMap(body.config_content ?? null);
 
     for (const ws of sockets) {
-      const attachment = ws.deserializeAttachment() as WSAttachment | null;
+      const attachment = parseAttachment(ws.deserializeAttachment());
       if (!attachment) continue;
 
       try {

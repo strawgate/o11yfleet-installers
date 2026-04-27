@@ -21,7 +21,7 @@ test:
     pnpm turbo test
 
 # Run all CI checks
-ci: lint typecheck test
+ci: lint typecheck test fmt-check
 
 # Format code
 fmt:
@@ -98,6 +98,37 @@ load-test-heavy:
 # Scale load test (500 agents, 180s)
 load-test-scale:
     ulimit -n 8192 && pnpm tsx scripts/load-test.ts --agents 500 --duration 180 --ramp 25
+
+# Run benchmark suite
+bench:
+    pnpm tsx experiments/src/benchmark.ts
+
+# Run benchmark and save results to file
+bench-save:
+    pnpm tsx experiments/src/benchmark.ts 2>&1 | tee experiments/benchmark-results.txt
+
+# Check worker bundle size (dry-run deploy)
+bundle-size:
+    #!/usr/bin/env bash
+    cd apps/worker
+    npx wrangler deploy --dry-run --outdir dist 2>&1 | tail -5 || true
+    BUNDLE=$(find dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
+    if [ -z "$BUNDLE" ]; then echo "⚠ No bundle found"; exit 0; fi
+    RAW=$(wc -c < "$BUNDLE" | tr -d ' ')
+    GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
+    echo "Raw: $((RAW / 1024)) KB  |  Gzip: $((GZ / 1024)) KB"
+
+# Run property-based tests only
+test-properties:
+    pnpm --filter @o11yfleet/core vitest run test/state-machine-properties.test.ts
+
+# Run core tests only (fast, no workerd)
+test-core:
+    pnpm --filter @o11yfleet/core test
+
+# Run worker tests only (workerd runtime)
+test-worker:
+    pnpm --filter @o11yfleet/worker test
 
 # CI load test with pass/fail criteria (25 agents, 30s)
 load-test-ci:

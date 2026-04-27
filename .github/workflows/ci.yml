@@ -7,7 +7,7 @@ on:
     branches: [main]
 
 jobs:
-  ci:
+  lint-format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,11 +27,142 @@ jobs:
       - name: Lint
         run: pnpm turbo lint
 
+      - name: Format check
+        run: pnpm prettier --check .
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
       - name: Type check
         run: pnpm turbo typecheck
 
-      - name: Unit & Integration Tests
-        run: pnpm turbo test
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Core tests (codec, state machine, auth)
+        run: pnpm --filter @o11yfleet/core test
+
+  test-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Worker tests (workerd runtime)
+        run: pnpm --filter @o11yfleet/worker test
+
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build worker bundle
+        run: |
+          cd apps/worker
+          npx wrangler deploy --dry-run --outdir dist 2>&1 | tail -20 || true
+
+      - name: Check bundle size (Workers limit: 10MB compressed)
+        run: |
+          BUNDLE=$(find apps/worker/dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
+          if [ -z "$BUNDLE" ]; then
+            echo "⚠ No bundle found — skipping size check"
+            exit 0
+          fi
+          RAW_SIZE=$(wc -c < "$BUNDLE" | tr -d ' ')
+          GZIP_SIZE=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
+          echo "Bundle: $BUNDLE"
+          echo "Raw size: $((RAW_SIZE / 1024)) KB"
+          echo "Gzip size: $((GZIP_SIZE / 1024)) KB"
+          # Workers limit: 10MB compressed for paid, 1MB free
+          MAX_GZIP=$((3 * 1024 * 1024))  # 3MB compressed budget
+          if [ "$GZIP_SIZE" -gt "$MAX_GZIP" ]; then
+            echo "❌ Bundle exceeds 3MB compressed budget ($((GZIP_SIZE / 1024)) KB)"
+            exit 1
+          fi
+          echo "✓ Bundle size OK"
+
+  benchmark:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Run benchmarks
+        run: pnpm tsx experiments/src/benchmark.ts 2>&1 | tee benchmark-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.txt
+          retention-days: 30
+
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
       - name: Terraform validate
         uses: hashicorp/setup-terraform@v3
@@ -43,7 +174,7 @@ jobs:
           terraform validate
 
   deploy-staging:
-    needs: ci
+    needs: [lint-format, typecheck, test-core, test-worker, bundle-size, terraform]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging

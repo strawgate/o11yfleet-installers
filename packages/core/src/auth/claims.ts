@@ -16,7 +16,7 @@ const encoder = new TextEncoder();
 function base64urlEncode(data: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < data.length; i++) {
-    binary += String.fromCharCode(data[i]);
+    binary += String.fromCharCode(data[i]!);
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }
@@ -54,10 +54,11 @@ export async function verifyClaim(token: string, secret: string): Promise<Assign
   if (parts.length !== 2) {
     throw new Error("Invalid claim format");
   }
-  const [payload, signature] = parts;
+  const payload = parts[0]!;
+  const signature = parts[1]!;
   const key = await getSigningKey(secret);
   const sigBytes = base64urlDecode(signature);
-  const valid = await crypto.subtle.verify("HMAC", key, sigBytes, encoder.encode(payload));
+  const valid = await crypto.subtle.verify("HMAC", key, sigBytes.buffer as ArrayBuffer, encoder.encode(payload));
   if (!valid) {
     throw new Error("Invalid signature");
   }

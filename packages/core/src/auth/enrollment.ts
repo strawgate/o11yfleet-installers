@@ -28,7 +28,7 @@ export async function verifyEnrollmentToken(
   const b = encoder.encode(storedHash);
   let result = 0;
   for (let i = 0; i < a.length; i++) {
-    result |= a[i] ^ b[i];
+    result |= a[i]! ^ b[i]!;
   }
   return result === 0;
 }
@@ -36,7 +36,7 @@ export async function verifyEnrollmentToken(
 function base64urlEncode(data: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < data.length; i++) {
-    binary += String.fromCharCode(data[i]);
+    binary += String.fromCharCode(data[i]!);
   }
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }

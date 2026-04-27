@@ -158,10 +158,10 @@ export class FakeOpampAgent {
       },
       agent_description: {
         identifying_attributes: [
-          { key: "service.name", value: this.agentName },
+          { key: "service.name", value: { string_value: this.agentName } },
         ],
         non_identifying_attributes: [
-          { key: "os.type", value: "test" },
+          { key: "os.type", value: { string_value: "test" } },
         ],
       },
     };

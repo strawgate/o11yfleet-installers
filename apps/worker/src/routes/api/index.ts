@@ -68,15 +68,15 @@ async function routeRequest(
   // Tenant by ID routes
   const tenantIdMatch = path.match(/^\/api\/tenants\/([^/]+)$/);
   if (tenantIdMatch) {
-    if (method === "GET") return handleGetTenant(env, tenantIdMatch[1]);
-    if (method === "PUT") return handleUpdateTenant(request, env, tenantIdMatch[1]);
-    if (method === "DELETE") return handleDeleteTenant(env, tenantIdMatch[1]);
+    if (method === "GET") return handleGetTenant(env, tenantIdMatch[1]!);
+    if (method === "PUT") return handleUpdateTenant(request, env, tenantIdMatch[1]!);
+    if (method === "DELETE") return handleDeleteTenant(env, tenantIdMatch[1]!);
   }
 
   // GET /api/tenants/:id/configurations
   const tenantConfigsMatch = path.match(/^\/api\/tenants\/([^/]+)\/configurations$/);
   if (tenantConfigsMatch && method === "GET") {
-    return handleListConfigurations(env, tenantConfigsMatch[1]);
+    return handleListConfigurations(env, tenantConfigsMatch[1]!);
   }
 
   // ─── Configurations ────────────────────────────────────────
@@ -89,21 +89,21 @@ async function routeRequest(
   // Configuration by ID routes
   const configMatch = path.match(/^\/api\/configurations\/([^/]+)$/);
   if (configMatch) {
-    if (method === "GET") return handleGetConfiguration(env, configMatch[1]);
-    if (method === "PUT") return handleUpdateConfiguration(request, env, configMatch[1]);
-    if (method === "DELETE") return handleDeleteConfiguration(env, configMatch[1]);
+    if (method === "GET") return handleGetConfiguration(env, configMatch[1]!);
+    if (method === "PUT") return handleUpdateConfiguration(request, env, configMatch[1]!);
+    if (method === "DELETE") return handleDeleteConfiguration(env, configMatch[1]!);
   }
 
   // POST /api/configurations/:id/versions
   const versionsPostMatch = path.match(/^\/api\/configurations\/([^/]+)\/versions$/);
   if (versionsPostMatch && method === "POST") {
-    return handleUploadVersion(request, env, versionsPostMatch[1]);
+    return handleUploadVersion(request, env, versionsPostMatch[1]!);
   }
 
   // GET /api/configurations/:id/versions
   const versionsGetMatch = path.match(/^\/api\/configurations\/([^/]+)\/versions$/);
   if (versionsGetMatch && method === "GET") {
-    return handleListVersions(env, versionsGetMatch[1]);
+    return handleListVersions(env, versionsGetMatch[1]!);
   }
 
   // ─── Enrollment Tokens ─────────────────────────────────────
@@ -111,13 +111,13 @@ async function routeRequest(
   // POST /api/configurations/:id/enrollment-token
   const enrollMatch = path.match(/^\/api\/configurations\/([^/]+)\/enrollment-token$/);
   if (enrollMatch && method === "POST") {
-    return handleCreateEnrollmentToken(request, env, enrollMatch[1]);
+    return handleCreateEnrollmentToken(request, env, enrollMatch[1]!);
   }
 
   // GET /api/configurations/:id/enrollment-tokens
   const tokensListMatch = path.match(/^\/api\/configurations\/([^/]+)\/enrollment-tokens$/);
   if (tokensListMatch && method === "GET") {
-    return handleListEnrollmentTokens(env, tokensListMatch[1]);
+    return handleListEnrollmentTokens(env, tokensListMatch[1]!);
   }
 
   // DELETE /api/configurations/:id/enrollment-tokens/:tokenId
@@ -125,7 +125,7 @@ async function routeRequest(
     /^\/api\/configurations\/([^/]+)\/enrollment-tokens\/([^/]+)$/,
   );
   if (tokenDeleteMatch && method === "DELETE") {
-    return handleRevokeEnrollmentToken(env, tokenDeleteMatch[1], tokenDeleteMatch[2]);
+    return handleRevokeEnrollmentToken(env, tokenDeleteMatch[1]!, tokenDeleteMatch[2]!);
   }
 
   // ─── Agents & Stats ────────────────────────────────────────
@@ -133,13 +133,13 @@ async function routeRequest(
   // GET /api/configurations/:id/agents
   const agentsMatch = path.match(/^\/api\/configurations\/([^/]+)\/agents$/);
   if (agentsMatch && method === "GET") {
-    return handleListAgents(env, agentsMatch[1]);
+    return handleListAgents(env, agentsMatch[1]!);
   }
 
   // GET /api/configurations/:id/stats
   const statsMatch = path.match(/^\/api\/configurations\/([^/]+)\/stats$/);
   if (statsMatch && method === "GET") {
-    return handleGetStats(env, statsMatch[1]);
+    return handleGetStats(env, statsMatch[1]!);
   }
 
   // ─── Rollout ───────────────────────────────────────────────
@@ -147,7 +147,7 @@ async function routeRequest(
   // POST /api/configurations/:id/rollout
   const rolloutMatch = path.match(/^\/api\/configurations\/([^/]+)\/rollout$/);
   if (rolloutMatch && method === "POST") {
-    return handleRollout(request, env, rolloutMatch[1]);
+    return handleRollout(request, env, rolloutMatch[1]!);
   }
 
   return jsonError("Not found", 404);
@@ -219,7 +219,7 @@ async function handleUpdateTenant(
     .bind(body.name.trim(), tenantId)
     .run();
 
-  return Response.json({ id: tenantId, name: body.name.trim(), plan: tenant.plan });
+  return Response.json({ id: tenantId, name: body.name.trim(), plan: tenant["plan"] });
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
@@ -281,9 +281,9 @@ async function handleCreateConfiguration(request: Request, env: Env): Promise<Re
   )
     .bind(body.tenant_id)
     .first<{ count: number }>();
-  if (countResult && countResult.count >= (tenant.max_configs as number)) {
+  if (countResult && countResult.count >= (tenant["max_configs"] as number)) {
     return jsonError(
-      `Configuration limit reached (${tenant.max_configs})`,
+      `Configuration limit reached (${tenant["max_configs"]})`,
       429,
     );
   }
@@ -401,7 +401,7 @@ async function handleUploadVersion(
 
   const result = await uploadConfigVersion(
     env,
-    config.tenant_id as string,
+    config["tenant_id"] as string,
     configId,
     yaml,
   );
@@ -424,7 +424,7 @@ async function handleListVersions(env: Env, configId: string): Promise<Response>
 
   return Response.json({
     versions: result.results,
-    current_config_hash: config.current_config_hash,
+    current_config_hash: config["current_config_hash"],
   });
 }
 
@@ -464,7 +464,7 @@ async function handleCreateEnrollmentToken(
   await env.FP_DB.prepare(
     `INSERT INTO enrollment_tokens (id, config_id, tenant_id, token_hash, label, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
   )
-    .bind(id, configId, config.tenant_id as string, tokenHash, body.label ?? null, expiresAt)
+    .bind(id, configId, config["tenant_id"] as string, tokenHash, body.label ?? null, expiresAt)
     .run();
 
   return Response.json(
@@ -507,7 +507,7 @@ async function handleRevokeEnrollmentToken(
     .first();
   if (!token) return jsonError("Enrollment token not found", 404);
 
-  if (token.revoked_at) {
+  if (token["revoked_at"]) {
     return jsonError("Token is already revoked", 409);
   }
 
@@ -558,20 +558,20 @@ async function handleRollout(
     .first();
   if (!config) return jsonError("Configuration not found", 404);
 
-  if (!config.current_config_hash) {
+  if (!config["current_config_hash"]) {
     return jsonError("No config version uploaded yet", 400);
   }
 
-  const doName = `${config.tenant_id}:${configId}`;
+  const doName = `${config["tenant_id"]}:${configId}`;
   const doId = env.CONFIG_DO.idFromName(doName);
   const stub = env.CONFIG_DO.get(doId);
 
-  const r2Key = `configs/sha256/${config.current_config_hash}.yaml`;
+  const r2Key = `configs/sha256/${config["current_config_hash"]}.yaml`;
   const r2Obj = await env.FP_CONFIGS.get(r2Key);
   const configContent = r2Obj ? await r2Obj.text() : null;
 
   const body = JSON.stringify({
-    config_hash: config.current_config_hash,
+    config_hash: config["current_config_hash"],
     config_content: configContent,
   });
   const response = await stub.fetch(

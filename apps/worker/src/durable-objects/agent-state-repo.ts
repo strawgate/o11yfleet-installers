@@ -58,8 +58,8 @@ export interface DesiredConfig {
 export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
   const row = sql.exec(`SELECT desired_config_hash, desired_config_content FROM do_config WHERE id = 1`).one();
   return {
-    hash: (row.desired_config_hash as string) ?? null,
-    content: (row.desired_config_content as string) ?? null,
+    hash: (row["desired_config_hash"] as string) ?? null,
+    content: (row["desired_config_content"] as string) ?? null,
   };
 }
 
@@ -98,7 +98,7 @@ export function checkRateLimit(sql: SqlStorage, uid: string, maxPerMinute: numbe
   ).toArray()[0];
 
   if (!row) return false; // Agent not in DB yet — allow
-  return (row.rate_window_count as number) > maxPerMinute;
+  return (row["rate_window_count"] as number) > maxPerMinute;
 }
 
 /**
@@ -117,24 +117,24 @@ export function loadAgentState(
 
   if (row) {
     return {
-      instance_uid: hexToUint8Array(row.instance_uid as string),
-      tenant_id: row.tenant_id as string,
-      config_id: row.config_id as string,
-      sequence_num: row.sequence_num as number,
-      generation: row.generation as number,
-      healthy: (row.healthy as number) === 1,
-      status: row.status as string,
-      last_error: row.last_error as string,
-      current_config_hash: row.current_config_hash
-        ? hexToUint8Array(row.current_config_hash as string)
+      instance_uid: hexToUint8Array(row["instance_uid"] as string),
+      tenant_id: row["tenant_id"] as string,
+      config_id: row["config_id"] as string,
+      sequence_num: row["sequence_num"] as number,
+      generation: row["generation"] as number,
+      healthy: (row["healthy"] as number) === 1,
+      status: row["status"] as string,
+      last_error: row["last_error"] as string,
+      current_config_hash: row["current_config_hash"]
+        ? hexToUint8Array(row["current_config_hash"] as string)
         : null,
       desired_config_hash: desiredConfigHash
         ? hexToUint8Array(desiredConfigHash)
         : null,
-      last_seen_at: row.last_seen_at as number,
-      connected_at: row.connected_at as number,
-      agent_description: row.agent_description as string | null,
-      capabilities: (row.capabilities as number) ?? 0,
+      last_seen_at: row["last_seen_at"] as number,
+      connected_at: row["connected_at"] as number,
+      agent_description: row["agent_description"] as string | null,
+      capabilities: (row["capabilities"] as number) ?? 0,
     };
   }
 
@@ -200,7 +200,7 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
  * Get agent count for limit enforcement.
  */
 export function getAgentCount(sql: SqlStorage): number {
-  return sql.exec("SELECT COUNT(*) as count FROM agents").one().count as number;
+  return sql.exec("SELECT COUNT(*) as count FROM agents").one()["count"] as number;
 }
 
 /**
@@ -240,9 +240,9 @@ export function getStats(sql: SqlStorage): {
     .one();
 
   return {
-    total: (row.total ?? 0) as number,
-    connected: (row.connected ?? 0) as number,
-    healthy: (row.healthy ?? 0) as number,
+    total: (row["total"] ?? 0) as number,
+    connected: (row["connected"] ?? 0) as number,
+    healthy: (row["healthy"] ?? 0) as number,
   };
 }
 
@@ -278,8 +278,8 @@ export function sweepStaleAgents(sql: SqlStorage, staleThresholdMs: number): Sta
     )
     .toArray();
   return stale.map((r) => ({
-    instance_uid: r.instance_uid as string,
-    tenant_id: r.tenant_id as string,
-    config_id: r.config_id as string,
+    instance_uid: r["instance_uid"] as string,
+    tenant_id: r["tenant_id"] as string,
+    config_id: r["config_id"] as string,
   }));
 }

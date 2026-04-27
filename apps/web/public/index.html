@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>FleetPlane — Fleet Management</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
   <style>
     :root {
       --bg: #0f1117;
@@ -125,7 +126,7 @@
       font-size: 14px;
     }
 
-    .panel-body { padding: 0; }
+    .panel-body { padding: 0; overflow-x: auto; }
 
     table {
       width: 100%;
@@ -143,6 +144,7 @@
       text-transform: uppercase;
       letter-spacing: 0.5px;
       white-space: nowrap;
+      scope: col;
     }
 
     td {
@@ -190,6 +192,8 @@
     }
 
     .btn:hover { border-color: var(--accent); color: var(--accent); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn:disabled:hover { border-color: var(--border); color: var(--text); }
 
     .btn-primary {
       background: var(--accent);
@@ -316,6 +320,12 @@
       from { transform: translateY(20px); opacity: 0; }
       to { transform: translateY(0); opacity: 1; }
     }
+
+    @media (max-width: 640px) {
+      header { flex-direction: column; gap: 12px; align-items: flex-start; }
+      .server-url input { width: 100%; }
+      main { padding: 12px; }
+    }
   </style>
 </head>
 <body>
@@ -329,6 +339,29 @@
   </header>
 
   <main>
+    <!-- Tenants -->
+    <div class="panel" id="tenants-panel">
+      <div class="panel-header">
+        <span>Tenants</span>
+        <div class="actions">
+          <button class="btn" onclick="document.getElementById('create-tenant-dialog').showModal()">+ New Tenant</button>
+        </div>
+      </div>
+      <div class="panel-body">
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">Name</th>
+              <th scope="col">Plan</th>
+              <th scope="col">ID</th>
+              <th scope="col">Created</th>
+            </tr>
+          </thead>
+          <tbody id="tenants-table"><tr><td colspan="4" class="empty-state">Loading...</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Stats -->
     <div class="grid" id="stats-grid">
       <div class="stat-card">
@@ -354,9 +387,9 @@
     </div>
 
     <!-- Configurations -->
-    <div class="panel">
+    <div class="panel" id="configs-panel" style="display:none">
       <div class="panel-header">
-        <span>Configurations</span>
+        <span>Configurations <span id="configs-tenant-name" style="color:var(--text-dim);font-weight:400;font-size:12px"></span></span>
         <div class="actions">
           <button class="btn" onclick="showCreateConfig()">+ New Config</button>
         </div>
@@ -365,11 +398,11 @@
         <table>
           <thead>
             <tr>
-              <th>Name</th>
-              <th>ID</th>
-              <th>Config Hash</th>
-              <th>Created</th>
-              <th>Actions</th>
+              <th scope="col">Name</th>
+              <th scope="col">ID</th>
+              <th scope="col">Config Hash</th>
+              <th scope="col">Created</th>
+              <th scope="col">Actions</th>
             </tr>
           </thead>
           <tbody id="configs-table"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
@@ -378,20 +411,27 @@
     </div>
 
     <!-- Agents -->
-    <div class="panel">
+    <div class="panel" id="agents-panel" style="display:none">
       <div class="panel-header">
-        <span>Agents</span>
-        <span class="refresh-indicator" id="agent-count"></span>
+        <span>Agents <span id="agents-config-name" style="color:var(--text-dim);font-weight:400;font-size:12px"></span></span>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select id="agent-filter" onchange="applyAgentFilter()" class="btn" style="font-size:11px">
+            <option value="">All</option>
+            <option value="connected">Connected</option>
+            <option value="disconnected">Disconnected</option>
+          </select>
+          <span class="refresh-indicator" id="agent-count"></span>
+        </div>
       </div>
       <div class="panel-body">
         <table>
           <thead>
             <tr>
-              <th>Instance UID</th>
-              <th>Status</th>
-              <th>Health</th>
-              <th>Config Hash</th>
-              <th>Last Seen</th>
+              <th scope="col">Instance UID</th>
+              <th scope="col">Status</th>
+              <th scope="col">Health</th>
+              <th scope="col">Config Hash</th>
+              <th scope="col">Last Seen</th>
             </tr>
           </thead>
           <tbody id="agents-table"><tr><td colspan="5" class="empty-state">Loading...</td></tr></tbody>
@@ -457,8 +497,13 @@
   </dialog>
 
   <script>
-    let currentState = null; // from .local-state.json equivalent
+    let tenantId = null;
+    let tenants = [];
+    let configs = [];
+    let selectedConfigId = null;
+    let allAgents = [];
     let autoRefreshTimer = null;
+    let _lastToken = null; // XSS-safe token storage
 
     function apiUrl() {
       return document.getElementById('api-url').value.replace(/\/$/, '');
@@ -477,10 +522,21 @@
     }
 
     function toast(msg, type = 'success') {
+      // Use a persistent ARIA live region for accessibility
+      let region = document.getElementById('toast-region');
+      if (!region) {
+        region = document.createElement('div');
+        region.id = 'toast-region';
+        region.setAttribute('role', 'status');
+        region.setAttribute('aria-live', 'polite');
+        region.setAttribute('aria-atomic', 'true');
+        region.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:1000';
+        document.body.appendChild(region);
+      }
       const el = document.createElement('div');
       el.className = `toast ${type}`;
       el.textContent = msg;
-      document.body.appendChild(el);
+      region.appendChild(el);
       setTimeout(() => el.remove(), 3000);
     }
 
@@ -494,7 +550,9 @@
       const sec = Math.floor((Date.now() - d.getTime()) / 1000);
       if (sec < 60) return `${sec}s ago`;
       if (sec < 3600) return `${Math.floor(sec / 60)}m ago`;
-      return d.toLocaleString();
+      if (sec < 86400) return `${Math.floor(sec / 3600)}h ago`;
+      if (sec < 604800) return `${Math.floor(sec / 86400)}d ago`;
+      return d.toLocaleDateString();
     }
 
     function statusBadge(status) {
@@ -504,7 +562,7 @@
         disconnected: 'badge-red',
         unknown: 'badge-gray',
       };
-      return `<span class="badge ${map[status] || 'badge-gray'}">${status}</span>`;
+      return `<span class="badge ${map[status] || 'badge-gray'}">${esc(status)}</span>`;
     }
 
     function healthBadge(healthy) {
@@ -515,89 +573,147 @@
 
     // ─── Data Loading ───
 
-    let tenantId = null;
-    let configs = [];
-
     async function refresh() {
       try {
-        // Try to get tenant/config from seed state or discover
-        await loadTenantData();
-        await loadStats();
-        await loadAgents();
+        await loadTenants();
+        if (tenantId) {
+          await loadTenantData();
+          await loadStats();
+          await loadAgents();
+        }
         document.getElementById('last-refresh').textContent = `Updated ${new Date().toLocaleTimeString()}`;
       } catch (err) {
         toast(`Connection failed: ${err.message}`, 'error');
       }
     }
 
-    async function loadTenantData() {
-      // Try all known tenants — in local dev there's usually one
-      // We'll discover by listing configs for any known tenant
-      if (!tenantId) {
-        // Attempt: check if we can read local state info
-        // Fallback: prompt user or use first tenant found
-        // For now, try fetching health to verify connectivity
-        await api('/healthz');
-      }
+    async function loadTenants() {
+      try {
+        const result = await api('/api/tenants');
+        tenants = result.tenants || [];
+        renderTenants();
 
-      if (tenantId) {
-        const result = await api(`/api/tenants/${tenantId}/configurations`);
-        configs = result.configurations || [];
-        renderConfigs();
+        // Auto-select first tenant if none selected
+        if (!tenantId && tenants.length > 0) {
+          selectTenant(tenants[0].id, tenants[0].name);
+        }
+      } catch {
+        // tenants endpoint might fail on first connect
       }
     }
 
+    function selectTenant(id, name) {
+      tenantId = id;
+      window.location.hash = id;
+      document.getElementById('configs-panel').style.display = 'block';
+      document.getElementById('configs-tenant-name').textContent = name ? `— ${name}` : '';
+      loadTenantData();
+    }
+
+    async function loadTenantData() {
+      if (!tenantId) return;
+      const result = await api(`/api/tenants/${tenantId}/configurations`);
+      configs = result.configurations || [];
+      renderConfigs();
+
+      // Auto-select first config
+      if (configs.length > 0 && !selectedConfigId) {
+        selectConfig(configs[0].id, configs[0].name);
+      } else if (configs.length === 0) {
+        selectedConfigId = null;
+        document.getElementById('agents-panel').style.display = 'none';
+      }
+    }
+
+    function selectConfig(id, name) {
+      selectedConfigId = id;
+      document.getElementById('agents-panel').style.display = 'block';
+      document.getElementById('agents-config-name').textContent = name ? `— ${name}` : '';
+      renderConfigs(); // re-render to highlight selected row
+      loadStats();
+      loadAgents();
+    }
+
     async function loadStats() {
-      if (configs.length === 0) return;
-      const cfg = configs[0];
+      if (!selectedConfigId) return;
       try {
-        const stats = await api(`/api/configurations/${cfg.id}/stats`);
-        document.getElementById('stat-total').textContent = stats.total_agents ?? 0;
-        document.getElementById('stat-connected').textContent = stats.connected_agents ?? 0;
-        document.getElementById('stat-healthy').textContent = stats.healthy_agents ?? 0;
+        const stats = await api(`/api/configurations/${selectedConfigId}/stats`);
+        const total = stats.total_agents ?? 0;
+        const connected = stats.connected_agents ?? 0;
+        const healthy = stats.healthy_agents ?? 0;
+
+        document.getElementById('stat-total').textContent = total;
+
+        const connEl = document.getElementById('stat-connected');
+        connEl.textContent = connected;
+        connEl.className = `value ${connected === 0 && total > 0 ? 'red' : connected < total ? 'yellow' : 'green'}`;
+
+        const healthEl = document.getElementById('stat-healthy');
+        healthEl.textContent = healthy;
+        healthEl.className = `value ${healthy < total && total > 0 ? 'yellow' : 'green'}`;
+
         document.getElementById('stat-ws').textContent = stats.active_websockets ?? 0;
         document.getElementById('stat-hash').textContent = shortHash(stats.desired_config_hash);
-
-        // Color coding
-        const connEl = document.getElementById('stat-connected');
-        connEl.className = `value ${stats.connected_agents > 0 ? 'green' : 'yellow'}`;
       } catch {
         // stats endpoint may not exist for this config
       }
     }
 
     async function loadAgents() {
-      if (configs.length === 0) return;
-      const cfg = configs[0];
+      if (!selectedConfigId) return;
       try {
-        const result = await api(`/api/configurations/${cfg.id}/agents`);
-        const agents = result.agents || [];
-        document.getElementById('agent-count').textContent = `${agents.length} agents`;
-        renderAgents(agents);
+        const result = await api(`/api/configurations/${selectedConfigId}/agents`);
+        allAgents = result.agents || [];
+        document.getElementById('agent-count').textContent = `${allAgents.length} agents`;
+        applyAgentFilter();
       } catch {
         // ok
       }
     }
 
+    function applyAgentFilter() {
+      const filter = document.getElementById('agent-filter').value;
+      const filtered = filter
+        ? allAgents.filter(a => a.status === filter || (filter === 'unhealthy' && !a.healthy))
+        : allAgents;
+      renderAgents(filtered);
+    }
+
     // ─── Rendering ───
+
+    function renderTenants() {
+      const tbody = document.getElementById('tenants-table');
+      if (tenants.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="4" class="empty-state">No tenants yet. Create one to get started.</td></tr>';
+        return;
+      }
+      tbody.innerHTML = tenants.map(t => `
+        <tr style="cursor:pointer;${t.id === tenantId ? 'background:var(--surface2)' : ''}" onclick="selectTenant('${t.id}', '${esc(t.name)}')">
+          <td><strong>${esc(t.name)}</strong></td>
+          <td><span class="badge badge-gray">${esc(t.plan || 'free')}</span></td>
+          <td class="mono" title="${t.id}" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${t.id}').then(()=>toast('Copied!'))">${t.id.slice(0, 8)}…</td>
+          <td>${timeAgo(t.created_at)}</td>
+        </tr>
+      `).join('');
+    }
 
     function renderConfigs() {
       const tbody = document.getElementById('configs-table');
       if (configs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No configurations. Create a tenant first.</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No configurations yet. Create one to start managing agents.</td></tr>';
         return;
       }
 
       tbody.innerHTML = configs.map(c => `
-        <tr>
+        <tr style="cursor:pointer;${c.id === selectedConfigId ? 'background:var(--surface2)' : ''}" onclick="selectConfig('${c.id}', '${esc(c.name)}')">
           <td><strong>${esc(c.name)}</strong></td>
-          <td class="mono">${c.id.slice(0, 8)}...</td>
+          <td class="mono" title="${c.id}" style="cursor:copy" onclick="event.stopPropagation();navigator.clipboard.writeText('${c.id}').then(()=>toast('Copied!'))">${c.id.slice(0, 8)}…</td>
           <td class="hash mono">${shortHash(c.current_config_hash)}</td>
           <td>${timeAgo(c.created_at)}</td>
           <td>
-            <button class="btn" onclick="showUpload('${c.id}', '${esc(c.name)}')">Upload YAML</button>
-            <button class="btn" onclick="generateToken('${c.id}')">Enrollment Token</button>
-            <button class="btn" onclick="rollout('${c.id}')">Rollout</button>
+            <button class="btn" onclick="event.stopPropagation();showUpload('${c.id}', '${esc(c.name)}')">Upload YAML</button>
+            <button class="btn" onclick="event.stopPropagation();generateToken('${c.id}')">Token</button>
+            <button class="btn" onclick="event.stopPropagation();confirmRollout('${c.id}', '${esc(c.name)}')">Rollout</button>
           </td>
         </tr>
       `).join('');
@@ -612,7 +728,7 @@
 
       tbody.innerHTML = agents.map(a => `
         <tr>
-          <td class="mono">${(a.instance_uid || '').slice(0, 16)}</td>
+          <td class="mono" title="${a.instance_uid}" style="cursor:copy" onclick="navigator.clipboard.writeText('${a.instance_uid}').then(()=>toast('Copied!'))">${(a.instance_uid || '').slice(0, 16)}…</td>
           <td>${statusBadge(a.status)}</td>
           <td>${healthBadge(a.healthy)}</td>
           <td class="hash mono">${shortHash(a.current_config_hash)}</td>
@@ -642,9 +758,11 @@
           method: 'POST',
           body: JSON.stringify({ name, plan }),
         });
-        tenantId = result.id;
         document.getElementById('create-tenant-dialog').close();
         toast(`Tenant "${name}" created`);
+        tenantId = result.id;
+        window.location.hash = result.id;
+        await refresh();
         // Now show config dialog
         document.getElementById('cfg-tenant').value = tenantId;
         document.getElementById('create-config-dialog').showModal();
@@ -659,12 +777,13 @@
       if (!tid || !name) return;
 
       try {
-        await api('/api/configurations', {
+        const result = await api('/api/configurations', {
           method: 'POST',
           body: JSON.stringify({ tenant_id: tid, name }),
         });
         document.getElementById('create-config-dialog').close();
         toast(`Configuration "${name}" created`);
+        selectedConfigId = result.id;
         await refresh();
       } catch (err) {
         toast(err.message, 'error');
@@ -688,7 +807,10 @@
     async function handleFileSelect(event) {
       const file = event.target.files[0];
       if (!file) return;
+      await uploadFile(file);
+    }
 
+    async function uploadFile(file) {
       try {
         const yaml = await file.text();
         const resp = await fetch(apiUrl() + `/api/configurations/${uploadConfigId}/versions`, {
@@ -701,14 +823,28 @@
 
         document.getElementById('upload-result').style.display = 'flex';
         document.getElementById('upload-result').innerHTML = `
-          <span>Uploaded! Hash: <span class="hash">${result.hash}</span> (${result.sizeBytes}B, dedup: ${result.deduplicated})</span>
-          <button class="btn btn-primary" onclick="rollout('${uploadConfigId}')">Rollout Now</button>
+          <span>Uploaded! Hash: <span class="hash">${esc(result.hash)}</span> (${result.sizeBytes}B, dedup: ${result.deduplicated})</span>
+          <button class="btn btn-primary" onclick="confirmRollout('${uploadConfigId}', '')">Rollout Now</button>
         `;
         toast(`Config uploaded: ${shortHash(result.hash)}`);
         await refresh();
       } catch (err) {
         toast(err.message, 'error');
       }
+    }
+
+    // Drag and drop support for upload area
+    function initDragDrop() {
+      const area = document.getElementById('upload-area');
+      if (!area) return;
+      area.addEventListener('dragover', e => { e.preventDefault(); area.style.borderColor = 'var(--accent)'; });
+      area.addEventListener('dragleave', () => { area.style.borderColor = ''; });
+      area.addEventListener('drop', e => {
+        e.preventDefault();
+        area.style.borderColor = '';
+        const file = e.dataTransfer.files[0];
+        if (file) uploadFile(file);
+      });
     }
 
     async function generateToken(configId) {
@@ -718,17 +854,32 @@
           body: JSON.stringify({}),
         });
 
+        // Store token safely — never inject raw server data into onclick attributes
+        _lastToken = result.token;
         const panel = document.getElementById('token-panel');
         panel.style.display = 'block';
         document.getElementById('token-display').innerHTML = `
-          <span>${result.token}</span>
-          <button class="btn" onclick="navigator.clipboard.writeText('${result.token}').then(() => toast('Copied!'))">Copy</button>
+          <span class="mono">${esc(result.token)}</span>
+          <button class="btn" onclick="copyLastToken()">Copy</button>
         `;
         panel.scrollIntoView({ behavior: 'smooth' });
         toast('Enrollment token generated');
       } catch (err) {
         toast(err.message, 'error');
       }
+    }
+
+    window.copyLastToken = function() {
+      if (_lastToken) navigator.clipboard.writeText(_lastToken).then(() => toast('Copied!'));
+    };
+
+    async function confirmRollout(configId, configName) {
+      const count = allAgents.filter(a => a.status === 'connected').length;
+      const msg = configName
+        ? `Push config "${configName}" to ${count} connected agent(s)?`
+        : `Push config to ${count} connected agent(s)?`;
+      if (!confirm(msg)) return;
+      await rollout(configId);
     }
 
     async function rollout(configId) {
@@ -745,14 +896,14 @@
     }
 
     function esc(s) {
+      if (s === null || s === undefined) return '';
       const div = document.createElement('div');
-      div.textContent = s;
+      div.textContent = String(s);
       return div.innerHTML;
     }
 
     // ─── Init ───
 
-    // Try to detect tenant from URL hash or auto-discover
     async function init() {
       const hash = window.location.hash.slice(1);
       if (hash) {
@@ -761,20 +912,12 @@
 
       try {
         await api('/healthz');
-        toast('Connected to FleetPlane');
-
-        // Auto-discover: try to find any tenant by fetching a well-known endpoint
-        // In local dev, the seed script creates a known tenant
-        // We'll try to find configs — if we have a tenant ID in hash, use it
-        if (tenantId) {
-          await refresh();
-        } else {
-          // Show prompt to create tenant
-          renderConfigs();
-        }
+        await refresh();
       } catch {
         toast('Cannot reach server. Start with: just dev', 'error');
       }
+
+      initDragDrop();
 
       // Auto-refresh every 5s
       autoRefreshTimer = setInterval(() => {
@@ -786,6 +929,7 @@
     window.setTenant = function(id) {
       tenantId = id;
       window.location.hash = id;
+      selectedConfigId = null;
       refresh();
     };
 
