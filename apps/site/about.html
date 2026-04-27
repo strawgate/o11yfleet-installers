@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>About — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .values { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+  .value { padding: 28px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .value:nth-child(3n) { border-right: none; }
+  .value:nth-last-child(-n+3) { border-bottom: none; }
+  .value .num { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
+  .value h3 { margin: 12px 0 8px; font-size: 17px; }
+  .value p { font-size: 13.5px; color: var(--fg-3); }
+  @media (max-width: 920px) {
+    .values { grid-template-columns: 1fr; }
+    .value { border-right: none; }
+  }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main>
+  <section class="hero wrap" style="padding-bottom: 64px;">
+    <div class="hero-meta">
+      <span class="pin"><span class="dot dot-ok dot-pulse"></span> About</span>
+    </div>
+    <h1>OpenTelemetry is open.<br/>Collector management should be too.</h1>
+
+    <div style="margin-top: 48px; display: grid; grid-template-columns: 1fr 1fr; gap: 64px; max-width: 1000px;">
+      <p class="lede" style="font-size: 17px;">
+        OpenTelemetry Collector has become the standard way to receive, process, and export telemetry. But the operational experience around collector fleets is still too manual.
+      </p>
+      <p class="lede" style="font-size: 17px;">
+        Teams end up with scattered YAML, unclear rollout history, and limited visibility into what is actually running. We are building a hosted OpAMP control plane so teams can adopt collector management incrementally — monitor first, manage when ready, and keep telemetry flowing to the systems they already trust.
+      </p>
+    </div>
+  </section>
+
+  <!-- Asymmetric quote/manifesto -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div style="display: grid; grid-template-columns: 1fr 2fr; gap: 48px; align-items: start;">
+        <div>
+          <span class="eyebrow">Manifesto</span>
+        </div>
+        <div style="font-size: clamp(22px, 2.4vw, 30px); line-height: 1.32; letter-spacing: -0.02em; color: var(--fg); text-wrap: balance;">
+          Telemetry should be portable. Configuration should be auditable. Adoption should be incremental. We are not trying to become another required destination — we are trying to make the layer that already exists feel operable.
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Values -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">What we believe</span>
+        <h2>Six rules we hold ourselves to.</h2>
+      </div>
+      <div class="values">
+        <div class="value"><div class="num">01</div><h3>Open standards over proprietary agents</h3><p>OpAMP is the contract. We don't ship our own agent and we don't try to lock you into one.</p></div>
+        <div class="value"><div class="num">02</div><h3>Control without lock-in</h3><p>Your telemetry destinations stay yours. Switch backends without touching us.</p></div>
+        <div class="value"><div class="num">03</div><h3>Monitor-only adoption path</h3><p>You can read forever before you write anything. Free, indefinitely.</p></div>
+        <div class="value"><div class="num">04</div><h3>Git-backed workflows</h3><p>The repo is the truth. We respect branch protection, codeowners, and audit trails that already exist.</p></div>
+        <div class="value"><div class="num">05</div><h3>Transparent pricing</h3><p>You pay for managing collectors. Not for the data they carry.</p></div>
+        <div class="value"><div class="num">06</div><h3>Safe rollouts over magical automation</h3><p>We'd rather show you the diff than hide it. Every action is reversible and traceable.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Origin / timeline -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Where we are</span>
+        <h2>Early, on purpose.</h2>
+        <p class="lede" style="margin-top: 14px;">
+          We are a small team that has spent years operating large collector fleets at companies you've heard of. O11yFleet is the tool we wish we'd had — and the one we're building with the platform engineers who tell us what's broken every week.
+        </p>
+      </div>
+
+      <div class="card" style="padding: 0; overflow: hidden;">
+        <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0;">
+          <div style="padding: 22px; border-right: 1px solid var(--line); background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; color: var(--accent);">2024 Q3</div>
+          <div style="padding: 22px;">
+            <div style="font-weight: 500;">Founded</div>
+            <div style="color: var(--fg-3); font-size: 13.5px; margin-top: 4px;">Three engineers and a strong opinion about scattered YAML.</div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0; border-top: 1px solid var(--line);">
+          <div style="padding: 22px; border-right: 1px solid var(--line); background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; color: var(--accent);">2025 Q1</div>
+          <div style="padding: 22px;">
+            <div style="font-weight: 500;">Private alpha</div>
+            <div style="color: var(--fg-3); font-size: 13.5px; margin-top: 4px;">Monitor-only mode in production at a half-dozen design partners.</div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0; border-top: 1px solid var(--line);">
+          <div style="padding: 22px; border-right: 1px solid var(--line); background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; color: var(--accent);">2025 Q4</div>
+          <div style="padding: 22px;">
+            <div style="font-weight: 500;">Managed configurations & GitHub sync</div>
+            <div style="color: var(--fg-3); font-size: 13.5px; margin-top: 4px;">Versioned configs, label-targeted rollouts, drift detection.</div>
+          </div>
+        </div>
+        <div style="display: grid; grid-template-columns: 110px 1fr; gap: 0; border-top: 1px solid var(--line);">
+          <div style="padding: 22px; border-right: 1px solid var(--line); background: var(--surface-2); font-family: var(--font-mono); font-size: 12px; color: var(--accent);">2026 Q2</div>
+          <div style="padding: 22px;">
+            <div style="font-weight: 500;">Public beta — you are here</div>
+            <div style="color: var(--fg-3); font-size: 13.5px; margin-top: 4px;">Hobby and Team Free open to everyone. Business plan available on request.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-block">
+        <h2>Want to follow along?</h2>
+        <p class="lede" style="margin: 14px auto 0; max-width: 56ch;">We post engineering notes and product changelog as we go. No newsletter SaaS theatre.</p>
+        <div class="actions">
+          <a href="#" class="btn btn-primary btn-lg">Start free →</a>
+          <a href="#" class="btn btn-secondary btn-lg">Read the changelog</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="shared.js"></script>
+<script>FB.render('about');</script>
+<script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,346 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Pricing — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .pricing-hero { padding-top: 88px; padding-bottom: 32px; }
+  .principle {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 2px solid var(--accent);
+    border-radius: var(--radius-lg);
+    padding: 22px 26px;
+    margin-top: 36px;
+    max-width: 760px;
+  }
+  .track-label {
+    font-family: var(--font-mono);
+    font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--fg-3);
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 18px;
+  }
+  .track-label::after {
+    content: ""; flex: 1; height: 1px; background: var(--line);
+  }
+  .plan {
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: var(--radius-lg);
+    padding: 28px;
+    display: flex; flex-direction: column;
+    min-height: 100%;
+  }
+  .plan.featured {
+    border-color: var(--accent-line);
+    background:
+      radial-gradient(700px 220px at 100% 0%, var(--accent-soft), transparent 60%),
+      var(--surface);
+  }
+  .plan h3 { font-size: 18px; }
+  .plan .price { font-family: var(--font-mono); font-size: 28px; letter-spacing: -0.02em; margin-top: 14px; }
+  .plan .price small { font-size: 13px; color: var(--fg-3); font-family: var(--font-mono); }
+  .plan .desc { color: var(--fg-3); font-size: 13.5px; margin-top: 8px; min-height: 38px; }
+  .plan ul { list-style: none; padding: 0; margin: 22px 0; display: flex; flex-direction: column; gap: 10px; flex: 1; }
+  .plan li { display: flex; gap: 10px; align-items: flex-start; font-size: 13.5px; color: var(--fg-2); }
+  .plan li::before {
+    content: ""; width: 14px; height: 14px; border-radius: 50%;
+    background: var(--surface-2);
+    border: 1px solid var(--line);
+    flex-shrink: 0; margin-top: 3px;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%237d8593' stroke-width='1.5'><path d='M3 6L5 8L9 4' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+    background-size: 10px 10px; background-position: center; background-repeat: no-repeat;
+  }
+  .plan li.no::before {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12' fill='none' stroke='%23545c68' stroke-width='1.5'><path d='M3 6h6'/></svg>");
+  }
+  .plan li.no { color: var(--fg-4); }
+
+  .plans-individual { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+  .plans-team { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 18px; }
+  @media (max-width: 920px) {
+    .plans-individual, .plans-team { grid-template-columns: 1fr; }
+  }
+
+  .compare {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13.5px;
+    margin-top: 12px;
+  }
+  .compare th, .compare td {
+    text-align: left;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--line);
+  }
+  .compare thead th {
+    font-family: var(--font-sans);
+    font-weight: 500;
+    color: var(--fg);
+    font-size: 13px;
+    background: var(--surface);
+    position: sticky; top: 60px; z-index: 2;
+  }
+  .compare thead th:first-child { color: var(--fg-3); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em; }
+  .compare th.section, .compare td.section { background: var(--surface-2); font-family: var(--font-mono); font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--fg-3); }
+  .compare td:first-child { color: var(--fg-2); }
+  .compare td:not(:first-child) { color: var(--fg-2); font-family: var(--font-mono); font-size: 12.5px; }
+  .compare .yes { color: var(--accent); }
+  .compare .no { color: var(--fg-5); }
+
+  .faq-item {
+    border-bottom: 1px solid var(--line);
+    padding: 20px 0;
+  }
+  .faq-q {
+    font-weight: 500;
+    color: var(--fg);
+    font-size: 15.5px;
+  }
+  .faq-a { color: var(--fg-2); margin-top: 8px; max-width: 64ch; }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main>
+  <section class="pricing-hero wrap">
+    <span class="eyebrow" style="margin-bottom: 18px;">Pricing</span>
+    <h1>Free to watch.<br/>Priced to manage.</h1>
+    <p class="lede" style="margin-top: 22px;">
+      Visibility is free, forever. Pay only when you start managing configurations, rolling out changes, and governing access across a team.
+    </p>
+
+    <div class="principle">
+      <div class="mono" style="font-size: 11px; color: var(--accent); letter-spacing: 0.06em; text-transform: uppercase;">We don't charge by telemetry volume</div>
+      <p style="margin-top: 10px; color: var(--fg-2);">
+        Your logs, metrics, and traces never traverse our infrastructure. Plans are based on the work the control plane actually does — managed configurations, rollouts, and team workflows.
+      </p>
+    </div>
+  </section>
+
+  <!-- Individuals -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="track-label">For individuals</div>
+      <div class="plans-individual">
+        <div class="plan">
+          <div class="row-sb"><h3>Hobby</h3><span class="tag">Free</span></div>
+          <div class="price">$0</div>
+          <div class="desc">For personal collector visibility.</div>
+          <ul>
+            <li>1 user</li>
+            <li class="no">0 API keys</li>
+            <li class="no">0 GitHub repos</li>
+            <li>Monitor-only mode</li>
+            <li>Collector health and heartbeat</li>
+            <li>Current effective config view</li>
+            <li class="no">No managed configs</li>
+            <li class="no">No remote rollouts</li>
+          </ul>
+          <a href="#" class="btn btn-secondary">Start Hobby</a>
+        </div>
+        <div class="plan">
+          <div class="row-sb"><h3>Pro</h3><span class="tag">Single operator</span></div>
+          <div class="price">$20<small>/month</small></div>
+          <div class="desc">For one operator managing collector configs.</div>
+          <ul>
+            <li>1 user</li>
+            <li class="no">0 API keys</li>
+            <li>1 GitHub repo</li>
+            <li>Up to 3 managed configurations</li>
+            <li>Config rollouts and basic version history</li>
+            <li>Optional collector self-telemetry</li>
+            <li>Community support</li>
+          </ul>
+          <a href="#" class="btn btn-secondary">Start Pro</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Teams -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="track-label">For teams</div>
+      <div class="plans-team">
+        <div class="plan">
+          <div class="row-sb"><h3>Team Free</h3><span class="tag">Free</span></div>
+          <div class="price">$0</div>
+          <div class="desc">For teams evaluating OpAMP safely.</div>
+          <ul>
+            <li>3 users</li>
+            <li class="no">0 API keys</li>
+            <li class="no">0 GitHub repos</li>
+            <li>Monitor-only mode</li>
+            <li>Shared collector inventory</li>
+            <li>Effective config visibility</li>
+            <li class="no">No remote changes</li>
+            <li>Perfect for platform team evaluations</li>
+          </ul>
+          <a href="#" class="btn btn-secondary">Start Team Free</a>
+        </div>
+        <div class="plan featured">
+          <div class="row-sb"><h3>Business</h3><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Most teams</span></div>
+          <div class="price">From $199<small>/month</small></div>
+          <div class="desc">For teams operating collector config in production.</div>
+          <ul>
+            <li>10 users included</li>
+            <li>Up to 25 managed configurations</li>
+            <li>3 GitHub repos</li>
+            <li>Multiple concurrent rollouts</li>
+            <li>Collector flow and health dashboards</li>
+            <li>30-day metrics and audit history</li>
+            <li>Webhook alerts (Slack, Teams, PagerDuty)</li>
+            <li>Basic RBAC</li>
+            <li>Email support</li>
+          </ul>
+          <a href="#" class="btn btn-primary">Start Business trial</a>
+        </div>
+        <div class="plan">
+          <div class="row-sb"><h3>Enterprise</h3><span class="tag">Custom</span></div>
+          <div class="price">Custom</div>
+          <div class="desc">For large-scale and governed collector fleets.</div>
+          <ul>
+            <li>Unlimited users</li>
+            <li>Custom managed config and repo limits</li>
+            <li>Large-scale rollout fanout</li>
+            <li>SSO (SAML / OIDC) and SCIM</li>
+            <li>Advanced RBAC and approval workflows</li>
+            <li>Audit log export</li>
+            <li>Extended retention</li>
+            <li>Dedicated support and SLA</li>
+          </ul>
+          <a href="#" class="btn btn-secondary">Talk to sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Comparison -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Compare plans</span>
+        <h2>Every feature, side by side.</h2>
+      </div>
+      <div style="overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface);">
+        <table class="compare">
+          <thead>
+            <tr>
+              <th style="width: 32%;">Feature</th>
+              <th>Hobby</th>
+              <th>Pro</th>
+              <th>Team Free</th>
+              <th>Business</th>
+              <th>Enterprise</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td class="section" colspan="6">Workspace</td></tr>
+            <tr><td>Users</td><td>1</td><td>1</td><td>3</td><td>10 incl.</td><td>Unlimited</td></tr>
+            <tr><td>Roles & RBAC</td><td class="no">—</td><td class="no">—</td><td>Basic</td><td>Basic</td><td class="yes">Advanced</td></tr>
+            <tr><td>SSO (SAML / OIDC) & SCIM</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>Audit history</td><td class="no">—</td><td>7 days</td><td>7 days</td><td>30 days</td><td class="yes">Extended + export</td></tr>
+
+            <tr><td class="section" colspan="6">Collector visibility</td></tr>
+            <tr><td>Inventory</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Heartbeat & health</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Effective config view</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Version & capability reporting</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+
+            <tr><td class="section" colspan="6">Configuration management</td></tr>
+            <tr><td>Managed configurations</td><td class="no">—</td><td>3</td><td class="no">—</td><td>25</td><td class="yes">Custom</td></tr>
+            <tr><td>Max config size</td><td>—</td><td>64 KB</td><td>—</td><td>256 KB</td><td class="yes">Custom</td></tr>
+            <tr><td>Version history</td><td class="no">—</td><td>Basic</td><td class="no">—</td><td class="yes">Full</td><td class="yes">Full</td></tr>
+            <tr><td>Remote rollout</td><td class="no">—</td><td class="yes">✓</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Concurrent rollouts</td><td class="no">—</td><td>1</td><td class="no">—</td><td class="yes">Multiple</td><td class="yes">Multiple</td></tr>
+            <tr><td>Rollback</td><td class="no">—</td><td class="yes">✓</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>GitHub repos</td><td class="no">—</td><td>1</td><td class="no">—</td><td>3</td><td class="yes">Custom</td></tr>
+
+            <tr><td class="section" colspan="6">Metrics & flow</td></tr>
+            <tr><td>Collector self-telemetry</td><td class="no">—</td><td>Optional</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Flow UI</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Metrics retention</td><td>—</td><td>7 days</td><td>—</td><td>30 days</td><td class="yes">Extended</td></tr>
+            <tr><td>Alerts</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">Webhook</td><td class="yes">Webhook + routing</td></tr>
+
+            <tr><td class="section" colspan="6">Automation</td></tr>
+            <tr><td>GitHub App</td><td class="no">—</td><td class="yes">✓</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Webhooks</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td><td class="yes">✓</td></tr>
+            <tr><td>Service accounts</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+            <tr><td>API access</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="no">—</td><td class="yes">✓</td></tr>
+
+            <tr><td class="section" colspan="6">Support</td></tr>
+            <tr><td>Channel</td><td>Community</td><td>Community</td><td>Community</td><td>Email</td><td class="yes">Dedicated + SLA</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top: 18px; font-size: 13px; max-width: 76ch;">
+        Normal application telemetry is not priced here because we are not your telemetry backend. Plans are based on collector management, configurations, team workflows, and optional collector self-telemetry.
+      </p>
+    </div>
+  </section>
+
+  <!-- FAQ -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Pricing FAQ</span>
+        <h2>Common questions.</h2>
+      </div>
+      <div style="max-width: 820px;">
+        <div class="faq-item">
+          <div class="faq-q">Do you charge based on telemetry volume?</div>
+          <div class="faq-a">No. We do not ingest your logs, metrics, or traces. You pay for the control plane.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What counts as a "managed configuration"?</div>
+          <div class="faq-a">A stored, versioned collector configuration that the platform can assign to collectors and roll out.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What's an "effective config"?</div>
+          <div class="faq-a">The configuration the collector reports as actually running — useful for catching drift.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Can I use this without remote management?</div>
+          <div class="faq-a">Yes. Hobby and Team Free are monitor-only by design.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What happens if a collector disconnects?</div>
+          <div class="faq-a">It keeps running its last effective configuration. We are strictly out-of-band.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">Do you support SSO?</div>
+          <div class="faq-a">Yes, on Enterprise.</div>
+        </div>
+        <div class="faq-item">
+          <div class="faq-q">What if I need more configs or repos than my plan allows?</div>
+          <div class="faq-a">Talk to us. Limits exist to keep the lower tiers honest, not to block real work — we'll find a fit.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-block">
+        <h2>Bring your collector fleet under control.</h2>
+        <p class="lede" style="margin: 14px auto 0; max-width: 56ch;">Start free in monitor-only mode. Upgrade when your team is ready.</p>
+        <div class="actions">
+          <a href="#" class="btn btn-primary btn-lg">Start free →</a>
+          <a href="#" class="btn btn-secondary btn-lg">Talk to sales</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="shared.js"></script>
+<script>FB.render('pricing');</script>
+<script src="app.js"></script>
+</body>
+</html>

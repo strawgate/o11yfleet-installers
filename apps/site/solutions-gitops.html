@@ -1,0 +1,285 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GitOps for collector config — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .feat-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: center; padding: 56px 0; border-top: 1px solid var(--line); }
+  .feat-row:first-of-type { border-top: none; }
+  .feat-row.flip { grid-template-columns: 1.2fr 1fr; }
+  .feat-row.flip .feat-copy { order: 2; }
+  @media (max-width: 920px) {
+    .feat-row, .feat-row.flip { grid-template-columns: 1fr; gap: 24px; padding: 40px 0; }
+    .feat-row.flip .feat-copy { order: 0; }
+  }
+  .feat-list { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 10px; }
+  .feat-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--fg-2); font-size: 14px; }
+  .feat-list li::before { content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; margin-top: 8px; flex-shrink: 0; }
+
+  .pipeline {
+    display: grid; grid-template-columns: 1fr 28px 1fr 28px 1fr 28px 1fr;
+    gap: 0; align-items: stretch;
+    margin-top: 32px;
+  }
+  .pipe-card { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 18px; min-height: 180px; }
+  .pipe-arrow { display:flex; align-items:center; justify-content: center; color: var(--fg-4); }
+  @media (max-width: 920px) {
+    .pipeline { grid-template-columns: 1fr; gap: 8px; }
+    .pipe-arrow { transform: rotate(90deg); padding: 4px 0; }
+  }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
+  .step { padding: 24px; border-right: 1px solid var(--line); background: var(--surface); }
+  .step:last-child { border-right: none; }
+  .step .num { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
+  .step h4 { margin: 10px 0 6px; }
+  .step p { font-size: 13.5px; color: var(--fg-3); }
+  @media (max-width: 920px) {
+    .steps { grid-template-columns: 1fr; }
+    .step { border-right: none; border-bottom: 1px solid var(--line); }
+  }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main>
+  <section class="hero wrap" style="padding-bottom: 32px;">
+    <div class="hero-meta">
+      <a href="index.html" class="muted" style="font-family: var(--font-mono); font-size: 12px;">← Solutions</a>
+      <span class="pin"><span class="dot dot-ok dot-pulse"></span> GitOps</span>
+    </div>
+    <h1>Bring GitOps discipline<br/>to OpenTelemetry Collector.</h1>
+    <p class="lede" style="margin-top: 22px;">
+      Connect GitHub, watch config paths in your repo, and link every rollout to a commit. Review the diff, roll out to selected collectors, and see exactly which ones applied the change.
+    </p>
+    <div class="hero-actions">
+      <a href="#" class="btn btn-primary btn-lg">Start free →</a>
+      <a href="#" class="btn btn-secondary btn-lg">Read the OpAMP guide</a>
+    </div>
+  </section>
+
+  <!-- Hero pipeline -->
+  <section class="wrap" style="margin-bottom: 64px;">
+    <div class="win">
+      <div class="win-bar">
+        <div class="lights"><i></i><i></i><i></i></div>
+        <div class="title">commit → review → rollout</div>
+      </div>
+      <div style="padding: 24px;">
+        <div class="pipeline">
+          <div class="pipe-card">
+            <div class="mono" style="font-size: 11px; color: var(--fg-4);">01 · COMMIT</div>
+            <div style="margin-top: 12px; display: flex; align-items: center; gap: 10px;">
+              <div style="width: 8px; height: 8px; background: var(--accent); border-radius: 50%;"></div>
+              <span class="mono" style="font-size: 13px;">a91f3b2</span>
+            </div>
+            <div style="margin-top: 6px; font-size: 13.5px;">tighten batch processor timeout</div>
+            <div class="mono" style="margin-top: 4px; font-size: 11.5px; color: var(--fg-4);">otel-configs/main · 6m ago</div>
+            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--line); font-family: var(--font-mono); font-size: 11.5px;">
+              <span style="color: var(--ok);">+3</span>&nbsp;<span style="color: var(--err);">−1</span>
+              <span style="color: var(--fg-4);"> · configs/prod-ingress.yaml</span>
+            </div>
+          </div>
+
+          <div class="pipe-arrow"><svg width="28" height="14" viewBox="0 0 28 14" fill="none"><path d="M0 7H26M22 2L27 7L22 12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></div>
+
+          <div class="pipe-card">
+            <div class="mono" style="font-size: 11px; color: var(--fg-4);">02 · VALIDATE</div>
+            <div style="margin-top: 12px; display: flex; flex-direction: column; gap: 8px; font-family: var(--font-mono); font-size: 12px;">
+              <div style="display:flex; gap: 8px; align-items: center; color: var(--ok);"><span class="dot dot-ok"></span>schema · pass</div>
+              <div style="display:flex; gap: 8px; align-items: center; color: var(--ok);"><span class="dot dot-ok"></span>processors compat · pass</div>
+              <div style="display:flex; gap: 8px; align-items: center; color: var(--ok);"><span class="dot dot-ok"></span>dry run · pass</div>
+              <div style="display:flex; gap: 8px; align-items: center; color: var(--fg-3);"><span class="dot"></span>review required: 1</div>
+            </div>
+          </div>
+
+          <div class="pipe-arrow"><svg width="28" height="14" viewBox="0 0 28 14" fill="none"><path d="M0 7H26M22 2L27 7L22 12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></div>
+
+          <div class="pipe-card">
+            <div class="mono" style="font-size: 11px; color: var(--fg-4);">03 · APPROVE</div>
+            <div style="margin-top: 12px; display: flex; gap: 10px; align-items: flex-start;">
+              <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); flex-shrink: 0; display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size: 11px;">j</div>
+              <div>
+                <div style="font-size: 13px;">jordan approved</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">2 of 2 required</div>
+              </div>
+            </div>
+            <div style="margin-top: 10px; display: flex; gap: 10px; align-items: flex-start;">
+              <div style="width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); border: 1px solid var(--line); flex-shrink: 0; display:flex; align-items:center; justify-content:center; font-family: var(--font-mono); font-size: 11px;">s</div>
+              <div>
+                <div style="font-size: 13px;">sam approved</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">codeowner · platform</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="pipe-arrow"><svg width="28" height="14" viewBox="0 0 28 14" fill="none"><path d="M0 7H26M22 2L27 7L22 12" stroke="currentColor" stroke-width="1" stroke-linecap="round"/></svg></div>
+
+          <div class="pipe-card">
+            <div class="mono" style="font-size: 11px; color: var(--fg-4);">04 · ROLL OUT</div>
+            <div style="margin-top: 12px; display:flex; flex-direction: column; gap: 8px;">
+              <div style="display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="color: var(--fg-3);">edge-iad</span>
+                <div style="height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden;"><div style="width: 100%; height:100%; background: var(--accent);"></div></div>
+                <span style="color: var(--ok); font-size: 10px;">12/12</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="color: var(--fg-3);">edge-sfo</span>
+                <div style="height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden;"><div style="width: 78%; height:100%; background: var(--accent);"></div></div>
+                <span style="color: var(--fg-2); font-size: 10px;">7/9</span>
+              </div>
+              <div style="display: grid; grid-template-columns: 70px 1fr auto; gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 11.5px;">
+                <span style="color: var(--fg-3);">gateway</span>
+                <div style="height: 4px; background: var(--surface-2); border-radius: 999px; overflow: hidden;"><div style="width: 50%; height:100%; background: var(--accent);"></div></div>
+                <span style="color: var(--fg-2); font-size: 10px;">3/6</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="feat-row">
+        <div class="feat-copy">
+          <span class="eyebrow">Repo as source of truth</span>
+          <h3 style="margin-top: 14px;">Your YAML lives in Git.<br/>So does its history.</h3>
+          <p>Connect a GitHub App once. Tell us which repo, which branch, and which paths. Every commit that touches a watched path becomes a candidate rollout.</p>
+          <ul class="feat-list">
+            <li>GitHub App with read-only repo scope</li>
+            <li>Watch any number of YAML paths or globs</li>
+            <li>Branch protection rules carry through to rollouts</li>
+          </ul>
+        </div>
+        <div class="win">
+          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">connected repos</div></div>
+          <div style="padding: 14px 18px;">
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: center;">
+              <div>
+                <div class="mono" style="font-size: 13px;">acme/otel-configs</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">main · configs/**.yaml</div>
+              </div>
+              <span class="tag tag-ok"><span class="dot dot-ok"></span>synced</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line); align-items: center;">
+              <div>
+                <div class="mono" style="font-size: 13px;">acme/platform-infra</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">main · otel/*.yaml</div>
+              </div>
+              <span class="tag tag-ok"><span class="dot dot-ok"></span>synced</span>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 10px; padding: 12px 0; align-items: center;">
+              <div>
+                <div class="mono" style="font-size: 13px;">acme/otel-experiments</div>
+                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">staging · sandbox/*.yaml</div>
+              </div>
+              <span class="tag">staging only</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="feat-row flip">
+        <div class="win">
+          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">commit · a91f3b2</div></div>
+          <div class="diff" style="padding: 12px 0;">
+            <div class="row"><span class="ln">12</span><span class="sign"> </span><span class="code">processors:</span></div>
+            <div class="row"><span class="ln">13</span><span class="sign"> </span><span class="code">  batch:</span></div>
+            <div class="row rem"><span class="ln">14</span><span class="sign">−</span><span class="code">    timeout: 1s</span></div>
+            <div class="row add"><span class="ln">14</span><span class="sign">+</span><span class="code">    timeout: 200ms</span></div>
+            <div class="row add"><span class="ln">15</span><span class="sign">+</span><span class="code">    send_batch_size: 4096</span></div>
+            <div class="row add"><span class="ln">16</span><span class="sign">+</span><span class="code">    send_batch_max_size: 4096</span></div>
+          </div>
+          <div style="padding: 12px 18px; border-top: 1px solid var(--line); display: flex; gap: 10px;">
+            <a href="#" class="btn btn-primary btn-sm">Roll out to env=production</a>
+            <a href="#" class="btn btn-ghost btn-sm">Open in GitHub</a>
+          </div>
+        </div>
+        <div class="feat-copy">
+          <span class="eyebrow">Commit-driven rollouts</span>
+          <h3 style="margin-top: 14px;">Every rollout points back<br/>to a commit.</h3>
+          <p>The diff in O11yFleet is the diff in GitHub. Click the SHA to land on the exact PR that introduced the change, and link rollouts back from your commit history.</p>
+          <ul class="feat-list">
+            <li>Diff parity with GitHub's own UI</li>
+            <li>Bidirectional links between commits and rollouts</li>
+            <li>Commit status checks for in-progress rollouts</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="feat-row">
+        <div class="feat-copy">
+          <span class="eyebrow">Approvals & policy</span>
+          <h3 style="margin-top: 14px;">Codeowners and approvals,<br/>at the rollout boundary.</h3>
+          <p>Reuse your <span class="mono">CODEOWNERS</span> file. Require N approvals before a config can be rolled out to a labeled environment. Policy lives next to the YAML, not in a separate UI.</p>
+          <ul class="feat-list">
+            <li>Reuse <span class="mono">CODEOWNERS</span> per path</li>
+            <li>Per-environment approval thresholds</li>
+            <li>Approval bypass with audited break-glass</li>
+          </ul>
+        </div>
+        <div class="win">
+          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">policy · env=production</div></div>
+          <div style="padding: 18px;">
+            <div style="display: flex; flex-direction: column; gap: 10px; font-family: var(--font-mono); font-size: 12.5px;">
+              <div style="padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; display: flex; justify-content: space-between;">
+                <span>require_approvals</span><span style="color: var(--accent);">2</span>
+              </div>
+              <div style="padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; display: flex; justify-content: space-between;">
+                <span>codeowners_required</span><span style="color: var(--accent);">true</span>
+              </div>
+              <div style="padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; display: flex; justify-content: space-between;">
+                <span>auto_rollback_on_health</span><span style="color: var(--accent);">below 95%</span>
+              </div>
+              <div style="padding: 10px 12px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 6px; display: flex; justify-content: space-between;">
+                <span>break_glass</span><span style="color: var(--fg-3);">audit + Slack</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- How it works -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">How it works</span>
+        <h2>Four steps from commit<br/>to running collector.</h2>
+      </div>
+      <div class="steps">
+        <div class="step"><div class="num">01</div><h4>Connect</h4><p>Install the GitHub App and pick the repo, branch, and watched paths.</p></div>
+        <div class="step"><div class="num">02</div><h4>Commit</h4><p>Push YAML in PRs the way you always have. Branch protection still applies.</p></div>
+        <div class="step"><div class="num">03</div><h4>Roll out</h4><p>Approve, target a label, and watch live progress per collector.</p></div>
+        <div class="step"><div class="num">04</div><h4>Audit</h4><p>Every rollout is timestamped, signed, and traceable to its commit.</p></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-block">
+        <h2>Make Git the only place<br/>collector config changes.</h2>
+        <p class="lede" style="margin: 14px auto 0; max-width: 56ch;">Connect a repo in five minutes. Keep your existing review process. Get a fleet that does what the commits say.</p>
+        <div class="actions">
+          <a href="#" class="btn btn-primary btn-lg">Start free →</a>
+          <a href="enterprise.html" class="btn btn-secondary btn-lg">For enterprise</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="shared.js"></script>
+<script>FB.render('solutions');</script>
+<script src="app.js"></script>
+</body>
+</html>

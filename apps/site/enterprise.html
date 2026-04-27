@@ -1,0 +1,232 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Enterprise — O11yFleet</title>
+<link rel="stylesheet" href="styles.css" />
+<style>
+  .ent-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  @media (max-width: 920px) { .ent-grid { grid-template-columns: 1fr; } }
+  .ent-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-lg); padding: 26px; }
+  .ent-card .ic { width: 30px; height: 30px; display:flex; align-items:center; justify-content:center; border-radius: 6px; background: var(--accent-soft); color: var(--accent); border: 1px solid var(--accent-line); }
+  .ent-card h3 { margin: 16px 0 8px; font-size: 18px; }
+  .ent-card p { font-size: 13.5px; color: var(--fg-3); }
+
+  .compliance { display: grid; grid-template-columns: repeat(5, 1fr); gap: 18px; }
+  .compliance > div { padding: 22px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; text-align: center; font-family: var(--font-mono); font-size: 12.5px; color: var(--fg-2); letter-spacing: 0.05em; }
+  @media (max-width: 720px) { .compliance { grid-template-columns: repeat(2, 1fr); } }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin: 32px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .stat { padding: 28px; border-right: 1px solid var(--line); }
+  .stat:last-child { border-right: none; }
+  .stat .num { font-family: var(--font-mono); font-size: 36px; letter-spacing: -0.02em; }
+  .stat .label { font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); text-transform: uppercase; letter-spacing: 0.06em; margin-top: 6px; }
+  @media (max-width: 720px) { .stat-row { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+<div id="site-header"></div>
+
+<main>
+  <section class="hero wrap" style="padding-bottom: 32px;">
+    <div class="hero-meta">
+      <span class="pin"><span class="dot dot-ok dot-pulse"></span> Enterprise</span>
+    </div>
+    <h1>Collector management for regulated<br/>and large-scale teams.</h1>
+    <p class="lede" style="margin-top: 22px;">
+      SSO, RBAC, approval workflows, and audit log export — on top of the same hosted OpAMP control plane. Govern thousands of collectors without owning the infrastructure that runs them.
+    </p>
+    <div class="hero-actions">
+      <a href="#" class="btn btn-primary btn-lg">Talk to sales</a>
+      <a href="pricing.html" class="btn btn-secondary btn-lg">See plans</a>
+    </div>
+  </section>
+
+  <section class="wrap" style="margin-bottom: 48px;">
+    <div class="stat-row">
+      <div class="stat"><div class="num">10k+</div><div class="label">Collectors per workspace</div></div>
+      <div class="stat"><div class="num">99.9%</div><div class="label">Control plane SLA</div></div>
+      <div class="stat"><div class="num">SAML</div><div class="label">SSO + SCIM provisioning</div></div>
+      <div class="stat"><div class="num">∞</div><div class="label">Audit retention via export</div></div>
+    </div>
+  </section>
+
+  <!-- Capabilities -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Built for enterprise</span>
+        <h2>The controls regulated teams need.</h2>
+      </div>
+      <div class="ent-grid">
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></div>
+          <h3>SSO & SCIM</h3>
+          <p>SAML and OIDC for sign-in. SCIM 2.0 for provisioning. JIT user creation, group-based role mapping, and de-provisioning the same minute someone leaves.</p>
+        </div>
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a4 4 0 0 1 4-4h8a4 4 0 0 1 4 4v2"/></svg></div>
+          <h3>Advanced RBAC</h3>
+          <p>Granular roles per workspace, environment, and config. Read-only auditors. Rollout operators scoped to a label set. Custom roles when the standard four aren't enough.</p>
+        </div>
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></div>
+          <h3>Approval workflows</h3>
+          <p>Configurable approval thresholds per environment. Reuse <span class="mono">CODEOWNERS</span>. Audited break-glass for incidents. Slack-based approval signoff.</p>
+        </div>
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+          <h3>Audit log export</h3>
+          <p>Every action — sign-in, config edit, rollout, approval, role change — streams to your SIEM via webhook or to S3 in JSONL. Tamper-evident with HMAC signing.</p>
+        </div>
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L4 5v6c0 5 3.5 9 8 11 4.5-2 8-6 8-11V5l-8-3z"/></svg></div>
+          <h3>Data residency</h3>
+          <p>Pin your workspace to US, EU, or AP regions. Collector self-telemetry stays in-region. We never see your application telemetry — full stop.</p>
+        </div>
+        <div class="ent-card">
+          <div class="ic"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div>
+          <h3>Dedicated support & SLA</h3>
+          <p>Named technical contact. Shared Slack channel. 99.9% uptime SLA on the control plane. Quarterly fleet operations review with our team.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- RBAC mockup -->
+  <section class="section">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Granular control</span>
+        <h2>Permissions that match how<br/>platform teams really work.</h2>
+        <p class="lede" style="margin-top: 14px;">Auditors read everything. Operators roll out within their environment. SREs break glass — and leave a record when they do.</p>
+      </div>
+      <div class="win">
+        <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">workspace · roles</div></div>
+        <table class="collector-table">
+          <thead>
+            <tr>
+              <th>Role</th>
+              <th>Inventory</th>
+              <th>Edit config</th>
+              <th>Roll out</th>
+              <th>Approve</th>
+              <th>Manage roles</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="name">Auditor</td>
+              <td><span class="tag tag-ok">read</span></td>
+              <td class="meta">—</td>
+              <td class="meta">—</td>
+              <td class="meta">—</td>
+              <td class="meta">—</td>
+            </tr>
+            <tr>
+              <td class="name">Operator · staging</td>
+              <td><span class="tag tag-ok">read</span></td>
+              <td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">staging</span></td>
+              <td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">staging</span></td>
+              <td class="meta">—</td>
+              <td class="meta">—</td>
+            </tr>
+            <tr>
+              <td class="name">Operator · production</td>
+              <td><span class="tag tag-ok">read</span></td>
+              <td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">prod</span></td>
+              <td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">prod (with approval)</span></td>
+              <td><span class="tag tag-ok">codeowners</span></td>
+              <td class="meta">—</td>
+            </tr>
+            <tr>
+              <td class="name">SRE on-call</td>
+              <td><span class="tag tag-ok">read</span></td>
+              <td><span class="tag tag-ok">all</span></td>
+              <td><span class="tag tag-warn">break-glass</span></td>
+              <td><span class="tag tag-ok">all</span></td>
+              <td class="meta">—</td>
+            </tr>
+            <tr>
+              <td class="name">Workspace admin</td>
+              <td><span class="tag tag-ok">read</span></td>
+              <td><span class="tag tag-ok">all</span></td>
+              <td><span class="tag tag-ok">all</span></td>
+              <td><span class="tag tag-ok">all</span></td>
+              <td><span class="tag tag-ok">yes</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- Trust strip -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="section-head">
+        <span class="eyebrow">Trust posture</span>
+        <h2>What we do — and don't — touch.</h2>
+        <p class="lede" style="margin-top: 14px;">We're early and we'd rather be precise than performative. Here's the actual scope of what flows through our systems.</p>
+      </div>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 18px;">
+        <div class="card card-pad">
+          <div class="mono" style="font-size: 11px; color: var(--accent); letter-spacing: 0.06em;">WHAT WE SEE</div>
+          <ul class="feat-list" style="margin-top: 14px;">
+            <li>Collector identity, version, capabilities, heartbeat</li>
+            <li>Effective configuration the collector self-reports</li>
+            <li>Optional collector self-telemetry (queue depth, drops, errors)</li>
+            <li>Audit events — sign-in, edit, rollout, approval</li>
+          </ul>
+        </div>
+        <div class="card card-pad">
+          <div class="mono" style="font-size: 11px; color: var(--fg-4); letter-spacing: 0.06em;">WHAT WE NEVER SEE</div>
+          <ul class="feat-list" style="margin-top: 14px;">
+            <li>Your application logs, metrics, traces, or spans</li>
+            <li>Telemetry payloads of any kind</li>
+            <li>Anything outside the OpAMP control channel</li>
+          </ul>
+        </div>
+      </div>
+      <p class="muted" style="margin-top: 24px; font-size: 13px; max-width: 76ch;">
+        Compliance attestations and a security review packet are available on request — we'll tell you exactly where each control stands today rather than printing a logo wall.
+      </p>
+    </div>
+  </section>
+
+  <!-- Quote -->
+  <section class="section-tight">
+    <div class="wrap">
+      <div class="card" style="padding: 48px; max-width: 880px; margin: 0 auto; text-align: center;">
+        <div style="font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.08em;">PILOT · LATE 2025</div>
+        <p style="font-size: clamp(20px, 2.4vw, 28px); line-height: 1.35; letter-spacing: -0.018em; color: var(--fg); margin-top: 18px; text-wrap: balance;">
+          "We had 1,800 collectors across four regions and zero idea which config was actually running on most of them. Monitor-only mode let us start telling the truth on day one — without changing how telemetry got to our backend."
+        </p>
+        <div class="mono" style="font-size: 12px; color: var(--fg-3); margin-top: 20px;">
+          — Platform Engineering Lead · Fortune 500 retailer
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section">
+    <div class="wrap">
+      <div class="cta-block">
+        <h2>Bring governance to your collector fleet.</h2>
+        <p class="lede" style="margin: 14px auto 0; max-width: 56ch;">Talk to us about workspace setup, SSO, audit export, and SLA. Most enterprises are running in production within four weeks.</p>
+        <div class="actions">
+          <a href="#" class="btn btn-primary btn-lg">Talk to sales</a>
+          <a href="#" class="btn btn-secondary btn-lg">Request security packet</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<div id="site-footer"></div>
+<script src="shared.js"></script>
+<script>FB.render('enterprise');</script>
+<script src="app.js"></script>
+</body>
+</html>

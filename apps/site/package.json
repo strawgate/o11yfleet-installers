@@ -1,0 +1,10 @@
+{
+  "name": "@o11yfleet/site",
+  "version": "0.0.1",
+  "private": true,
+  "description": "O11yFleet public marketing site",
+  "scripts": {
+    "dev": "npx serve . -l 4000",
+    "build": "echo 'Static site — no build step'"
+  }
+}
