@@ -274,7 +274,7 @@ describe("Config Content Delivery", () => {
     };
 
     const yamlContent = "receivers:\n  otlp:\n    protocols:\n      grpc:";
-    const result = processFrame(state, msg, yamlContent);
+    const result = processFrame(state, msg, new TextEncoder().encode(yamlContent));
 
     expect(result.response?.remote_config).toBeDefined();
     expect(result.response!.remote_config!.config.config_map).toBeDefined();
@@ -320,7 +320,7 @@ describe("Config Content Delivery", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg, "should not appear");
+    const result = processFrame(state, msg, new TextEncoder().encode("should not appear"));
     expect(result.response?.remote_config).toBeUndefined();
   });
 
@@ -338,7 +338,7 @@ describe("Config Content Delivery", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg, "should not appear");
+    const result = processFrame(state, msg, new TextEncoder().encode("should not appear"));
     expect(result.response?.remote_config).toBeUndefined();
   });
 });

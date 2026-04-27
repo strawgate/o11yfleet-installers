@@ -46,6 +46,7 @@ const MAX_AGENTS_PER_CONFIG = 50_000;
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private desiredConfigHash: string | null = null;
   private desiredConfigContent: string | null = null; // C4: cached YAML body for delivery
+  private desiredConfigBytes: Uint8Array | null = null; // Pre-encoded to avoid per-message TextEncoder
   private initialized = false;
   // Compact rate limiter: [windowStart, count] per UID — 2 numbers vs 60 timestamps
   private rateLimits = new Map<string, { windowStart: number; count: number }>();
@@ -58,9 +59,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (this.initialized) return;
     initSchema(this.ctx.storage.sql);
 
-    const stored = await this.ctx.storage.get<string>("desired_config_hash");
-    if (stored) {
-      this.desiredConfigHash = stored;
+    const [storedHash, storedContent] = await Promise.all([
+      this.ctx.storage.get<string>("desired_config_hash"),
+      this.ctx.storage.get<string>("desired_config_content"),
+    ]);
+    if (storedHash) {
+      this.desiredConfigHash = storedHash;
+    }
+    if (storedContent) {
+      this.desiredConfigContent = storedContent;
+      this.desiredConfigBytes = new TextEncoder().encode(storedContent);
     }
     this.initialized = true;
   }
@@ -200,7 +208,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         this.desiredConfigHash,
       );
 
-      const result = processFrame(state, agentMsg, this.desiredConfigContent);
+      const result = processFrame(state, agentMsg, this.desiredConfigBytes);
 
       if (result.shouldPersist) {
         saveAgentState(this.ctx.storage.sql, result.newState);
@@ -282,7 +290,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     this.desiredConfigHash = body.config_hash;
     this.desiredConfigContent = body.config_content ?? null;
-    await this.ctx.storage.put("desired_config_hash", body.config_hash);
+    this.desiredConfigBytes = body.config_content
+      ? new TextEncoder().encode(body.config_content)
+      : null;
+    await Promise.all([
+      this.ctx.storage.put("desired_config_hash", body.config_hash),
+      body.config_content
+        ? this.ctx.storage.put("desired_config_content", body.config_content)
+        : this.ctx.storage.delete("desired_config_content"),
+    ]);
 
     const sockets = this.ctx.getWebSockets();
     const desiredHashBytes = hexToUint8Array(body.config_hash);
@@ -318,10 +334,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
    * Build the config_map with actual YAML content if available.
    */
   private buildConfigMap(): Record<string, { body: Uint8Array; content_type: string }> {
-    if (!this.desiredConfigContent) return {};
+    if (!this.desiredConfigBytes) return {};
     return {
       "": {
-        body: new TextEncoder().encode(this.desiredConfigContent),
+        body: this.desiredConfigBytes,
         content_type: "text/yaml",
       },
     };

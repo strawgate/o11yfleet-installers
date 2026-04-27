@@ -23,7 +23,7 @@ function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   return true;
 }
 
-export function processFrame(state: AgentState, msg: AgentToServer, configContent?: string | null): ProcessResult {
+export function processFrame(state: AgentState, msg: AgentToServer, configContentBytes?: Uint8Array | null): ProcessResult {
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
   const now = Date.now();
@@ -153,9 +153,9 @@ export function processFrame(state: AgentState, msg: AgentToServer, configConten
   ) {
     // C4 fix: Include config content in config_map when available
     const configMap: Record<string, { body: Uint8Array; content_type: string }> = {};
-    if (configContent) {
+    if (configContentBytes) {
       configMap[""] = {
-        body: new TextEncoder().encode(configContent),
+        body: configContentBytes,
         content_type: "text/yaml",
       };
     }
