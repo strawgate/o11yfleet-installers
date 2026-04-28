@@ -14,8 +14,7 @@ export function AgentsPage() {
   const agentQueries = useQueries({
     queries: (configs ?? []).map((c) => ({
       queryKey: ["configuration", c.id, "agents"],
-      queryFn: () =>
-        api.get<{ agents: Agent[] }>(`/api/v1/configurations/${c.id}/agents`),
+      queryFn: () => api.get<{ agents: Agent[] }>(`/api/v1/configurations/${c.id}/agents`),
       refetchInterval: 10_000,
     })),
   });
@@ -35,8 +34,8 @@ export function AgentsPage() {
       <div className="mb-6">
         <h1 className="text-lg font-semibold text-fg">Agents</h1>
         <p className="text-xs text-fg-3 mt-0.5">
-          {allAgents.length} agent{allAgents.length === 1 ? "" : "s"} across{" "}
-          {configs?.length ?? 0} configuration{(configs?.length ?? 0) === 1 ? "" : "s"}
+          {allAgents.length} agent{allAgents.length === 1 ? "" : "s"} across {configs?.length ?? 0}{" "}
+          configuration{(configs?.length ?? 0) === 1 ? "" : "s"}
         </p>
       </div>
 
@@ -57,21 +56,13 @@ export function AgentsPage() {
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Agent
-                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Agent</th>
                 <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
                   Configuration
                 </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Status
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Health
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Last Seen
-                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Status</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Health</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Last Seen</th>
               </tr>
             </thead>
             <tbody>
@@ -84,9 +75,7 @@ export function AgentsPage() {
                     <p className="text-fg font-medium text-xs font-mono">
                       {a.hostname ?? a.instance_uid.slice(0, 12)}
                     </p>
-                    {a.agent_version && (
-                      <p className="text-[10px] text-fg-4">v{a.agent_version}</p>
-                    )}
+                    {a.agent_version && <p className="text-[10px] text-fg-4">v{a.agent_version}</p>}
                   </td>
                   <td className="px-4 py-3">
                     <Link
@@ -97,9 +86,7 @@ export function AgentsPage() {
                     </Link>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge
-                      variant={a.status === "connected" ? "success" : "default"}
-                    >
+                    <Badge variant={a.status === "connected" ? "success" : "default"}>
                       {a.status}
                     </Badge>
                   </td>
@@ -108,9 +95,7 @@ export function AgentsPage() {
                       {a.healthy ? "healthy" : "unhealthy"}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-xs text-fg-3">
-                    {relativeTime(a.last_seen_at)}
-                  </td>
+                  <td className="px-4 py-3 text-xs text-fg-3">{relativeTime(a.last_seen_at)}</td>
                 </tr>
               ))}
             </tbody>

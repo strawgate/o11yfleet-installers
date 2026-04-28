@@ -5,10 +5,11 @@ import { Button } from "../components/ui/Button";
 import { Input } from "../components/ui/Input";
 
 export function AdminLoginPage() {
-  const { login } = useAuth();
+  const { login, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/admin/overview";
+  const from =
+    (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/admin/overview";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,6 +23,7 @@ export function AdminLoginPage() {
     try {
       const user = await login(email, password);
       if (user.role !== "admin") {
+        await logout();
         setError("This account does not have admin access");
         return;
       }

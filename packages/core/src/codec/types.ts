@@ -86,6 +86,7 @@ export interface AgentIdentification {
   new_instance_uid: Uint8Array;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-empty-object-type
 export interface AgentDisconnect {}
 
 export interface KeyValue {

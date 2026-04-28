@@ -2,6 +2,8 @@
 // Format: fp_enroll_{base64url_random_32_bytes}
 // Only SHA-256 hash is stored
 
+import { base64urlEncode } from "./base64url.js";
+
 const encoder = new TextEncoder();
 
 export function generateEnrollmentToken(): string {
@@ -31,12 +33,4 @@ export async function verifyEnrollmentToken(
     result |= a[i]! ^ b[i]!;
   }
   return result === 0;
-}
-
-function base64urlEncode(data: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < data.length; i++) {
-    binary += String.fromCharCode(data[i]!);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 }

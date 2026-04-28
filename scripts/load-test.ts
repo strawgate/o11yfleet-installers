@@ -25,21 +25,21 @@ import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 // ──────────────────────────────────────────────
 interface LoadTestOpts {
   agents: number;
-  duration: number;      // seconds
-  ramp: number;          // agents per second
+  duration: number; // seconds
+  ramp: number; // agents per second
   heartbeatMs: number;
   token: string;
   endpoint: string;
-  ci: boolean;           // CI mode: JSON output + exit code based on thresholds
+  ci: boolean; // CI mode: JSON output + exit code based on thresholds
 }
 
 // Pass/fail thresholds for CI mode
 interface CIThresholds {
-  maxConnectFailRate: number;    // max % of connect failures (default 5%)
-  maxErrorRate: number;          // max % of errors vs total messages (default 1%)
-  maxP99ConnectMs: number;       // max p99 connect latency (default 5000ms)
-  maxP99HeartbeatMs: number;     // max p99 heartbeat RTT (default 2000ms)
-  minEnrollmentRate: number;     // min % of agents that must enroll (default 95%)
+  maxConnectFailRate: number; // max % of connect failures (default 5%)
+  maxErrorRate: number; // max % of errors vs total messages (default 1%)
+  maxP99ConnectMs: number; // max p99 connect latency (default 5000ms)
+  maxP99HeartbeatMs: number; // max p99 heartbeat RTT (default 2000ms)
+  minEnrollmentRate: number; // min % of agents that must enroll (default 95%)
 }
 
 const CI_THRESHOLDS: CIThresholds = {
@@ -64,13 +64,27 @@ function parseArgs(): LoadTestOpts {
 
   for (let i = 0; i < args.length; i++) {
     switch (args[i]) {
-      case "--agents": opts.agents = parseInt(args[++i], 10); break;
-      case "--duration": opts.duration = parseInt(args[++i], 10); break;
-      case "--ramp": opts.ramp = parseInt(args[++i], 10); break;
-      case "--heartbeat": opts.heartbeatMs = parseInt(args[++i], 10); break;
-      case "--token": opts.token = args[++i]; break;
-      case "--endpoint": opts.endpoint = args[++i]; break;
-      case "--ci": opts.ci = true; break;
+      case "--agents":
+        opts.agents = parseInt(args[++i], 10);
+        break;
+      case "--duration":
+        opts.duration = parseInt(args[++i], 10);
+        break;
+      case "--ramp":
+        opts.ramp = parseInt(args[++i], 10);
+        break;
+      case "--heartbeat":
+        opts.heartbeatMs = parseInt(args[++i], 10);
+        break;
+      case "--token":
+        opts.token = args[++i];
+        break;
+      case "--endpoint":
+        opts.endpoint = args[++i];
+        break;
+      case "--ci":
+        opts.ci = true;
+        break;
     }
   }
 
@@ -129,7 +143,7 @@ class StreamingStats {
 // Metrics
 // ──────────────────────────────────────────────
 interface MemorySample {
-  timestamp: number;       // seconds since start
+  timestamp: number; // seconds since start
   heapUsedMB: number;
   heapTotalMB: number;
   rssMB: number;
@@ -225,11 +239,7 @@ function createAgent(id: number): LoadAgent {
 // ──────────────────────────────────────────────
 // Agent lifecycle
 // ──────────────────────────────────────────────
-function connectAgent(
-  agent: LoadAgent,
-  opts: LoadTestOpts,
-  metrics: Metrics,
-): Promise<void> {
+function connectAgent(agent: LoadAgent, opts: LoadTestOpts, metrics: Metrics): Promise<void> {
   return new Promise((resolve) => {
     metrics.connectAttempts++;
     agent.state = "connecting";
@@ -274,12 +284,8 @@ function connectAgent(
           status: "running",
         },
         agent_description: {
-          identifying_attributes: [
-            { key: "service.name", value: agent.name },
-          ],
-          non_identifying_attributes: [
-            { key: "os.type", value: process.platform },
-          ],
+          identifying_attributes: [{ key: "service.name", value: agent.name }],
+          non_identifying_attributes: [{ key: "os.type", value: process.platform }],
         },
       };
       ws.send(encodeFrame(hello));
@@ -317,7 +323,9 @@ function connectAgent(
             metrics.enrollLatencies.record(enrollLatency);
             agent.state = "running";
           }
-        } catch { /* ignore */ }
+        } catch {
+          /* ignore */
+        }
         return;
       }
 
@@ -382,7 +390,9 @@ function connectAgent(
       if (agent.state === "connecting") {
         metrics.connectFailures++;
         agent.state = "closed";
-        try { ws.close(); } catch {}
+        try {
+          ws.close();
+        } catch {}
         resolve();
       }
     }, 10_000);
@@ -395,7 +405,9 @@ function closeAgent(agent: LoadAgent): void {
     agent.heartbeatTimer = null;
   }
   if (agent.ws && agent.ws.readyState === WebSocket.OPEN) {
-    try { agent.ws.close(1000, "load test complete"); } catch {}
+    try {
+      agent.ws.close(1000, "load test complete");
+    } catch {}
   }
   agent.state = "closed";
 }
@@ -404,16 +416,16 @@ function closeAgent(agent: LoadAgent): void {
 // Reporting
 // ──────────────────────────────────────────────
 function printProgress(agents: LoadAgent[], metrics: Metrics, elapsed: number): void {
-  const connected = agents.filter(a => a.state === "running" || a.state === "enrolled").length;
-  const closed = agents.filter(a => a.state === "closed").length;
+  const connected = agents.filter((a) => a.state === "running" || a.state === "enrolled").length;
+  const closed = agents.filter((a) => a.state === "closed").length;
   const mem = process.memoryUsage();
   const heapMB = (mem.heapUsed / 1024 / 1024).toFixed(1);
   const rssMB = (mem.rss / 1024 / 1024).toFixed(1);
 
   process.stdout.write(
     `\r  ${connected} connected | ${closed} closed | ` +
-    `${metrics.heartbeatsSent} heartbeats | ${metrics.configPushesReceived} config pushes | ` +
-    `${metrics.errors} errors | heap ${heapMB}MB rss ${rssMB}MB | ${Math.round(elapsed)}s elapsed   `,
+      `${metrics.heartbeatsSent} heartbeats | ${metrics.configPushesReceived} config pushes | ` +
+      `${metrics.errors} errors | heap ${heapMB}MB rss ${rssMB}MB | ${Math.round(elapsed)}s elapsed   `,
   );
 }
 
@@ -424,7 +436,9 @@ function printReport(metrics: Metrics, durationSec: number): void {
   console.log("╠═══════════════════════════════════════════════════════════╣");
   console.log(`║  Duration:        ${durationSec}s`);
   console.log(`║  Connect attempts: ${metrics.connectAttempts}`);
-  console.log(`║  Connected:        ${metrics.connectSuccesses} (${metrics.connectFailures} failed)`);
+  console.log(
+    `║  Connected:        ${metrics.connectSuccesses} (${metrics.connectFailures} failed)`,
+  );
   console.log(`║  Enrollments:      ${metrics.enrollments}`);
   console.log(`║  Heartbeats sent:  ${metrics.heartbeatsSent}`);
   console.log(`║  Config pushes:    ${metrics.configPushesReceived}`);
@@ -435,24 +449,36 @@ function printReport(metrics: Metrics, durationSec: number): void {
   console.log(`║  Disconnects:      ${metrics.disconnects}`);
   console.log("╠═══════════════════════════════════════════════════════════╣");
   console.log("║  Latency (connect)                                       ║");
-  console.log(`║    p50: ${formatMs(metrics.connectLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.connectLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.connectLatencies.percentile(99))}`);
+  console.log(
+    `║    p50: ${formatMs(metrics.connectLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.connectLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.connectLatencies.percentile(99))}`,
+  );
   console.log("║  Latency (enrollment)                                    ║");
-  console.log(`║    p50: ${formatMs(metrics.enrollLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.enrollLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.enrollLatencies.percentile(99))}`);
+  console.log(
+    `║    p50: ${formatMs(metrics.enrollLatencies.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.enrollLatencies.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.enrollLatencies.percentile(99))}`,
+  );
   console.log("║  Latency (heartbeat RTT)                                 ║");
-  console.log(`║    p50: ${formatMs(metrics.heartbeatRtts.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.heartbeatRtts.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.heartbeatRtts.percentile(99))}`);
+  console.log(
+    `║    p50: ${formatMs(metrics.heartbeatRtts.percentile(50)).padEnd(8)} p95: ${formatMs(metrics.heartbeatRtts.percentile(95)).padEnd(8)} p99: ${formatMs(metrics.heartbeatRtts.percentile(99))}`,
+  );
   console.log("║  Throughput                                               ║");
-  console.log(`║    TX: ${(metrics.messagesSent / durationSec).toFixed(1)} msg/s  RX: ${(metrics.messagesReceived / durationSec).toFixed(1)} msg/s`);
+  console.log(
+    `║    TX: ${(metrics.messagesSent / durationSec).toFixed(1)} msg/s  RX: ${(metrics.messagesReceived / durationSec).toFixed(1)} msg/s`,
+  );
   console.log("╠═══════════════════════════════════════════════════════════╣");
   console.log("║  Memory (client process)                                  ║");
   if (metrics.memorySamples.length > 0) {
-    const peakHeap = Math.max(...metrics.memorySamples.map(s => s.heapUsedMB));
-    const peakRss = Math.max(...metrics.memorySamples.map(s => s.rssMB));
+    const peakHeap = Math.max(...metrics.memorySamples.map((s) => s.heapUsedMB));
+    const peakRss = Math.max(...metrics.memorySamples.map((s) => s.rssMB));
     const finalSample = metrics.memorySamples[metrics.memorySamples.length - 1];
     const firstSample = metrics.memorySamples[0];
     const heapGrowth = finalSample.heapUsedMB - firstSample.heapUsedMB;
-    const perAgentKB = metrics.connectSuccesses > 0
-      ? ((finalSample.heapUsedMB - firstSample.heapUsedMB) * 1024 / metrics.connectSuccesses).toFixed(1)
-      : "N/A";
+    const perAgentKB =
+      metrics.connectSuccesses > 0
+        ? (
+            ((finalSample.heapUsedMB - firstSample.heapUsedMB) * 1024) /
+            metrics.connectSuccesses
+          ).toFixed(1)
+        : "N/A";
     console.log(`║    Peak heap:    ${peakHeap.toFixed(1)} MB`);
     console.log(`║    Peak RSS:     ${peakRss.toFixed(1)} MB`);
     console.log(`║    Heap growth:  ${heapGrowth >= 0 ? "+" : ""}${heapGrowth.toFixed(1)} MB`);
@@ -462,40 +488,48 @@ function printReport(metrics: Metrics, durationSec: number): void {
 
   // JSON output for programmatic use
   console.log("\n--- JSON ---");
-  console.log(JSON.stringify({
-    duration_sec: durationSec,
-    agents: metrics.connectSuccesses,
-    connect_failures: metrics.connectFailures,
-    enrollments: metrics.enrollments,
-    heartbeats: metrics.heartbeatsSent,
-    config_pushes: metrics.configPushesReceived,
-    errors: metrics.errors,
-    disconnects: metrics.disconnects,
-    latency: {
-      connect_p50_ms: +metrics.connectLatencies.percentile(50).toFixed(2),
-      connect_p95_ms: +metrics.connectLatencies.percentile(95).toFixed(2),
-      connect_p99_ms: +metrics.connectLatencies.percentile(99).toFixed(2),
-      enroll_p50_ms: +metrics.enrollLatencies.percentile(50).toFixed(2),
-      enroll_p95_ms: +metrics.enrollLatencies.percentile(95).toFixed(2),
-      enroll_p99_ms: +metrics.enrollLatencies.percentile(99).toFixed(2),
-      heartbeat_rtt_p50_ms: +metrics.heartbeatRtts.percentile(50).toFixed(2),
-      heartbeat_rtt_p95_ms: +metrics.heartbeatRtts.percentile(95).toFixed(2),
-      heartbeat_rtt_p99_ms: +metrics.heartbeatRtts.percentile(99).toFixed(2),
-    },
-    throughput: {
-      tx_per_sec: +(metrics.messagesSent / durationSec).toFixed(1),
-      rx_per_sec: +(metrics.messagesReceived / durationSec).toFixed(1),
-    },
-    memory: {
-      peak_heap_mb: metrics.memorySamples.length > 0
-        ? Math.max(...metrics.memorySamples.map(s => s.heapUsedMB))
-        : 0,
-      peak_rss_mb: metrics.memorySamples.length > 0
-        ? Math.max(...metrics.memorySamples.map(s => s.rssMB))
-        : 0,
-      samples: metrics.memorySamples,
-    },
-  }, null, 2));
+  console.log(
+    JSON.stringify(
+      {
+        duration_sec: durationSec,
+        agents: metrics.connectSuccesses,
+        connect_failures: metrics.connectFailures,
+        enrollments: metrics.enrollments,
+        heartbeats: metrics.heartbeatsSent,
+        config_pushes: metrics.configPushesReceived,
+        errors: metrics.errors,
+        disconnects: metrics.disconnects,
+        latency: {
+          connect_p50_ms: +metrics.connectLatencies.percentile(50).toFixed(2),
+          connect_p95_ms: +metrics.connectLatencies.percentile(95).toFixed(2),
+          connect_p99_ms: +metrics.connectLatencies.percentile(99).toFixed(2),
+          enroll_p50_ms: +metrics.enrollLatencies.percentile(50).toFixed(2),
+          enroll_p95_ms: +metrics.enrollLatencies.percentile(95).toFixed(2),
+          enroll_p99_ms: +metrics.enrollLatencies.percentile(99).toFixed(2),
+          heartbeat_rtt_p50_ms: +metrics.heartbeatRtts.percentile(50).toFixed(2),
+          heartbeat_rtt_p95_ms: +metrics.heartbeatRtts.percentile(95).toFixed(2),
+          heartbeat_rtt_p99_ms: +metrics.heartbeatRtts.percentile(99).toFixed(2),
+        },
+        throughput: {
+          tx_per_sec: +(metrics.messagesSent / durationSec).toFixed(1),
+          rx_per_sec: +(metrics.messagesReceived / durationSec).toFixed(1),
+        },
+        memory: {
+          peak_heap_mb:
+            metrics.memorySamples.length > 0
+              ? Math.max(...metrics.memorySamples.map((s) => s.heapUsedMB))
+              : 0,
+          peak_rss_mb:
+            metrics.memorySamples.length > 0
+              ? Math.max(...metrics.memorySamples.map((s) => s.rssMB))
+              : 0,
+          samples: metrics.memorySamples,
+        },
+      },
+      null,
+      2,
+    ),
+  );
 }
 
 // ──────────────────────────────────────────────
@@ -555,7 +589,7 @@ async function main(): Promise<void> {
   // Progress reporting + memory sampling
   const progressInterval = setInterval(() => {
     const elapsed = (performance.now() - startTime) / 1000;
-    const connected = agents.filter(a => a.state === "running" || a.state === "enrolled").length;
+    const connected = agents.filter((a) => a.state === "running" || a.state === "enrolled").length;
     sampleMemory(metrics, elapsed, connected);
     printProgress(agents, metrics, elapsed);
   }, 2_000);
@@ -581,7 +615,7 @@ async function main(): Promise<void> {
   }
 
   // Brief pause for close frames to send
-  await new Promise(r => setTimeout(r, 1_000));
+  await new Promise((r) => setTimeout(r, 1_000));
 
   const totalDuration = (performance.now() - startTime) / 1000;
   printReport(metrics, Math.round(totalDuration));
@@ -600,11 +634,12 @@ function evaluateCIThresholds(metrics: Metrics, opts: LoadTestOpts): number {
   const failures: string[] = [];
 
   // Connect failure rate
-  const connectFailRate = metrics.connectAttempts > 0
-    ? (metrics.connectFailures / metrics.connectAttempts) * 100
-    : 0;
+  const connectFailRate =
+    metrics.connectAttempts > 0 ? (metrics.connectFailures / metrics.connectAttempts) * 100 : 0;
   if (connectFailRate > CI_THRESHOLDS.maxConnectFailRate) {
-    failures.push(`Connect failure rate ${connectFailRate.toFixed(1)}% > ${CI_THRESHOLDS.maxConnectFailRate}%`);
+    failures.push(
+      `Connect failure rate ${connectFailRate.toFixed(1)}% > ${CI_THRESHOLDS.maxConnectFailRate}%`,
+    );
   }
 
   // Error rate
@@ -617,7 +652,9 @@ function evaluateCIThresholds(metrics: Metrics, opts: LoadTestOpts): number {
   // p99 connect latency
   const p99Connect = metrics.connectLatencies.percentile(99);
   if (p99Connect > CI_THRESHOLDS.maxP99ConnectMs) {
-    failures.push(`p99 connect latency ${p99Connect.toFixed(0)}ms > ${CI_THRESHOLDS.maxP99ConnectMs}ms`);
+    failures.push(
+      `p99 connect latency ${p99Connect.toFixed(0)}ms > ${CI_THRESHOLDS.maxP99ConnectMs}ms`,
+    );
   }
 
   // p99 heartbeat RTT
@@ -627,11 +664,11 @@ function evaluateCIThresholds(metrics: Metrics, opts: LoadTestOpts): number {
   }
 
   // Enrollment rate
-  const enrollRate = opts.agents > 0
-    ? (metrics.enrollments / opts.agents) * 100
-    : 100;
+  const enrollRate = opts.agents > 0 ? (metrics.enrollments / opts.agents) * 100 : 100;
   if (enrollRate < CI_THRESHOLDS.minEnrollmentRate) {
-    failures.push(`Enrollment rate ${enrollRate.toFixed(1)}% < ${CI_THRESHOLDS.minEnrollmentRate}%`);
+    failures.push(
+      `Enrollment rate ${enrollRate.toFixed(1)}% < ${CI_THRESHOLDS.minEnrollmentRate}%`,
+    );
   }
 
   if (failures.length > 0) {
@@ -648,11 +685,19 @@ function evaluateCIThresholds(metrics: Metrics, opts: LoadTestOpts): number {
   console.log("\n\x1b[32m╔═══════════════════════════════════════════════════════════╗");
   console.log("║  CI LOAD TEST PASSED                                     ║");
   console.log("╠═══════════════════════════════════════════════════════════╣");
-  console.log(`║  ✓ Connect failures: ${connectFailRate.toFixed(1)}% ≤ ${CI_THRESHOLDS.maxConnectFailRate}%`);
+  console.log(
+    `║  ✓ Connect failures: ${connectFailRate.toFixed(1)}% ≤ ${CI_THRESHOLDS.maxConnectFailRate}%`,
+  );
   console.log(`║  ✓ Error rate:       ${errorRate.toFixed(2)}% ≤ ${CI_THRESHOLDS.maxErrorRate}%`);
-  console.log(`║  ✓ p99 connect:      ${p99Connect.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99ConnectMs}ms`);
-  console.log(`║  ✓ p99 heartbeat:    ${p99Hb.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99HeartbeatMs}ms`);
-  console.log(`║  ✓ Enrollment rate:  ${enrollRate.toFixed(1)}% ≥ ${CI_THRESHOLDS.minEnrollmentRate}%`);
+  console.log(
+    `║  ✓ p99 connect:      ${p99Connect.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99ConnectMs}ms`,
+  );
+  console.log(
+    `║  ✓ p99 heartbeat:    ${p99Hb.toFixed(0)}ms ≤ ${CI_THRESHOLDS.maxP99HeartbeatMs}ms`,
+  );
+  console.log(
+    `║  ✓ Enrollment rate:  ${enrollRate.toFixed(1)}% ≥ ${CI_THRESHOLDS.minEnrollmentRate}%`,
+  );
   console.log("╚═══════════════════════════════════════════════════════════╝\x1b[0m");
   return 0;
 }

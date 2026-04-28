@@ -1,8 +1,11 @@
-// API route handlers for FleetPlane
+// Legacy API route handlers for FleetPlane — DEPRECATED, prefer /api/v1/* routes.
+// These routes pre-date tenant-scoped auth. Config-by-ID endpoints now validate
+// tenant ownership when a tenantId is available (session auth). Bearer-only callers
+// (API_SECRET) bypass tenant checks — treat as admin-level access.
 // Consistent error contract: { error: string } with appropriate HTTP status
 
 import type { Env } from "../../index.js";
-import { uploadConfigVersion, getConfigContent, validateYaml } from "../../config-store.js";
+import { uploadConfigVersion, validateYaml } from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
 
 // ─── Error helpers ──────────────────────────────────────────────────
@@ -28,13 +31,18 @@ class ApiError extends Error {
 
 // ─── Router ─────────────────────────────────────────────────────────
 
+/**
+ * @deprecated Use /api/v1/* tenant-scoped routes instead.
+ * tenantId is passed from session auth when available to prevent IDOR on config endpoints.
+ */
 export async function handleApiRequest(
   request: Request,
   env: Env,
   url: URL,
+  tenantId?: string | null,
 ): Promise<Response> {
   try {
-    return await routeRequest(request, env, url);
+    return await routeRequest(request, env, url, tenantId ?? null);
   } catch (err) {
     if (err instanceof ApiError) {
       return jsonError(err.message, err.status);
@@ -49,6 +57,7 @@ async function routeRequest(
   request: Request,
   env: Env,
   url: URL,
+  tenantId: string | null,
 ): Promise<Response> {
   const path = url.pathname;
   const method = request.method;
@@ -86,24 +95,24 @@ async function routeRequest(
     return handleCreateConfiguration(request, env);
   }
 
-  // Configuration by ID routes
+  // Configuration by ID routes — tenant ownership validated when tenantId is available
   const configMatch = path.match(/^\/api\/configurations\/([^/]+)$/);
   if (configMatch) {
-    if (method === "GET") return handleGetConfiguration(env, configMatch[1]!);
-    if (method === "PUT") return handleUpdateConfiguration(request, env, configMatch[1]!);
-    if (method === "DELETE") return handleDeleteConfiguration(env, configMatch[1]!);
+    if (method === "GET") return handleGetConfiguration(env, configMatch[1]!, tenantId);
+    if (method === "PUT") return handleUpdateConfiguration(request, env, configMatch[1]!, tenantId);
+    if (method === "DELETE") return handleDeleteConfiguration(env, configMatch[1]!, tenantId);
   }
 
   // POST /api/configurations/:id/versions
   const versionsPostMatch = path.match(/^\/api\/configurations\/([^/]+)\/versions$/);
   if (versionsPostMatch && method === "POST") {
-    return handleUploadVersion(request, env, versionsPostMatch[1]!);
+    return handleUploadVersion(request, env, versionsPostMatch[1]!, tenantId);
   }
 
   // GET /api/configurations/:id/versions
   const versionsGetMatch = path.match(/^\/api\/configurations\/([^/]+)\/versions$/);
   if (versionsGetMatch && method === "GET") {
-    return handleListVersions(env, versionsGetMatch[1]!);
+    return handleListVersions(env, versionsGetMatch[1]!, tenantId);
   }
 
   // ─── Enrollment Tokens ─────────────────────────────────────
@@ -111,13 +120,13 @@ async function routeRequest(
   // POST /api/configurations/:id/enrollment-token
   const enrollMatch = path.match(/^\/api\/configurations\/([^/]+)\/enrollment-token$/);
   if (enrollMatch && method === "POST") {
-    return handleCreateEnrollmentToken(request, env, enrollMatch[1]!);
+    return handleCreateEnrollmentToken(request, env, enrollMatch[1]!, tenantId);
   }
 
   // GET /api/configurations/:id/enrollment-tokens
   const tokensListMatch = path.match(/^\/api\/configurations\/([^/]+)\/enrollment-tokens$/);
   if (tokensListMatch && method === "GET") {
-    return handleListEnrollmentTokens(env, tokensListMatch[1]!);
+    return handleListEnrollmentTokens(env, tokensListMatch[1]!, tenantId);
   }
 
   // DELETE /api/configurations/:id/enrollment-tokens/:tokenId
@@ -125,7 +134,7 @@ async function routeRequest(
     /^\/api\/configurations\/([^/]+)\/enrollment-tokens\/([^/]+)$/,
   );
   if (tokenDeleteMatch && method === "DELETE") {
-    return handleRevokeEnrollmentToken(env, tokenDeleteMatch[1]!, tokenDeleteMatch[2]!);
+    return handleRevokeEnrollmentToken(env, tokenDeleteMatch[1]!, tokenDeleteMatch[2]!, tenantId);
   }
 
   // ─── Agents & Stats ────────────────────────────────────────
@@ -133,13 +142,13 @@ async function routeRequest(
   // GET /api/configurations/:id/agents
   const agentsMatch = path.match(/^\/api\/configurations\/([^/]+)\/agents$/);
   if (agentsMatch && method === "GET") {
-    return handleListAgents(env, agentsMatch[1]!);
+    return handleListAgents(env, agentsMatch[1]!, tenantId);
   }
 
   // GET /api/configurations/:id/stats
   const statsMatch = path.match(/^\/api\/configurations\/([^/]+)\/stats$/);
   if (statsMatch && method === "GET") {
-    return handleGetStats(env, statsMatch[1]!);
+    return handleGetStats(env, statsMatch[1]!, tenantId);
   }
 
   // ─── Rollout ───────────────────────────────────────────────
@@ -147,7 +156,7 @@ async function routeRequest(
   // POST /api/configurations/:id/rollout
   const rolloutMatch = path.match(/^\/api\/configurations\/([^/]+)\/rollout$/);
   if (rolloutMatch && method === "POST") {
-    return handleRollout(request, env, rolloutMatch[1]!);
+    return handleRollout(request, env, rolloutMatch[1]!, tenantId);
   }
 
   return jsonError("Not found", 404);
@@ -184,9 +193,7 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
 }
 
 async function handleListTenants(env: Env): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT * FROM tenants ORDER BY created_at DESC`,
-  ).all();
+  const result = await env.FP_DB.prepare(`SELECT * FROM tenants ORDER BY created_at DESC`).all();
   return Response.json({ tenants: result.results });
 }
 
@@ -198,11 +205,7 @@ async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   return Response.json(tenant);
 }
 
-async function handleUpdateTenant(
-  request: Request,
-  env: Env,
-  tenantId: string,
-): Promise<Response> {
+async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
   const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
     .bind(tenantId)
     .first();
@@ -213,9 +216,7 @@ async function handleUpdateTenant(
     return jsonError("name is required", 400);
   }
 
-  await env.FP_DB.prepare(
-    `UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?`,
-  )
+  await env.FP_DB.prepare(`UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?`)
     .bind(body.name.trim(), tenantId)
     .run();
 
@@ -282,10 +283,7 @@ async function handleCreateConfiguration(request: Request, env: Env): Promise<Re
     .bind(body.tenant_id)
     .first<{ count: number }>();
   if (countResult && countResult.count >= (tenant["max_configs"] as number)) {
-    return jsonError(
-      `Configuration limit reached (${tenant["max_configs"]})`,
-      429,
-    );
+    return jsonError(`Configuration limit reached (${tenant["max_configs"]})`, 429);
   }
 
   const id = crypto.randomUUID();
@@ -298,10 +296,12 @@ async function handleCreateConfiguration(request: Request, env: Env): Promise<Re
   return Response.json({ id, tenant_id: body.tenant_id, name: body.name }, { status: 201 });
 }
 
-async function handleGetConfiguration(env: Env, configId: string): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+async function handleGetConfiguration(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
   return Response.json(config);
 }
@@ -310,10 +310,9 @@ async function handleUpdateConfiguration(
   request: Request,
   env: Env,
   configId: string,
+  tenantId: string | null,
 ): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
   const body = await parseJsonBody<{ name?: string; description?: string }>(request);
@@ -336,9 +335,7 @@ async function handleUpdateConfiguration(
   updates.push("updated_at = datetime('now')");
   values.push(configId);
 
-  await env.FP_DB.prepare(
-    `UPDATE configurations SET ${updates.join(", ")} WHERE id = ?`,
-  )
+  await env.FP_DB.prepare(`UPDATE configurations SET ${updates.join(", ")} WHERE id = ?`)
     .bind(...values)
     .run();
 
@@ -348,21 +345,19 @@ async function handleUpdateConfiguration(
   return Response.json(updated);
 }
 
-async function handleDeleteConfiguration(env: Env, configId: string): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+async function handleDeleteConfiguration(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  await env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`)
-    .bind(configId)
-    .run();
-  await env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`)
-    .bind(configId)
-    .run();
-  await env.FP_DB.prepare(`DELETE FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .run();
+  await env.FP_DB.batch([
+    env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`).bind(configId),
+    env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`).bind(configId),
+    env.FP_DB.prepare(`DELETE FROM configurations WHERE id = ?`).bind(configId),
+  ]);
 
   return new Response(null, { status: 204 });
 }
@@ -373,12 +368,19 @@ async function handleUploadVersion(
   request: Request,
   env: Env,
   configId: string,
+  tenantId: string | null,
 ): Promise<Response> {
-  const config = await env.FP_DB.prepare(
-    `SELECT c.*, t.id as t_id FROM configurations c JOIN tenants t ON c.tenant_id = t.id WHERE c.id = ?`,
-  )
-    .bind(configId)
-    .first();
+  const config = tenantId
+    ? await env.FP_DB.prepare(
+        `SELECT c.*, t.id as t_id FROM configurations c JOIN tenants t ON c.tenant_id = t.id WHERE c.id = ? AND c.tenant_id = ?`,
+      )
+        .bind(configId, tenantId)
+        .first()
+    : await env.FP_DB.prepare(
+        `SELECT c.*, t.id as t_id FROM configurations c JOIN tenants t ON c.tenant_id = t.id WHERE c.id = ?`,
+      )
+        .bind(configId)
+        .first();
   if (!config) return jsonError("Configuration not found", 404);
 
   const yaml = await request.text();
@@ -396,20 +398,17 @@ async function handleUploadVersion(
     return jsonError(`Invalid YAML: ${yamlError}`, 400);
   }
 
-  const result = await uploadConfigVersion(
-    env,
-    config["tenant_id"] as string,
-    configId,
-    yaml,
-  );
+  const result = await uploadConfigVersion(env, config["tenant_id"] as string, configId, yaml);
 
   return Response.json(result, { status: 201 });
 }
 
-async function handleListVersions(env: Env, configId: string): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+async function handleListVersions(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
   const result = await env.FP_DB.prepare(
@@ -431,10 +430,9 @@ async function handleCreateEnrollmentToken(
   request: Request,
   env: Env,
   configId: string,
+  tenantId: string | null,
 ): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
   const body = await parseJsonBody<{ label?: string; expires_in_hours?: number }>(request);
@@ -476,10 +474,12 @@ async function handleCreateEnrollmentToken(
   );
 }
 
-async function handleListEnrollmentTokens(env: Env, configId: string): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+async function handleListEnrollmentTokens(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
   const result = await env.FP_DB.prepare(
@@ -496,7 +496,12 @@ async function handleRevokeEnrollmentToken(
   env: Env,
   configId: string,
   tokenId: string,
+  tenantId: string | null,
 ): Promise<Response> {
+  // Verify config ownership before operating on its tokens
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
+  if (!config) return jsonError("Configuration not found", 404);
+
   const token = await env.FP_DB.prepare(
     `SELECT * FROM enrollment_tokens WHERE id = ? AND config_id = ?`,
   )
@@ -508,9 +513,7 @@ async function handleRevokeEnrollmentToken(
     return jsonError("Token is already revoked", 409);
   }
 
-  await env.FP_DB.prepare(
-    `UPDATE enrollment_tokens SET revoked_at = datetime('now') WHERE id = ?`,
-  )
+  await env.FP_DB.prepare(`UPDATE enrollment_tokens SET revoked_at = datetime('now') WHERE id = ?`)
     .bind(tokenId)
     .run();
 
@@ -519,8 +522,12 @@ async function handleRevokeEnrollmentToken(
 
 // ─── Agent & Stats Handlers ─────────────────────────────────────────
 
-async function handleListAgents(env: Env, configId: string): Promise<Response> {
-  const doName = await getDoNameForConfig(env, configId);
+async function handleListAgents(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const doName = await getDoNameForConfig(env, configId, tenantId);
   if (!doName) return jsonError("Configuration not found", 404);
 
   const doId = env.CONFIG_DO.idFromName(doName);
@@ -529,8 +536,12 @@ async function handleListAgents(env: Env, configId: string): Promise<Response> {
   return response;
 }
 
-async function handleGetStats(env: Env, configId: string): Promise<Response> {
-  const doName = await getDoNameForConfig(env, configId);
+async function handleGetStats(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Response> {
+  const doName = await getDoNameForConfig(env, configId, tenantId);
   if (!doName) return jsonError("Configuration not found", 404);
 
   const doId = env.CONFIG_DO.idFromName(doName);
@@ -545,10 +556,9 @@ async function handleRollout(
   request: Request,
   env: Env,
   configId: string,
+  tenantId: string | null,
 ): Promise<Response> {
-  const config = await env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`)
-    .bind(configId)
-    .first();
+  const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
   if (!config["current_config_hash"]) {
@@ -580,7 +590,35 @@ async function handleRollout(
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
-async function getDoNameForConfig(env: Env, configId: string): Promise<string | null> {
+/** Fetch a config by ID, optionally validating tenant ownership (IDOR prevention). */
+async function getConfigWithOwnershipCheck(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<Record<string, unknown> | null> {
+  if (tenantId) {
+    return env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ? AND tenant_id = ?`)
+      .bind(configId, tenantId)
+      .first();
+  }
+  // IDOR risk: no tenant scoping when called via Bearer-only auth (admin-level)
+  return env.FP_DB.prepare(`SELECT * FROM configurations WHERE id = ?`).bind(configId).first();
+}
+
+async function getDoNameForConfig(
+  env: Env,
+  configId: string,
+  tenantId: string | null,
+): Promise<string | null> {
+  if (tenantId) {
+    const config = await env.FP_DB.prepare(
+      `SELECT tenant_id FROM configurations WHERE id = ? AND tenant_id = ?`,
+    )
+      .bind(configId, tenantId)
+      .first<{ tenant_id: string }>();
+    if (!config) return null;
+    return `${config.tenant_id}:${configId}`;
+  }
   const config = await env.FP_DB.prepare(`SELECT tenant_id FROM configurations WHERE id = ?`)
     .bind(configId)
     .first<{ tenant_id: string }>();

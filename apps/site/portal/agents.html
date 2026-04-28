@@ -1,108 +1,179 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Agents — O11yFleet</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-</head>
-<body>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head"><div><h1>Agents</h1><div class="sub">42 collectors phoning home. Filter, group, take action.</div></div><div class="actions"><a href="getting-started.html" class="btn btn-primary btn-sm">Add collector</a></div></div>
-      <div class="dt-card">
-        <div class="dt-toolbar">
-          <input class="input" placeholder="Filter by name, label, version…" style="width: 280px; height: 30px;" />
-          <select class="select" style="width: auto; height: 30px;"><option>All status</option><option>Healthy</option><option>Degraded</option><option>Offline</option></select>
-          <select class="select" style="width: auto; height: 30px;"><option>All envs</option><option>production</option><option>staging</option><option>dev</option></select>
-          <span class="count" style="margin-left: 8px;">42 collectors</span>
-          <div class="spacer"></div>
-          <button class="btn btn-ghost btn-sm">Export CSV</button>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Agents — O11yFleet</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Agents</h1>
+              <div class="sub">42 collectors phoning home. Filter, group, take action.</div>
+            </div>
+            <div class="actions">
+              <a href="getting-started.html" class="btn btn-primary btn-sm">Add collector</a>
+            </div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <input
+                class="input"
+                placeholder="Filter by name, label, version…"
+                style="width: 280px; height: 30px"
+              />
+              <select class="select" style="width: auto; height: 30px">
+                <option>All status</option>
+                <option>Healthy</option>
+                <option>Degraded</option>
+                <option>Offline</option>
+              </select>
+              <select class="select" style="width: auto; height: 30px">
+                <option>All envs</option>
+                <option>production</option>
+                <option>staging</option>
+                <option>dev</option>
+              </select>
+              <span class="count" style="margin-left: 8px">42 collectors</span>
+              <div class="spacer"></div>
+              <button class="btn btn-ghost btn-sm">Export CSV</button>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Labels</th>
+                  <th>Version</th>
+                  <th>Config</th>
+                  <th>Heartbeat</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="agent-rows"></tbody>
+            </table>
+          </div>
         </div>
-        <table class="dt">
-          <thead><tr><th>Name</th><th>Labels</th><th>Version</th><th>Config</th><th>Heartbeat</th><th>Status</th></tr></thead>
-          <tbody id="agent-rows"></tbody>
-        </table>
-      </div>
+      </main>
     </div>
-  </main>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>
-FB.shell({ current: 'agents', crumbs: [{label:'Agents'}] });
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({ current: "agents", crumbs: [{ label: "Agents" }] });
 
-(async function () {
-  var authed = await FP.checkAuth();
-  if (!authed) return;
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
 
-  var tbody = document.getElementById('agent-rows');
-  var countEl = document.querySelector('.dt-toolbar .count');
-  var subEl = document.querySelector('.page-head .sub');
+        var tbody = document.getElementById("agent-rows");
+        var countEl = document.querySelector(".dt-toolbar .count");
+        var subEl = document.querySelector(".page-head .sub");
 
-  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
-
-  function statusTag(agent) {
-    if (!agent.connected) return '<span class="tag tag-err"><span class="dot dot-err"></span>offline</span>';
-    if (agent.health === 'healthy') return '<span class="tag tag-ok"><span class="dot dot-ok"></span>healthy</span>';
-    return '<span class="tag tag-warn"><span class="dot dot-warn"></span>degraded</span>';
-  }
-
-  async function loadAgents() {
-    try {
-      // Get all configurations, then load agents for each
-      var configData = await FP.get('/api/v1/configurations');
-      var configs = configData.configurations || [];
-      var allAgents = [];
-
-      for (var i = 0; i < configs.length; i++) {
-        try {
-          var data = await FP.get('/api/v1/configurations/' + configs[i].id + '/agents');
-          var agents = data.agents || [];
-          agents.forEach(function(a) { a._configName = configs[i].name; a._configId = configs[i].id; });
-          allAgents = allAgents.concat(agents);
-        } catch (e) { /* skip failed config */ }
-      }
-
-      countEl.textContent = allAgents.length + ' collector' + (allAgents.length !== 1 ? 's' : '');
-      subEl.textContent = allAgents.length + ' collectors phoning home.';
-
-      if (allAgents.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;">No agents connected yet. <a href="getting-started.html">Enroll a collector</a> to get started.</td></tr>';
-        return;
-      }
-
-      tbody.innerHTML = allAgents.map(function(a) {
-        var uid = a.instance_uid || '';
-        var name = a.hostname || uid.slice(0, 12) || '—';
-        var labels = '';
-        if (a.labels && typeof a.labels === 'object') {
-          labels = Object.entries(a.labels).map(function(kv) { return kv[0] + '=' + kv[1]; }).join(', ');
+        function esc(s) {
+          var d = document.createElement("div");
+          d.textContent = s || "";
+          return d.innerHTML;
         }
-        var version = a.agent_version || '—';
-        var hb = a.last_seen ? FP.relTime(a.last_seen) : '—';
-        return '<tr class="clickable" onclick="window.location.href=\'agent-detail.html?config=' + esc(a._configId) + '&uid=' + esc(uid) + '\'">' +
-          '<td class="name">' + esc(name) + '</td>' +
-          '<td class="meta">' + esc(labels || '—') + '</td>' +
-          '<td class="mono-cell">' + esc(version) + '</td>' +
-          '<td class="mono-cell"><a href="configuration-detail.html?id=' + esc(a._configId) + '" style="color:var(--accent)" onclick="event.stopPropagation()">' + esc(a._configName) + '</a></td>' +
-          '<td class="meta">' + hb + '</td>' +
-          '<td>' + statusTag(a) + '</td>' +
-          '</tr>';
-      }).join('');
-    } catch (e) {
-      console.error('Failed to load agents', e);
-      tbody.innerHTML = '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load agents</td></tr>';
-    }
-  }
 
-  FP.autoRefresh(loadAgents, 10000);
-})();
-</script>
-</body>
+        function statusTag(agent) {
+          if (!agent.connected)
+            return '<span class="tag tag-err"><span class="dot dot-err"></span>offline</span>';
+          if (agent.health === "healthy")
+            return '<span class="tag tag-ok"><span class="dot dot-ok"></span>healthy</span>';
+          return '<span class="tag tag-warn"><span class="dot dot-warn"></span>degraded</span>';
+        }
+
+        async function loadAgents() {
+          try {
+            // Get all configurations, then load agents for each
+            var configData = await FP.get("/api/v1/configurations");
+            var configs = configData.configurations || [];
+            var allAgents = [];
+
+            for (var i = 0; i < configs.length; i++) {
+              try {
+                var data = await FP.get("/api/v1/configurations/" + configs[i].id + "/agents");
+                var agents = data.agents || [];
+                agents.forEach(function (a) {
+                  a._configName = configs[i].name;
+                  a._configId = configs[i].id;
+                });
+                allAgents = allAgents.concat(agents);
+              } catch (e) {
+                /* skip failed config */
+              }
+            }
+
+            countEl.textContent =
+              allAgents.length + " collector" + (allAgents.length !== 1 ? "s" : "");
+            subEl.textContent = allAgents.length + " collectors phoning home.";
+
+            if (allAgents.length === 0) {
+              tbody.innerHTML =
+                '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;">No agents connected yet. <a href="getting-started.html">Enroll a collector</a> to get started.</td></tr>';
+              return;
+            }
+
+            tbody.innerHTML = allAgents
+              .map(function (a) {
+                var uid = a.instance_uid || "";
+                var name = a.hostname || uid.slice(0, 12) || "—";
+                var labels = "";
+                if (a.labels && typeof a.labels === "object") {
+                  labels = Object.entries(a.labels)
+                    .map(function (kv) {
+                      return kv[0] + "=" + kv[1];
+                    })
+                    .join(", ");
+                }
+                var version = a.agent_version || "—";
+                var hb = a.last_seen ? FP.relTime(a.last_seen) : "—";
+                return (
+                  '<tr class="clickable" onclick="window.location.href=\'agent-detail.html?config=' +
+                  esc(a._configId) +
+                  "&uid=" +
+                  esc(uid) +
+                  "'\">" +
+                  '<td class="name">' +
+                  esc(name) +
+                  "</td>" +
+                  '<td class="meta">' +
+                  esc(labels || "—") +
+                  "</td>" +
+                  '<td class="mono-cell">' +
+                  esc(version) +
+                  "</td>" +
+                  '<td class="mono-cell"><a href="configuration-detail.html?id=' +
+                  esc(a._configId) +
+                  '" style="color:var(--accent)" onclick="event.stopPropagation()">' +
+                  esc(a._configName) +
+                  "</a></td>" +
+                  '<td class="meta">' +
+                  hb +
+                  "</td>" +
+                  "<td>" +
+                  statusTag(a) +
+                  "</td>" +
+                  "</tr>"
+                );
+              })
+              .join("");
+          } catch (e) {
+            console.error("Failed to load agents", e);
+            tbody.innerHTML =
+              '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load agents</td></tr>';
+          }
+        }
+
+        FP.autoRefresh(loadAgents, 10000);
+      })();
+    </script>
+  </body>
 </html>

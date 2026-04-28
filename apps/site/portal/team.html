@@ -1,59 +1,205 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Team — O11yFleet</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-</head>
-<body>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head">
-        <div><h1>Team</h1><div class="sub">6 of 10 seats used on the Business plan.</div></div>
-        <div class="actions"><button class="btn btn-primary btn-sm" data-open-modal="invite">Invite member</button></div>
-      </div>
-      <div class="dt-card">
-        <div class="dt-toolbar"><span class="count">6 members · 1 pending</span><div class="spacer"></div></div>
-        <table class="dt">
-          <thead><tr><th>Member</th><th>Role</th><th>Last active</th><th>2FA</th><th></th></tr></thead>
-          <tbody>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">MP</span><div><div class="name">Maya Patel</div><div class="meta">maya@acmeplatform.com</div></div></div></td><td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Owner</span></td><td class="meta">now</td><td><span class="tag tag-ok">on</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td></tr>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">JN</span><div><div class="name">Jordan Nguyen</div><div class="meta">jordan@acmeplatform.com</div></div></div></td><td><span class="tag">Admin</span></td><td class="meta">12m ago</td><td><span class="tag tag-ok">on</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td></tr>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">SK</span><div><div class="name">Sam Kim</div><div class="meta">sam@acmeplatform.com</div></div></div></td><td><span class="tag">Editor</span></td><td class="meta">2h ago</td><td><span class="tag tag-ok">on</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td></tr>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">RT</span><div><div class="name">Riya Tan</div><div class="meta">riya@acmeplatform.com</div></div></div></td><td><span class="tag">Editor</span></td><td class="meta">1d ago</td><td><span class="tag tag-warn">off</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td></tr>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">AB</span><div><div class="name">Alex Brooks</div><div class="meta">alex@acmeplatform.com</div></div></div></td><td><span class="tag">Viewer</span></td><td class="meta">3d ago</td><td><span class="tag tag-ok">on</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td></tr>
-            <tr><td><div class="flex-row gap-sm"><span class="avatar">PM</span><div><div class="name">priya@acmeplatform.com</div><div class="meta">invited 5h ago</div></div></div></td><td><span class="tag">Editor</span></td><td class="meta">—</td><td class="meta">—</td><td class="row-actions"><button class="btn btn-ghost btn-sm">Resend</button></td></tr>
-          </tbody>
-        </table>
-      </div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Team — O11yFleet</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Team</h1>
+              <div class="sub">6 of 10 seats used on the Business plan.</div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-primary btn-sm" data-open-modal="invite">Invite member</button>
+            </div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <span class="count">6 members · 1 pending</span>
+              <div class="spacer"></div>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Member</th>
+                  <th>Role</th>
+                  <th>Last active</th>
+                  <th>2FA</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">MP</span>
+                      <div>
+                        <div class="name">Maya Patel</div>
+                        <div class="meta">maya@acmeplatform.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>
+                    <span class="tag" style="border-color: var(--accent-line); color: var(--accent)"
+                      >Owner</span
+                    >
+                  </td>
+                  <td class="meta">now</td>
+                  <td><span class="tag tag-ok">on</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">JN</span>
+                      <div>
+                        <div class="name">Jordan Nguyen</div>
+                        <div class="meta">jordan@acmeplatform.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tag">Admin</span></td>
+                  <td class="meta">12m ago</td>
+                  <td><span class="tag tag-ok">on</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">SK</span>
+                      <div>
+                        <div class="name">Sam Kim</div>
+                        <div class="meta">sam@acmeplatform.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tag">Editor</span></td>
+                  <td class="meta">2h ago</td>
+                  <td><span class="tag tag-ok">on</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">RT</span>
+                      <div>
+                        <div class="name">Riya Tan</div>
+                        <div class="meta">riya@acmeplatform.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tag">Editor</span></td>
+                  <td class="meta">1d ago</td>
+                  <td><span class="tag tag-warn">off</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">AB</span>
+                      <div>
+                        <div class="name">Alex Brooks</div>
+                        <div class="meta">alex@acmeplatform.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tag">Viewer</span></td>
+                  <td class="meta">3d ago</td>
+                  <td><span class="tag tag-ok">on</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="flex-row gap-sm">
+                      <span class="avatar">PM</span>
+                      <div>
+                        <div class="name">priya@acmeplatform.com</div>
+                        <div class="meta">invited 5h ago</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td><span class="tag">Editor</span></td>
+                  <td class="meta">—</td>
+                  <td class="meta">—</td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">Resend</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3 style="font-size: 15px; font-weight: 500; margin: 32px 0 10px;">SSO</h3>
-      <div class="card card-pad" style="padding: 18px; display: flex; align-items: center; gap: 14px;">
-        <div style="flex: 1;"><div style="font-weight: 500;">SAML / OIDC SSO</div><div class="t-muted text-sm mt-2">Available on Business and Enterprise. Enforce SSO for everyone in the workspace.</div></div>
-        <button class="btn btn-secondary btn-sm">Configure</button>
+          <h3 style="font-size: 15px; font-weight: 500; margin: 32px 0 10px">SSO</h3>
+          <div
+            class="card card-pad"
+            style="padding: 18px; display: flex; align-items: center; gap: 14px"
+          >
+            <div style="flex: 1">
+              <div style="font-weight: 500">SAML / OIDC SSO</div>
+              <div class="t-muted text-sm mt-2">
+                Available on Business and Enterprise. Enforce SSO for everyone in the workspace.
+              </div>
+            </div>
+            <button class="btn btn-secondary btn-sm">Configure</button>
+          </div>
+        </div>
+      </main>
+    </div>
+    <div class="modal-backdrop" id="invite">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Invite a member</h3>
+          <button class="modal-close" data-close-modal>×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Email</label
+            ><input class="input" type="email" placeholder="teammate@company.com" />
+          </div>
+          <div class="field">
+            <label>Role</label
+            ><select class="select">
+              <option>Editor — can change configs</option>
+              <option>Admin — manage team & billing</option>
+              <option>Viewer — read-only</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-close-modal>Cancel</button
+          ><button
+            class="btn btn-primary"
+            data-close-modal
+            onclick="toast('Not implemented', 'Team invitations are not yet available.', 'warn')"
+          >
+            Send invite
+          </button>
+        </div>
       </div>
     </div>
-  </main>
-</div>
-<div class="modal-backdrop" id="invite">
-  <div class="modal">
-    <div class="modal-head"><h3>Invite a member</h3><button class="modal-close" data-close-modal>×</button></div>
-    <div class="modal-body">
-      <div class="field"><label>Email</label><input class="input" type="email" placeholder="teammate@company.com" /></div>
-      <div class="field"><label>Role</label><select class="select"><option>Editor — can change configs</option><option>Admin — manage team & billing</option><option>Viewer — read-only</option></select></div>
-    </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Not implemented','Team invitations are not yet available.','warn');">Send invite</button></div>
-  </div>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>FB.shell({ current: 'team', crumbs: [{label:'Settings'},{label:'Team'}], prototype: 'Team members are hardcoded. Team management requires the RBAC/Team API (issue #16).' });</script>
-<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
-</body>
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({
+        current: "team",
+        crumbs: [{ label: "Settings" }, { label: "Team" }],
+        prototype:
+          "Team members are hardcoded. Team management requires the RBAC/Team API (issue #16).",
+      });
+    </script>
+    <script>
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
+      })();
+    </script>
+  </body>
 </html>

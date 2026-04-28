@@ -58,7 +58,9 @@ async function main() {
     process.exit(1);
   }
 
-  log.ok(`Uploaded — hash: ${data.hash.slice(0, 16)}... size: ${data.sizeBytes}B dedup: ${data.deduplicated}`);
+  log.ok(
+    `Uploaded — hash: ${data.hash.slice(0, 16)}... size: ${data.sizeBytes}B dedup: ${data.deduplicated}`,
+  );
 
   // Update local state
   state.current_config_hash = data.hash;

@@ -25,13 +25,11 @@ export async function api<T = unknown>(
 }
 
 /** Create a tenant. Returns { id, name }. */
-export async function createTenant(
-  name: string,
-): Promise<{ id: string; name: string }> {
-  const { status, data } = await api<{ id: string; name: string }>(
-    "/api/tenants",
-    { method: "POST", body: JSON.stringify({ name }) },
-  );
+export async function createTenant(name: string): Promise<{ id: string; name: string }> {
+  const { status, data } = await api<{ id: string; name: string }>("/api/tenants", {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
   if (status !== 201) throw new Error(`Failed to create tenant: ${status}`);
   return data;
 }
@@ -58,12 +56,12 @@ export async function uploadConfigVersion(
   configId: string,
   yaml: string,
 ): Promise<{ hash: string; deduplicated: boolean }> {
-  const res = await fetch(
-    `${BASE_URL}/api/configurations/${configId}/versions`,
-    { method: "POST", body: yaml, headers: { "Content-Type": "text/yaml" } },
-  );
-  if (res.status !== 201)
-    throw new Error(`Failed to upload config: ${res.status}`);
+  const res = await fetch(`${BASE_URL}/api/configurations/${configId}/versions`, {
+    method: "POST",
+    body: yaml,
+    headers: { "Content-Type": "text/yaml" },
+  });
+  if (res.status !== 201) throw new Error(`Failed to upload config: ${res.status}`);
   return res.json();
 }
 
@@ -99,9 +97,7 @@ export async function getConfigStats(configId: string): Promise<{
   desired_config_hash: string | null;
   active_websockets: number;
 }> {
-  const { status, data } = await api(
-    `/api/configurations/${configId}/stats`,
-  );
+  const { status, data } = await api(`/api/configurations/${configId}/stats`);
   if (status !== 200) throw new Error(`Failed to get stats: ${status}`);
   return data as any;
 }
@@ -110,9 +106,7 @@ export async function getConfigStats(configId: string): Promise<{
 export async function getAgentSummaries(
   configId: string,
 ): Promise<{ agents: Array<Record<string, unknown>> }> {
-  const { status, data } = await api(
-    `/api/configurations/${configId}/agents`,
-  );
+  const { status, data } = await api(`/api/configurations/${configId}/agents`);
   if (status !== 200) throw new Error(`Failed to get agents: ${status}`);
   return data as any;
 }
@@ -127,9 +121,7 @@ export async function listTenants(): Promise<{
 }
 
 /** Get a tenant by ID. */
-export async function getTenant(
-  tenantId: string,
-): Promise<Record<string, unknown>> {
+export async function getTenant(tenantId: string): Promise<Record<string, unknown>> {
   const { status, data } = await api(`/api/tenants/${tenantId}`);
   if (status !== 200) throw new Error(`Failed to get tenant: ${status}`);
   return data as any;
@@ -140,10 +132,10 @@ export async function updateTenant(
   tenantId: string,
   body: { name?: string },
 ): Promise<{ id: string; name: string }> {
-  const { status, data } = await api<{ id: string; name: string }>(
-    `/api/tenants/${tenantId}`,
-    { method: "PUT", body: JSON.stringify(body) },
-  );
+  const { status, data } = await api<{ id: string; name: string }>(`/api/tenants/${tenantId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
   if (status !== 200) throw new Error(`Failed to update tenant: ${status}`);
   return data;
 }
@@ -161,10 +153,10 @@ export async function updateConfig(
   configId: string,
   body: { name?: string; description?: string },
 ): Promise<Record<string, unknown>> {
-  const { status, data } = await api(
-    `/api/configurations/${configId}`,
-    { method: "PUT", body: JSON.stringify(body) },
-  );
+  const { status, data } = await api(`/api/configurations/${configId}`, {
+    method: "PUT",
+    body: JSON.stringify(body),
+  });
   if (status !== 200) throw new Error(`Failed to update config: ${status}`);
   return data as any;
 }
@@ -182,9 +174,7 @@ export async function listConfigVersions(configId: string): Promise<{
   versions: Array<{ config_hash: string; created_at: string }>;
   current_config_hash: string;
 }> {
-  const { status, data } = await api(
-    `/api/configurations/${configId}/versions`,
-  );
+  const { status, data } = await api(`/api/configurations/${configId}/versions`);
   if (status !== 200) throw new Error(`Failed to list versions: ${status}`);
   return data as any;
 }
@@ -193,9 +183,7 @@ export async function listConfigVersions(configId: string): Promise<{
 export async function listEnrollmentTokens(configId: string): Promise<{
   tokens: Array<{ id: string; label: string | null; revoked_at: string | null }>;
 }> {
-  const { status, data } = await api(
-    `/api/configurations/${configId}/enrollment-tokens`,
-  );
+  const { status, data } = await api(`/api/configurations/${configId}/enrollment-tokens`);
   if (status !== 200) throw new Error(`Failed to list tokens: ${status}`);
   return data as any;
 }
@@ -205,10 +193,7 @@ export async function revokeEnrollmentToken(
   configId: string,
   tokenId: string,
 ): Promise<{ status: number; data: unknown }> {
-  return api(
-    `/api/configurations/${configId}/enrollment-tokens/${tokenId}`,
-    { method: "DELETE" },
-  );
+  return api(`/api/configurations/${configId}/enrollment-tokens/${tokenId}`, { method: "DELETE" });
 }
 
 /** Upload invalid content and return the status + error. */
@@ -216,23 +201,20 @@ export async function uploadRaw(
   configId: string,
   body: string,
 ): Promise<{ status: number; error?: string }> {
-  const res = await fetch(
-    `${BASE_URL}/api/configurations/${configId}/versions`,
-    { method: "POST", body, headers: { "Content-Type": "text/yaml" } },
-  );
+  const res = await fetch(`${BASE_URL}/api/configurations/${configId}/versions`, {
+    method: "POST",
+    body,
+    headers: { "Content-Type": "text/yaml" },
+  });
   const data = await res.json().catch(() => ({}));
   return { status: res.status, ...(data as any) };
 }
 
 /** List configurations for a tenant. */
-export async function listConfigs(
-  tenantId: string,
-): Promise<{
+export async function listConfigs(tenantId: string): Promise<{
   configurations: Array<{ id: string; name: string; tenant_id: string }>;
 }> {
-  const { status, data } = await api(
-    `/api/tenants/${tenantId}/configurations`,
-  );
+  const { status, data } = await api(`/api/tenants/${tenantId}/configurations`);
   if (status !== 200) throw new Error(`Failed to list configs: ${status}`);
   return data as any;
 }
@@ -248,9 +230,7 @@ export async function healthz(): Promise<boolean> {
 }
 
 /** Wait for server to be ready with exponential backoff. */
-export async function waitForServer(
-  maxWaitMs = 15_000,
-): Promise<void> {
+export async function waitForServer(maxWaitMs = 15_000): Promise<void> {
   const start = Date.now();
   let delay = 200;
   while (Date.now() - start < maxWaitMs) {
@@ -258,9 +238,7 @@ export async function waitForServer(
     await new Promise((r) => setTimeout(r, delay));
     delay = Math.min(delay * 1.5, 2000);
   }
-  throw new Error(
-    `Server at ${BASE_URL} not ready after ${maxWaitMs}ms. Run 'just dev' first.`,
-  );
+  throw new Error(`Server at ${BASE_URL} not ready after ${maxWaitMs}ms. Run 'just dev' first.`);
 }
 
 /** Small delay for async operations to settle (e.g., queue processing). */

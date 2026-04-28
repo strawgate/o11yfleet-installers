@@ -5,13 +5,15 @@
 Add these DNS records in the [Cloudflare Dashboard](https://dash.cloudflare.com/417e8c0fd8f1a64e9f2c4845afa6dc56) for zone `o11yfleet.com`:
 
 ### Worker API
-| Type | Name | Content | Proxy |
-|------|------|---------|-------|
+
+| Type | Name  | Content | Proxy      |
+| ---- | ----- | ------- | ---------- |
 | AAAA | `api` | `100::` | ✅ Proxied |
 
 This routes `api.o11yfleet.com` → Worker (`o11yfleet-worker`).
 
 ### Site (Cloudflare Pages custom domains)
+
 Add these as **Custom Domains** in Pages > o11yfleet-site > Custom domains:
 
 - `o11yfleet.com` — marketing site
@@ -24,12 +26,13 @@ Pages auto-creates CNAME records when you add custom domains.
 
 Add these in GitHub repo Settings > Secrets and variables > Actions:
 
-| Secret | Value | Notes |
-|--------|-------|-------|
-| `CLOUDFLARE_API_TOKEN` | (create in CF Dashboard) | See permissions below |
-| `CLOUDFLARE_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` | |
+| Secret                  | Value                              | Notes                 |
+| ----------------------- | ---------------------------------- | --------------------- |
+| `CLOUDFLARE_API_TOKEN`  | (create in CF Dashboard)           | See permissions below |
+| `CLOUDFLARE_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` |                       |
 
 ### CF API Token Permissions
+
 Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
 
 - **Zone > DNS > Edit** (for managing DNS records)
@@ -50,21 +53,21 @@ Then uncomment the `analytics_engine_datasets` block in `apps/worker/wrangler.js
 
 ## Current Resource IDs
 
-| Resource | ID |
-|----------|-----|
-| D1 Database (fp-db) | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
-| Worker | `o11yfleet-worker` |
-| Pages Project | `o11yfleet-site` |
-| CF Account | `417e8c0fd8f1a64e9f2c4845afa6dc56` |
-| Zone (o11yfleet.com) | `2650adcd696a6e400201a68323e90c5e` |
+| Resource             | ID                                     |
+| -------------------- | -------------------------------------- |
+| D1 Database (fp-db)  | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
+| Worker               | `o11yfleet-worker`                     |
+| Pages Project        | `o11yfleet-site`                       |
+| CF Account           | `417e8c0fd8f1a64e9f2c4845afa6dc56`     |
+| Zone (o11yfleet.com) | `2650adcd696a6e400201a68323e90c5e`     |
 
 ## URLs
 
-| Service | URL |
-|---------|-----|
+| Service              | URL                                            |
+| -------------------- | ---------------------------------------------- |
 | Worker (workers.dev) | https://o11yfleet-worker.o11yfleet.workers.dev |
-| Worker (custom) | https://api.o11yfleet.com |
-| Site (pages.dev) | https://o11yfleet-site.pages.dev |
-| Site (custom) | https://o11yfleet.com |
-| Portal (custom) | https://app.o11yfleet.com |
-| Admin (custom) | https://admin.o11yfleet.com |
+| Worker (custom)      | https://api.o11yfleet.com                      |
+| Site (pages.dev)     | https://o11yfleet-site.pages.dev               |
+| Site (custom)        | https://o11yfleet.com                          |
+| Portal (custom)      | https://app.o11yfleet.com                      |
+| Admin (custom)       | https://admin.o11yfleet.com                    |

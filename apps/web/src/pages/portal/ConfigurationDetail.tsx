@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, Navigate } from "react-router-dom";
 import {
   useConfiguration,
   useConfigAgents,
@@ -28,13 +28,15 @@ export function ConfigurationDetailPage() {
   const [yamlContent, setYamlContent] = useState("");
   const [deleteConfirm, setDeleteConfirm] = useState("");
 
-  const { data: config } = useConfiguration(id!);
-  const { data: agents } = useConfigAgents(id!);
-  const { data: versions } = useConfigVersions(id!);
-  const { data: stats } = useConfigStats(id!);
+  const { data: config } = useConfiguration(id ?? "");
+  const { data: agents } = useConfigAgents(id ?? "");
+  const { data: versions } = useConfigVersions(id ?? "");
+  const { data: stats } = useConfigStats(id ?? "");
   const deleteMutation = useDeleteConfiguration();
-  const rolloutMutation = useRollout(id!);
-  const uploadMutation = useUploadConfigVersion(id!);
+  const rolloutMutation = useRollout(id ?? "");
+  const uploadMutation = useUploadConfigVersion(id ?? "");
+
+  if (!id) return <Navigate to="/portal/configurations" replace />;
 
   async function handleDelete() {
     if (deleteConfirm !== config?.name) return;
@@ -90,23 +92,13 @@ export function ConfigurationDetailPage() {
       <div className="flex items-start justify-between mb-6">
         <div>
           <h1 className="text-lg font-semibold text-fg">{config?.name}</h1>
-          <p className="text-xs text-fg-3 mt-0.5 font-mono">
-            {config?.id}
-          </p>
+          <p className="text-xs text-fg-3 mt-0.5 font-mono">{config?.id}</p>
         </div>
         <div className="flex gap-2">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => setShowUpload(true)}
-          >
+          <Button variant="secondary" size="sm" onClick={() => setShowUpload(true)}>
             Upload YAML
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            onClick={() => setShowDelete(true)}
-          >
+          <Button variant="danger" size="sm" onClick={() => setShowDelete(true)}>
             Delete
           </Button>
         </div>
@@ -114,18 +106,9 @@ export function ConfigurationDetailPage() {
 
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4 mb-6">
-        <StatCard
-          label="Total Agents"
-          value={stats?.total_agents ?? "—"}
-        />
-        <StatCard
-          label="Connected"
-          value={stats?.connected_agents ?? "—"}
-        />
-        <StatCard
-          label="Healthy"
-          value={stats?.healthy_agents ?? "—"}
-        />
+        <StatCard label="Total Agents" value={stats?.total_agents ?? "—"} />
+        <StatCard label="Connected" value={stats?.connected_agents ?? "—"} />
+        <StatCard label="Healthy" value={stats?.healthy_agents ?? "—"} />
       </div>
 
       {/* Tabs */}
@@ -167,8 +150,8 @@ export function ConfigurationDetailPage() {
         title="Delete Configuration"
       >
         <p className="text-sm text-fg-3 mb-4">
-          This will permanently delete this configuration and disconnect all agents.
-          Type <span className="font-mono text-fg">{config?.name}</span> to confirm.
+          This will permanently delete this configuration and disconnect all agents. Type{" "}
+          <span className="font-mono text-fg">{config?.name}</span> to confirm.
         </p>
         <input
           value={deleteConfirm}
@@ -182,9 +165,7 @@ export function ConfigurationDetailPage() {
           </Button>
           <Button
             variant="danger"
-            disabled={
-              deleteConfirm !== config?.name || deleteMutation.isPending
-            }
+            disabled={deleteConfirm !== config?.name || deleteMutation.isPending}
             onClick={handleDelete}
           >
             {deleteMutation.isPending ? "Deleting…" : "Delete Configuration"}
@@ -211,10 +192,7 @@ export function ConfigurationDetailPage() {
           <Button variant="secondary" onClick={() => setShowUpload(false)}>
             Cancel
           </Button>
-          <Button
-            disabled={!yamlContent.trim() || uploadMutation.isPending}
-            onClick={handleUpload}
-          >
+          <Button disabled={!yamlContent.trim() || uploadMutation.isPending} onClick={handleUpload}>
             {uploadMutation.isPending ? "Uploading…" : "Upload & Deploy"}
           </Button>
         </div>
@@ -223,7 +201,11 @@ export function ConfigurationDetailPage() {
   );
 }
 
-function AgentsTab({ agents }: { agents?: ReturnType<typeof Array<import("../../hooks/queries").Agent>> }) {
+function AgentsTab({
+  agents,
+}: {
+  agents?: ReturnType<typeof Array<import("../../hooks/queries").Agent>>;
+}) {
   if (!agents?.length) {
     return (
       <p className="text-sm text-fg-3 py-8 text-center">
@@ -251,24 +233,18 @@ function AgentsTab({ agents }: { agents?: ReturnType<typeof Array<import("../../
                   {a.hostname ?? a.instance_uid.slice(0, 12)}
                 </p>
                 {a.agent_version && (
-                  <p className="text-[10px] text-fg-4 mt-0.5">
-                    v{a.agent_version}
-                  </p>
+                  <p className="text-[10px] text-fg-4 mt-0.5">v{a.agent_version}</p>
                 )}
               </td>
               <td className="px-4 py-3">
-                <Badge variant={a.status === "connected" ? "success" : "default"}>
-                  {a.status}
-                </Badge>
+                <Badge variant={a.status === "connected" ? "success" : "default"}>{a.status}</Badge>
               </td>
               <td className="px-4 py-3">
                 <Badge variant={a.healthy ? "success" : "error"}>
                   {a.healthy ? "healthy" : "unhealthy"}
                 </Badge>
               </td>
-              <td className="px-4 py-3 text-fg-3 text-xs">
-                {relativeTime(a.last_seen_at)}
-              </td>
+              <td className="px-4 py-3 text-fg-3 text-xs">{relativeTime(a.last_seen_at)}</td>
             </tr>
           ))}
         </tbody>
@@ -279,36 +255,25 @@ function AgentsTab({ agents }: { agents?: ReturnType<typeof Array<import("../../
 
 function VersionsTab({ versions }: { versions?: import("../../hooks/queries").ConfigVersion[] }) {
   if (!versions?.length) {
-    return (
-      <p className="text-sm text-fg-3 py-8 text-center">
-        No versions uploaded yet.
-      </p>
-    );
+    return <p className="text-sm text-fg-3 py-8 text-center">No versions uploaded yet.</p>;
   }
 
   return (
     <div className="space-y-3">
       {versions.map((v, i) => (
-        <div
-          key={v.id}
-          className="rounded-lg border border-line bg-surface p-4"
-        >
+        <div key={v.id} className="rounded-lg border border-line bg-surface p-4">
           <div className="flex items-center justify-between">
             <div>
-              <span className="text-xs font-mono text-fg-3">
-                {v.config_hash.slice(0, 12)}
-              </span>
+              <span className="text-xs font-mono text-fg-3">{v.config_hash.slice(0, 12)}</span>
               {i === 0 && (
-                <Badge variant="success" className="ml-2">latest</Badge>
+                <Badge variant="success" className="ml-2">
+                  latest
+                </Badge>
               )}
             </div>
-            <span className="text-xs text-fg-4">
-              {relativeTime(v.created_at)}
-            </span>
+            <span className="text-xs text-fg-4">{relativeTime(v.created_at)}</span>
           </div>
-          {v.message && (
-            <p className="mt-1 text-sm text-fg-3">{v.message}</p>
-          )}
+          {v.message && <p className="mt-1 text-sm text-fg-3">{v.message}</p>}
         </div>
       ))}
     </div>

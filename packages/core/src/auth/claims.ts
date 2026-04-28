@@ -1,6 +1,8 @@
 // Auth — signed assignment claims
 // HMAC-SHA256 via Web Crypto. Base64url JSON `.` signature format.
 
+import { base64urlEncode, base64urlDecode } from "./base64url.js";
+
 export interface AssignmentClaim {
   v: 1;
   tenant_id: string;
@@ -12,24 +14,6 @@ export interface AssignmentClaim {
 }
 
 const encoder = new TextEncoder();
-
-function base64urlEncode(data: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < data.length; i++) {
-    binary += String.fromCharCode(data[i]!);
-  }
-  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-}
-
-function base64urlDecode(str: string): Uint8Array {
-  const padded = str.replace(/-/g, "+").replace(/_/g, "/");
-  const binary = atob(padded);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes;
-}
 
 async function getSigningKey(secret: string): Promise<CryptoKey> {
   return crypto.subtle.importKey(
@@ -58,7 +42,15 @@ export async function verifyClaim(token: string, secret: string): Promise<Assign
   const signature = parts[1]!;
   const key = await getSigningKey(secret);
   const sigBytes = base64urlDecode(signature);
-  const valid = await crypto.subtle.verify("HMAC", key, sigBytes.buffer as ArrayBuffer, encoder.encode(payload));
+  const valid = await crypto.subtle.verify(
+    "HMAC",
+    key,
+    sigBytes.buffer.slice(
+      sigBytes.byteOffset,
+      sigBytes.byteOffset + sigBytes.byteLength,
+    ) as ArrayBuffer,
+    encoder.encode(payload),
+  );
   if (!valid) {
     throw new Error("Invalid signature");
   }

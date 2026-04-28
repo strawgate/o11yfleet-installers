@@ -2,44 +2,44 @@
 
 ## Where Models Agree
 
-| Finding | Claude Opus 4.7 | Gemini 3.1 Pro Thinking | GPT-5.5 | Evidence |
-|---------|-----------|-----------|-----------|----------|
-| Structure as dependency DAG with explicit inputs/outputs per workstream | ✓ | ✓ | ✓ | Enables parallel agent execution without coordination overhead |
-| Phase 0 is sequential bootstrap; everything else branches from it | ✓ | ✓ | ✓ | Repo skeleton + tooling must exist before any agent can work |
-| Pure OpAMP core (codec + state machine) has zero CF imports | ✓ | ✓ | ✓ | Testable in plain Vitest; swappable to WASM later |
-| Fake agent is a first-class deliverable, not an afterthought | ✓ | ✓ | ✓ | Required input for every integration and E2E test |
-| Config DO, queue consumer, R2 storage, auth tokens are fully independent workstreams | ✓ | ✓ | ✓ | No shared mutable state between them until integration phase |
-| Integration phase requires synchronization point before E2E | ✓ | ✓ | ✓ | Components must connect before system-level tests make sense |
-| 10 specific E2E scenarios as hard acceptance criteria | ✓ | ✓ | ✓ | Enrollment, reconnect, config push, seq gap, disconnect, retry, dedup, auth, limits, spoofing |
-| `@cloudflare/vitest-pool-workers` for offline integration tests [developers.cloudflare](https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects/) | ✓ | ✓ | ✓ | Runs inside real workerd runtime with D1/R2/DO/Queue bindings |
-| Performance experiment is a parallel track, never blocking v1 | ✓ | ✓ | ✓ | TS baseline vs Rust-WASM; decision rule: ≥2x faster or don't switch |
+| Finding                                                                                                                                                                           | Claude Opus 4.7 | Gemini 3.1 Pro Thinking | GPT-5.5 | Evidence                                                                                      |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ----------------------- | ------- | --------------------------------------------------------------------------------------------- |
+| Structure as dependency DAG with explicit inputs/outputs per workstream                                                                                                           | ✓               | ✓                       | ✓       | Enables parallel agent execution without coordination overhead                                |
+| Phase 0 is sequential bootstrap; everything else branches from it                                                                                                                 | ✓               | ✓                       | ✓       | Repo skeleton + tooling must exist before any agent can work                                  |
+| Pure OpAMP core (codec + state machine) has zero CF imports                                                                                                                       | ✓               | ✓                       | ✓       | Testable in plain Vitest; swappable to WASM later                                             |
+| Fake agent is a first-class deliverable, not an afterthought                                                                                                                      | ✓               | ✓                       | ✓       | Required input for every integration and E2E test                                             |
+| Config DO, queue consumer, R2 storage, auth tokens are fully independent workstreams                                                                                              | ✓               | ✓                       | ✓       | No shared mutable state between them until integration phase                                  |
+| Integration phase requires synchronization point before E2E                                                                                                                       | ✓               | ✓                       | ✓       | Components must connect before system-level tests make sense                                  |
+| 10 specific E2E scenarios as hard acceptance criteria                                                                                                                             | ✓               | ✓                       | ✓       | Enrollment, reconnect, config push, seq gap, disconnect, retry, dedup, auth, limits, spoofing |
+| `@cloudflare/vitest-pool-workers` for offline integration tests [developers.cloudflare](https://developers.cloudflare.com/durable-objects/examples/testing-with-durable-objects/) | ✓               | ✓                       | ✓       | Runs inside real workerd runtime with D1/R2/DO/Queue bindings                                 |
+| Performance experiment is a parallel track, never blocking v1                                                                                                                     | ✓               | ✓                       | ✓       | TS baseline vs Rust-WASM; decision rule: ≥2x faster or don't switch                           |
 
 ## Where Models Disagree
 
-| Topic | Claude Opus 4.7 | Gemini 3.1 Pro Thinking | GPT-5.5 | Why They Differ |
-|-------|-----------|-----------|-----------|-----------------|
-| **Granularity** | 5 phases, ~17 tracks total | 4 phases, ~10 tasks | 13 phases, ~35 workstreams | GPT-5.5 decomposes to individual-agent-assignable units; others batch more |
-| **When UI happens** | Phase 4 (after E2E) | Explicitly excluded from plan | Phase 11 (late, parallel) | Gemini 3.1 Pro Thinking says UI is not an engineering deliverable; others include it |
-| **Workstream assignment format** | Implicit via track descriptions | Implicit | Explicit template with inputs/outputs/do-not-modify/acceptance | GPT-5.5 optimizes for agent handoff |
-| **API routes as separate phase** | Bundled into Phase 3 integration | Bundled into integration | Dedicated Phase 8 with 3 sub-workstreams | GPT-5.5 treats API as its own concern; others fold it in |
-| **Definition of done** | Exit criteria per phase | Acceptance criteria per phase | Explicit "Definition of Done for v1" section | GPT-5.5 adds a project-level completion gate |
+| Topic                            | Claude Opus 4.7                  | Gemini 3.1 Pro Thinking       | GPT-5.5                                                        | Why They Differ                                                                      |
+| -------------------------------- | -------------------------------- | ----------------------------- | -------------------------------------------------------------- | ------------------------------------------------------------------------------------ |
+| **Granularity**                  | 5 phases, ~17 tracks total       | 4 phases, ~10 tasks           | 13 phases, ~35 workstreams                                     | GPT-5.5 decomposes to individual-agent-assignable units; others batch more           |
+| **When UI happens**              | Phase 4 (after E2E)              | Explicitly excluded from plan | Phase 11 (late, parallel)                                      | Gemini 3.1 Pro Thinking says UI is not an engineering deliverable; others include it |
+| **Workstream assignment format** | Implicit via track descriptions  | Implicit                      | Explicit template with inputs/outputs/do-not-modify/acceptance | GPT-5.5 optimizes for agent handoff                                                  |
+| **API routes as separate phase** | Bundled into Phase 3 integration | Bundled into integration      | Dedicated Phase 8 with 3 sub-workstreams                       | GPT-5.5 treats API as its own concern; others fold it in                             |
+| **Definition of done**           | Exit criteria per phase          | Acceptance criteria per phase | Explicit "Definition of Done for v1" section                   | GPT-5.5 adds a project-level completion gate                                         |
 
 ## Unique Discoveries
 
-| Model | Unique Finding | Why It Matters |
-|-------|----------------|----------------|
-| GPT-5.5 | Agent assignment template format: `{workstream, inputs, do-not-modify, tasks, tests-required, acceptance}` | Directly executable by coding agents without ambiguity |
-| GPT-5.5 | Header spoofing E2E scenario (#10): external request with fake `x-fp-tenant-id` headers must be stripped | Security hole that's easy to miss; catches trust-boundary bugs |
-| GPT-5.5 | Separate workstream for request context encoding between ingress Worker and DO | Prevents a class of bugs where external headers leak into trusted internal routing |
-| Claude Opus 4.7 | Explicit critical path identification: Phase 0 → 1C (core) → 2B (Config DO) → 3 sync → 4A (E2E) | Tells you which workstreams to staff first if agents are limited |
+| Model           | Unique Finding                                                                                             | Why It Matters                                                                     |
+| --------------- | ---------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| GPT-5.5         | Agent assignment template format: `{workstream, inputs, do-not-modify, tasks, tests-required, acceptance}` | Directly executable by coding agents without ambiguity                             |
+| GPT-5.5         | Header spoofing E2E scenario (#10): external request with fake `x-fp-tenant-id` headers must be stripped   | Security hole that's easy to miss; catches trust-boundary bugs                     |
+| GPT-5.5         | Separate workstream for request context encoding between ingress Worker and DO                             | Prevents a class of bugs where external headers leak into trusted internal routing |
+| Claude Opus 4.7 | Explicit critical path identification: Phase 0 → 1C (core) → 2B (Config DO) → 3 sync → 4A (E2E)            | Tells you which workstreams to staff first if agents are limited                   |
 
-***
+---
 
 ## The Definitive Plan
 
 What follows merges all three models into a single plan optimized for parallel agent execution. I've adopted GPT-5.5's granularity (agents need small, clear units), Claude Opus 4.7's critical-path awareness, and Gemini 3.1 Pro Thinking's "contracts first" principle.
 
-***
+---
 
 # Phase 0 — Bootstrap
 
@@ -47,6 +47,7 @@ What follows merges all three models into a single plan optimized for parallel a
 **Agents:** 1. Sequential. Everything else depends on this.
 
 ### Deliverables
+
 - Monorepo: pnpm workspaces, Turborepo, TypeScript strict, ESLint, Prettier
 - Package skeletons: `packages/core`, `packages/test-utils`, `apps/worker`, `apps/web`, `infra/terraform`, `experiments/`
 - `wrangler.toml` with binding stubs (D1, R2, Queue, DO, Analytics Engine)
@@ -55,12 +56,13 @@ What follows merges all three models into a single plan optimized for parallel a
 - `docs/architecture.md` documenting: Config-as-DO partitioning, signed claims, R2 content-addressing, queue read model, offline testing
 
 ### Exit Criteria
+
 ```bash
 pnpm install && pnpm lint && pnpm typecheck && pnpm test  # passes
 wrangler dev  # starts, GET /healthz → 200
 ```
 
-***
+---
 
 # Phase 1 — Foundations (5-Way Parallel)
 
@@ -72,6 +74,7 @@ wrangler dev  # starts, GET /healthz → 200
 **Owns:** `infra/terraform/`
 
 Provision per environment (dev/staging/prod):
+
 - `cloudflare_d1_database`
 - `cloudflare_r2_bucket`
 - `cloudflare_queue`
@@ -133,14 +136,14 @@ Also: `generateEnrollmentToken()`, `hashEnrollmentToken()`, `verifyEnrollmentTok
 
 ```typescript
 class FakeOpampAgent {
-  constructor(opts: { endpoint, enrollmentToken?, assignmentClaim?, instanceUid? })
-  connect(): Promise<void>
-  sendHello(): Promise<void>
-  sendHeartbeat(): Promise<void>
-  sendHealth(status): Promise<void>
-  waitForRemoteConfig(): Promise<RemoteConfig>
-  applyConfig(hash): Promise<void>
-  close(): Promise<void>
+  constructor(opts: { endpoint; enrollmentToken?; assignmentClaim?; instanceUid? });
+  connect(): Promise<void>;
+  sendHello(): Promise<void>;
+  sendHeartbeat(): Promise<void>;
+  sendHealth(status): Promise<void>;
+  waitForRemoteConfig(): Promise<RemoteConfig>;
+  applyConfig(hash): Promise<void>;
+  close(): Promise<void>;
 }
 ```
 
@@ -148,7 +151,7 @@ Uses `packages/core` for framing. Manages sequence numbers internally.
 
 **Exit:** Can generate valid OpAMP frames. Unit tests verify frames decode via core codec.
 
-***
+---
 
 # Phase 2 — Components (4-Way Parallel)
 
@@ -209,6 +212,7 @@ The central stateful actor:
 **Inputs:** D1 schema (1B), config store (can mock), enrollment tokens (1D)
 
 CRUD routes:
+
 ```
 POST   /api/tenants
 GET    /api/tenants/:id/configurations
@@ -223,7 +227,7 @@ POST   /api/configurations/:id/rollout          → calls DO
 
 **Exit:** Each endpoint has handler tests against local D1/R2 bindings. Nonexistent resource returns 404.
 
-***
+---
 
 # Phase 3 — Integration (2 Tracks → Sync Point)
 
@@ -235,6 +239,7 @@ POST   /api/configurations/:id/rollout          → calls DO
 **Owns:** `apps/worker/src/index.ts` routing logic
 
 Route `/v1/opamp` to Config DO:
+
 1. **Hot path:** Extract assignment claim from `Authorization: Bearer`. Verify locally (no I/O). Build DO name `${tenant_id}:${config_id}`. Forward request.
 2. **Cold path:** No claim → extract enrollment token → hash → D1 lookup → validate → route to DO.
 3. **Security:** Strip any external `x-fp-*` headers before forwarding to DO. Pass validated context via internal headers.
@@ -248,12 +253,14 @@ Route `/api/*` to API handlers (2D).
 **Owns:** Integration between ingress (3A) and Config DO (2B)
 
 When agent connects with enrollment token (no claim):
+
 - Config DO creates agent record
 - Config DO generates signed assignment claim (1D)
 - Claim returned in first `ServerToAgent` response
 - Agent stores claim for future reconnects
 
 When `set-desired-config` called:
+
 - Config DO updates desired hash
 - Iterates `ctx.getWebSockets()` → sends `ServerToAgent` with new `RemoteConfig` reference to all connected agents
 
@@ -278,7 +285,7 @@ D1 shows "disconnected"
 
 **Exit:** This test passes entirely offline. If it does, the system works.
 
-***
+---
 
 # Phase 4 — E2E Suite + Hardening (6-Way Parallel)
 
@@ -289,24 +296,25 @@ D1 shows "disconnected"
 
 Each scenario is independently assignable:
 
-| # | Scenario | Key Assertion |
-|---|----------|---------------|
-| 1 | New enrollment | Token → claim → connected in D1 |
-| 2 | Reconnect with claim | No D1 hit on hot path |
-| 3 | Config update push | Connected agent receives v2 |
-| 4 | Sequence gap | Server sends `ReportFullState` flag |
-| 5 | Disconnect | `webSocketClose` → offline in D1 |
-| 6 | Hibernation restore | Socket attachments survive DO eviction |
-| 7 | Queue retry | Consumer fails once → retries → D1 correct |
-| 8 | R2 dedup | Same YAML → one R2 object |
-| 9 | Free-tier limits | Agent beyond max rejected cleanly |
-| 10 | Auth failure + header spoofing | Invalid claim → 401; spoofed headers stripped |
+| #   | Scenario                       | Key Assertion                                 |
+| --- | ------------------------------ | --------------------------------------------- |
+| 1   | New enrollment                 | Token → claim → connected in D1               |
+| 2   | Reconnect with claim           | No D1 hit on hot path                         |
+| 3   | Config update push             | Connected agent receives v2                   |
+| 4   | Sequence gap                   | Server sends `ReportFullState` flag           |
+| 5   | Disconnect                     | `webSocketClose` → offline in D1              |
+| 6   | Hibernation restore            | Socket attachments survive DO eviction        |
+| 7   | Queue retry                    | Consumer fails once → retries → D1 correct    |
+| 8   | R2 dedup                       | Same YAML → one R2 object                     |
+| 9   | Free-tier limits               | Agent beyond max rejected cleanly             |
+| 10  | Auth failure + header spoofing | Invalid claim → 401; spoofed headers stripped |
 
 **Exit:** All 10 pass offline in CI.
 
 ## 4B — Rate Limits & Quotas
 
 Enforce in Config DO + ingress:
+
 - Max messages/minute/agent
 - Max config size (256 KB)
 - Max agents per config (configurable, default 50k)
@@ -329,6 +337,7 @@ Enforce in Config DO + ingress:
 ## 4D — Cost Guardrails (Code Review)
 
 Verify and test:
+
 - [ ] No D1 write on no-op heartbeat
 - [ ] No queue event on no-op heartbeat
 - [ ] No timers/alarms in Config DO
@@ -354,6 +363,7 @@ Smoke test: create temp tenant → run fake agent → verify lifecycle → clean
 ## 4F — Minimal UI (Optional, Non-Blocking)
 
 Cloudflare Pages app:
+
 - Config list + detail
 - Agent table (from D1 read model)
 - YAML upload form
@@ -362,7 +372,7 @@ Cloudflare Pages app:
 
 **Exit:** Human can complete demo in browser. Not required for v1 definition of done.
 
-***
+---
 
 # Phase 5 — Performance Experiment (Fully Parallel, Non-Blocking)
 
@@ -370,21 +380,25 @@ Cloudflare Pages app:
 **Agents:** 3, independent.
 
 ## 5A — Benchmark Harness
+
 ```
 10k frame decodes, 10k encodes, 10k state transitions,
 1k agents × 100 messages, config push to 1k connections
 ```
+
 Metrics: p50/p95/p99 latency, CPU time, memory. JSON output.
 
 ## 5B — TypeScript Baseline
+
 Run harness against current core. Establish baseline.
 
 ## 5C — Rust-WASM Core
+
 Reimplement only codec + state machine in Rust. Compile to WASM. Wire via `wasm-bindgen`. Run same harness. Same fixtures must pass.
 
 **Decision rule:** Ship WASM only if ≥2x faster on decode+process+encode OR ≥30% cheaper at realistic DO volume. Otherwise ship TypeScript.
 
-***
+---
 
 # Dependency Graph
 
@@ -427,24 +441,24 @@ Phase 0 (1 agent, sequential)
 Phase 1C ──► Phase 5A/5B/5C  Performance Experiments (non-blocking)
 ```
 
-***
+---
 
 # Parallel Execution Summary
 
-| Phase | Max Concurrent Agents | Critical Path? |
-|-------|-----------------------|----------------|
-| 0 | 1 | Yes — everything blocks on it |
-| 1 | **5** | 1C is on critical path |
-| 2 | **4** | 2B is on critical path |
-| 3 | **2 → 1 sync** | 3-SYNC is the gate |
-| 4 | **6** | 4A + 4E are most important |
-| 5 | **3** | No — runs in parallel with 2-4 |
+| Phase | Max Concurrent Agents | Critical Path?                 |
+| ----- | --------------------- | ------------------------------ |
+| 0     | 1                     | Yes — everything blocks on it  |
+| 1     | **5**                 | 1C is on critical path         |
+| 2     | **4**                 | 2B is on critical path         |
+| 3     | **2 → 1 sync**        | 3-SYNC is the gate             |
+| 4     | **6**                 | 4A + 4E are most important     |
+| 5     | **3**                 | No — runs in parallel with 2-4 |
 
 **Critical path:** `0 → 1C → 2B → 3-SYNC → 4A`
 
 If agents are limited, staff the critical path first. Everything else can catch up.
 
-***
+---
 
 # Agent Assignment Format
 
@@ -491,7 +505,7 @@ Every workstream should be handed to an agent in this format:
 └─────────────────────────────────────────────────┘
 ```
 
-***
+---
 
 # Definition of Done — v1 Development Complete
 
@@ -572,6 +586,7 @@ Every workstream should be handed to an agent in this format:
 ### 7. Client/Server Contract Mismatches
 
 **Concrete bugs found:**
+
 - `getting-started.html` expects `raw_token` but worker returns `token`
 - `agents.html` expects `connected`, `health`, `hostname` but DO returns `status`, `healthy`, `last_seen_at`
 - `agent-detail.html` ignores `uid`/`config` params, reads synthetic `?a=` index
@@ -592,53 +607,53 @@ Every workstream should be handed to an agent in this format:
 
 **Why React over Alpine.js / incremental enhancement:**
 
-| Factor | Alpine.js (incremental) | React (new SPA) |
-|--------|------------------------|-----------------|
-| Solves listener leaks | Partially | Yes — component lifecycle |
-| Solves global state | No — still `window.*` | Yes — React context / TanStack Query |
-| Solves type safety | No — still plain JS | Yes — TSX + shared types |
-| Solves duplication | Partially | Yes — real components |
-| Solves innerHTML XSS | No | Yes — JSX escapes by default |
-| Dev experience | Marginal improvement | HMR, error overlay, source maps |
-| Migration effort | Lower initially | Higher initially, but the prototype code is throwaway anyway |
-| Ecosystem | Small | Massive — testing, a11y, forms, routing all solved |
+| Factor                | Alpine.js (incremental) | React (new SPA)                                              |
+| --------------------- | ----------------------- | ------------------------------------------------------------ |
+| Solves listener leaks | Partially               | Yes — component lifecycle                                    |
+| Solves global state   | No — still `window.*`   | Yes — React context / TanStack Query                         |
+| Solves type safety    | No — still plain JS     | Yes — TSX + shared types                                     |
+| Solves duplication    | Partially               | Yes — real components                                        |
+| Solves innerHTML XSS  | No                      | Yes — JSX escapes by default                                 |
+| Dev experience        | Marginal improvement    | HMR, error overlay, source maps                              |
+| Migration effort      | Lower initially         | Higher initially, but the prototype code is throwaway anyway |
+| Ecosystem             | Small                   | Massive — testing, a11y, forms, routing all solved           |
 
 **The prototype portal pages are not load-bearing production code.** They're HTML mockups with inline `<script>` blocks that manually DOM-manipulate fake data. Incrementally enhancing them with Alpine.js would preserve and legitimize code that should be rewritten. A clean React app lets us start right.
 
 ### Target Stack
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **Build** | Vite | Fast, zero-config, excellent React support |
-| **Framework** | React 19 + TypeScript | Industry standard, massive ecosystem, JSX escapes by default |
-| **Routing** | React Router v7 | File-based or config-based, lazy loading built in |
-| **API State** | TanStack Query | Replaces all manual fetch + setInterval polling with cache/refetch/optimistic updates |
-| **Validation** | Zod | Shared schemas between worker and frontend, runtime + compile-time safety |
-| **Styling** | Tailwind CSS v4 | Already using utility-class patterns, scoped by default |
-| **Components** | shadcn/ui (Radix primitives) | Accessible, unstyled primitives. Copy-paste, not dependency |
-| **Forms** | React Hook Form + Zod | Type-safe forms with validation |
-| **Testing** | Vitest + React Testing Library | Same test runner as worker, component-level testing |
-| **E2E** | Playwright (already have it) | Cross-browser, already set up in `tests/ui` |
+| Layer          | Technology                     | Why                                                                                   |
+| -------------- | ------------------------------ | ------------------------------------------------------------------------------------- |
+| **Build**      | Vite                           | Fast, zero-config, excellent React support                                            |
+| **Framework**  | React 19 + TypeScript          | Industry standard, massive ecosystem, JSX escapes by default                          |
+| **Routing**    | React Router v7                | File-based or config-based, lazy loading built in                                     |
+| **API State**  | TanStack Query                 | Replaces all manual fetch + setInterval polling with cache/refetch/optimistic updates |
+| **Validation** | Zod                            | Shared schemas between worker and frontend, runtime + compile-time safety             |
+| **Styling**    | Tailwind CSS v4                | Already using utility-class patterns, scoped by default                               |
+| **Components** | shadcn/ui (Radix primitives)   | Accessible, unstyled primitives. Copy-paste, not dependency                           |
+| **Forms**      | React Hook Form + Zod          | Type-safe forms with validation                                                       |
+| **Testing**    | Vitest + React Testing Library | Same test runner as worker, component-level testing                                   |
+| **E2E**        | Playwright (already have it)   | Cross-browser, already set up in `tests/ui`                                           |
 
 ### Worker-Side Improvements
 
-| Layer | Technology | Why |
-|-------|-----------|-----|
-| **Router** | Hono | Purpose-built for CF Workers. Typed middleware, built-in CORS. Replaces ~500 lines of hand-rolled routing with ~50 |
-| **DB** | Drizzle ORM | Typed D1 queries. Schema-driven types eliminate `row["field"] as Type` casts |
-| **Validation** | Zod | Shared with frontend. Validates at every API boundary |
+| Layer          | Technology  | Why                                                                                                                |
+| -------------- | ----------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Router**     | Hono        | Purpose-built for CF Workers. Typed middleware, built-in CORS. Replaces ~500 lines of hand-rolled routing with ~50 |
+| **DB**         | Drizzle ORM | Typed D1 queries. Schema-driven types eliminate `row["field"] as Type` casts                                       |
+| **Validation** | Zod         | Shared with frontend. Validates at every API boundary                                                              |
 
 ### Static Analysis & Lint Tooling
 
-| Tool | Scope | What It Catches |
-|------|-------|----------------|
-| **ESLint** (existing, extend) | Worker + React | Already strict. Add `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh` |
-| **TypeScript strict** (existing) | Worker + React | Already on with `noUncheckedIndexedAccess`. Extend to frontend |
-| **Biome** (consider) | Formatting + linting | 100x faster than Prettier + ESLint. Could replace both. Evaluate after React migration |
-| **eslint-plugin-security** | Worker | Catches `innerHTML`, `eval`, prototype pollution patterns |
-| **knip** | Monorepo | Dead code detection across packages. Finds unused exports, deps, files |
-| **publint** | Packages | Validates package.json exports are correct |
-| **@tanstack/eslint-plugin-query** | React | Catches common TanStack Query mistakes |
+| Tool                              | Scope                | What It Catches                                                                        |
+| --------------------------------- | -------------------- | -------------------------------------------------------------------------------------- |
+| **ESLint** (existing, extend)     | Worker + React       | Already strict. Add `eslint-plugin-react-hooks`, `eslint-plugin-react-refresh`         |
+| **TypeScript strict** (existing)  | Worker + React       | Already on with `noUncheckedIndexedAccess`. Extend to frontend                         |
+| **Biome** (consider)              | Formatting + linting | 100x faster than Prettier + ESLint. Could replace both. Evaluate after React migration |
+| **eslint-plugin-security**        | Worker               | Catches `innerHTML`, `eval`, prototype pollution patterns                              |
+| **knip**                          | Monorepo             | Dead code detection across packages. Finds unused exports, deps, files                 |
+| **publint**                       | Packages             | Validates package.json exports are correct                                             |
+| **@tanstack/eslint-plugin-query** | React                | Catches common TanStack Query mistakes                                                 |
 
 ### CI Pipeline Additions
 
@@ -648,14 +663,14 @@ test-web:
   - pnpm --filter @o11yfleet/web lint
   - pnpm --filter @o11yfleet/web typecheck
   - pnpm --filter @o11yfleet/web test
-  - pnpm --filter @o11yfleet/web build  # catches import errors
+  - pnpm --filter @o11yfleet/web build # catches import errors
 
-test-e2e:  # after deploy to preview
+test-e2e: # after deploy to preview
   - pnpm --filter tests-e2e test:e2e
   - pnpm --filter tests-ui test:e2e
 
 dead-code:
-  - npx knip  # find unused exports, deps, files
+  - npx knip # find unused exports, deps, files
 ```
 
 ---
@@ -716,12 +731,14 @@ dead-code:
 ## Remaining Work
 
 ### Immediate (this sprint)
+
 - [ ] Scaffold React + Vite app in `apps/web`
 - [ ] Remove `?api=` URL override security hole from `portal-api.js`
 - [ ] Fix seed token comparison to use `timingSafeEqual`
 - [ ] Review remaining silent catch blocks in `config-do.ts` and `event-consumer.ts`
 
 ### React Migration
+
 - [ ] Auth pages + auth context provider
 - [ ] Shell components (sidebar, topbar, theme)
 - [ ] Overview dashboard with TanStack Query
@@ -732,12 +749,14 @@ dead-code:
 - [ ] Admin pages
 
 ### Worker Modernization
+
 - [ ] Migrate to Hono router
 - [ ] Add Drizzle ORM for typed D1 queries
 - [ ] Add Zod validation to all API endpoints
 - [ ] Consolidate triplicated route logic
 
 ### Tooling
+
 - [ ] Add `knip` for dead code detection
 - [ ] Add `eslint-plugin-security` to worker
 - [ ] Add React lint plugins to web app

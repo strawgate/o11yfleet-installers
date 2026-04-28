@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
-import { ConfigDurableObject } from "../src/durable-objects/config-do.js";
+import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import {
   setupD1,
   createTenant,
@@ -119,9 +119,7 @@ describe("Rate Limiting", () => {
       );
 
       // Import and call checkRateLimit
-      const { checkRateLimit } = await import(
-        "../src/durable-objects/agent-state-repo.js"
-      );
+      const { checkRateLimit } = await import("../src/durable-objects/agent-state-repo.js");
 
       // First 60 calls should not be rate limited
       for (let i = 0; i < 60; i++) {
@@ -133,10 +131,7 @@ describe("Rate Limiting", () => {
 
       // Verify the count is stored in SQLite
       const row = sql
-        .exec(
-          `SELECT rate_window_count FROM agents WHERE instance_uid = ?`,
-          "rl-agent-1",
-        )
+        .exec(`SELECT rate_window_count FROM agents WHERE instance_uid = ?`, "rl-agent-1")
         .toArray()[0];
       expect(row!.rate_window_count).toBe(61);
     });

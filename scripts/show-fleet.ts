@@ -72,9 +72,7 @@ async function main() {
     console.log(`  Total agents:      ${stats.total_agents}`);
     console.log(`  Connected:         ${stats.connected_agents}`);
     console.log(`  Healthy:           ${stats.healthy_agents}`);
-    console.log(
-      `  Desired config:    ${stats.desired_config_hash?.slice(0, 24) ?? "not set"}...`,
-    );
+    console.log(`  Desired config:    ${stats.desired_config_hash?.slice(0, 24) ?? "not set"}...`);
     console.log();
   }
 
@@ -91,9 +89,7 @@ async function main() {
       console.log();
     } else {
       console.log(`─── Agents (${agents.length}) ──────────────────────────────`);
-      console.log(
-        "  UID              Status       Healthy  Config Hash       Last Seen",
-      );
+      console.log("  UID              Status       Healthy  Config Hash       Last Seen");
       console.log("  " + "─".repeat(80));
       for (const a of agents) {
         const uid = a.instance_uid.slice(0, 16);

@@ -9,16 +9,16 @@ export default {
     const host = url.hostname;
 
     // app.o11yfleet.com — redirect root to portal
-    if (host === 'app.o11yfleet.com' && (url.pathname === '/' || url.pathname === '')) {
-      return Response.redirect('https://app.o11yfleet.com/portal/overview', 302);
+    if (host === "app.o11yfleet.com" && (url.pathname === "/" || url.pathname === "")) {
+      return Response.redirect("https://app.o11yfleet.com/portal/overview", 302);
     }
 
     // admin.o11yfleet.com — redirect root to admin overview
-    if (host === 'admin.o11yfleet.com' && (url.pathname === '/' || url.pathname === '')) {
-      return Response.redirect('https://admin.o11yfleet.com/admin/overview', 302);
+    if (host === "admin.o11yfleet.com" && (url.pathname === "/" || url.pathname === "")) {
+      return Response.redirect("https://admin.o11yfleet.com/admin/overview", 302);
     }
 
     // Serve static assets normally
     return env.ASSETS.fetch(request);
-  }
+  },
 };

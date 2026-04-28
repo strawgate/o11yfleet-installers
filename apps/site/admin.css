@@ -1,6 +1,7 @@
 /* admin.css — overrides shared portal styling for admin portal.
    Switches the accent from green to amber so admin views are unmistakably distinct. */
-:root, [data-theme="dark"] {
+:root,
+[data-theme="dark"] {
   --accent: oklch(0.82 0.13 78);
   --accent-2: oklch(0.78 0.14 78);
   --accent-soft: oklch(0.82 0.13 78 / 0.12);
@@ -10,11 +11,16 @@
 [data-theme="light"] {
   --accent: oklch(0.62 0.14 78);
   --accent-2: oklch(0.55 0.15 78);
-  --accent-soft: oklch(0.62 0.14 78 / 0.10);
+  --accent-soft: oklch(0.62 0.14 78 / 0.1);
   --accent-line: oklch(0.62 0.14 78 / 0.28);
   --accent-fg: #ffffff;
 }
 .admin-stripe {
-  position: fixed; top: 0; left: 0; right: 0;
-  height: 2px; background: var(--accent); z-index: 1000;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--accent);
+  z-index: 1000;
 }

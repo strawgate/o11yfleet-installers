@@ -42,7 +42,9 @@ export function initSchema(sql: SqlStorage): void {
   sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
   // Indexes for alarm sweep and stats queries
   sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`);
-  sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`);
+  sql.exec(
+    `CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`,
+  );
 }
 
 // ─── Config State ───────────────────────────────────────────────────
@@ -56,7 +58,9 @@ export interface DesiredConfig {
  * Load desired config from SQLite (sync, ~µs).
  */
 export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
-  const row = sql.exec(`SELECT desired_config_hash, desired_config_content FROM do_config WHERE id = 1`).one();
+  const row = sql
+    .exec(`SELECT desired_config_hash, desired_config_content FROM do_config WHERE id = 1`)
+    .one();
   return {
     hash: (row["desired_config_hash"] as string) ?? null,
     content: (row["desired_config_content"] as string) ?? null,
@@ -86,16 +90,19 @@ export function checkRateLimit(sql: SqlStorage, uid: string, maxPerMinute: numbe
   const windowStart = now - 60_000;
 
   // Atomic: reset expired window or increment count, return new count
-  const row = sql.exec(
-    `UPDATE agents SET
+  const row = sql
+    .exec(
+      `UPDATE agents SET
        rate_window_start = CASE WHEN rate_window_start < ? THEN ? ELSE rate_window_start END,
        rate_window_count = CASE WHEN rate_window_start < ? THEN 1 ELSE rate_window_count + 1 END
      WHERE instance_uid = ?
      RETURNING rate_window_count`,
-    windowStart, now,
-    windowStart,
-    uid,
-  ).toArray()[0];
+      windowStart,
+      now,
+      windowStart,
+      uid,
+    )
+    .toArray()[0];
 
   if (!row) return false; // Agent not in DB yet — allow
   return (row["rate_window_count"] as number) > maxPerMinute;
@@ -111,9 +118,7 @@ export function loadAgentState(
   configId: string,
   desiredConfigHash: string | null,
 ): AgentState {
-  const row = sql
-    .exec(`SELECT * FROM agents WHERE instance_uid = ?`, instanceUid)
-    .toArray()[0];
+  const row = sql.exec(`SELECT * FROM agents WHERE instance_uid = ?`, instanceUid).toArray()[0];
 
   if (row) {
     return {
@@ -128,9 +133,7 @@ export function loadAgentState(
       current_config_hash: row["current_config_hash"]
         ? hexToUint8Array(row["current_config_hash"] as string)
         : null,
-      desired_config_hash: desiredConfigHash
-        ? hexToUint8Array(desiredConfigHash)
-        : null,
+      desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
       last_seen_at: row["last_seen_at"] as number,
       connected_at: row["connected_at"] as number,
       agent_description: row["agent_description"] as string | null,
@@ -149,9 +152,7 @@ export function loadAgentState(
     status: "unknown",
     last_error: "",
     current_config_hash: null,
-    desired_config_hash: desiredConfigHash
-      ? hexToUint8Array(desiredConfigHash)
-      : null,
+    desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
     last_seen_at: 0,
     connected_at: 0,
     agent_description: null,
@@ -250,9 +251,7 @@ export function getStats(sql: SqlStorage): {
  * List agents (most recently seen first).
  */
 export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknown>[] {
-  return sql
-    .exec(`SELECT * FROM agents ORDER BY last_seen_at DESC LIMIT ?`, limit)
-    .toArray();
+  return sql.exec(`SELECT * FROM agents ORDER BY last_seen_at DESC LIMIT ?`, limit).toArray();
 }
 
 // ─── Stale Agent Detection ──────────────────────────────────────────

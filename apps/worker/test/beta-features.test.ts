@@ -4,11 +4,21 @@ import { apiFetch } from "./helpers.js";
 
 // Apply D1 migrations before tests
 beforeAll(async () => {
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
 });
 
 // Helper to create a tenant
@@ -33,14 +43,11 @@ async function createConfig(tenantId: string, name = "test-config") {
 
 // Helper to create enrollment token
 async function createToken(configId: string) {
-  const res = await apiFetch(
-    `http://localhost/api/configurations/${configId}/enrollment-token`,
-    {
-      method: "POST",
-      body: JSON.stringify({ label: "test" }),
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+  const res = await apiFetch(`http://localhost/api/configurations/${configId}/enrollment-token`, {
+    method: "POST",
+    body: JSON.stringify({ label: "test" }),
+    headers: { "Content-Type": "application/json" },
+  });
   return res.json<{ id: string; token: string }>();
 }
 
@@ -51,14 +58,11 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-test");
     const config = await createConfig(tenant.id);
 
-    const response = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      {
-        method: "POST",
-        body: "this is: [not: valid: yaml:",
-        headers: { "Content-Type": "text/yaml" },
-      },
-    );
+    const response = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "this is: [not: valid: yaml:",
+      headers: { "Content-Type": "text/yaml" },
+    });
     expect(response.status).toBe(400);
     const body = await response.json<{ error: string }>();
     expect(body.error).toContain("Invalid YAML");
@@ -68,14 +72,11 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-scalar");
     const config = await createConfig(tenant.id);
 
-    const response = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      {
-        method: "POST",
-        body: "just a plain string",
-        headers: { "Content-Type": "text/yaml" },
-      },
-    );
+    const response = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "just a plain string",
+      headers: { "Content-Type": "text/yaml" },
+    });
     expect(response.status).toBe(400);
     const body = await response.json<{ error: string }>();
     expect(body.error).toContain("Invalid YAML");
@@ -85,14 +86,11 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-valid");
     const config = await createConfig(tenant.id);
 
-    const response = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      {
-        method: "POST",
-        body: "receivers:\n  otlp:\n    protocols:\n      grpc:\n",
-        headers: { "Content-Type": "text/yaml" },
-      },
-    );
+    const response = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "receivers:\n  otlp:\n    protocols:\n      grpc:\n",
+      headers: { "Content-Type": "text/yaml" },
+    });
     expect(response.status).toBe(201);
   });
 });
@@ -168,14 +166,11 @@ describe("Configuration CRUD", () => {
     const tenant = await createTenant("config-update");
     const config = await createConfig(tenant.id, "old-name");
 
-    const res = await apiFetch(
-      `http://localhost/api/configurations/${config.id}`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ name: "new-name" }),
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    const res = await apiFetch(`http://localhost/api/configurations/${config.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name: "new-name" }),
+      headers: { "Content-Type": "application/json" },
+    });
     expect(res.status).toBe(200);
     const body = await res.json<{ name: string }>();
     expect(body.name).toBe("new-name");
@@ -186,29 +181,24 @@ describe("Configuration CRUD", () => {
     const config = await createConfig(tenant.id, "to-delete");
 
     // Upload a version + create a token so there's stuff to cascade
-    await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: "key: value\n", headers: { "Content-Type": "text/yaml" } },
-    );
-    await apiFetch(
-      `http://localhost/api/configurations/${config.id}/enrollment-token`,
-      {
-        method: "POST",
-        body: JSON.stringify({ label: "cascade" }),
-        headers: { "Content-Type": "application/json" },
-      },
-    );
+    await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "key: value\n",
+      headers: { "Content-Type": "text/yaml" },
+    });
+    await apiFetch(`http://localhost/api/configurations/${config.id}/enrollment-token`, {
+      method: "POST",
+      body: JSON.stringify({ label: "cascade" }),
+      headers: { "Content-Type": "application/json" },
+    });
 
-    const res = await apiFetch(
-      `http://localhost/api/configurations/${config.id}`,
-      { method: "DELETE" },
-    );
+    const res = await apiFetch(`http://localhost/api/configurations/${config.id}`, {
+      method: "DELETE",
+    });
     expect(res.status).toBe(204);
 
     // Verify it's gone
-    const check = await apiFetch(
-      `http://localhost/api/configurations/${config.id}`,
-    );
+    const check = await apiFetch(`http://localhost/api/configurations/${config.id}`);
     expect(check.status).toBe(404);
   });
 });
@@ -221,18 +211,18 @@ describe("Config Versions", () => {
     const config = await createConfig(tenant.id, "with-versions");
 
     // Upload 2 versions
-    await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: "version: one\n", headers: { "Content-Type": "text/yaml" } },
-    );
-    await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: "version: two\n", headers: { "Content-Type": "text/yaml" } },
-    );
+    await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "version: one\n",
+      headers: { "Content-Type": "text/yaml" },
+    });
+    await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "version: two\n",
+      headers: { "Content-Type": "text/yaml" },
+    });
 
-    const res = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-    );
+    const res = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`);
     expect(res.status).toBe(200);
     const body = await res.json<{
       versions: Array<{ config_hash: string }>;

@@ -9,6 +9,7 @@ Now we need you to design the **user portal** (the logged-in product experience 
 ## Design System Continuity
 
 Reuse and extend the existing design system from `styles.css`:
+
 - **Same CSS custom properties** (`--bg`, `--surface`, `--line`, `--fg`, `--accent`, `--ok`, `--warn`, `--err`, etc.)
 - **Same `[data-theme="dark"]` / `[data-theme="light"]` toggle** with localStorage persistence
 - **Same Geist + Geist Mono font stack**
@@ -23,11 +24,13 @@ Each portal should be a self-contained directory of HTML pages (not a SPA with h
 ## Architecture Context
 
 **Backend API** (already built):
+
 - User routes: `POST|GET /api/v1/configurations`, `GET|PUT|DELETE /api/v1/configurations/:id`, versions, enrollment-tokens, agents, stats, rollout — all scoped by `X-Tenant-Id` header
 - Admin routes: `POST|GET /api/admin/tenants`, `GET|PUT|DELETE /api/admin/tenants/:id`, `GET /api/admin/tenants/:id/configurations`
 - Auth: Currently header-based stubs (`X-Tenant-Id`, `X-Admin`). Future: real SSO with JWT. Design the UI as if real auth exists (login page, session, profile dropdown) — we'll wire it up.
 
 **Data model**:
+
 - **Tenant**: id, name, plan (free/pro/enterprise), max_configs, max_agents_per_config, created_at, updated_at
 - **Configuration**: id, tenant_id, name, description, current_config_hash, created_at, updated_at
 - **Config Version**: id, config_id, tenant_id, config_hash (SHA-256), r2_key, size_bytes, created_by, created_at
@@ -36,6 +39,7 @@ Each portal should be a self-contained directory of HTML pages (not a SPA with h
 - **Stats** (from Durable Object): total_agents, connected_agents, healthy_agents, desired_config_hash, active_websockets
 
 **Pricing tiers** (from pricing.html — the portal must respect and display these):
+
 - Hobby: Free, 1 user, monitor-only, no managed configs, no API keys
 - Pro: $20/mo, 1 user, 3 managed configs, 1 GitHub repo, basic rollouts
 - Team Free: Free, 3 users, monitor-only
@@ -71,6 +75,7 @@ ACCOUNT
 #### 1. Auth Pages (no sidebar, centered card layout like the marketing site hero)
 
 **Sign Up** (`signup.html`)
+
 - Email + password form (or "Continue with Google" / "Continue with GitHub" SSO buttons)
 - Organization name field
 - Checkbox: "I agree to Terms and Privacy Policy" (link to marketing site)
@@ -78,16 +83,19 @@ ACCOUNT
 - If invited: pre-filled email, "Join [Org Name]" heading, no org name field
 
 **Log In** (`login.html`)
+
 - Email + password, or SSO buttons
 - "Forgot password?" link
 - "Don't have an account? Sign up" link
 - Error state: red border on inputs, error message below
 
 **Forgot Password** (`forgot-password.html`)
+
 - Email field → "Send reset link" button
 - Success state: "Check your email" message with icon
 
 **Accept Invite** (`accept-invite.html`)
+
 - Shows who invited you and to which organization
 - If already have account: "Sign in to accept"
 - If new: sign up form pre-filled with email
@@ -95,6 +103,7 @@ ACCOUNT
 #### 2. Onboarding (no sidebar, step-by-step wizard)
 
 **Onboarding** (`onboarding.html`)
+
 - 3-step flow with progress indicator (dots or numbered steps)
 - **Step 1: "Name your workspace"** — org name (pre-filled from signup), optional display name
 - **Step 2: "Create your first configuration"** — name field, optional description. Explain what a configuration group is.
@@ -106,6 +115,7 @@ ACCOUNT
 The landing page after login. Fleet health at a glance.
 
 **Content:**
+
 - **Stat cards row**: Total Configurations, Total Agents (across all configs), Connected Agents, Healthy Agents, Active WebSockets
 - **Configuration list** (table in a card):
   - Columns: Name, Status (tag: N connected / M total), Config Hash (truncated mono), Last Rollout (relative time), Created
@@ -130,16 +140,19 @@ The landing page after login. Fleet health at a glance.
 The most important page. This is where operators spend their time.
 
 **Header row:**
+
 - Config name (h2, editable inline or via edit button)
 - Config ID (mono, small)
 - Action buttons: "Upload YAML", "Generate Token", "Rollout" (primary, with confirmation), "Settings" (gear icon → dropdown: Rename, Delete with confirmation)
 
 **Stat cards row:**
+
 - Total Agents, Connected (green if > 0, red if 0 but total > 0), Healthy, Active WebSockets, Desired Config Hash (mono, truncated)
 
 **Tabbed section** (tabs below the stats):
 
 **Tab: Agents**
+
 - Filter bar: status dropdown (All / Connected / Disconnected), health dropdown (All / Healthy / Unhealthy)
 - Agent count: "247 agents" (updates with filter)
 - Table:
@@ -149,6 +162,7 @@ The most important page. This is where operators spend their time.
   - Click row → expandable detail? Or just a slide-out panel showing full agent info: instance_uid (full), agent_description (parsed JSON), capabilities (decoded from bitmask to human names), last_error, all timestamps
 
 **Tab: Enrollment Tokens**
+
 - "+ Generate Token" button (top right of tab)
 - Table:
   - Columns: Label (or "(no label)"), Token ID (mono, truncated), Status (active / expired / revoked — badge), Expires (date or "Never"), Created
@@ -160,6 +174,7 @@ The most important page. This is where operators spend their time.
   - Also show a ready-to-use YAML snippet with the token pre-filled
 
 **Tab: Config Versions**
+
 - "+ Upload New Version" button
 - Table:
   - Columns: Config Hash (mono), Size, Created By (if available), Created At, Status (tag: "current" green for active version, "previous" dim for older)
@@ -169,10 +184,12 @@ The most important page. This is where operators spend their time.
   - After upload: success message with hash, size, and "Roll out now?" button
 
 **Tab: Rollouts** (if we want to show rollout history — optional but valuable)
+
 - Table of past rollouts: config_hash, pushed count, initiated_at, initiated_by
 - Current rollout status if one is in progress (progress bar like the marketing site mockups)
 
 **Tab: Settings** (config-level)
+
 - Name (editable)
 - Description (editable)
 - Danger zone: Delete configuration (requires typing the config name to confirm, like GitHub repo deletion)
@@ -194,23 +211,27 @@ Account and organization settings.
 **Sections:**
 
 **Profile**
+
 - Name (editable)
 - Email (read-only or editable)
 - Avatar (Gravatar or upload)
 - Change password button → modal
 
 **Organization**
+
 - Organization name (editable)
 - Organization ID (mono, read-only, copy button)
 - Plan badge + "Current plan: Business" with "Manage plan →" link to billing
 - Plan usage: configs used/max, agents connected/max (progress bars)
 
 **API Keys** (Pro+ plans)
+
 - List of API keys: name, prefix (last 4 chars), created, last used, status
 - "+ Create API Key" button → dialog with name, shows key once
 - Revoke button per key
 
 **Danger Zone** (card with red left border)
+
 - "Delete organization" — requires typing org name, shows warning about data loss
 
 #### 8. Team (`team.html`) — Business+ plans only
@@ -274,13 +295,16 @@ SYSTEM
 Platform-wide KPIs at a glance.
 
 **Stat cards row:**
+
 - Total Tenants, Total Configurations (across all tenants), Total Connected Agents (sum across all DOs), Tenants on Free/Pro/Enterprise (breakdown)
 
 **Recent tenants** (table in card):
+
 - 10 most recently created tenants: Name, Plan, Configs count, Created
 - Click → tenant detail
 
 **System status:**
+
 - API health indicator (green dot + "Healthy" or red + "Degraded")
 - Workers version
 - Last deploy timestamp (if available)
@@ -300,25 +324,30 @@ Platform-wide KPIs at a glance.
 Full admin view of a single tenant.
 
 **Header:**
+
 - Tenant name (h2)
 - Tenant ID (mono)
 - Buttons: "Step Into Portal →" (opens user portal for this tenant), "Edit" (modal), "Delete" (danger, confirmation required — blocks if tenant has configurations)
 
 **Info cards row:**
+
 - Plan (badge), Configurations (count / max), Max Agents/Config, Created, Last Updated
 
 **Sections:**
 
 **Configurations** (table in card):
+
 - All configs for this tenant: Name, ID, Config Hash, Created
 - No edit capability here — "Step In" to modify configs via the user portal
 
 **Plan Management:**
+
 - Current plan + limits
 - "Change plan" dropdown: free → pro → enterprise (updates max_configs, max_agents)
 - Show what changes on plan change
 
 **Danger Zone:**
+
 - Delete tenant (requires confirmation, blocks if configs exist)
 - Force-disconnect all agents (emergency)
 
@@ -369,6 +398,7 @@ These appear across both portals:
 ## Deliverables
 
 For the **user portal**, produce these files:
+
 ```
 portal/
   signup.html
@@ -388,6 +418,7 @@ portal/
 ```
 
 For the **admin portal**, produce these files:
+
 ```
 admin/
   login.html
@@ -401,6 +432,7 @@ admin/
 ```
 
 Shared across both:
+
 ```
 shared/
   portal-shell.js           (sidebar toggle, topbar behavior, profile dropdown, keyboard shortcuts, notification bell)

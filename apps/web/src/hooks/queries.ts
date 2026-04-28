@@ -95,8 +95,7 @@ export function useOverview() {
 export function useConfigurations() {
   return useQuery({
     queryKey: ["configurations"],
-    queryFn: () =>
-      api.get<{ configurations: Configuration[] }>("/api/v1/configurations"),
+    queryFn: () => api.get<{ configurations: Configuration[] }>("/api/v1/configurations"),
     select: (d) => d.configurations,
     refetchInterval: 15_000,
   });
@@ -105,8 +104,7 @@ export function useConfigurations() {
 export function useConfiguration(id: string) {
   return useQuery({
     queryKey: ["configuration", id],
-    queryFn: () =>
-      api.get<{ configuration: ConfigDetail }>(`/api/v1/configurations/${id}`),
+    queryFn: () => api.get<{ configuration: ConfigDetail }>(`/api/v1/configurations/${id}`),
     select: (d) => d.configuration,
   });
 }
@@ -114,8 +112,7 @@ export function useConfiguration(id: string) {
 export function useConfigAgents(configId: string) {
   return useQuery({
     queryKey: ["configuration", configId, "agents"],
-    queryFn: () =>
-      api.get<{ agents: Agent[] }>(`/api/v1/configurations/${configId}/agents`),
+    queryFn: () => api.get<{ agents: Agent[] }>(`/api/v1/configurations/${configId}/agents`),
     select: (d) => d.agents,
     refetchInterval: 10_000,
   });
@@ -125,9 +122,7 @@ export function useConfigVersions(configId: string) {
   return useQuery({
     queryKey: ["configuration", configId, "versions"],
     queryFn: () =>
-      api.get<{ versions: ConfigVersion[] }>(
-        `/api/v1/configurations/${configId}/versions`,
-      ),
+      api.get<{ versions: ConfigVersion[] }>(`/api/v1/configurations/${configId}/versions`),
     select: (d) => d.versions,
   });
 }
@@ -135,8 +130,7 @@ export function useConfigVersions(configId: string) {
 export function useConfigStats(configId: string) {
   return useQuery({
     queryKey: ["configuration", configId, "stats"],
-    queryFn: () =>
-      api.get<ConfigStats>(`/api/v1/configurations/${configId}/stats`),
+    queryFn: () => api.get<ConfigStats>(`/api/v1/configurations/${configId}/stats`),
     refetchInterval: 10_000,
   });
 }
@@ -188,8 +182,7 @@ export function useDeleteConfiguration() {
 export function useUpdateTenant() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name?: string }) =>
-      api.put<{ tenant: Tenant }>("/api/v1/tenant", data),
+    mutationFn: (data: { name?: string }) => api.put<{ tenant: Tenant }>("/api/v1/tenant", data),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["tenant"] }),
   });
 }
@@ -198,10 +191,7 @@ export function useCreateEnrollmentToken(configId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (data: { label?: string; expires_in_hours?: number }) =>
-      api.post<NewTokenResponse>(
-        `/api/v1/configurations/${configId}/enrollment-token`,
-        data,
-      ),
+      api.post<NewTokenResponse>(`/api/v1/configurations/${configId}/enrollment-token`, data),
     onSuccess: () =>
       qc.invalidateQueries({
         queryKey: ["configuration", configId, "tokens"],
@@ -225,10 +215,7 @@ export function useUploadConfigVersion(configId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (yaml: string) =>
-      api.postText<{ version: ConfigVersion }>(
-        `/api/v1/configurations/${configId}/versions`,
-        yaml,
-      ),
+      api.postText<{ version: ConfigVersion }>(`/api/v1/configurations/${configId}/versions`, yaml),
     onSuccess: () =>
       qc.invalidateQueries({
         queryKey: ["configuration", configId, "versions"],
@@ -267,9 +254,7 @@ export function useAdminTenantConfigs(tenantId: string) {
   return useQuery({
     queryKey: ["admin", "tenant", tenantId, "configurations"],
     queryFn: () =>
-      api.get<{ configurations: Configuration[] }>(
-        `/api/admin/tenants/${tenantId}/configurations`,
-      ),
+      api.get<{ configurations: Configuration[] }>(`/api/admin/tenants/${tenantId}/configurations`),
     select: (d) => d.configurations,
   });
 }

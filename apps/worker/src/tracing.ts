@@ -14,11 +14,7 @@ const WS_TRACER = "o11yfleet.websocket";
 /**
  * Create a span for WebSocket message processing.
  */
-export function startWsMessageSpan(
-  instanceUid: string,
-  tenantId: string,
-  configId: string,
-): Span {
+export function startWsMessageSpan(instanceUid: string, tenantId: string, configId: string): Span {
   const tracer = trace.getTracer(WS_TRACER);
   return tracer.startSpan("ws.message", {
     attributes: {
@@ -32,10 +28,7 @@ export function startWsMessageSpan(
 /**
  * Create a span for WebSocket close/error lifecycle events.
  */
-export function startWsLifecycleSpan(
-  event: "close" | "error",
-  instanceUid: string,
-): Span {
+export function startWsLifecycleSpan(event: "close" | "error", instanceUid: string): Span {
   const tracer = trace.getTracer(WS_TRACER);
   return tracer.startSpan(`ws.${event}`, {
     attributes: {

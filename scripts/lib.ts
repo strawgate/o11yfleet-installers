@@ -50,8 +50,7 @@ export const log = {
   ok: (msg: string) => console.log(`\x1b[32m[${ts()}]\x1b[0m ✓ ${msg}`),
   warn: (msg: string) => console.log(`\x1b[33m[${ts()}]\x1b[0m ⚠ ${msg}`),
   error: (msg: string) => console.log(`\x1b[31m[${ts()}]\x1b[0m ✗ ${msg}`),
-  ws: (dir: "→" | "←" | "↔", msg: string) =>
-    console.log(`\x1b[35m[${ts()}]\x1b[0m ${dir} ${msg}`),
+  ws: (dir: "→" | "←" | "↔", msg: string) => console.log(`\x1b[35m[${ts()}]\x1b[0m ${dir} ${msg}`),
   dim: (msg: string) => console.log(`\x1b[2m[${ts()}] ${msg}\x1b[0m`),
 };
 

@@ -1,11 +1,4 @@
-import {
-  createContext,
-  useContext,
-  useState,
-  useEffect,
-  useCallback,
-  type ReactNode,
-} from "react";
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { api, ApiError } from "./api";
 
@@ -72,9 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>
   );
 }
 
@@ -98,8 +89,7 @@ export function RequireAdmin({ children }: { children: ReactNode }) {
   const location = useLocation();
 
   if (loading) return <LoadingScreen />;
-  if (!user)
-    return <Navigate to="/admin-login" state={{ from: location }} replace />;
+  if (!user) return <Navigate to="/admin-login" state={{ from: location }} replace />;
   if (user.role !== "admin") return <Navigate to="/portal/overview" replace />;
   return <>{children}</>;
 }

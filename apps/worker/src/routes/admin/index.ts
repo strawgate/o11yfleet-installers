@@ -26,11 +26,7 @@ class AdminApiError extends Error {
 
 // ─── Router ─────────────────────────────────────────────────────────
 
-export async function handleAdminRequest(
-  request: Request,
-  env: Env,
-  url: URL,
-): Promise<Response> {
+export async function handleAdminRequest(request: Request, env: Env, url: URL): Promise<Response> {
   try {
     return await routeAdminRequest(request, env, url);
   } catch (err) {
@@ -42,11 +38,7 @@ export async function handleAdminRequest(
   }
 }
 
-async function routeAdminRequest(
-  request: Request,
-  env: Env,
-  url: URL,
-): Promise<Response> {
+async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<Response> {
   const path = url.pathname;
   const method = request.method;
 
@@ -112,9 +104,7 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
 }
 
 async function handleListTenants(env: Env): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT * FROM tenants ORDER BY created_at DESC`,
-  ).all();
+  const result = await env.FP_DB.prepare(`SELECT * FROM tenants ORDER BY created_at DESC`).all();
   return Response.json({ tenants: result.results });
 }
 
@@ -126,11 +116,7 @@ async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   return Response.json(tenant);
 }
 
-async function handleUpdateTenant(
-  request: Request,
-  env: Env,
-  tenantId: string,
-): Promise<Response> {
+async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
   const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
     .bind(tenantId)
     .first();
@@ -160,9 +146,7 @@ async function handleUpdateTenant(
   updates.push("updated_at = datetime('now')");
   values.push(tenantId);
 
-  await env.FP_DB.prepare(
-    `UPDATE tenants SET ${updates.join(", ")} WHERE id = ?`,
-  )
+  await env.FP_DB.prepare(`UPDATE tenants SET ${updates.join(", ")} WHERE id = ?`)
     .bind(...values)
     .run();
 
@@ -206,10 +190,18 @@ async function handleListConfigurations(env: Env, tenantId: string): Promise<Res
 // ─── Admin Overview ─────────────────────────────────────────────────
 
 async function handleAdminOverview(env: Env): Promise<Response> {
-  const tenants = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{ count: number }>();
-  const configs = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations").first<{ count: number }>();
-  const tokens = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL").first<{ count: number }>();
-  const users = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM users").first<{ count: number }>();
+  const tenants = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{
+    count: number;
+  }>();
+  const configs = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations").first<{
+    count: number;
+  }>();
+  const tokens = await env.FP_DB.prepare(
+    "SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL",
+  ).first<{ count: number }>();
+  const users = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM users").first<{
+    count: number;
+  }>();
 
   return Response.json({
     total_tenants: tenants?.count ?? 0,

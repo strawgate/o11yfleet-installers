@@ -41,9 +41,7 @@ export function AdminLayout() {
                 )
               }
             >
-              <span className="w-4 text-center text-xs opacity-60">
-                {item.icon}
-              </span>
+              <span className="w-4 text-center text-xs opacity-60">{item.icon}</span>
               {item.label}
             </NavLink>
           ))}
@@ -51,9 +49,7 @@ export function AdminLayout() {
 
         {/* User footer */}
         <div className="border-t border-line px-4 py-3">
-          <p className="text-xs font-medium text-fg truncate">
-            {user?.displayName}
-          </p>
+          <p className="text-xs font-medium text-fg truncate">{user?.displayName}</p>
           <p className="text-[10px] text-fg-4 truncate">{user?.email}</p>
           <button
             onClick={logout}

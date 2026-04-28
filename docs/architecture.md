@@ -9,6 +9,7 @@ FleetPlane is an OpAMP (Open Agent Management Protocol) management service built
 ### Config-as-Durable-Object Partitioning
 
 Each `(tenant_id, config_id)` pair maps to one Durable Object. This gives us:
+
 - Natural sharding by configuration group
 - WebSocket hibernation for idle agents (zero cost when sleeping)
 - DO-internal SQLite for per-config agent state
@@ -19,6 +20,7 @@ DO name format: `${tenant_id}:${config_id}`
 ### Signed Assignment Claims
 
 After enrollment, each agent receives a signed JWT-like claim (HMAC-SHA256) containing:
+
 - `tenant_id`, `config_id`, `instance_uid`, `generation`
 - Issued/expiry timestamps
 
@@ -27,6 +29,7 @@ Hot-path connections verify the claim locally (no D1 lookup). Only enrollment hi
 ### R2 Content-Addressed Config Storage
 
 Config YAML is stored in R2 keyed by SHA-256 hash:
+
 - Key format: `configs/sha256/{hash}.yaml`
 - Deduplication: identical configs share one R2 object
 - Config DO references hash, never stores full YAML
@@ -51,16 +54,16 @@ Agent → WebSocket → Worker (ingress) → Config DO → Queue → Consumer �
 
 ## Component Map
 
-| Component | Location | Runtime |
-|-----------|----------|---------|
-| OpAMP Codec | `packages/core/src/codec/` | Pure TS, no CF |
-| State Machine | `packages/core/src/state-machine/` | Pure TS, no CF |
-| Auth/Claims | `packages/core/src/auth/` | Pure TS, Web Crypto |
-| D1 Schema | `packages/db/` | SQL |
-| Fake Agent | `packages/test-utils/` | Pure TS |
-| Worker | `apps/worker/src/index.ts` | CF Worker |
-| Config DO | `apps/worker/src/durable-objects/` | CF DO |
-| Config Store | `apps/worker/src/config-store.ts` | CF Worker + R2 |
-| Event Consumer | `apps/worker/src/event-consumer.ts` | CF Queue |
-| API Routes | `apps/worker/src/routes/api/` | CF Worker |
-| Terraform | `infra/terraform/` | HCL |
+| Component      | Location                            | Runtime             |
+| -------------- | ----------------------------------- | ------------------- |
+| OpAMP Codec    | `packages/core/src/codec/`          | Pure TS, no CF      |
+| State Machine  | `packages/core/src/state-machine/`  | Pure TS, no CF      |
+| Auth/Claims    | `packages/core/src/auth/`           | Pure TS, Web Crypto |
+| D1 Schema      | `packages/db/`                      | SQL                 |
+| Fake Agent     | `packages/test-utils/`              | Pure TS             |
+| Worker         | `apps/worker/src/index.ts`          | CF Worker           |
+| Config DO      | `apps/worker/src/durable-objects/`  | CF DO               |
+| Config Store   | `apps/worker/src/config-store.ts`   | CF Worker + R2      |
+| Event Consumer | `apps/worker/src/event-consumer.ts` | CF Queue            |
+| API Routes     | `apps/worker/src/routes/api/`       | CF Worker           |
+| Terraform      | `infra/terraform/`                  | HCL                 |

@@ -3,7 +3,7 @@
 // config ack → disconnect → reconnect with claim → verify stats
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { RemoteConfigStatuses } from "@o11yfleet/core/codec";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
@@ -36,7 +36,7 @@ describe("Full Agent Lifecycle", () => {
   let enrollmentToken: string;
   let assignmentClaim: string;
   let parsedClaim: AssignmentClaim;
-  let instanceUid: string;
+  let _instanceUid: string;
 
   beforeAll(async () => {
     const tenant = await createTenant("Lifecycle Corp");
@@ -60,7 +60,7 @@ describe("Full Agent Lifecycle", () => {
 
     // Claims are 2-part HMAC format: base64url(payload).base64url(sig)
     assignmentClaim = enrollment.assignment_claim;
-    instanceUid = enrollment.instance_uid;
+    _instanceUid = enrollment.instance_uid;
 
     // Verify the claim is valid and parseable
     parsedClaim = await verifyClaim(assignmentClaim, CLAIM_SECRET);
@@ -134,8 +134,7 @@ describe("Full Agent Lifecycle", () => {
     const ack: AgentToServer = {
       instance_uid: new Uint8Array(16),
       sequence_num: 1,
-      capabilities:
-        AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
       flags: 0,
       remote_config_status: {
         last_remote_config_hash:

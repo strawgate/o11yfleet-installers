@@ -20,9 +20,7 @@ export function TenantsPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-lg font-semibold text-fg">Tenants</h1>
-          <p className="text-xs text-fg-3 mt-0.5">
-            {tenants?.length ?? 0} total
-          </p>
+          <p className="text-xs text-fg-3 mt-0.5">{tenants?.length ?? 0} total</p>
         </div>
       </div>
 
@@ -66,9 +64,7 @@ export function TenantsPage() {
                   <td className="px-4 py-3">
                     <Badge>{t.plan}</Badge>
                   </td>
-                  <td className="px-4 py-3 text-fg-3 text-xs">
-                    {relativeTime(t.created_at)}
-                  </td>
+                  <td className="px-4 py-3 text-fg-3 text-xs">{relativeTime(t.created_at)}</td>
                 </tr>
               ))}
               {filtered?.length === 0 && (

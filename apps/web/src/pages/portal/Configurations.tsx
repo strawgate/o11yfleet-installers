@@ -50,24 +50,16 @@ export function ConfigurationsPage() {
           title="No configurations yet"
           description="Create your first configuration to start managing collectors."
         >
-          <Button onClick={() => setShowCreate(true)}>
-            Create Configuration
-          </Button>
+          <Button onClick={() => setShowCreate(true)}>Create Configuration</Button>
         </EmptyState>
       ) : (
         <div className="rounded-xl border border-line overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b border-line bg-surface-2">
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Name
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Environment
-                </th>
-                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">
-                  Created
-                </th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Name</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Environment</th>
+                <th className="text-left px-4 py-2.5 text-xs font-medium text-fg-3">Created</th>
               </tr>
             </thead>
             <tbody>
@@ -84,12 +76,8 @@ export function ConfigurationsPage() {
                       {c.name}
                     </Link>
                   </td>
-                  <td className="px-4 py-3 text-fg-3">
-                    {c.environment ?? "—"}
-                  </td>
-                  <td className="px-4 py-3 text-fg-3">
-                    {relativeTime(c.created_at)}
-                  </td>
+                  <td className="px-4 py-3 text-fg-3">{c.environment ?? "—"}</td>
+                  <td className="px-4 py-3 text-fg-3">{relativeTime(c.created_at)}</td>
                 </tr>
               ))}
             </tbody>
@@ -97,11 +85,7 @@ export function ConfigurationsPage() {
         </div>
       )}
 
-      <Modal
-        open={showCreate}
-        onClose={() => setShowCreate(false)}
-        title="New Configuration"
-      >
+      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="New Configuration">
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -118,11 +102,7 @@ export function ConfigurationsPage() {
             autoFocus
           />
           <div className="flex justify-end gap-2">
-            <Button
-              variant="secondary"
-              type="button"
-              onClick={() => setShowCreate(false)}
-            >
+            <Button variant="secondary" type="button" onClick={() => setShowCreate(false)}>
               Cancel
             </Button>
             <Button type="submit" disabled={createMutation.isPending}>

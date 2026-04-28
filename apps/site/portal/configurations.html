@@ -1,130 +1,194 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Configurations — O11yFleet</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-</head>
-<body>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head">
-        <div>
-          <h1>Configurations</h1>
-          <div class="sub">Stored, versioned collector configurations. Edit in the UI or back with a Git repo, per configuration.</div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configurations — O11yFleet</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Configurations</h1>
+              <div class="sub">
+                Stored, versioned collector configurations. Edit in the UI or back with a Git repo,
+                per configuration.
+              </div>
+            </div>
+            <div class="actions">
+              <a href="#" class="btn btn-secondary btn-sm">Import from YAML</a>
+              <button class="btn btn-primary btn-sm" data-open-modal="new-config">
+                New configuration
+              </button>
+            </div>
+          </div>
+
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <span class="count" id="config-count">Loading…</span>
+              <div class="spacer"></div>
+              <select class="select" style="width: auto; height: 30px">
+                <option>All sources</option>
+                <option>UI</option>
+                <option>Git</option>
+              </select>
+              <select class="select" style="width: auto; height: 30px">
+                <option>All environments</option>
+                <option>production</option>
+                <option>staging</option>
+              </select>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Config Hash</th>
+                  <th>Description</th>
+                  <th>Updated</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="config-rows">
+                <tr>
+                  <td colspan="5" class="meta" style="text-align: center; padding: 32px">
+                    Loading…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <div class="actions">
-          <a href="#" class="btn btn-secondary btn-sm">Import from YAML</a>
-          <button class="btn btn-primary btn-sm" data-open-modal="new-config">New configuration</button>
+      </main>
+    </div>
+
+    <div class="modal-backdrop" id="new-config">
+      <div class="modal" role="dialog" aria-modal="true">
+        <div class="modal-head">
+          <h3>New configuration</h3>
+          <button class="modal-close" data-close-modal>×</button>
+        </div>
+        <div class="modal-body">
+          <div class="field">
+            <label>Name</label><input class="input mono" placeholder="prod-ingress" />
+          </div>
+          <div class="field">
+            <label>Source</label>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px">
+              <label
+                class="card card-pad"
+                style="
+                  padding: 14px;
+                  cursor: pointer;
+                  border-color: var(--accent-line);
+                  background: var(--accent-soft);
+                "
+              >
+                <div class="flex-row gap-sm">
+                  <input type="radio" name="source" checked /><strong>UI</strong>
+                </div>
+                <div class="text-sm t-muted mt-2">Edit YAML inline. Versioned automatically.</div>
+              </label>
+              <label class="card card-pad" style="padding: 14px; cursor: pointer">
+                <div class="flex-row gap-sm">
+                  <input type="radio" name="source" /><strong>Git</strong>
+                </div>
+                <div class="text-sm t-muted mt-2">Watch a path in a GitHub repo. PR-driven.</div>
+              </label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Targets (label selector)</label
+            ><input class="input mono" placeholder="env=production,role=ingress" />
+            <div class="help">
+              Collectors matching these labels will receive this configuration.
+            </div>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button class="btn btn-primary" id="create-config-btn">Create</button>
         </div>
       </div>
-
-      <div class="dt-card">
-        <div class="dt-toolbar">
-          <span class="count" id="config-count">Loading…</span>
-          <div class="spacer"></div>
-          <select class="select" style="width: auto; height: 30px;"><option>All sources</option><option>UI</option><option>Git</option></select>
-          <select class="select" style="width: auto; height: 30px;"><option>All environments</option><option>production</option><option>staging</option></select>
-        </div>
-        <table class="dt">
-          <thead><tr><th>Name</th><th>Config Hash</th><th>Description</th><th>Updated</th><th></th></tr></thead>
-          <tbody id="config-rows">
-            <tr><td colspan="5" class="meta" style="text-align:center; padding:32px;">Loading…</td></tr>
-          </tbody>
-        </table>
-      </div>
     </div>
-  </main>
-</div>
 
-<div class="modal-backdrop" id="new-config">
-  <div class="modal" role="dialog" aria-modal="true">
-    <div class="modal-head"><h3>New configuration</h3><button class="modal-close" data-close-modal>×</button></div>
-    <div class="modal-body">
-      <div class="field"><label>Name</label><input class="input mono" placeholder="prod-ingress" /></div>
-      <div class="field">
-        <label>Source</label>
-        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
-          <label class="card card-pad" style="padding: 14px; cursor: pointer; border-color: var(--accent-line); background: var(--accent-soft);">
-            <div class="flex-row gap-sm"><input type="radio" name="source" checked /><strong>UI</strong></div>
-            <div class="text-sm t-muted mt-2">Edit YAML inline. Versioned automatically.</div>
-          </label>
-          <label class="card card-pad" style="padding: 14px; cursor: pointer;">
-            <div class="flex-row gap-sm"><input type="radio" name="source" /><strong>Git</strong></div>
-            <div class="text-sm t-muted mt-2">Watch a path in a GitHub repo. PR-driven.</div>
-          </label>
-        </div>
-      </div>
-      <div class="field"><label>Targets (label selector)</label><input class="input mono" placeholder="env=production,role=ingress" /><div class="help">Collectors matching these labels will receive this configuration.</div></div>
-    </div>
-    <div class="modal-foot">
-      <button class="btn btn-ghost" data-close-modal>Cancel</button>
-      <button class="btn btn-primary" id="create-config-btn">Create</button>
-    </div>
-  </div>
-</div>
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({ current: "configurations", crumbs: [{ label: "Configurations" }] });
+    </script>
+    <script>
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
 
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>FB.shell({ current: 'configurations', crumbs: [{label:'Configurations'}] });</script>
-<script>
-(async function () {
-  var authed = await FP.checkAuth();
-  if (!authed) return;
+        var tbody = document.getElementById("config-rows");
+        var countEl = document.querySelector(".dt-toolbar .count");
 
-  var tbody = document.getElementById('config-rows');
-  var countEl = document.querySelector('.dt-toolbar .count');
-
-  async function loadConfigs() {
-    try {
-      const data = await FP.get('/api/v1/configurations');
-      const configs = data.configurations || [];
-      countEl.textContent = configs.length + ' configuration' + (configs.length !== 1 ? 's' : '');
-      if (configs.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No configurations yet. Create one to get started.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = configs.map(c => `
+        async function loadConfigs() {
+          try {
+            const data = await FP.get("/api/v1/configurations");
+            const configs = data.configurations || [];
+            countEl.textContent =
+              configs.length + " configuration" + (configs.length !== 1 ? "s" : "");
+            if (configs.length === 0) {
+              tbody.innerHTML =
+                '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No configurations yet. Create one to get started.</td></tr>';
+              return;
+            }
+            tbody.innerHTML = configs
+              .map(
+                (c) => `
         <tr class="clickable" onclick="window.location.href='configuration-detail.html?id=${c.id}'">
           <td class="name">${esc(c.name)}</td>
-          <td class="mono-cell">${c.current_config_hash ? FP.trunc(c.current_config_hash, 12) : '—'}</td>
-          <td class="meta">${esc(c.description || '—')}</td>
+          <td class="mono-cell">${c.current_config_hash ? FP.trunc(c.current_config_hash, 12) : "—"}</td>
+          <td class="meta">${esc(c.description || "—")}</td>
           <td class="meta">${FP.relTime(c.updated_at)}</td>
           <td class="row-actions"><span class="t-muted">›</span></td>
         </tr>
-      `).join('');
-    } catch (e) {
-      console.error('Failed to load configurations', e);
-      tbody.innerHTML = '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load configurations</td></tr>';
-    }
-  }
+      `,
+              )
+              .join("");
+          } catch (e) {
+            console.error("Failed to load configurations", e);
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load configurations</td></tr>';
+          }
+        }
 
-  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s;
+          return d.innerHTML;
+        }
 
-  // Create configuration
-  document.getElementById('create-config-btn').addEventListener('click', async () => {
-    const nameInput = document.querySelector('#new-config .input.mono');
-    const name = nameInput ? nameInput.value.trim() : '';
-    if (!name) { toast('Name required', '', 'err'); return; }
-    try {
-      await FP.post('/api/v1/configurations', { name: name });
-      closeModal('new-config');
-      toast('Configuration created', name);
-      nameInput.value = '';
-      loadConfigs();
-    } catch (e) {
-      toast('Failed to create', e.message, 'err');
-    }
-  });
+        // Create configuration
+        document.getElementById("create-config-btn").addEventListener("click", async () => {
+          const nameInput = document.querySelector("#new-config .input.mono");
+          const name = nameInput ? nameInput.value.trim() : "";
+          if (!name) {
+            toast("Name required", "", "err");
+            return;
+          }
+          try {
+            await FP.post("/api/v1/configurations", { name: name });
+            closeModal("new-config");
+            toast("Configuration created", name);
+            nameInput.value = "";
+            loadConfigs();
+          } catch (e) {
+            toast("Failed to create", e.message, "err");
+          }
+        });
 
-  FP.autoRefresh(loadConfigs, 10000);
-})();
-</script>
-</body>
+        FP.autoRefresh(loadConfigs, 10000);
+      })();
+    </script>
+  </body>
 </html>

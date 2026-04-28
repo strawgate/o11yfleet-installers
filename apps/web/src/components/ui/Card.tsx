@@ -7,12 +7,7 @@ interface CardProps {
 
 export function Card({ children, className }: CardProps) {
   return (
-    <div
-      className={clsx(
-        "rounded-xl border border-line bg-surface p-5",
-        className,
-      )}
-    >
+    <div className={clsx("rounded-xl border border-line bg-surface p-5", className)}>
       {children}
     </div>
   );
@@ -23,9 +18,5 @@ export function CardHeader({ children, className }: CardProps) {
 }
 
 export function CardTitle({ children, className }: CardProps) {
-  return (
-    <h3 className={clsx("text-sm font-semibold text-fg", className)}>
-      {children}
-    </h3>
-  );
+  return <h3 className={clsx("text-sm font-semibold text-fg", className)}>{children}</h3>;
 }

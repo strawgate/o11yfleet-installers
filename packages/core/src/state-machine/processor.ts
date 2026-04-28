@@ -23,7 +23,11 @@ function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   return true;
 }
 
-export function processFrame(state: AgentState, msg: AgentToServer, configContentBytes?: Uint8Array | null): ProcessResult {
+export function processFrame(
+  state: AgentState,
+  msg: AgentToServer,
+  configContentBytes?: Uint8Array | null,
+): ProcessResult {
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
   const now = Date.now();
@@ -67,7 +71,8 @@ export function processFrame(state: AgentState, msg: AgentToServer, configConten
     return { newState, response: null, events, shouldPersist };
   }
 
-  // Is this a hello (first message, seq=0 or state has no connected_at)?
+  // Is this a hello (first message or reconnection)?
+  // Per OpAMP spec, seq=0 signals a hello. Also treat as hello if connected_at was never set.
   const isHello = msg.sequence_num === 0 || state.connected_at === 0;
 
   if (isHello) {
@@ -92,7 +97,10 @@ export function processFrame(state: AgentState, msg: AgentToServer, configConten
 
   // Process health
   if (msg.health) {
-    const healthChanged = msg.health.healthy !== state.healthy || msg.health.status !== state.status;
+    const healthChanged =
+      msg.health.healthy !== state.healthy ||
+      msg.health.status !== state.status ||
+      msg.health.last_error !== state.last_error;
     if (healthChanged) {
       newState.healthy = msg.health.healthy;
       newState.status = msg.health.status;
@@ -113,8 +121,11 @@ export function processFrame(state: AgentState, msg: AgentToServer, configConten
 
   // Process agent description
   if (msg.agent_description) {
-    newState.agent_description = JSON.stringify(msg.agent_description);
-    shouldPersist = true;
+    const descJson = JSON.stringify(msg.agent_description);
+    if (descJson !== state.agent_description) {
+      newState.agent_description = descJson;
+      shouldPersist = true;
+    }
   }
 
   // Process remote config status
@@ -170,5 +181,3 @@ export function processFrame(state: AgentState, msg: AgentToServer, configConten
 
   return { newState, response, events, shouldPersist };
 }
-
-

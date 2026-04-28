@@ -7,9 +7,7 @@ describe("validateYaml", () => {
   });
 
   it("returns null for nested YAML", () => {
-    expect(
-      validateYaml("receivers:\n  otlp:\n    protocols:\n      grpc:\n"),
-    ).toBeNull();
+    expect(validateYaml("receivers:\n  otlp:\n    protocols:\n      grpc:\n")).toBeNull();
   });
 
   it("returns error for invalid YAML syntax", () => {

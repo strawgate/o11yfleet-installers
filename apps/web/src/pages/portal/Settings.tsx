@@ -46,25 +46,17 @@ export function SettingsPage() {
             onChange={(e) => setName(e.target.value)}
           />
           <div>
-            <label className="block text-xs font-medium text-fg-3 mb-1.5">
-              Plan
-            </label>
+            <label className="block text-xs font-medium text-fg-3 mb-1.5">Plan</label>
             <Badge>{tenant?.plan ?? "—"}</Badge>
           </div>
           <div>
-            <label className="block text-xs font-medium text-fg-3 mb-1.5">
-              Workspace ID
-            </label>
-            <code className="text-xs font-mono text-fg-3">
-              {tenant?.id ?? "—"}
-            </code>
+            <label className="block text-xs font-medium text-fg-3 mb-1.5">Workspace ID</label>
+            <code className="text-xs font-mono text-fg-3">{tenant?.id ?? "—"}</code>
           </div>
           <Button
             onClick={handleSave}
             disabled={
-              updateMutation.isPending ||
-              !displayName.trim() ||
-              displayName === tenant?.name
+              updateMutation.isPending || !displayName.trim() || displayName === tenant?.name
             }
           >
             {updateMutation.isPending ? "Saving…" : "Save Changes"}
@@ -88,11 +80,7 @@ export function SettingsPage() {
               variant="danger"
               size="sm"
               onClick={() =>
-                toast(
-                  "Not implemented",
-                  "Workspace deletion is not yet available.",
-                  "warning",
-                )
+                toast("Not implemented", "Workspace deletion is not yet available.", "warning")
               }
             >
               Delete

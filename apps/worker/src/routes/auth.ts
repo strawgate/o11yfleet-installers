@@ -1,16 +1,7 @@
 // Auth routes — login, logout, session management, seed accounts
 
 import type { Env } from "../index.js";
-
-// ─── Timing-safe comparison ─────────────────────────────────────────
-
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aBuf = enc.encode(a);
-  const bBuf = enc.encode(b);
-  if (aBuf.byteLength !== bBuf.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(aBuf, bBuf);
-}
+import { timingSafeEqual } from "../utils/crypto.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -24,14 +15,20 @@ const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 async function hashPassword(password: string, salt?: Uint8Array): Promise<string> {
   salt = salt ?? crypto.getRandomValues(new Uint8Array(16));
   const enc = new TextEncoder();
-  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, ["deriveBits"]);
+  const keyMaterial = await crypto.subtle.importKey("raw", enc.encode(password), "PBKDF2", false, [
+    "deriveBits",
+  ]);
   const derived = await crypto.subtle.deriveBits(
     { name: "PBKDF2", salt, iterations: 100_000, hash: "SHA-256" },
     keyMaterial,
     256,
   );
-  const hashHex = Array.from(new Uint8Array(derived)).map((b) => b.toString(16).padStart(2, "0")).join("");
-  const saltHex = Array.from(salt).map((b) => b.toString(16).padStart(2, "0")).join("");
+  const hashHex = Array.from(new Uint8Array(derived))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+  const saltHex = Array.from(salt)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
   return `pbkdf2:100000:${saltHex}:${hashHex}`;
 }
 
@@ -51,7 +48,9 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
 
 function generateSessionId(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("");
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
 function getCookie(request: Request, name: string): string | null {
@@ -62,11 +61,11 @@ function getCookie(request: Request, name: string): string | null {
 }
 
 function sessionCookie(sessionId: string, maxAge: number): string {
-  return `fp_session=${sessionId}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`;
+  return `fp_session=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
 }
 
 function clearSessionCookie(): string {
-  return "fp_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0";
+  return "fp_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
 }
 
 // ─── Auth context (used by middleware) ──────────────────────────────
@@ -87,13 +86,15 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
     `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.id = ? AND s.expires_at > datetime('now')`,
-  ).bind(sessionId).first<{
-    user_id: string;
-    email: string;
-    display_name: string;
-    tenant_id: string | null;
-    role: string;
-  }>();
+  )
+    .bind(sessionId)
+    .first<{
+      user_id: string;
+      email: string;
+      display_name: string;
+      tenant_id: string | null;
+      role: string;
+    }>();
 
   if (!row) return null;
   return {
@@ -143,14 +144,16 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
   const user = await env.FP_DB.prepare(
     "SELECT id, email, password_hash, display_name, role, tenant_id FROM users WHERE email = ?",
-  ).bind(email).first<{
-    id: string;
-    email: string;
-    password_hash: string;
-    display_name: string;
-    role: string;
-    tenant_id: string | null;
-  }>();
+  )
+    .bind(email)
+    .first<{
+      id: string;
+      email: string;
+      password_hash: string;
+      display_name: string;
+      role: string;
+      tenant_id: string | null;
+    }>();
 
   if (!user) return jsonError("Invalid email or password", 401);
 
@@ -160,14 +163,14 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   // Create session
   const sessionId = generateSessionId();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  await env.FP_DB.prepare(
-    "INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)",
-  ).bind(sessionId, user.id, expiresAt).run();
+  await env.FP_DB.prepare("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)")
+    .bind(sessionId, user.id, expiresAt)
+    .run();
 
   // Clean up expired sessions for this user (best-effort)
-  await env.FP_DB.prepare(
-    "DELETE FROM sessions WHERE user_id = ? AND expires_at < datetime('now')",
-  ).bind(user.id).run();
+  await env.FP_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at < datetime('now')")
+    .bind(user.id)
+    .run();
 
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
   return Response.json(
@@ -193,10 +196,7 @@ async function handleLogout(request: Request, env: Env): Promise<Response> {
   if (sessionId) {
     await env.FP_DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
   }
-  return Response.json(
-    { ok: true },
-    { headers: { "Set-Cookie": clearSessionCookie() } },
-  );
+  return Response.json({ ok: true }, { headers: { "Set-Cookie": clearSessionCookie() } });
 }
 
 // ─── GET /auth/me ───────────────────────────────────────────────────
@@ -222,12 +222,16 @@ async function handleSeed(env: Env): Promise<Response> {
   const results: string[] = [];
 
   // Find the demo tenant (first tenant, or create one)
-  let tenant = await env.FP_DB.prepare("SELECT id FROM tenants ORDER BY created_at LIMIT 1").first<{ id: string }>();
+  let tenant = await env.FP_DB.prepare("SELECT id FROM tenants ORDER BY created_at LIMIT 1").first<{
+    id: string;
+  }>();
   if (!tenant) {
     const tenantId = crypto.randomUUID();
     await env.FP_DB.prepare(
       "INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)",
-    ).bind(tenantId, "Demo Org", "pro", 50, 100000).run();
+    )
+      .bind(tenantId, "Demo Org", "pro", 50, 100000)
+      .run();
     tenant = { id: tenantId };
     results.push(`Created demo tenant: ${tenantId}`);
   }
@@ -235,35 +239,47 @@ async function handleSeed(env: Env): Promise<Response> {
   // Seed tenant user
   const tenantEmail = e.SEED_TENANT_USER_EMAIL ?? "demo@o11yfleet.com";
   const tenantPassword = e.SEED_TENANT_USER_PASSWORD ?? "demo-password";
-  const existingTenantUser = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?").bind(tenantEmail).first();
+  const existingTenantUser = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
+    .bind(tenantEmail)
+    .first();
   if (!existingTenantUser) {
     const hash = await hashPassword(tenantPassword);
     const userId = crypto.randomUUID();
     await env.FP_DB.prepare(
       "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
-    ).bind(userId, tenantEmail, hash, "Demo User", "member", tenant.id).run();
+    )
+      .bind(userId, tenantEmail, hash, "Demo User", "member", tenant.id)
+      .run();
     results.push(`Created tenant user: ${tenantEmail}`);
   } else {
     // Update password in case it changed
     const hash = await hashPassword(tenantPassword);
-    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?").bind(hash, tenantEmail).run();
+    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?")
+      .bind(hash, tenantEmail)
+      .run();
     results.push(`Updated tenant user password: ${tenantEmail}`);
   }
 
   // Seed admin user
   const adminEmail = e.SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
   const adminPassword = e.SEED_ADMIN_PASSWORD ?? "admin-password";
-  const existingAdmin = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?").bind(adminEmail).first();
+  const existingAdmin = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
+    .bind(adminEmail)
+    .first();
   if (!existingAdmin) {
     const hash = await hashPassword(adminPassword);
     const userId = crypto.randomUUID();
     await env.FP_DB.prepare(
       "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
-    ).bind(userId, adminEmail, hash, "Admin", "admin", null).run();
+    )
+      .bind(userId, adminEmail, hash, "Admin", "admin", null)
+      .run();
     results.push(`Created admin user: ${adminEmail}`);
   } else {
     const hash = await hashPassword(adminPassword);
-    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?").bind(hash, adminEmail).run();
+    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?")
+      .bind(hash, adminEmail)
+      .run();
     results.push(`Updated admin user password: ${adminEmail}`);
   }
 

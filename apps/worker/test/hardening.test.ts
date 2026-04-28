@@ -2,7 +2,16 @@ import { describe, it, expect } from "vitest";
 import { processFrame } from "@o11yfleet/core/state-machine";
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import { AgentCapabilities } from "@o11yfleet/core/codec";
-import { AppError, AuthError, ProtocolError, RateLimitError, StorageError, NotFoundError, errorResponse, WS_CLOSE_CODES } from "../src/errors.js";
+import {
+  AppError,
+  AuthError,
+  ProtocolError,
+  RateLimitError,
+  StorageError,
+  NotFoundError,
+  errorResponse,
+  WS_CLOSE_CODES,
+} from "../src/errors.js";
 
 // ========================
 // Phase 4D: Cost Guardrails

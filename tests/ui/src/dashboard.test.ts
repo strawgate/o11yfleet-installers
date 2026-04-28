@@ -47,9 +47,7 @@ test.describe("Dashboard Smoke Tests", () => {
 
   test("Connect button is visible", async ({ page }) => {
     await page.goto(UI_URL);
-    await expect(
-      page.locator(".server-url button", { hasText: "Connect" }),
-    ).toBeVisible();
+    await expect(page.locator(".server-url button", { hasText: "Connect" })).toBeVisible();
   });
 
   test("stat cards are present", async ({ page }) => {

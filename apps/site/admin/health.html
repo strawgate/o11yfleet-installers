@@ -1,71 +1,202 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>System health — O11yFleet Admin</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-<link rel="stylesheet" href="../admin.css" />
-</head>
-<body>
-<div class="admin-stripe"></div>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head"><div><h1>System health</h1><div class="sub">Live state of OpAMP gateways, control plane, and dependencies.</div></div></div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>System health — O11yFleet Admin</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+    <link rel="stylesheet" href="../admin.css" />
+  </head>
+  <body>
+    <div class="admin-stripe"></div>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>System health</h1>
+              <div class="sub">Live state of OpAMP gateways, control plane, and dependencies.</div>
+            </div>
+          </div>
 
-      <div class="banner warn mb-6">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-        <div><div class="b-title">eu-west-1 OpAMP gateway · p99 384ms</div><div class="b-body">Above 250ms threshold for 12m. Investigate before promoting.</div></div>
-        <div class="b-actions"><button class="btn btn-secondary btn-sm">Drain region</button></div>
-      </div>
+          <div class="banner warn mb-6">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M8 2L1.5 13.5h13z" />
+              <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+            </svg>
+            <div>
+              <div class="b-title">eu-west-1 OpAMP gateway · p99 384ms</div>
+              <div class="b-body">Above 250ms threshold for 12m. Investigate before promoting.</div>
+            </div>
+            <div class="b-actions">
+              <button class="btn btn-secondary btn-sm">Drain region</button>
+            </div>
+          </div>
 
-      <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px;">OpAMP gateways</h3>
-      <div class="dt-card mb-6">
-        <table class="dt">
-          <thead><tr><th>Region</th><th>Connected</th><th>Heartbeat p50</th><th>Heartbeat p99</th><th>Push p99</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="name">us-east-1</td><td class="mono-cell">14,842</td><td class="mono-cell">28ms</td><td class="mono-cell">112ms</td><td class="mono-cell">94ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">us-west-2</td><td class="mono-cell">9,118</td><td class="mono-cell">31ms</td><td class="mono-cell">128ms</td><td class="mono-cell">102ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">eu-west-1</td><td class="mono-cell">8,402</td><td class="mono-cell">52ms</td><td class="mono-cell t-warn">384ms</td><td class="mono-cell t-warn">298ms</td><td><span class="tag tag-warn">degraded</span></td></tr>
-            <tr><td class="name">ap-southeast-1</td><td class="mono-cell">3,914</td><td class="mono-cell">44ms</td><td class="mono-cell">182ms</td><td class="mono-cell">142ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">ap-northeast-1</td><td class="mono-cell">2,216</td><td class="mono-cell">39ms</td><td class="mono-cell">156ms</td><td class="mono-cell">128ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px">OpAMP gateways</h3>
+          <div class="dt-card mb-6">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Region</th>
+                  <th>Connected</th>
+                  <th>Heartbeat p50</th>
+                  <th>Heartbeat p99</th>
+                  <th>Push p99</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">us-east-1</td>
+                  <td class="mono-cell">14,842</td>
+                  <td class="mono-cell">28ms</td>
+                  <td class="mono-cell">112ms</td>
+                  <td class="mono-cell">94ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">us-west-2</td>
+                  <td class="mono-cell">9,118</td>
+                  <td class="mono-cell">31ms</td>
+                  <td class="mono-cell">128ms</td>
+                  <td class="mono-cell">102ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">eu-west-1</td>
+                  <td class="mono-cell">8,402</td>
+                  <td class="mono-cell">52ms</td>
+                  <td class="mono-cell t-warn">384ms</td>
+                  <td class="mono-cell t-warn">298ms</td>
+                  <td><span class="tag tag-warn">degraded</span></td>
+                </tr>
+                <tr>
+                  <td class="name">ap-southeast-1</td>
+                  <td class="mono-cell">3,914</td>
+                  <td class="mono-cell">44ms</td>
+                  <td class="mono-cell">182ms</td>
+                  <td class="mono-cell">142ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">ap-northeast-1</td>
+                  <td class="mono-cell">2,216</td>
+                  <td class="mono-cell">39ms</td>
+                  <td class="mono-cell">156ms</td>
+                  <td class="mono-cell">128ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px;">Control plane</h3>
-      <div class="dt-card mb-6">
-        <table class="dt">
-          <thead><tr><th>Service</th><th>Version</th><th>Replicas</th><th>Error rate</th><th>p99 latency</th><th>Status</th></tr></thead>
-          <tbody>
-            <tr><td class="name">api-gateway</td><td class="mono-cell">v2.18.4</td><td class="mono-cell">12</td><td class="mono-cell">0.04%</td><td class="mono-cell">88ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">config-store</td><td class="mono-cell">v2.18.4</td><td class="mono-cell">8</td><td class="mono-cell">0.00%</td><td class="mono-cell">12ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">rollout-engine</td><td class="mono-cell">v2.18.4</td><td class="mono-cell">6</td><td class="mono-cell">0.01%</td><td class="mono-cell">42ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">github-sync</td><td class="mono-cell">v2.18.4</td><td class="mono-cell">4</td><td class="mono-cell">0.12%</td><td class="mono-cell">320ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-            <tr><td class="name">audit-log</td><td class="mono-cell">v2.18.4</td><td class="mono-cell">4</td><td class="mono-cell">0.00%</td><td class="mono-cell">22ms</td><td><span class="tag tag-ok">healthy</span></td></tr>
-          </tbody>
-        </table>
-      </div>
+          <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px">Control plane</h3>
+          <div class="dt-card mb-6">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Service</th>
+                  <th>Version</th>
+                  <th>Replicas</th>
+                  <th>Error rate</th>
+                  <th>p99 latency</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="name">api-gateway</td>
+                  <td class="mono-cell">v2.18.4</td>
+                  <td class="mono-cell">12</td>
+                  <td class="mono-cell">0.04%</td>
+                  <td class="mono-cell">88ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">config-store</td>
+                  <td class="mono-cell">v2.18.4</td>
+                  <td class="mono-cell">8</td>
+                  <td class="mono-cell">0.00%</td>
+                  <td class="mono-cell">12ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">rollout-engine</td>
+                  <td class="mono-cell">v2.18.4</td>
+                  <td class="mono-cell">6</td>
+                  <td class="mono-cell">0.01%</td>
+                  <td class="mono-cell">42ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">github-sync</td>
+                  <td class="mono-cell">v2.18.4</td>
+                  <td class="mono-cell">4</td>
+                  <td class="mono-cell">0.12%</td>
+                  <td class="mono-cell">320ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+                <tr>
+                  <td class="name">audit-log</td>
+                  <td class="mono-cell">v2.18.4</td>
+                  <td class="mono-cell">4</td>
+                  <td class="mono-cell">0.00%</td>
+                  <td class="mono-cell">22ms</td>
+                  <td><span class="tag tag-ok">healthy</span></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
 
-      <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px;">Dependencies</h3>
-      <div class="stat-grid">
-        <div class="stat"><div class="label">PostgreSQL primary</div><div class="val ok" style="font-size: 18px;">healthy</div><div class="delta">replica lag 12ms</div></div>
-        <div class="stat"><div class="label">Redis</div><div class="val ok" style="font-size: 18px;">healthy</div><div class="delta">hit rate 98.4%</div></div>
-        <div class="stat"><div class="label">S3 (configs)</div><div class="val ok" style="font-size: 18px;">healthy</div></div>
-        <div class="stat"><div class="label">GitHub API</div><div class="val warn" style="font-size: 18px;">degraded</div><div class="delta down">rate limiting · 1.2%</div></div>
-        <div class="stat"><div class="label">Stripe</div><div class="val ok" style="font-size: 18px;">healthy</div></div>
-      </div>
+          <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px">Dependencies</h3>
+          <div class="stat-grid">
+            <div class="stat">
+              <div class="label">PostgreSQL primary</div>
+              <div class="val ok" style="font-size: 18px">healthy</div>
+              <div class="delta">replica lag 12ms</div>
+            </div>
+            <div class="stat">
+              <div class="label">Redis</div>
+              <div class="val ok" style="font-size: 18px">healthy</div>
+              <div class="delta">hit rate 98.4%</div>
+            </div>
+            <div class="stat">
+              <div class="label">S3 (configs)</div>
+              <div class="val ok" style="font-size: 18px">healthy</div>
+            </div>
+            <div class="stat">
+              <div class="label">GitHub API</div>
+              <div class="val warn" style="font-size: 18px">degraded</div>
+              <div class="delta down">rate limiting · 1.2%</div>
+            </div>
+            <div class="stat">
+              <div class="label">Stripe</div>
+              <div class="val ok" style="font-size: 18px">healthy</div>
+            </div>
+          </div>
+        </div>
+      </main>
     </div>
-  </main>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>FB.shell({ role:'admin', current:'health', crumbs:[{label:'Operations'},{label:'System health'}], prototype: 'Health data is hardcoded. Real system health requires monitoring integration.' });</script>
-<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
-</body>
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({
+        role: "admin",
+        current: "health",
+        crumbs: [{ label: "Operations" }, { label: "System health" }],
+        prototype: "Health data is hardcoded. Real system health requires monitoring integration.",
+      });
+    </script>
+    <script>
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
+      })();
+    </script>
+  </body>
 </html>

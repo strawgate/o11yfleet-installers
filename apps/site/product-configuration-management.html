@@ -1,321 +1,692 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Configuration management — O11yFleet</title>
-<link rel="stylesheet" href="styles.css" />
-<style>
-  .feat-row { display: grid; grid-template-columns: 1fr 1.2fr; gap: 48px; align-items: center; padding: 56px 0; border-top: 1px solid var(--line); }
-  .feat-row:first-of-type { border-top: none; }
-  .feat-row.flip { grid-template-columns: 1.2fr 1fr; }
-  .feat-row.flip .feat-copy { order: 2; }
-  @media (max-width: 920px) {
-    .feat-row, .feat-row.flip { grid-template-columns: 1fr; gap: 24px; padding: 40px 0; }
-    .feat-row.flip .feat-copy { order: 0; }
-  }
-  .feat-copy h3 { font-size: clamp(22px, 2.2vw, 30px); margin-bottom: 14px; }
-  .feat-list { list-style: none; padding: 0; margin: 18px 0 0; display: flex; flex-direction: column; gap: 10px; }
-  .feat-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--fg-2); font-size: 14px; }
-  .feat-list li::before {
-    content: ""; width: 6px; height: 6px; background: var(--accent); border-radius: 50%; margin-top: 8px; flex-shrink: 0;
-  }
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configuration management — O11yFleet</title>
+    <link rel="stylesheet" href="styles.css" />
+    <style>
+      .feat-row {
+        display: grid;
+        grid-template-columns: 1fr 1.2fr;
+        gap: 48px;
+        align-items: center;
+        padding: 56px 0;
+        border-top: 1px solid var(--line);
+      }
+      .feat-row:first-of-type {
+        border-top: none;
+      }
+      .feat-row.flip {
+        grid-template-columns: 1.2fr 1fr;
+      }
+      .feat-row.flip .feat-copy {
+        order: 2;
+      }
+      @media (max-width: 920px) {
+        .feat-row,
+        .feat-row.flip {
+          grid-template-columns: 1fr;
+          gap: 24px;
+          padding: 40px 0;
+        }
+        .feat-row.flip .feat-copy {
+          order: 0;
+        }
+      }
+      .feat-copy h3 {
+        font-size: clamp(22px, 2.2vw, 30px);
+        margin-bottom: 14px;
+      }
+      .feat-list {
+        list-style: none;
+        padding: 0;
+        margin: 18px 0 0;
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+      }
+      .feat-list li {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        color: var(--fg-2);
+        font-size: 14px;
+      }
+      .feat-list li::before {
+        content: "";
+        width: 6px;
+        height: 6px;
+        background: var(--accent);
+        border-radius: 50%;
+        margin-top: 8px;
+        flex-shrink: 0;
+      }
 
-  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0; margin-top: 32px; border: 1px solid var(--line); border-radius: var(--radius-lg); overflow: hidden; }
-  .step { padding: 24px; border-right: 1px solid var(--line); background: var(--surface); }
-  .step:last-child { border-right: none; }
-  .step .num { font-family: var(--font-mono); font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
-  .step h4 { margin: 10px 0 6px; }
-  .step p { font-size: 13.5px; color: var(--fg-3); }
-  @media (max-width: 920px) {
-    .steps { grid-template-columns: 1fr; }
-    .step { border-right: none; border-bottom: 1px solid var(--line); }
-  }
-</style>
-</head>
-<body>
-<div id="site-header"></div>
+      .steps {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0;
+        margin-top: 32px;
+        border: 1px solid var(--line);
+        border-radius: var(--radius-lg);
+        overflow: hidden;
+      }
+      .step {
+        padding: 24px;
+        border-right: 1px solid var(--line);
+        background: var(--surface);
+      }
+      .step:last-child {
+        border-right: none;
+      }
+      .step .num {
+        font-family: var(--font-mono);
+        font-size: 11px;
+        color: var(--accent);
+        letter-spacing: 0.06em;
+      }
+      .step h4 {
+        margin: 10px 0 6px;
+      }
+      .step p {
+        font-size: 13.5px;
+        color: var(--fg-3);
+      }
+      @media (max-width: 920px) {
+        .steps {
+          grid-template-columns: 1fr;
+        }
+        .step {
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="site-header"></div>
 
-<main>
-  <section class="hero wrap" style="padding-bottom: 32px;">
-    <div class="hero-meta">
-      <a href="index.html" class="muted" style="font-family: var(--font-mono); font-size: 12px;">← Product</a>
-      <span class="pin"><span class="dot dot-ok dot-pulse"></span> Configuration management</span>
-    </div>
-    <h1>Turn collector YAML into<br/>managed rollouts.</h1>
-    <p class="lede" style="margin-top: 22px;">
-      Store, version, assign, and roll out collector configs from one place. Compare intended state with the effective config each collector actually reports, and roll back instantly when anything looks wrong.
-    </p>
-    <div class="hero-actions">
-      <a href="signup.html" class="btn btn-primary btn-lg">Start free →</a>
-      <a href="pricing.html" class="btn btn-secondary btn-lg">See pricing</a>
-    </div>
-  </section>
-
-  <!-- Hero mockup -->
-  <section class="wrap" style="margin-bottom: 64px;">
-    <div class="win">
-      <div class="win-bar">
-        <div class="lights"><i></i><i></i><i></i></div>
-        <div class="title">configurations · prod-ingress</div>
-        <span style="margin-left:auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-4);">v14 · 42 collectors</span>
-      </div>
-      <div style="display: grid; grid-template-columns: 280px 1fr;">
-        <!-- left: version list -->
-        <div style="border-right: 1px solid var(--line); padding: 12px 0;">
-          <div style="padding: 8px 18px; font-family: var(--font-mono); font-size: 11px; color: var(--fg-4); letter-spacing: 0.06em;">VERSIONS</div>
-          <div style="padding: 10px 18px; background: var(--surface-2); border-left: 2px solid var(--accent); display: flex; gap: 10px; align-items: center;">
-            <span class="dot dot-ok dot-pulse"></span>
-            <div>
-              <div class="mono" style="font-size: 12.5px;">v14 <span style="color: var(--accent);">·</span> a91f3b2</div>
-              <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top:2px;">applying · 33/42</div>
-            </div>
-          </div>
-          <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center;">
-            <span style="width:7px; height:7px; background: var(--fg-4); border-radius: 50%;"></span>
-            <div>
-              <div class="mono" style="font-size: 12.5px;">v13 · 7c2ed11</div>
-              <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top:2px;">applied · 2d ago</div>
-            </div>
-          </div>
-          <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center;">
-            <span style="width:7px; height:7px; background: var(--err); border-radius: 50%;"></span>
-            <div>
-              <div class="mono" style="font-size: 12.5px;">v12 · 3a01f9e</div>
-              <div class="mono" style="font-size: 11px; color: var(--err); margin-top:2px;">rolled back · 4d ago</div>
-            </div>
-          </div>
-          <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center;">
-            <span style="width:7px; height:7px; background: var(--fg-4); border-radius: 50%;"></span>
-            <div>
-              <div class="mono" style="font-size: 12.5px;">v11 · b9d44a2</div>
-              <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top:2px;">applied · 1w ago</div>
-            </div>
-          </div>
+    <main>
+      <section class="hero wrap" style="padding-bottom: 32px">
+        <div class="hero-meta">
+          <a href="index.html" class="muted" style="font-family: var(--font-mono); font-size: 12px"
+            >← Product</a
+          >
+          <span class="pin"
+            ><span class="dot dot-ok dot-pulse"></span> Configuration management</span
+          >
         </div>
-        <!-- right: diff + drift -->
-        <div>
-          <div style="padding: 12px 18px; border-bottom: 1px solid var(--line); display:flex; gap: 14px; align-items: center;">
-            <span class="mono" style="font-size: 12px; color: var(--fg-3);">v13 → v14</span>
-            <span class="mono" style="font-size: 12px; color: var(--fg-4);">configs/prod-ingress.yaml</span>
-            <span class="tag" style="margin-left:auto; border-color: var(--accent-line); color: var(--accent);">drift on 1 collector</span>
-          </div>
-          <div class="diff" style="padding: 14px 0;">
-            <div class="row"><span class="ln">10</span><span class="sign"> </span><span class="code">  otlp:</span></div>
-            <div class="row"><span class="ln">11</span><span class="sign"> </span><span class="code">    protocols: { grpc: { endpoint: 0.0.0.0:4317 } }</span></div>
-            <div class="row"><span class="ln">12</span><span class="sign"> </span><span class="code">processors:</span></div>
-            <div class="row"><span class="ln">13</span><span class="sign"> </span><span class="code">  batch:</span></div>
-            <div class="row rem"><span class="ln">14</span><span class="sign">−</span><span class="code">    timeout: 1s</span></div>
-            <div class="row rem"><span class="ln">15</span><span class="sign">−</span><span class="code">    send_batch_size: 8192</span></div>
-            <div class="row add"><span class="ln">14</span><span class="sign">+</span><span class="code">    timeout: 200ms</span></div>
-            <div class="row add"><span class="ln">15</span><span class="sign">+</span><span class="code">    send_batch_size: 4096</span></div>
-            <div class="row add"><span class="ln">16</span><span class="sign">+</span><span class="code">    send_batch_max_size: 4096</span></div>
-            <div class="row"><span class="ln">17</span><span class="sign"> </span><span class="code">  memory_limiter:</span></div>
-            <div class="row"><span class="ln">18</span><span class="sign"> </span><span class="code">    check_interval: 1s</span></div>
-            <div class="row"><span class="ln">19</span><span class="sign"> </span><span class="code">    limit_mib: 1500</span></div>
-          </div>
-          <div style="padding: 14px 18px; border-top: 1px solid var(--line); display:flex; gap: 10px; align-items: center;">
-            <a href="#" class="btn btn-primary btn-sm">Roll out v14</a>
-            <a href="#" class="btn btn-secondary btn-sm">Roll back</a>
-            <span style="margin-left:auto; font-family: var(--font-mono); font-size: 11.5px; color: var(--fg-4);">last applied 6m ago by maya</span>
-          </div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- Features -->
-  <section class="section-tight">
-    <div class="wrap">
-      <div class="feat-row">
-        <div class="feat-copy">
-          <span class="eyebrow">Versioned configs</span>
-          <h3 style="margin-top: 14px;">Every config is a versioned object.</h3>
-          <p>Push from the UI, the CLI, or a Git commit — every save is a new immutable version with a SHA, an author, a message, and a diff.</p>
-          <ul class="feat-list">
-            <li>Immutable version history, indexed by SHA</li>
-            <li>Inline YAML editor with schema-aware validation</li>
-            <li>Compare any two versions, side by side</li>
-          </ul>
-        </div>
-        <div class="win">
-          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">history · prod-ingress</div></div>
-          <div style="padding: 14px 18px;">
-            <div style="display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center;">
-              <span class="mono" style="color: var(--accent); font-size: 12.5px;">v14</span>
-              <div style="font-size: 13px;">tighten batch processor timeout</div>
-              <span class="mono" style="color: var(--fg-4); font-size: 11px;">6m</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center;">
-              <span class="mono" style="color: var(--fg-2); font-size: 12.5px;">v13</span>
-              <div style="font-size: 13px;">add k8sattributes processor</div>
-              <span class="mono" style="color: var(--fg-4); font-size: 11px;">2d</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--line); align-items: center;">
-              <span class="mono" style="color: var(--fg-2); font-size: 12.5px;">v12</span>
-              <div style="font-size: 13px;">try otlp/http exporter</div>
-              <span class="mono" style="color: var(--err); font-size: 11px;">rolled back</span>
-            </div>
-            <div style="display: grid; grid-template-columns: 60px 1fr auto; gap: 12px; padding: 10px 0; align-items: center;">
-              <span class="mono" style="color: var(--fg-2); font-size: 12.5px;">v11</span>
-              <div style="font-size: 13px;">raise memory_limiter to 1500MiB</div>
-              <span class="mono" style="color: var(--fg-4); font-size: 11px;">1w</span>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="feat-row flip">
-        <div class="win">
-          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">drift · intended vs effective</div></div>
-          <div style="padding: 18px;">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
-              <div>
-                <div class="mono" style="font-size: 11px; color: var(--fg-4);">INTENDED · v14</div>
-                <div class="diff" style="margin-top: 8px; font-size: 11.5px; border: 1px solid var(--line); border-radius: 6px;">
-                  <div class="row"><span class="ln">14</span><span class="sign"></span><span class="code">timeout: 200ms</span></div>
-                  <div class="row"><span class="ln">15</span><span class="sign"></span><span class="code">send_batch_size: 4096</span></div>
-                </div>
-              </div>
-              <div>
-                <div class="mono" style="font-size: 11px; color: var(--warn);">EFFECTIVE · 1 collector</div>
-                <div class="diff" style="margin-top: 8px; font-size: 11.5px; border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line)); border-radius: 6px;">
-                  <div class="row rem"><span class="ln">14</span><span class="sign">≠</span><span class="code">timeout: 1s</span></div>
-                  <div class="row rem"><span class="ln">15</span><span class="sign">≠</span><span class="code">send_batch_size: 8192</span></div>
-                </div>
-              </div>
-            </div>
-            <div style="margin-top: 14px; padding: 10px 12px; background: color-mix(in oklab, var(--warn) 8%, var(--surface)); border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line)); border-radius: 6px; font-size: 12.5px; color: var(--fg-2);">
-              <span class="mono" style="color: var(--warn);">otel-gateway-02</span> reports an older effective config. Reapply or quarantine.
-            </div>
-          </div>
-        </div>
-        <div class="feat-copy">
-          <span class="eyebrow">Drift detection</span>
-          <h3 style="margin-top: 14px;">Catch the gap between<br/>intended and effective.</h3>
-          <p>OpAMP gives you the config a collector reports it's actually running. We diff that against what you asked for — and surface every mismatch.</p>
-          <ul class="feat-list">
-            <li>Per-collector intended vs effective comparison</li>
-            <li>Filter the inventory to only drifted collectors</li>
-            <li>One-click reapply or quarantine</li>
-          </ul>
-        </div>
-      </div>
-
-      <div class="feat-row">
-        <div class="feat-copy">
-          <span class="eyebrow">Targeted assignment</span>
-          <h3 style="margin-top: 14px;">Assign configs by label, not by hostname.</h3>
-          <p>Group collectors with labels — environment, region, role — and bind a managed config to a label expression. New collectors that match the label inherit the config automatically.</p>
-          <ul class="feat-list">
-            <li>Label-based selectors with full Boolean operators</li>
-            <li>Preview the matched set before you assign</li>
-            <li>Per-config and per-collector pin overrides</li>
-          </ul>
-        </div>
-        <div class="win">
-          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">assignment · prod-ingress</div></div>
-          <div style="padding: 18px;">
-            <div class="mono" style="font-size: 11px; color: var(--fg-4);">SELECTOR</div>
-            <div style="margin-top: 8px; padding: 12px 14px; background: var(--bg-elev); border: 1px solid var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 12.5px; color: var(--fg);">
-              env <span style="color: var(--accent);">=</span> "production" <span style="color: var(--fg-4);">AND</span> role <span style="color: var(--accent);">=</span> "ingress"
-            </div>
-            <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top: 18px;">MATCHES</div>
-            <div style="margin-top: 8px; display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px;">
-              <!-- 42 cells -->
-              <script>
-                document.write(Array.from({length: 42}, () =>
-                  '<div style="aspect-ratio: 1; border-radius: 3px; background: color-mix(in oklab, var(--accent) 30%, var(--surface)); border: 1px solid var(--accent-line);"></div>'
-                ).join(''));
-              </script>
-            </div>
-            <div style="margin-top: 14px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-3);">
-              42 collectors will receive this config on next rollout.
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div class="feat-row flip">
-        <div class="win">
-          <div class="win-bar"><div class="lights"><i></i><i></i><i></i></div><div class="title">rollback · v14 → v13</div></div>
-          <div style="padding: 22px;">
-            <div style="display: flex; align-items: center; gap: 14px; padding: 14px 16px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 8px;">
-              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" style="color: var(--accent);"><path d="M3 7v6h6M21 17a9 9 0 0 1-15-6L3 13" stroke-linecap="round" stroke-linejoin="round"/></svg>
-              <div>
-                <div style="font-weight: 500;">Roll back to v13</div>
-                <div class="mono" style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px;">7c2ed11 · jordan · 2d ago</div>
-              </div>
-              <a href="#" class="btn btn-primary btn-sm" style="margin-left: auto;">Confirm rollback</a>
-            </div>
-            <div style="margin-top: 14px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 8px; font-family: var(--font-mono); font-size: 12px; color: var(--fg-3);">
-              42 collectors will revert to v13. Effective config will reconcile within ~30 seconds.
-            </div>
-          </div>
-        </div>
-        <div class="feat-copy">
-          <span class="eyebrow">Instant rollback</span>
-          <h3 style="margin-top: 14px;">Undo a bad rollout in one click.</h3>
-          <p>Every prior version is one button away. Roll back to a known-good config across the entire fleet, or scope the rollback to a single label set.</p>
-          <ul class="feat-list">
-            <li>One-click revert to any prior version</li>
-            <li>Scoped rollback for partial recoveries</li>
-            <li>Auto-rollback on health threshold breach (Business+)</li>
-          </ul>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <!-- How it works strip -->
-  <section class="section">
-    <div class="wrap">
-      <div class="section-head">
-        <span class="eyebrow">How it works</span>
-        <h2>From YAML to running collector,<br/>in four steps.</h2>
-      </div>
-      <div class="steps">
-        <div class="step">
-          <div class="num">01</div>
-          <h4>Author</h4>
-          <p>Edit YAML in the UI, push from CLI, or commit to Git.</p>
-        </div>
-        <div class="step">
-          <div class="num">02</div>
-          <h4>Validate</h4>
-          <p>Schema check, processor compatibility, and dry-run before save.</p>
-        </div>
-        <div class="step">
-          <div class="num">03</div>
-          <h4>Roll out</h4>
-          <p>Stage to a label slice, watch live progress, fan out when green.</p>
-        </div>
-        <div class="step">
-          <div class="num">04</div>
-          <h4>Reconcile</h4>
-          <p>Effective config reports back. Drift surfaces immediately.</p>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section">
-    <div class="wrap">
-      <div class="cta-block">
-        <h2>Ready to manage configs the way you ship code?</h2>
-        <p class="lede" style="margin: 14px auto 0; max-width: 56ch;">Start free, connect a collector in monitor-only mode, and turn on managed mode whenever you're ready.</p>
-        <div class="actions">
+        <h1>Turn collector YAML into<br />managed rollouts.</h1>
+        <p class="lede" style="margin-top: 22px">
+          Store, version, assign, and roll out collector configs from one place. Compare intended
+          state with the effective config each collector actually reports, and roll back instantly
+          when anything looks wrong.
+        </p>
+        <div class="hero-actions">
           <a href="signup.html" class="btn btn-primary btn-lg">Start free →</a>
-          <a href="solutions-gitops.html" class="btn btn-secondary btn-lg">See GitOps workflow</a>
+          <a href="pricing.html" class="btn btn-secondary btn-lg">See pricing</a>
         </div>
-      </div>
-    </div>
-  </section>
-</main>
+      </section>
 
-<div id="site-footer"></div>
-<script src="shared.js"></script>
-<script>FB.render('product');</script>
-<script src="app.js"></script>
-</body>
+      <!-- Hero mockup -->
+      <section class="wrap" style="margin-bottom: 64px">
+        <div class="win">
+          <div class="win-bar">
+            <div class="lights"><i></i><i></i><i></i></div>
+            <div class="title">configurations · prod-ingress</div>
+            <span
+              style="
+                margin-left: auto;
+                font-family: var(--font-mono);
+                font-size: 11.5px;
+                color: var(--fg-4);
+              "
+              >v14 · 42 collectors</span
+            >
+          </div>
+          <div style="display: grid; grid-template-columns: 280px 1fr">
+            <!-- left: version list -->
+            <div style="border-right: 1px solid var(--line); padding: 12px 0">
+              <div
+                style="
+                  padding: 8px 18px;
+                  font-family: var(--font-mono);
+                  font-size: 11px;
+                  color: var(--fg-4);
+                  letter-spacing: 0.06em;
+                "
+              >
+                VERSIONS
+              </div>
+              <div
+                style="
+                  padding: 10px 18px;
+                  background: var(--surface-2);
+                  border-left: 2px solid var(--accent);
+                  display: flex;
+                  gap: 10px;
+                  align-items: center;
+                "
+              >
+                <span class="dot dot-ok dot-pulse"></span>
+                <div>
+                  <div class="mono" style="font-size: 12.5px">
+                    v14 <span style="color: var(--accent)">·</span> a91f3b2
+                  </div>
+                  <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top: 2px">
+                    applying · 33/42
+                  </div>
+                </div>
+              </div>
+              <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center">
+                <span
+                  style="width: 7px; height: 7px; background: var(--fg-4); border-radius: 50%"
+                ></span>
+                <div>
+                  <div class="mono" style="font-size: 12.5px">v13 · 7c2ed11</div>
+                  <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top: 2px">
+                    applied · 2d ago
+                  </div>
+                </div>
+              </div>
+              <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center">
+                <span
+                  style="width: 7px; height: 7px; background: var(--err); border-radius: 50%"
+                ></span>
+                <div>
+                  <div class="mono" style="font-size: 12.5px">v12 · 3a01f9e</div>
+                  <div class="mono" style="font-size: 11px; color: var(--err); margin-top: 2px">
+                    rolled back · 4d ago
+                  </div>
+                </div>
+              </div>
+              <div style="padding: 10px 18px; display: flex; gap: 10px; align-items: center">
+                <span
+                  style="width: 7px; height: 7px; background: var(--fg-4); border-radius: 50%"
+                ></span>
+                <div>
+                  <div class="mono" style="font-size: 12.5px">v11 · b9d44a2</div>
+                  <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top: 2px">
+                    applied · 1w ago
+                  </div>
+                </div>
+              </div>
+            </div>
+            <!-- right: diff + drift -->
+            <div>
+              <div
+                style="
+                  padding: 12px 18px;
+                  border-bottom: 1px solid var(--line);
+                  display: flex;
+                  gap: 14px;
+                  align-items: center;
+                "
+              >
+                <span class="mono" style="font-size: 12px; color: var(--fg-3)">v13 → v14</span>
+                <span class="mono" style="font-size: 12px; color: var(--fg-4)"
+                  >configs/prod-ingress.yaml</span
+                >
+                <span
+                  class="tag"
+                  style="margin-left: auto; border-color: var(--accent-line); color: var(--accent)"
+                  >drift on 1 collector</span
+                >
+              </div>
+              <div class="diff" style="padding: 14px 0">
+                <div class="row">
+                  <span class="ln">10</span><span class="sign"> </span
+                  ><span class="code"> otlp:</span>
+                </div>
+                <div class="row">
+                  <span class="ln">11</span><span class="sign"> </span
+                  ><span class="code"> protocols: { grpc: { endpoint: 0.0.0.0:4317 } }</span>
+                </div>
+                <div class="row">
+                  <span class="ln">12</span><span class="sign"> </span
+                  ><span class="code">processors:</span>
+                </div>
+                <div class="row">
+                  <span class="ln">13</span><span class="sign"> </span
+                  ><span class="code"> batch:</span>
+                </div>
+                <div class="row rem">
+                  <span class="ln">14</span><span class="sign">−</span
+                  ><span class="code"> timeout: 1s</span>
+                </div>
+                <div class="row rem">
+                  <span class="ln">15</span><span class="sign">−</span
+                  ><span class="code"> send_batch_size: 8192</span>
+                </div>
+                <div class="row add">
+                  <span class="ln">14</span><span class="sign">+</span
+                  ><span class="code"> timeout: 200ms</span>
+                </div>
+                <div class="row add">
+                  <span class="ln">15</span><span class="sign">+</span
+                  ><span class="code"> send_batch_size: 4096</span>
+                </div>
+                <div class="row add">
+                  <span class="ln">16</span><span class="sign">+</span
+                  ><span class="code"> send_batch_max_size: 4096</span>
+                </div>
+                <div class="row">
+                  <span class="ln">17</span><span class="sign"> </span
+                  ><span class="code"> memory_limiter:</span>
+                </div>
+                <div class="row">
+                  <span class="ln">18</span><span class="sign"> </span
+                  ><span class="code"> check_interval: 1s</span>
+                </div>
+                <div class="row">
+                  <span class="ln">19</span><span class="sign"> </span
+                  ><span class="code"> limit_mib: 1500</span>
+                </div>
+              </div>
+              <div
+                style="
+                  padding: 14px 18px;
+                  border-top: 1px solid var(--line);
+                  display: flex;
+                  gap: 10px;
+                  align-items: center;
+                "
+              >
+                <a href="#" class="btn btn-primary btn-sm">Roll out v14</a>
+                <a href="#" class="btn btn-secondary btn-sm">Roll back</a>
+                <span
+                  style="
+                    margin-left: auto;
+                    font-family: var(--font-mono);
+                    font-size: 11.5px;
+                    color: var(--fg-4);
+                  "
+                  >last applied 6m ago by maya</span
+                >
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Features -->
+      <section class="section-tight">
+        <div class="wrap">
+          <div class="feat-row">
+            <div class="feat-copy">
+              <span class="eyebrow">Versioned configs</span>
+              <h3 style="margin-top: 14px">Every config is a versioned object.</h3>
+              <p>
+                Push from the UI, the CLI, or a Git commit — every save is a new immutable version
+                with a SHA, an author, a message, and a diff.
+              </p>
+              <ul class="feat-list">
+                <li>Immutable version history, indexed by SHA</li>
+                <li>Inline YAML editor with schema-aware validation</li>
+                <li>Compare any two versions, side by side</li>
+              </ul>
+            </div>
+            <div class="win">
+              <div class="win-bar">
+                <div class="lights"><i></i><i></i><i></i></div>
+                <div class="title">history · prod-ingress</div>
+              </div>
+              <div style="padding: 14px 18px">
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 60px 1fr auto;
+                    gap: 12px;
+                    padding: 10px 0;
+                    border-bottom: 1px solid var(--line);
+                    align-items: center;
+                  "
+                >
+                  <span class="mono" style="color: var(--accent); font-size: 12.5px">v14</span>
+                  <div style="font-size: 13px">tighten batch processor timeout</div>
+                  <span class="mono" style="color: var(--fg-4); font-size: 11px">6m</span>
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 60px 1fr auto;
+                    gap: 12px;
+                    padding: 10px 0;
+                    border-bottom: 1px solid var(--line);
+                    align-items: center;
+                  "
+                >
+                  <span class="mono" style="color: var(--fg-2); font-size: 12.5px">v13</span>
+                  <div style="font-size: 13px">add k8sattributes processor</div>
+                  <span class="mono" style="color: var(--fg-4); font-size: 11px">2d</span>
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 60px 1fr auto;
+                    gap: 12px;
+                    padding: 10px 0;
+                    border-bottom: 1px solid var(--line);
+                    align-items: center;
+                  "
+                >
+                  <span class="mono" style="color: var(--fg-2); font-size: 12.5px">v12</span>
+                  <div style="font-size: 13px">try otlp/http exporter</div>
+                  <span class="mono" style="color: var(--err); font-size: 11px">rolled back</span>
+                </div>
+                <div
+                  style="
+                    display: grid;
+                    grid-template-columns: 60px 1fr auto;
+                    gap: 12px;
+                    padding: 10px 0;
+                    align-items: center;
+                  "
+                >
+                  <span class="mono" style="color: var(--fg-2); font-size: 12.5px">v11</span>
+                  <div style="font-size: 13px">raise memory_limiter to 1500MiB</div>
+                  <span class="mono" style="color: var(--fg-4); font-size: 11px">1w</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="feat-row flip">
+            <div class="win">
+              <div class="win-bar">
+                <div class="lights"><i></i><i></i><i></i></div>
+                <div class="title">drift · intended vs effective</div>
+              </div>
+              <div style="padding: 18px">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px">
+                  <div>
+                    <div class="mono" style="font-size: 11px; color: var(--fg-4)">
+                      INTENDED · v14
+                    </div>
+                    <div
+                      class="diff"
+                      style="
+                        margin-top: 8px;
+                        font-size: 11.5px;
+                        border: 1px solid var(--line);
+                        border-radius: 6px;
+                      "
+                    >
+                      <div class="row">
+                        <span class="ln">14</span><span class="sign"></span
+                        ><span class="code">timeout: 200ms</span>
+                      </div>
+                      <div class="row">
+                        <span class="ln">15</span><span class="sign"></span
+                        ><span class="code">send_batch_size: 4096</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div>
+                    <div class="mono" style="font-size: 11px; color: var(--warn)">
+                      EFFECTIVE · 1 collector
+                    </div>
+                    <div
+                      class="diff"
+                      style="
+                        margin-top: 8px;
+                        font-size: 11.5px;
+                        border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+                        border-radius: 6px;
+                      "
+                    >
+                      <div class="row rem">
+                        <span class="ln">14</span><span class="sign">≠</span
+                        ><span class="code">timeout: 1s</span>
+                      </div>
+                      <div class="row rem">
+                        <span class="ln">15</span><span class="sign">≠</span
+                        ><span class="code">send_batch_size: 8192</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div
+                  style="
+                    margin-top: 14px;
+                    padding: 10px 12px;
+                    background: color-mix(in oklab, var(--warn) 8%, var(--surface));
+                    border: 1px solid color-mix(in oklab, var(--warn) 30%, var(--line));
+                    border-radius: 6px;
+                    font-size: 12.5px;
+                    color: var(--fg-2);
+                  "
+                >
+                  <span class="mono" style="color: var(--warn)">otel-gateway-02</span> reports an
+                  older effective config. Reapply or quarantine.
+                </div>
+              </div>
+            </div>
+            <div class="feat-copy">
+              <span class="eyebrow">Drift detection</span>
+              <h3 style="margin-top: 14px">Catch the gap between<br />intended and effective.</h3>
+              <p>
+                OpAMP gives you the config a collector reports it's actually running. We diff that
+                against what you asked for — and surface every mismatch.
+              </p>
+              <ul class="feat-list">
+                <li>Per-collector intended vs effective comparison</li>
+                <li>Filter the inventory to only drifted collectors</li>
+                <li>One-click reapply or quarantine</li>
+              </ul>
+            </div>
+          </div>
+
+          <div class="feat-row">
+            <div class="feat-copy">
+              <span class="eyebrow">Targeted assignment</span>
+              <h3 style="margin-top: 14px">Assign configs by label, not by hostname.</h3>
+              <p>
+                Group collectors with labels — environment, region, role — and bind a managed config
+                to a label expression. New collectors that match the label inherit the config
+                automatically.
+              </p>
+              <ul class="feat-list">
+                <li>Label-based selectors with full Boolean operators</li>
+                <li>Preview the matched set before you assign</li>
+                <li>Per-config and per-collector pin overrides</li>
+              </ul>
+            </div>
+            <div class="win">
+              <div class="win-bar">
+                <div class="lights"><i></i><i></i><i></i></div>
+                <div class="title">assignment · prod-ingress</div>
+              </div>
+              <div style="padding: 18px">
+                <div class="mono" style="font-size: 11px; color: var(--fg-4)">SELECTOR</div>
+                <div
+                  style="
+                    margin-top: 8px;
+                    padding: 12px 14px;
+                    background: var(--bg-elev);
+                    border: 1px solid var(--line);
+                    border-radius: 8px;
+                    font-family: var(--font-mono);
+                    font-size: 12.5px;
+                    color: var(--fg);
+                  "
+                >
+                  env <span style="color: var(--accent)">=</span> "production"
+                  <span style="color: var(--fg-4)">AND</span> role
+                  <span style="color: var(--accent)">=</span> "ingress"
+                </div>
+                <div class="mono" style="font-size: 11px; color: var(--fg-4); margin-top: 18px">
+                  MATCHES
+                </div>
+                <div
+                  style="
+                    margin-top: 8px;
+                    display: grid;
+                    grid-template-columns: repeat(7, 1fr);
+                    gap: 4px;
+                  "
+                >
+                  <!-- 42 cells -->
+                  <script>
+                    document.write(
+                      Array.from(
+                        { length: 42 },
+                        () =>
+                          '<div style="aspect-ratio: 1; border-radius: 3px; background: color-mix(in oklab, var(--accent) 30%, var(--surface)); border: 1px solid var(--accent-line);"></div>',
+                      ).join(""),
+                    );
+                  </script>
+                </div>
+                <div
+                  style="
+                    margin-top: 14px;
+                    font-family: var(--font-mono);
+                    font-size: 12px;
+                    color: var(--fg-3);
+                  "
+                >
+                  42 collectors will receive this config on next rollout.
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="feat-row flip">
+            <div class="win">
+              <div class="win-bar">
+                <div class="lights"><i></i><i></i><i></i></div>
+                <div class="title">rollback · v14 → v13</div>
+              </div>
+              <div style="padding: 22px">
+                <div
+                  style="
+                    display: flex;
+                    align-items: center;
+                    gap: 14px;
+                    padding: 14px 16px;
+                    background: var(--surface-2);
+                    border: 1px solid var(--line);
+                    border-radius: 8px;
+                  "
+                >
+                  <svg
+                    width="22"
+                    height="22"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.6"
+                    style="color: var(--accent)"
+                  >
+                    <path
+                      d="M3 7v6h6M21 17a9 9 0 0 1-15-6L3 13"
+                      stroke-linecap="round"
+                      stroke-linejoin="round"
+                    />
+                  </svg>
+                  <div>
+                    <div style="font-weight: 500">Roll back to v13</div>
+                    <div
+                      class="mono"
+                      style="font-size: 11.5px; color: var(--fg-4); margin-top: 2px"
+                    >
+                      7c2ed11 · jordan · 2d ago
+                    </div>
+                  </div>
+                  <a href="#" class="btn btn-primary btn-sm" style="margin-left: auto"
+                    >Confirm rollback</a
+                  >
+                </div>
+                <div
+                  style="
+                    margin-top: 14px;
+                    padding: 12px 14px;
+                    border: 1px dashed var(--line);
+                    border-radius: 8px;
+                    font-family: var(--font-mono);
+                    font-size: 12px;
+                    color: var(--fg-3);
+                  "
+                >
+                  42 collectors will revert to v13. Effective config will reconcile within ~30
+                  seconds.
+                </div>
+              </div>
+            </div>
+            <div class="feat-copy">
+              <span class="eyebrow">Instant rollback</span>
+              <h3 style="margin-top: 14px">Undo a bad rollout in one click.</h3>
+              <p>
+                Every prior version is one button away. Roll back to a known-good config across the
+                entire fleet, or scope the rollback to a single label set.
+              </p>
+              <ul class="feat-list">
+                <li>One-click revert to any prior version</li>
+                <li>Scoped rollback for partial recoveries</li>
+                <li>Auto-rollback on health threshold breach (Business+)</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- How it works strip -->
+      <section class="section">
+        <div class="wrap">
+          <div class="section-head">
+            <span class="eyebrow">How it works</span>
+            <h2>From YAML to running collector,<br />in four steps.</h2>
+          </div>
+          <div class="steps">
+            <div class="step">
+              <div class="num">01</div>
+              <h4>Author</h4>
+              <p>Edit YAML in the UI, push from CLI, or commit to Git.</p>
+            </div>
+            <div class="step">
+              <div class="num">02</div>
+              <h4>Validate</h4>
+              <p>Schema check, processor compatibility, and dry-run before save.</p>
+            </div>
+            <div class="step">
+              <div class="num">03</div>
+              <h4>Roll out</h4>
+              <p>Stage to a label slice, watch live progress, fan out when green.</p>
+            </div>
+            <div class="step">
+              <div class="num">04</div>
+              <h4>Reconcile</h4>
+              <p>Effective config reports back. Drift surfaces immediately.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="wrap">
+          <div class="cta-block">
+            <h2>Ready to manage configs the way you ship code?</h2>
+            <p class="lede" style="margin: 14px auto 0; max-width: 56ch">
+              Start free, connect a collector in monitor-only mode, and turn on managed mode
+              whenever you're ready.
+            </p>
+            <div class="actions">
+              <a href="signup.html" class="btn btn-primary btn-lg">Start free →</a>
+              <a href="solutions-gitops.html" class="btn btn-secondary btn-lg"
+                >See GitOps workflow</a
+              >
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <div id="site-footer"></div>
+    <script src="shared.js"></script>
+    <script>
+      FB.render("product");
+    </script>
+    <script src="app.js"></script>
+  </body>
 </html>

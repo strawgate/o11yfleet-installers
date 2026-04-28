@@ -69,21 +69,17 @@ export async function uploadConfigVersion(
   // Generate a version ID
   const versionId = crypto.randomUUID();
 
-  // Insert config version record
-  await env.FP_DB.prepare(
-    `INSERT INTO config_versions (id, config_id, tenant_id, config_hash, r2_key, size_bytes, created_by, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-     ON CONFLICT(config_id, config_hash) DO NOTHING`,
-  )
-    .bind(versionId, configId, tenantId, hash, r2Key, yamlBytes.byteLength, createdBy ?? null)
-    .run();
-
-  // Update current config hash
-  await env.FP_DB.prepare(
-    `UPDATE configurations SET current_config_hash = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`,
-  )
-    .bind(hash, configId, tenantId)
-    .run();
+  // Atomically insert version record and update current hash
+  await env.FP_DB.batch([
+    env.FP_DB.prepare(
+      `INSERT INTO config_versions (id, config_id, tenant_id, config_hash, r2_key, size_bytes, created_by, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(config_id, config_hash) DO NOTHING`,
+    ).bind(versionId, configId, tenantId, hash, r2Key, yamlBytes.byteLength, createdBy ?? null),
+    env.FP_DB.prepare(
+      `UPDATE configurations SET current_config_hash = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`,
+    ).bind(hash, configId, tenantId),
+  ]);
 
   return {
     hash,
@@ -93,10 +89,7 @@ export async function uploadConfigVersion(
   };
 }
 
-export async function getConfigContent(
-  env: ConfigStoreEnv,
-  hash: string,
-): Promise<string | null> {
+export async function getConfigContent(env: ConfigStoreEnv, hash: string): Promise<string | null> {
   const r2Key = `configs/sha256/${hash}.yaml`;
   const obj = await env.FP_CONFIGS.get(r2Key);
   if (!obj) return null;

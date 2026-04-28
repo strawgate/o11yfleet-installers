@@ -36,8 +36,7 @@ describe("codec/framing", () => {
     const msg: ServerToAgent = {
       instance_uid: new Uint8Array(16),
       flags: ServerToAgentFlags.Unspecified,
-      capabilities:
-        ServerCapabilities.AcceptsStatus | ServerCapabilities.OffersRemoteConfig,
+      capabilities: ServerCapabilities.AcceptsStatus | ServerCapabilities.OffersRemoteConfig,
       remote_config: {
         config: {
           config_map: {

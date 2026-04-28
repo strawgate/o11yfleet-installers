@@ -97,26 +97,35 @@ console.log("================================\n");
 const results: BenchResult[] = [];
 
 // Benchmark 1: Encode
-results.push(bench("encodeFrame", 10_000, () => {
-  encodeFrame(sampleMsg);
-}));
+results.push(
+  bench("encodeFrame", 10_000, () => {
+    encodeFrame(sampleMsg);
+  }),
+);
 
 // Benchmark 2: Decode
-results.push(bench("decodeFrame", 10_000, () => {
-  decodeFrame(encoded);
-}));
+results.push(
+  bench("decodeFrame", 10_000, () => {
+    decodeFrame(encoded);
+  }),
+);
 
 // Benchmark 3: State machine transitions
 let seq = 0;
-results.push(bench("processFrame", 10_000, () => {
-  seq++;
-  processFrame({ ...baseState, sequence_num: seq - 1 }, {
-    instance_uid: new Uint8Array(16),
-    sequence_num: seq,
-    capabilities: AgentCapabilities.ReportsStatus,
-    flags: 0,
-  });
-}));
+results.push(
+  bench("processFrame", 10_000, () => {
+    seq++;
+    processFrame(
+      { ...baseState, sequence_num: seq - 1 },
+      {
+        instance_uid: new Uint8Array(16),
+        sequence_num: seq,
+        capabilities: AgentCapabilities.ReportsStatus,
+        flags: 0,
+      },
+    );
+  }),
+);
 
 // Benchmark 4: 1k agents × 100 messages
 {

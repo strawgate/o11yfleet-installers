@@ -11,9 +11,16 @@ describe("hexToUint8Array", () => {
     expect(result).toEqual(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
   });
 
-  it("handles odd-length hex by prepending 0", () => {
+  it("pads odd-length hex string with leading zero", () => {
     const result = hexToUint8Array("abc");
     expect(result).toEqual(new Uint8Array([0x0a, 0xbc]));
+  });
+
+  it("treats invalid hex characters as 0", () => {
+    const result = hexToUint8Array("zzzz");
+    expect(result).toEqual(new Uint8Array([0, 0]));
+    const result2 = hexToUint8Array("abgh");
+    expect(result2).toEqual(new Uint8Array([0xab, 0]));
   });
 
   it("handles all zeros", () => {

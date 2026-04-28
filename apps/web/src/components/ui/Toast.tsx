@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { clsx } from "clsx";
 
 type ToastKind = "success" | "error" | "warning" | "info";
@@ -27,23 +27,32 @@ const kindStyles: Record<ToastKind, string> = {
 
 export function Toaster() {
   const [toasts, setToasts] = useState<Toast[]>([]);
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>());
 
   const addToast = useCallback((t: Toast) => {
     setToasts((prev) => [...prev, t]);
-    setTimeout(() => {
+    const timer = setTimeout(() => {
       setToasts((prev) => prev.filter((x) => x.id !== t.id));
+      timers.current.delete(timer);
     }, 4000);
+    timers.current.add(timer);
   }, []);
 
   useEffect(() => {
     listeners.add(addToast);
     return () => {
       listeners.delete(addToast);
+      for (const timer of timers.current) clearTimeout(timer);
+      timers.current.clear();
     };
   }, [addToast]);
 
   return (
-    <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm">
+    <div
+      className="fixed bottom-4 right-4 z-50 flex flex-col gap-2 max-w-sm"
+      aria-live="polite"
+      role="status"
+    >
       {toasts.map((t) => (
         <div
           key={t.id}

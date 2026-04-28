@@ -1,212 +1,455 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Acme Platform — O11yFleet Admin</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-<link rel="stylesheet" href="../admin.css" />
-</head>
-<body>
-<div class="admin-stripe"></div>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head">
-        <div>
-          <div class="flex-row gap-sm" style="margin-bottom: 6px;">
-            <span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Business</span>
-            <span class="tag tag-ok">healthy</span>
-            <span class="tag t-mono" style="font-family: var(--font-mono);">ws_acme_5f3a91d2</span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Acme Platform — O11yFleet Admin</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+    <link rel="stylesheet" href="../admin.css" />
+  </head>
+  <body>
+    <div class="admin-stripe"></div>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <div class="flex-row gap-sm" style="margin-bottom: 6px">
+                <span class="tag" style="border-color: var(--accent-line); color: var(--accent)"
+                  >Business</span
+                >
+                <span class="tag tag-ok">healthy</span>
+                <span class="tag t-mono" style="font-family: var(--font-mono)"
+                  >ws_acme_5f3a91d2</span
+                >
+              </div>
+              <h1>Acme Platform</h1>
+              <div class="sub">
+                42 collectors · 6 members · created Jan 12, 2026 · owner maya@acmeplatform.com
+              </div>
+            </div>
+            <div class="actions">
+              <button class="btn btn-secondary btn-sm" data-open-modal="impersonate">
+                Impersonate
+              </button>
+              <button class="btn btn-secondary btn-sm">Open in customer portal</button>
+            </div>
           </div>
-          <h1>Acme Platform</h1>
-          <div class="sub">42 collectors · 6 members · created Jan 12, 2026 · owner maya@acmeplatform.com</div>
-        </div>
-        <div class="actions">
-          <button class="btn btn-secondary btn-sm" data-open-modal="impersonate">Impersonate</button>
-          <button class="btn btn-secondary btn-sm">Open in customer portal</button>
-        </div>
-      </div>
 
-      <div class="banner warn mb-6">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-        <div><div class="b-title">Staff actions on this tenant are logged</div><div class="b-body">Impersonation creates a banner in the customer portal. Use the lowest scope that lets you help.</div></div>
-      </div>
+          <div class="banner warn mb-6">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M8 2L1.5 13.5h13z" />
+              <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+            </svg>
+            <div>
+              <div class="b-title">Staff actions on this tenant are logged</div>
+              <div class="b-body">
+                Impersonation creates a banner in the customer portal. Use the lowest scope that
+                lets you help.
+              </div>
+            </div>
+          </div>
 
-      <div data-tabs="t" class="tabs">
-        <button class="tab active" data-tab="summary">Summary</button>
-        <button class="tab" data-tab="usage">Usage</button>
-        <button class="tab" data-tab="billing">Billing</button>
-        <button class="tab" data-tab="members">Members <span class="count">6</span></button>
-        <button class="tab" data-tab="events">Events</button>
-        <button class="tab" data-tab="actions">Actions</button>
-      </div>
+          <div data-tabs="t" class="tabs">
+            <button class="tab active" data-tab="summary">Summary</button>
+            <button class="tab" data-tab="usage">Usage</button>
+            <button class="tab" data-tab="billing">Billing</button>
+            <button class="tab" data-tab="members">Members <span class="count">6</span></button>
+            <button class="tab" data-tab="events">Events</button>
+            <button class="tab" data-tab="actions">Actions</button>
+          </div>
 
-      <div data-tab-panel="summary" data-tabs-group="t" class="tab-panel active">
-        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-          <div><strong>Prototype</strong> — Summary stats and notes show sample data</div>
-        </div>
-        <div class="stat-grid mb-6">
-          <div class="stat"><div class="label">Plan</div><div class="val" style="font-size: 18px;">Business</div><div class="delta">$249/mo</div></div>
-          <div class="stat"><div class="label">Collectors</div><div class="val">42</div><div class="delta up">+3 last 7d</div></div>
-          <div class="stat"><div class="label">Configurations</div><div class="val">7</div><div class="delta">2 git-backed</div></div>
-          <div class="stat"><div class="label">Members</div><div class="val">6 / 10</div></div>
-          <div class="stat"><div class="label">MRR</div><div class="val">$249</div><div class="delta">paying since Jan</div></div>
-        </div>
-        <div class="card card-pad" style="padding: 22px;">
-          <h3 style="font-size: 14px; font-weight: 500;">Notes (internal)</h3>
-          <textarea class="textarea mt-3">Onboarded via product-led signup. Switched from Pro → Business 3w in. Slack channel: #cust-acme. Looking at GitOps integration with their Terraform setup.</textarea>
-        </div>
-      </div>
+          <div data-tab-panel="summary" data-tabs-group="t" class="tab-panel active">
+            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M8 2L1.5 13.5h13z" />
+                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+              </svg>
+              <div><strong>Prototype</strong> — Summary stats and notes show sample data</div>
+            </div>
+            <div class="stat-grid mb-6">
+              <div class="stat">
+                <div class="label">Plan</div>
+                <div class="val" style="font-size: 18px">Business</div>
+                <div class="delta">$249/mo</div>
+              </div>
+              <div class="stat">
+                <div class="label">Collectors</div>
+                <div class="val">42</div>
+                <div class="delta up">+3 last 7d</div>
+              </div>
+              <div class="stat">
+                <div class="label">Configurations</div>
+                <div class="val">7</div>
+                <div class="delta">2 git-backed</div>
+              </div>
+              <div class="stat">
+                <div class="label">Members</div>
+                <div class="val">6 / 10</div>
+              </div>
+              <div class="stat">
+                <div class="label">MRR</div>
+                <div class="val">$249</div>
+                <div class="delta">paying since Jan</div>
+              </div>
+            </div>
+            <div class="card card-pad" style="padding: 22px">
+              <h3 style="font-size: 14px; font-weight: 500">Notes (internal)</h3>
+              <textarea class="textarea mt-3">
+Onboarded via product-led signup. Switched from Pro → Business 3w in. Slack channel: #cust-acme. Looking at GitOps integration with their Terraform setup.</textarea
+              >
+            </div>
+          </div>
 
-      <div data-tab-panel="usage" data-tabs-group="t" class="tab-panel">
-        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-          <div><strong>Prototype</strong> — Usage tracking shows sample data</div>
-        </div>
-        <div class="card card-pad" style="padding: 22px;">
-          <h3 style="font-size: 14px; font-weight: 500;">Plan limits</h3>
-          <div class="mt-4" style="display: flex; flex-direction: column; gap: 14px;">
-            <div><div class="flex-row justify-between text-sm"><span>Managed configurations</span><span class="t-mono">7 / 25</span></div><div class="bar mt-2"><i style="width: 28%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm"><span>GitHub repos</span><span class="t-mono">2 / 3</span></div><div class="bar mt-2"><i style="width: 67%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm"><span>Team members</span><span class="t-mono">6 / 10</span></div><div class="bar mt-2"><i style="width: 60%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm"><span>API requests (30d)</span><span class="t-mono">142,331</span></div><div class="bar mt-2"><i style="width: 38%;"></i></div></div>
+          <div data-tab-panel="usage" data-tabs-group="t" class="tab-panel">
+            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M8 2L1.5 13.5h13z" />
+                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+              </svg>
+              <div><strong>Prototype</strong> — Usage tracking shows sample data</div>
+            </div>
+            <div class="card card-pad" style="padding: 22px">
+              <h3 style="font-size: 14px; font-weight: 500">Plan limits</h3>
+              <div class="mt-4" style="display: flex; flex-direction: column; gap: 14px">
+                <div>
+                  <div class="flex-row justify-between text-sm">
+                    <span>Managed configurations</span><span class="t-mono">7 / 25</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 28%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm">
+                    <span>GitHub repos</span><span class="t-mono">2 / 3</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 67%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm">
+                    <span>Team members</span><span class="t-mono">6 / 10</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 60%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm">
+                    <span>API requests (30d)</span><span class="t-mono">142,331</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 38%"></i></div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div data-tab-panel="billing" data-tabs-group="t" class="tab-panel">
+            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M8 2L1.5 13.5h13z" />
+                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+              </svg>
+              <div><strong>Prototype</strong> — Billing data shows sample invoices</div>
+            </div>
+            <div class="dt-card">
+              <table class="dt">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Description</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="meta">Mar 27, 2026</td>
+                    <td>Business · monthly</td>
+                    <td class="mono-cell">$249.00</td>
+                    <td><span class="tag tag-ok">paid</span></td>
+                  </tr>
+                  <tr>
+                    <td class="meta">Feb 27, 2026</td>
+                    <td>Business · monthly</td>
+                    <td class="mono-cell">$249.00</td>
+                    <td><span class="tag tag-ok">paid</span></td>
+                  </tr>
+                  <tr>
+                    <td class="meta">Jan 27, 2026</td>
+                    <td>Pro → Business prorated</td>
+                    <td class="mono-cell">$187.00</td>
+                    <td><span class="tag tag-ok">paid</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div data-tab-panel="members" data-tabs-group="t" class="tab-panel">
+            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M8 2L1.5 13.5h13z" />
+                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+              </svg>
+              <div><strong>Prototype</strong> — Member list shows sample data</div>
+            </div>
+            <div class="dt-card">
+              <table class="dt">
+                <thead>
+                  <tr>
+                    <th>Member</th>
+                    <th>Role</th>
+                    <th>Last active</th>
+                    <th>2FA</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="name">
+                      Maya Patel <span class="meta">— maya@acmeplatform.com</span>
+                    </td>
+                    <td>
+                      <span
+                        class="tag"
+                        style="border-color: var(--accent-line); color: var(--accent)"
+                        >Owner</span
+                      >
+                    </td>
+                    <td class="meta">now</td>
+                    <td><span class="tag tag-ok">on</span></td>
+                  </tr>
+                  <tr>
+                    <td class="name">Jordan Nguyen <span class="meta">— jordan@…</span></td>
+                    <td><span class="tag">Admin</span></td>
+                    <td class="meta">12m</td>
+                    <td><span class="tag tag-ok">on</span></td>
+                  </tr>
+                  <tr>
+                    <td class="name">Sam Kim <span class="meta">— sam@…</span></td>
+                    <td><span class="tag">Editor</span></td>
+                    <td class="meta">2h</td>
+                    <td><span class="tag tag-ok">on</span></td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div data-tab-panel="events" data-tabs-group="t" class="tab-panel">
+            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
+              <svg
+                viewBox="0 0 16 16"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="1.6"
+                style="width: 14px; height: 14px"
+              >
+                <path d="M8 2L1.5 13.5h13z" />
+                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
+              </svg>
+              <div><strong>Prototype</strong> — Audit events show sample data</div>
+            </div>
+            <div class="dt-card">
+              <table class="dt">
+                <thead>
+                  <tr>
+                    <th>When</th>
+                    <th>Actor</th>
+                    <th>Action</th>
+                    <th>Target</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td class="meta">6m</td>
+                    <td>maya</td>
+                    <td>rollout.start</td>
+                    <td class="mono-cell">prod-ingress@v14</td>
+                  </tr>
+                  <tr>
+                    <td class="meta">2h</td>
+                    <td>github</td>
+                    <td>config.sync</td>
+                    <td class="mono-cell">k8s-daemon@a91f3b2</td>
+                  </tr>
+                  <tr>
+                    <td class="meta">5h</td>
+                    <td>sam</td>
+                    <td>member.invite</td>
+                    <td class="mono-cell">priya@acmeplatform.com</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div data-tab-panel="actions" data-tabs-group="t" class="tab-panel">
+            <div class="card card-pad" style="padding: 22px">
+              <h3 style="font-size: 14px; font-weight: 500">Plan</h3>
+              <div class="flex-row mt-3" style="gap: 8px">
+                <select class="select" style="max-width: 240px">
+                  <option>Business</option>
+                  <option>Pro</option>
+                  <option>Scale</option>
+                  <option>Enterprise (custom)</option>
+                </select>
+                <button class="btn btn-secondary btn-sm">Change plan</button>
+              </div>
+              <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px">Limit overrides</h3>
+              <div class="flex-row mt-3" style="gap: 8px">
+                <input class="input mono" style="max-width: 200px" placeholder="managed_configs" />
+                <input class="input mono" style="max-width: 100px" placeholder="50" />
+                <button class="btn btn-secondary btn-sm">Apply</button>
+              </div>
+              <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px; color: var(--err)">
+                Suspension
+              </h3>
+              <p class="t-muted text-sm mt-2">
+                Suspending blocks API + UI. Collectors keep last effective config and continue
+                working.
+              </p>
+              <button
+                class="btn btn-secondary btn-sm mt-3"
+                style="
+                  border-color: color-mix(in oklab, var(--err) 30%, var(--line));
+                  color: var(--err);
+                "
+              >
+                Suspend tenant
+              </button>
+            </div>
           </div>
         </div>
-      </div>
-
-      <div data-tab-panel="billing" data-tabs-group="t" class="tab-panel">
-        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-          <div><strong>Prototype</strong> — Billing data shows sample invoices</div>
+      </main>
+    </div>
+    <div class="modal-backdrop" id="impersonate">
+      <div class="modal danger">
+        <div class="modal-head">
+          <h3>Impersonate Acme Platform?</h3>
+          <button class="modal-close" data-close-modal>×</button>
         </div>
-        <div class="dt-card">
-          <table class="dt">
-            <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead>
-            <tbody>
-              <tr><td class="meta">Mar 27, 2026</td><td>Business · monthly</td><td class="mono-cell">$249.00</td><td><span class="tag tag-ok">paid</span></td></tr>
-              <tr><td class="meta">Feb 27, 2026</td><td>Business · monthly</td><td class="mono-cell">$249.00</td><td><span class="tag tag-ok">paid</span></td></tr>
-              <tr><td class="meta">Jan 27, 2026</td><td>Pro → Business prorated</td><td class="mono-cell">$187.00</td><td><span class="tag tag-ok">paid</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div data-tab-panel="members" data-tabs-group="t" class="tab-panel">
-        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-          <div><strong>Prototype</strong> — Member list shows sample data</div>
-        </div>
-        <div class="dt-card">
-          <table class="dt">
-            <thead><tr><th>Member</th><th>Role</th><th>Last active</th><th>2FA</th></tr></thead>
-            <tbody>
-              <tr><td class="name">Maya Patel <span class="meta">— maya@acmeplatform.com</span></td><td><span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Owner</span></td><td class="meta">now</td><td><span class="tag tag-ok">on</span></td></tr>
-              <tr><td class="name">Jordan Nguyen <span class="meta">— jordan@…</span></td><td><span class="tag">Admin</span></td><td class="meta">12m</td><td><span class="tag tag-ok">on</span></td></tr>
-              <tr><td class="name">Sam Kim <span class="meta">— sam@…</span></td><td><span class="tag">Editor</span></td><td class="meta">2h</td><td><span class="tag tag-ok">on</span></td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <div data-tab-panel="events" data-tabs-group="t" class="tab-panel">
-        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-          <div><strong>Prototype</strong> — Audit events show sample data</div>
-        </div>
-        <div class="dt-card"><table class="dt">
-          <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead>
-          <tbody>
-            <tr><td class="meta">6m</td><td>maya</td><td>rollout.start</td><td class="mono-cell">prod-ingress@v14</td></tr>
-            <tr><td class="meta">2h</td><td>github</td><td>config.sync</td><td class="mono-cell">k8s-daemon@a91f3b2</td></tr>
-            <tr><td class="meta">5h</td><td>sam</td><td>member.invite</td><td class="mono-cell">priya@acmeplatform.com</td></tr>
-          </tbody>
-        </table></div>
-      </div>
-
-      <div data-tab-panel="actions" data-tabs-group="t" class="tab-panel">
-        <div class="card card-pad" style="padding: 22px;">
-          <h3 style="font-size: 14px; font-weight: 500;">Plan</h3>
-          <div class="flex-row mt-3" style="gap: 8px;">
-            <select class="select" style="max-width: 240px;"><option>Business</option><option>Pro</option><option>Scale</option><option>Enterprise (custom)</option></select>
-            <button class="btn btn-secondary btn-sm">Change plan</button>
+        <div class="modal-body">
+          <p class="t-muted text-sm">
+            A banner will appear in the customer portal. All actions you take will be logged with
+            your staff identity.
+          </p>
+          <div class="field">
+            <label>Reason (required)</label
+            ><input
+              class="input"
+              placeholder="e.g. Support ticket #4821 — config not propagating"
+            />
           </div>
-          <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px;">Limit overrides</h3>
-          <div class="flex-row mt-3" style="gap: 8px;">
-            <input class="input mono" style="max-width: 200px;" placeholder="managed_configs"/>
-            <input class="input mono" style="max-width: 100px;" placeholder="50"/>
-            <button class="btn btn-secondary btn-sm">Apply</button>
+          <div class="field">
+            <label>Scope</label
+            ><select class="select">
+              <option>Read-only — see what they see</option>
+              <option>Edit — change settings on their behalf</option>
+            </select>
           </div>
-          <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px; color: var(--err);">Suspension</h3>
-          <p class="t-muted text-sm mt-2">Suspending blocks API + UI. Collectors keep last effective config and continue working.</p>
-          <button class="btn btn-secondary btn-sm mt-3" style="border-color: color-mix(in oklab, var(--err) 30%, var(--line)); color: var(--err);">Suspend tenant</button>
+        </div>
+        <div class="modal-foot">
+          <button class="btn btn-ghost" data-close-modal>Cancel</button
+          ><button class="btn btn-primary" data-close-modal>Start session</button>
         </div>
       </div>
     </div>
-  </main>
-</div>
-<div class="modal-backdrop" id="impersonate"><div class="modal danger"><div class="modal-head"><h3>Impersonate Acme Platform?</h3><button class="modal-close" data-close-modal>×</button></div><div class="modal-body">
-  <p class="t-muted text-sm">A banner will appear in the customer portal. All actions you take will be logged with your staff identity.</p>
-  <div class="field"><label>Reason (required)</label><input class="input" placeholder="e.g. Support ticket #4821 — config not propagating" /></div>
-  <div class="field"><label>Scope</label><select class="select"><option>Read-only — see what they see</option><option>Edit — change settings on their behalf</option></select></div>
-</div><div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal>Start session</button></div></div></div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>
-(async function () {
-  var authed = await FP.checkAuth();
-  if (!authed) return;
-  const tenantId = new URLSearchParams(window.location.search).get('id');
-  FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Tenants', href:'tenants.html'},{label:'Loading…'}] });
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
+        const tenantId = new URLSearchParams(window.location.search).get("id");
+        FB.shell({
+          role: "admin",
+          current: "tenants",
+          crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: "Loading…" }],
+        });
 
-  function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s;
+          return d.innerHTML;
+        }
 
-  async function loadTenant() {
-    if (!tenantId) return;
-    try {
-      const t = await FP.get('/api/admin/tenants/' + tenantId);
-      // Update header
-      document.querySelector('.page-head h1').textContent = t.name;
-      document.title = t.name + ' — O11yFleet Admin';
-      document.querySelector('.page-head .sub').textContent = 'ID: ' + t.id + ' · plan: ' + t.plan + ' · created ' + FP.relTime(t.created_at);
-      // Plan badge
-      const planTag = document.querySelector('.page-head .flex-row .tag');
-      if (planTag) planTag.textContent = t.plan;
-      // Tenant ID badge
-      const idTag = document.querySelector('.page-head .flex-row .tag.t-mono');
-      if (idTag) idTag.textContent = FP.trunc(t.id, 16);
-      // Update breadcrumbs
-      FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Tenants', href:'tenants.html'},{label: t.name}] });
-      // Update stat cards
-      const stats = document.querySelectorAll('.stat-grid .stat .val');
-      if (stats[0]) stats[0].textContent = t.plan;
-      if (stats[1]) stats[1].textContent = '—'; // collector count not available yet
-      if (stats[3]) stats[3].textContent = '— / —'; // members not available yet
+        async function loadTenant() {
+          if (!tenantId) return;
+          try {
+            const t = await FP.get("/api/admin/tenants/" + tenantId);
+            // Update header
+            document.querySelector(".page-head h1").textContent = t.name;
+            document.title = t.name + " — O11yFleet Admin";
+            document.querySelector(".page-head .sub").textContent =
+              "ID: " + t.id + " · plan: " + t.plan + " · created " + FP.relTime(t.created_at);
+            // Plan badge
+            const planTag = document.querySelector(".page-head .flex-row .tag");
+            if (planTag) planTag.textContent = t.plan;
+            // Tenant ID badge
+            const idTag = document.querySelector(".page-head .flex-row .tag.t-mono");
+            if (idTag) idTag.textContent = FP.trunc(t.id, 16);
+            // Update breadcrumbs
+            FB.shell({
+              role: "admin",
+              current: "tenants",
+              crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: t.name }],
+            });
+            // Update stat cards
+            const stats = document.querySelectorAll(".stat-grid .stat .val");
+            if (stats[0]) stats[0].textContent = t.plan;
+            if (stats[1]) stats[1].textContent = "—"; // collector count not available yet
+            if (stats[3]) stats[3].textContent = "— / —"; // members not available yet
 
-      // Load configs
-      const configData = await FP.get('/api/admin/tenants/' + tenantId + '/configurations');
-      const configs = configData.configurations || [];
-      if (stats[2]) stats[2].textContent = configs.length;
+            // Load configs
+            const configData = await FP.get("/api/admin/tenants/" + tenantId + "/configurations");
+            const configs = configData.configurations || [];
+            if (stats[2]) stats[2].textContent = configs.length;
 
-      // "Open in customer portal" button
-      const openBtn = document.querySelector('.actions .btn-secondary:last-child');
-      if (openBtn) {
-        openBtn.onclick = () => {
-          window.open('../portal/overview.html?tenant=' + tenantId + '&api=' + encodeURIComponent(FP.apiBase), '_blank');
-        };
-      }
-    } catch (e) {
-      console.error('Failed to load tenant', e);
-    }
-  }
+            // "Open in customer portal" button
+            const openBtn = document.querySelector(".actions .btn-secondary:last-child");
+            if (openBtn) {
+              openBtn.onclick = () => {
+                window.open(
+                  "../portal/overview.html?tenant=" +
+                    tenantId +
+                    "&api=" +
+                    encodeURIComponent(FP.apiBase),
+                  "_blank",
+                );
+              };
+            }
+          } catch (e) {
+            console.error("Failed to load tenant", e);
+          }
+        }
 
-  loadTenant();
-})();
-</script>
-</body>
+        loadTenant();
+      })();
+    </script>
+  </body>
 </html>

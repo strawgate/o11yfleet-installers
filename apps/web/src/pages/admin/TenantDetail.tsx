@@ -1,4 +1,4 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, Navigate } from "react-router-dom";
 import { useAdminTenant, useAdminTenantConfigs } from "../../hooks/queries";
 import { Badge } from "../../components/ui/Badge";
 import { StatCard } from "../../components/ui/StatCard";
@@ -6,14 +6,18 @@ import { relativeTime } from "../../lib/format";
 
 export function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
-  const { data: tenant } = useAdminTenant(id!);
-  const { data: configs } = useAdminTenantConfigs(id!);
+  const { data: tenant } = useAdminTenant(id ?? "");
+  const { data: configs } = useAdminTenantConfigs(id ?? "");
+
+  if (!id) return <Navigate to="/admin/tenants" replace />;
 
   return (
     <div className="p-6 max-w-5xl">
       {/* Breadcrumb */}
       <div className="flex items-center gap-2 text-xs text-fg-3 mb-4">
-        <Link to="/admin/tenants" className="hover:text-fg">Tenants</Link>
+        <Link to="/admin/tenants" className="hover:text-fg">
+          Tenants
+        </Link>
         <span>/</span>
         <span className="text-fg">{tenant?.name ?? "…"}</span>
       </div>
@@ -29,10 +33,7 @@ export function TenantDetailPage() {
       <div className="grid grid-cols-3 gap-4 mb-8">
         <StatCard label="Configurations" value={configs?.length ?? "—"} />
         <StatCard label="Plan" value={tenant?.plan ?? "—"} />
-        <StatCard
-          label="Created"
-          value={tenant ? relativeTime(tenant.created_at) : "—"}
-        />
+        <StatCard label="Created" value={tenant ? relativeTime(tenant.created_at) : "—"} />
       </div>
 
       <h2 className="text-sm font-semibold text-fg mb-3">Configurations</h2>

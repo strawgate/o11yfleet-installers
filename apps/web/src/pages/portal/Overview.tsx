@@ -14,10 +14,7 @@ export function OverviewPage() {
           label="Configurations"
           value={isLoading ? "—" : (data?.total_configurations ?? 0)}
         />
-        <StatCard
-          label="Total Agents"
-          value={isLoading ? "—" : (data?.total_agents ?? 0)}
-        />
+        <StatCard label="Total Agents" value={isLoading ? "—" : (data?.total_agents ?? 0)} />
         <StatCard
           label="Connected"
           value={isLoading ? "—" : (data?.connected_agents ?? 0)}
@@ -39,9 +36,7 @@ export function OverviewPage() {
           className="rounded-xl border border-line bg-surface p-5 hover:border-brand/30 transition-colors"
         >
           <h3 className="text-sm font-semibold text-fg">🚀 Get Started</h3>
-          <p className="mt-1 text-xs text-fg-3">
-            Connect your first OTel Collector in minutes
-          </p>
+          <p className="mt-1 text-xs text-fg-3">Connect your first OTel Collector in minutes</p>
         </Link>
 
         <Link
@@ -49,9 +44,7 @@ export function OverviewPage() {
           className="rounded-xl border border-line bg-surface p-5 hover:border-brand/30 transition-colors"
         >
           <h3 className="text-sm font-semibold text-fg">☰ Configurations</h3>
-          <p className="mt-1 text-xs text-fg-3">
-            Create and manage collector configurations
-          </p>
+          <p className="mt-1 text-xs text-fg-3">Create and manage collector configurations</p>
         </Link>
       </div>
     </div>

@@ -6,6 +6,7 @@ import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { handleQueueBatch } from "./event-consumer.js";
+import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyClaim, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 
@@ -44,6 +45,7 @@ function getCorsHeaders(request: Request): Record<string, string> {
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
     "Access-Control-Allow-Credentials": "true",
+    Vary: "Origin",
   };
 }
 
@@ -54,15 +56,6 @@ const INTERNAL_HEADERS = [
   "x-fp-instance-uid",
   "x-fp-enrollment",
 ];
-
-/** Timing-safe comparison of API secrets to prevent timing attacks. */
-function timingSafeEqual(a: string, b: string): boolean {
-  const enc = new TextEncoder();
-  const aBuf = enc.encode(a);
-  const bBuf = enc.encode(b);
-  if (aBuf.byteLength !== bBuf.byteLength) return false;
-  return crypto.subtle.timingSafeEqual(aBuf, bBuf);
-}
 
 function addCorsHeaders(resp: Response, request: Request): Response {
   const corsResp = new Response(resp.body, resp);
@@ -93,80 +86,95 @@ export default {
 };
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
+  const url = new URL(request.url);
 
-    // Health check
-    if (url.pathname === "/healthz") {
-      return Response.json({ status: "ok", timestamp: new Date().toISOString() }, { headers: getCorsHeaders(request) });
-    }
+  // Health check
+  if (url.pathname === "/healthz") {
+    return Response.json(
+      { status: "ok", timestamp: new Date().toISOString() },
+      { headers: getCorsHeaders(request) },
+    );
+  }
 
-    // CORS preflight
-    if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
-    }
+  // CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+  }
 
-    // Auth routes — no auth required (they handle their own)
-    if (url.pathname.startsWith("/auth/")) {
-      const resp = await handleAuthRequest(request, env, url);
-      return addCorsHeaders(resp, request);
-    }
+  // Auth routes — no auth required (they handle their own)
+  if (url.pathname.startsWith("/auth/")) {
+    const resp = await handleAuthRequest(request, env, url);
+    return addCorsHeaders(resp, request);
+  }
 
-    // API routes — with auth + CORS
-    if (url.pathname.startsWith("/api/")) {
-      // Check Bearer token first (programmatic API access)
-      let hasBearerAuth = false;
-      if (env.API_SECRET) {
-        const auth = request.headers.get("Authorization");
-        const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-        if (token && timingSafeEqual(token, env.API_SECRET)) {
-          hasBearerAuth = true;
-        }
+  // API routes — with auth + CORS
+  if (url.pathname.startsWith("/api/")) {
+    // Check Bearer token first (programmatic API access)
+    let hasBearerAuth = false;
+    if (env.API_SECRET) {
+      const auth = request.headers.get("Authorization");
+      const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+      if (token && timingSafeEqual(token, env.API_SECRET)) {
+        hasBearerAuth = true;
       }
-
-      // Try session-based auth (cookie)
-      const sessionAuth = await authenticate(request, env);
-
-      let resp: Response;
-
-      // Admin routes — /api/admin/*
-      if (url.pathname.startsWith("/api/admin/")) {
-        // Require either Bearer API_SECRET or admin session
-        if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
-          return addCorsHeaders(Response.json({ error: "Admin access required" }, { status: 403 }), request);
-        }
-        resp = await handleAdminRequest(request, env, url);
-      }
-      // Tenant-scoped routes — /api/v1/*
-      else if (url.pathname.startsWith("/api/v1/")) {
-        // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth)
-        let tenantId: string | null = null;
-        if (sessionAuth?.tenantId) {
-          tenantId = sessionAuth.tenantId;
-        } else if (hasBearerAuth) {
-          tenantId = request.headers.get("X-Tenant-Id");
-        }
-        if (!tenantId) {
-          return addCorsHeaders(Response.json({ error: "Authentication required" }, { status: 401 }), request);
-        }
-        resp = await handleV1Request(request, env, url, tenantId);
-      }
-      // Legacy routes — /api/*
-      else {
-        if (!hasBearerAuth && !sessionAuth) {
-          return addCorsHeaders(Response.json({ error: "Authentication required" }, { status: 401 }), request);
-        }
-        resp = await handleApiRequest(request, env, url);
-      }
-
-      return addCorsHeaders(resp, request);
     }
 
-    // OpAMP WebSocket endpoint
-    if (url.pathname === "/v1/opamp") {
-      return handleOpampRequest(request, env);
+    // Try session-based auth (cookie)
+    const sessionAuth = await authenticate(request, env);
+
+    let resp: Response;
+
+    // Admin routes — /api/admin/*
+    if (url.pathname.startsWith("/api/admin/")) {
+      // Require either Bearer API_SECRET or admin session
+      if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
+        return addCorsHeaders(
+          Response.json({ error: "Admin access required" }, { status: 403 }),
+          request,
+        );
+      }
+      resp = await handleAdminRequest(request, env, url);
+    }
+    // Tenant-scoped routes — /api/v1/*
+    else if (url.pathname.startsWith("/api/v1/")) {
+      // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth)
+      let tenantId: string | null = null;
+      if (sessionAuth?.tenantId) {
+        tenantId = sessionAuth.tenantId;
+      } else if (hasBearerAuth) {
+        tenantId = request.headers.get("X-Tenant-Id");
+      }
+      if (!tenantId) {
+        return addCorsHeaders(
+          Response.json({ error: "Authentication required" }, { status: 401 }),
+          request,
+        );
+      }
+      resp = await handleV1Request(request, env, url, tenantId);
+    }
+    // Legacy routes — /api/*
+    else {
+      if (!hasBearerAuth && !sessionAuth) {
+        return addCorsHeaders(
+          Response.json({ error: "Authentication required" }, { status: 401 }),
+          request,
+        );
+      }
+      resp = await handleApiRequest(request, env, url, sessionAuth?.tenantId);
     }
 
-    return new Response("Not found", { status: 404 });
+    return addCorsHeaders(resp, request);
+  }
+
+  // OpAMP WebSocket endpoint
+  if (url.pathname === "/v1/opamp") {
+    if (!env.CLAIM_SECRET) {
+      return new Response("Server misconfigured: CLAIM_SECRET not set", { status: 500 });
+    }
+    return handleOpampRequest(request, env);
+  }
+
+  return new Response("Not found", { status: 404 });
 }
 
 /**
@@ -218,10 +226,12 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
       cleanHeaders.set("x-fp-config-id", claim.config_id);
       cleanHeaders.set("x-fp-instance-uid", claim.instance_uid);
 
-      return stub.fetch(new Request(request.url, {
-        method: request.method,
-        headers: cleanHeaders,
-      }));
+      return stub.fetch(
+        new Request(request.url, {
+          method: request.method,
+          headers: cleanHeaders,
+        }),
+      );
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Invalid claim";
       return Response.json({ error: msg }, { status: 401 });
@@ -265,8 +275,10 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   cleanHeaders.set("x-fp-instance-uid", instanceUid);
   cleanHeaders.set("x-fp-enrollment", "true");
 
-  return stub.fetch(new Request(request.url, {
-    method: request.method,
-    headers: cleanHeaders,
-  }));
+  return stub.fetch(
+    new Request(request.url, {
+      method: request.method,
+      headers: cleanHeaders,
+    }),
+  );
 }

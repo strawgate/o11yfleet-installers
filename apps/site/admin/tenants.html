@@ -1,96 +1,153 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Tenants — O11yFleet Admin</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-<link rel="stylesheet" href="../admin.css" />
-</head>
-<body>
-<div class="admin-stripe"></div>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head"><div><h1>Tenants</h1><div class="sub">1,284 workspaces · 38,492 collectors</div></div><div class="actions"><button class="btn btn-secondary btn-sm">Export CSV</button></div></div>
-      <div class="dt-card">
-        <div class="dt-toolbar">
-          <input class="input" placeholder="Filter by name, slug, owner email…" style="width: 320px; height: 30px;" />
-          <select class="select" style="width: auto; height: 30px;"><option>All plans</option><option>Free</option><option>Pro</option><option>Business</option><option>Scale</option><option>Enterprise</option></select>
-          <select class="select" style="width: auto; height: 30px;"><option>All statuses</option><option>Trial</option><option>Active</option><option>Past due</option><option>Suspended</option></select>
-          <span class="count" style="margin-left: 8px;">1,284 tenants</span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Tenants — O11yFleet Admin</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+    <link rel="stylesheet" href="../admin.css" />
+  </head>
+  <body>
+    <div class="admin-stripe"></div>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Tenants</h1>
+              <div class="sub">1,284 workspaces · 38,492 collectors</div>
+            </div>
+            <div class="actions"><button class="btn btn-secondary btn-sm">Export CSV</button></div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <input
+                class="input"
+                placeholder="Filter by name, slug, owner email…"
+                style="width: 320px; height: 30px"
+              />
+              <select class="select" style="width: auto; height: 30px">
+                <option>All plans</option>
+                <option>Free</option>
+                <option>Pro</option>
+                <option>Business</option>
+                <option>Scale</option>
+                <option>Enterprise</option>
+              </select>
+              <select class="select" style="width: auto; height: 30px">
+                <option>All statuses</option>
+                <option>Trial</option>
+                <option>Active</option>
+                <option>Past due</option>
+                <option>Suspended</option>
+              </select>
+              <span class="count" style="margin-left: 8px">1,284 tenants</span>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Workspace</th>
+                  <th>Plan</th>
+                  <th>Max Configs</th>
+                  <th>Max Agents</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody id="trows">
+                <tr>
+                  <td colspan="5" class="meta" style="text-align: center; padding: 32px">
+                    Loading…
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
         </div>
-        <table class="dt">
-          <thead><tr><th>Workspace</th><th>Plan</th><th>Max Configs</th><th>Max Agents</th><th>Created</th></tr></thead>
-          <tbody id="trows"><tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">Loading…</td></tr></tbody>
-        </table>
-      </div>
+      </main>
     </div>
-  </main>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>
-FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Operations'},{label:'Tenants'}] });
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({
+        role: "admin",
+        current: "tenants",
+        crumbs: [{ label: "Operations" }, { label: "Tenants" }],
+      });
 
-(async function () {
-var authed = await FP.checkAuth();
-if (!authed) return;
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
 
-function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s;
+          return d.innerHTML;
+        }
 
-async function loadTenants() {
-  const tbody = document.getElementById('trows');
-  const countEl = document.querySelector('.page-head .sub');
-  try {
-    const data = await FP.get('/api/admin/tenants');
-    const tenants = data.tenants || [];
-    if (countEl) countEl.textContent = tenants.length + ' workspace' + (tenants.length !== 1 ? 's' : '');
-    const filterInput = document.querySelector('.dt-toolbar .input');
-    const planSelect = document.querySelectorAll('.dt-toolbar .select')[0];
+        async function loadTenants() {
+          const tbody = document.getElementById("trows");
+          const countEl = document.querySelector(".page-head .sub");
+          try {
+            const data = await FP.get("/api/admin/tenants");
+            const tenants = data.tenants || [];
+            if (countEl)
+              countEl.textContent =
+                tenants.length + " workspace" + (tenants.length !== 1 ? "s" : "");
+            const filterInput = document.querySelector(".dt-toolbar .input");
+            const planSelect = document.querySelectorAll(".dt-toolbar .select")[0];
 
-    function render() {
-      let filtered = tenants;
-      if (filterInput && filterInput.value) {
-        const q = filterInput.value.toLowerCase();
-        filtered = filtered.filter(t => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q));
-      }
-      if (planSelect && planSelect.value !== 'All plans') {
-        const p = planSelect.value.toLowerCase();
-        filtered = filtered.filter(t => t.plan === p);
-      }
-      document.querySelector('.dt-toolbar .count').textContent = filtered.length + ' tenants';
-      if (filtered.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No tenants found.</td></tr>';
-        return;
-      }
-      tbody.innerHTML = filtered.map(t => {
-        const planStyle = (t.plan === 'pro' || t.plan === 'enterprise') ? ' style="border-color: var(--accent-line); color: var(--accent);"' : '';
-        return `<tr class="clickable" onclick="window.location.href='tenant-detail.html?id=${t.id}'">
+            function render() {
+              let filtered = tenants;
+              if (filterInput && filterInput.value) {
+                const q = filterInput.value.toLowerCase();
+                filtered = filtered.filter(
+                  (t) => t.name.toLowerCase().includes(q) || t.id.toLowerCase().includes(q),
+                );
+              }
+              if (planSelect && planSelect.value !== "All plans") {
+                const p = planSelect.value.toLowerCase();
+                filtered = filtered.filter((t) => t.plan === p);
+              }
+              document.querySelector(".dt-toolbar .count").textContent =
+                filtered.length + " tenants";
+              if (filtered.length === 0) {
+                tbody.innerHTML =
+                  '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No tenants found.</td></tr>';
+                return;
+              }
+              tbody.innerHTML = filtered
+                .map((t) => {
+                  const planStyle =
+                    t.plan === "pro" || t.plan === "enterprise"
+                      ? ' style="border-color: var(--accent-line); color: var(--accent);"'
+                      : "";
+                  return `<tr class="clickable" onclick="window.location.href='tenant-detail.html?id=${t.id}'">
           <td><div class="name">${esc(t.name)}</div><div class="meta">${FP.trunc(t.id, 12)}</div></td>
           <td><span class="tag"${planStyle}>${esc(t.plan)}</span></td>
           <td class="mono-cell">${t.max_configs}</td>
           <td class="mono-cell">${(t.max_agents_per_config || 0).toLocaleString()}</td>
           <td class="meta">${FP.relTime(t.created_at)}</td>
         </tr>`;
-      }).join('');
-    }
+                })
+                .join("");
+            }
 
-    if (filterInput) filterInput.addEventListener('input', render);
-    if (planSelect) planSelect.addEventListener('change', render);
-    render();
-  } catch (e) {
-    console.error('Failed to load tenants', e);
-    tbody.innerHTML = '<tr><td colspan="5" class="meta" style="color:var(--err);text-align:center;padding:32px;">Failed to load tenants</td></tr>';
-  }
-}
+            if (filterInput) filterInput.addEventListener("input", render);
+            if (planSelect) planSelect.addEventListener("change", render);
+            render();
+          } catch (e) {
+            console.error("Failed to load tenants", e);
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="meta" style="color:var(--err);text-align:center;padding:32px;">Failed to load tenants</td></tr>';
+          }
+        }
 
-FP.autoRefresh(loadTenants, 15000);
-})();
-</script>
-</body>
+        FP.autoRefresh(loadTenants, 15000);
+      })();
+    </script>
+  </body>
 </html>

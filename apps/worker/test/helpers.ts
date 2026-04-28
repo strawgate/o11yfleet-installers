@@ -13,7 +13,7 @@ export const API_SECRET = "test-api-secret-for-dev-only-32chars";
 
 /** Standard auth headers for API requests in tests */
 export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return { "Authorization": `Bearer ${API_SECRET}`, ...extra };
+  return { Authorization: `Bearer ${API_SECRET}`, ...extra };
 }
 
 /**
@@ -62,10 +62,7 @@ export async function setupD1(): Promise<void> {
  */
 export function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Timeout waiting for message")),
-      timeoutMs,
-    );
+    const timer = setTimeout(() => reject(new Error("Timeout waiting for message")), timeoutMs);
     ws.addEventListener(
       "message",
       (event) => {
@@ -82,10 +79,7 @@ export function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEven
  */
 export function waitForClose(ws: WebSocket, timeoutMs = 3000): Promise<CloseEvent> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => reject(new Error("Timeout waiting for close")),
-      timeoutMs,
-    );
+    const timer = setTimeout(() => reject(new Error("Timeout waiting for close")), timeoutMs);
     ws.addEventListener(
       "close",
       (e) => {
@@ -140,10 +134,7 @@ export async function createTenant(name: string): Promise<TenantResult> {
 /**
  * Create a configuration for a tenant. Returns { id, tenant_id, name }.
  */
-export async function createConfig(
-  tenantId: string,
-  name: string,
-): Promise<ConfigResult> {
+export async function createConfig(tenantId: string, name: string): Promise<ConfigResult> {
   const res = await exports.default.fetch("http://localhost/api/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, name }),
@@ -171,9 +162,7 @@ export async function uploadConfigVersion(
 /**
  * Create an enrollment token for a config. Returns { token, id }.
  */
-export async function createEnrollmentToken(
-  configId: string,
-): Promise<EnrollmentResult> {
+export async function createEnrollmentToken(configId: string): Promise<EnrollmentResult> {
   const res = await exports.default.fetch(
     `http://localhost/api/configurations/${configId}/enrollment-token`,
     {
@@ -203,19 +192,16 @@ export async function rolloutConfig(
 /**
  * Get config stats (from DO via API).
  */
-export async function getConfigStats(
-  configId: string,
-): Promise<{
+export async function getConfigStats(configId: string): Promise<{
   total_agents: number;
   connected_agents: number;
   healthy_agents: number;
   desired_config_hash: string | null;
   active_websockets: number;
 }> {
-  const res = await exports.default.fetch(
-    `http://localhost/api/configurations/${configId}/stats`,
-    { headers: authHeaders() },
-  );
+  const res = await exports.default.fetch(`http://localhost/api/configurations/${configId}/stats`, {
+    headers: authHeaders(),
+  });
   expect(res.status).toBe(200);
   return res.json();
 }
@@ -245,7 +231,7 @@ export async function connectWithEnrollment(token: string): Promise<{
   enrollment: { type: string; assignment_claim: string; instance_uid: string };
 }> {
   const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
-    headers: { "Upgrade": "websocket", "Authorization": `Bearer ${token}` },
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
   });
   expect(wsRes.status).toBe(101);
   const ws = wsRes.webSocket!;
@@ -268,7 +254,7 @@ export async function connectWithEnrollment(token: string): Promise<{
 export async function connectWithClaim(claim: AssignmentClaim): Promise<WebSocket> {
   const token = await signClaim(claim, CLAIM_SECRET);
   const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
-    headers: { "Upgrade": "websocket", "Authorization": `Bearer ${token}` },
+    headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
   });
   expect(wsRes.status).toBe(101);
   const ws = wsRes.webSocket!;
@@ -288,10 +274,10 @@ export async function sendHello(
     sequence_num: opts.seqNum ?? 0,
     capabilities:
       opts.capabilities ??
-      (AgentCapabilities.ReportsStatus |
+      AgentCapabilities.ReportsStatus |
         AgentCapabilities.AcceptsRemoteConfig |
         AgentCapabilities.ReportsHealth |
-        AgentCapabilities.ReportsRemoteConfig),
+        AgentCapabilities.ReportsRemoteConfig,
     flags: 0,
     health: {
       healthy: true,
@@ -314,15 +300,11 @@ export async function sendHello(
 /**
  * Send an OpAMP heartbeat and return the server response.
  */
-export async function sendHeartbeat(
-  ws: WebSocket,
-  seqNum: number,
-): Promise<ServerToAgent> {
+export async function sendHeartbeat(ws: WebSocket, seqNum: number): Promise<ServerToAgent> {
   const hb: AgentToServer = {
     instance_uid: new Uint8Array(16),
     sequence_num: seqNum,
-    capabilities:
-      AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
+    capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
     flags: 0,
   };
   ws.send(encodeFrame(hb));

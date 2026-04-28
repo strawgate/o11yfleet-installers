@@ -2,11 +2,7 @@ import { describe, it, expect } from "vitest";
 import { processFrame } from "../src/state-machine/processor.js";
 import type { AgentState } from "../src/state-machine/types.js";
 import type { AgentToServer } from "../src/codec/types.js";
-import {
-  AgentCapabilities,
-  ServerToAgentFlags,
-  RemoteConfigStatuses,
-} from "../src/codec/types.js";
+import { AgentCapabilities, ServerToAgentFlags, RemoteConfigStatuses } from "../src/codec/types.js";
 import { FleetEventType } from "../src/events.js";
 
 function makeDefaultState(overrides: Partial<AgentState> = {}): AgentState {
@@ -278,7 +274,10 @@ describe("Config Content Delivery", () => {
 
     expect(result.response?.remote_config).toBeDefined();
     expect(result.response!.remote_config!.config.config_map).toBeDefined();
-    const configMap = result.response!.remote_config!.config.config_map as Record<string, { body: Uint8Array; content_type: string }>;
+    const configMap = result.response!.remote_config!.config.config_map as Record<
+      string,
+      { body: Uint8Array; content_type: string }
+    >;
     expect(configMap[""]).toBeDefined();
     expect(configMap[""].content_type).toBe("text/yaml");
     expect(new TextDecoder().decode(configMap[""].body)).toBe(yamlContent);

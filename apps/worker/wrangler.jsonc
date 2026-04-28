@@ -1,92 +1,75 @@
 {
-	"name": "o11yfleet-worker",
-	"main": "src/index.ts",
-	"compatibility_date": "2026-04-26",
-	"compatibility_flags": [
-		"nodejs_compat"
-	],
-	"routes": [
-		{
-			"pattern": "api.o11yfleet.com/*",
-			"zone_name": "o11yfleet.com"
-		}
-	],
-	"workers_dev": true,
-	"vars": {
-		"CLAIM_SECRET": "dev-secret-key-for-testing-only-32ch",
-		"API_SECRET": "test-api-secret-for-dev-only-32chars",
-		"SEED_TENANT_USER_EMAIL": "demo@o11yfleet.com",
-		"SEED_TENANT_USER_PASSWORD": "demo-password",
-		"SEED_ADMIN_EMAIL": "admin@o11yfleet.com",
-		"SEED_ADMIN_PASSWORD": "admin-password"
-	},
-	"d1_databases": [
-		{
-			"binding": "FP_DB",
-			"database_name": "fp-db",
-			"database_id": "192ca9ca-bd47-4bd2-9321-fcdf62d9cf05",
-			"migrations_dir": "../../packages/db/migrations"
-		}
-	],
-	"r2_buckets": [
-		{
-			"binding": "FP_CONFIGS",
-			"bucket_name": "fp-configs"
-		}
-	],
-	"queues": {
-		"producers": [
-			{
-				"binding": "FP_EVENTS",
-				"queue": "fp-events"
-			}
-		],
-		"consumers": [
-			{
-				"queue": "fp-events",
-				"max_batch_size": 100,
-				"max_batch_timeout": 5
-			}
-		]
-	},
-	"durable_objects": {
-		"bindings": [
-			{
-				"name": "CONFIG_DO",
-				"class_name": "ConfigDurableObject"
-			}
-		]
-	},
-	"migrations": [
-		{
-			"tag": "v1",
-			"new_sqlite_classes": [
-				"ConfigDurableObject"
-			]
-		}
-	],
-	// TODO: Re-enable after activating Analytics Engine in CF Dashboard
-	// "analytics_engine_datasets": [
-	// 	{
-	// 		"binding": "FP_ANALYTICS",
-	// 		"dataset": "fp_analytics"
-	// 	}
-	// ],
-	// ─── Environment overrides ─────────────────────────────────────────
-	// Staging and production use the instrumented entry point for OTel auto-tracing.
-	// Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
-	"env": {
-		"staging": {
-			"main": "src/instrumented.ts",
-			"vars": {
-				"CLAIM_SECRET": ""
-			}
-		},
-		"production": {
-			"main": "src/instrumented.ts",
-			"vars": {
-				"CLAIM_SECRET": ""
-			}
-		}
-	}
+  "name": "o11yfleet-worker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "routes": [
+    {
+      "pattern": "api.o11yfleet.com/*",
+      "zone_name": "o11yfleet.com",
+    },
+  ],
+  "workers_dev": true,
+  "vars": {},
+  "d1_databases": [
+    {
+      "binding": "FP_DB",
+      "database_name": "fp-db",
+      "database_id": "192ca9ca-bd47-4bd2-9321-fcdf62d9cf05",
+      "migrations_dir": "../../packages/db/migrations",
+    },
+  ],
+  "r2_buckets": [
+    {
+      "binding": "FP_CONFIGS",
+      "bucket_name": "fp-configs",
+    },
+  ],
+  "queues": {
+    "producers": [
+      {
+        "binding": "FP_EVENTS",
+        "queue": "fp-events",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "fp-events",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+      },
+    ],
+  },
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "CONFIG_DO",
+        "class_name": "ConfigDurableObject",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["ConfigDurableObject"],
+    },
+  ],
+  // TODO: Re-enable after activating Analytics Engine in CF Dashboard
+  // "analytics_engine_datasets": [
+  // 	{
+  // 		"binding": "FP_ANALYTICS",
+  // 		"dataset": "fp_analytics"
+  // 	}
+  // ],
+  // ─── Environment overrides ─────────────────────────────────────────
+  // Staging and production use the instrumented entry point for OTel auto-tracing.
+  // Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
+  "env": {
+    "staging": {
+      "main": "src/instrumented.ts",
+    },
+    "production": {
+      "main": "src/instrumented.ts",
+    },
+  },
 }

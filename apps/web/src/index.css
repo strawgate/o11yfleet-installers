@@ -14,8 +14,8 @@
   --color-fg-4: #545c68;
   --color-ok: oklch(0.78 0.17 152);
   --color-warn: oklch(0.82 0.13 78);
-  --color-err: oklch(0.70 0.18 24);
-  --color-info: oklch(0.72 0.10 230);
+  --color-err: oklch(0.7 0.18 24);
+  --color-info: oklch(0.72 0.1 230);
   --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
   --font-mono: "Geist Mono", ui-monospace, monospace;
 }

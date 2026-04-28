@@ -7,16 +7,12 @@ import * as fc from "fast-check";
 import { processFrame } from "../src/state-machine/processor.js";
 import type { AgentState } from "../src/state-machine/types.js";
 import type { AgentToServer } from "../src/codec/types.js";
-import {
-  AgentCapabilities,
-  RemoteConfigStatuses,
-} from "../src/codec/types.js";
+import { AgentCapabilities, RemoteConfigStatuses } from "../src/codec/types.js";
 import { FleetEventType } from "../src/events.js";
 
 // ─── Arbitraries ────────────────────────────────────────────────────
 
-const arbUint8Array = (len: number) =>
-  fc.uint8Array({ minLength: len, maxLength: len });
+const arbUint8Array = (len: number) => fc.uint8Array({ minLength: len, maxLength: len });
 
 const arbCapabilities = fc.constantFrom(
   0,
@@ -115,59 +111,53 @@ describe("state-machine property tests", () => {
 
   it("last_seen_at never decreases across a message sequence", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: 3, max: 20 }),
-        (msgCount) => {
-          let state = makeInitialState();
-          let prevLastSeen = 0;
+      fc.property(fc.integer({ min: 3, max: 20 }), (msgCount) => {
+        let state = makeInitialState();
+        let prevLastSeen = 0;
 
-          for (let i = 0; i < msgCount; i++) {
-            const msg: AgentToServer = {
-              instance_uid: new Uint8Array(16),
-              sequence_num: i,
-              capabilities: AgentCapabilities.ReportsStatus,
-              flags: 0,
-            };
-            const result = processFrame(state, msg);
-            expect(result.newState.last_seen_at).toBeGreaterThanOrEqual(prevLastSeen);
-            prevLastSeen = result.newState.last_seen_at;
-            state = result.newState;
-          }
-        },
-      ),
+        for (let i = 0; i < msgCount; i++) {
+          const msg: AgentToServer = {
+            instance_uid: new Uint8Array(16),
+            sequence_num: i,
+            capabilities: AgentCapabilities.ReportsStatus,
+            flags: 0,
+          };
+          const result = processFrame(state, msg);
+          expect(result.newState.last_seen_at).toBeGreaterThanOrEqual(prevLastSeen);
+          prevLastSeen = result.newState.last_seen_at;
+          state = result.newState;
+        }
+      }),
       { numRuns: 100 },
     );
   });
 
   it("connected_at is set on first message and never changes after", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: 3, max: 20 }),
-        (msgCount) => {
-          let state = makeInitialState();
-          let firstConnectedAt: number | null = null;
+      fc.property(fc.integer({ min: 3, max: 20 }), (msgCount) => {
+        let state = makeInitialState();
+        let firstConnectedAt: number | null = null;
 
-          for (let i = 0; i < msgCount; i++) {
-            const msg: AgentToServer = {
-              instance_uid: new Uint8Array(16),
-              sequence_num: i,
-              capabilities: AgentCapabilities.ReportsStatus,
-              flags: 0,
-            };
-            const result = processFrame(state, msg);
+        for (let i = 0; i < msgCount; i++) {
+          const msg: AgentToServer = {
+            instance_uid: new Uint8Array(16),
+            sequence_num: i,
+            capabilities: AgentCapabilities.ReportsStatus,
+            flags: 0,
+          };
+          const result = processFrame(state, msg);
 
-            if (i === 0) {
-              // First message (hello) must set connected_at
-              expect(result.newState.connected_at).toBeGreaterThan(0);
-              firstConnectedAt = result.newState.connected_at;
-            } else {
-              // Subsequent messages must not change connected_at
-              expect(result.newState.connected_at).toBe(firstConnectedAt);
-            }
-            state = result.newState;
+          if (i === 0) {
+            // First message (hello) must set connected_at
+            expect(result.newState.connected_at).toBeGreaterThan(0);
+            firstConnectedAt = result.newState.connected_at;
+          } else {
+            // Subsequent messages must not change connected_at
+            expect(result.newState.connected_at).toBe(firstConnectedAt);
           }
-        },
-      ),
+          state = result.newState;
+        }
+      }),
       { numRuns: 100 },
     );
   });
@@ -200,27 +190,24 @@ describe("state-machine property tests", () => {
 
   it("disconnect always emits exactly one AGENT_DISCONNECTED event", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: 0, max: 100 }),
-        (currentSeq) => {
-          const state = makeInitialState({
-            sequence_num: currentSeq,
-            connected_at: Date.now(),
-          });
-          const msg: AgentToServer = {
-            instance_uid: new Uint8Array(16),
-            sequence_num: currentSeq + 1,
-            capabilities: AgentCapabilities.ReportsStatus,
-            flags: 0,
-            agent_disconnect: {},
-          };
-          const result = processFrame(state, msg);
-          expect(result.response).toBeNull();
-          expect(result.events).toHaveLength(1);
-          expect(result.events[0]!.type).toBe(FleetEventType.AGENT_DISCONNECTED);
-          expect(result.shouldPersist).toBe(true);
-        },
-      ),
+      fc.property(fc.integer({ min: 0, max: 100 }), (currentSeq) => {
+        const state = makeInitialState({
+          sequence_num: currentSeq,
+          connected_at: Date.now(),
+        });
+        const msg: AgentToServer = {
+          instance_uid: new Uint8Array(16),
+          sequence_num: currentSeq + 1,
+          capabilities: AgentCapabilities.ReportsStatus,
+          flags: 0,
+          agent_disconnect: {},
+        };
+        const result = processFrame(state, msg);
+        expect(result.response).toBeNull();
+        expect(result.events).toHaveLength(1);
+        expect(result.events[0]!.type).toBe(FleetEventType.AGENT_DISCONNECTED);
+        expect(result.shouldPersist).toBe(true);
+      }),
       { numRuns: 200 },
     );
   });
@@ -323,75 +310,66 @@ describe("state-machine property tests", () => {
 
   it("pure heartbeat (no changes) never persists", () => {
     fc.assert(
-      fc.property(
-        fc.integer({ min: 5, max: 50 }),
-        (currentSeq) => {
-          const state = makeInitialState({
-            sequence_num: currentSeq,
-            connected_at: Date.now() - 60000,
-            healthy: true,
-            status: "running",
-            capabilities: AgentCapabilities.ReportsStatus,
-          });
-          const msg: AgentToServer = {
-            instance_uid: new Uint8Array(16),
-            sequence_num: currentSeq + 1,
-            capabilities: AgentCapabilities.ReportsStatus,
-            flags: 0,
-            // No health, no config status, no description, no disconnect
-          };
-          const result = processFrame(state, msg);
-          expect(result.shouldPersist).toBe(false);
-          expect(result.events).toHaveLength(0);
-        },
-      ),
+      fc.property(fc.integer({ min: 5, max: 50 }), (currentSeq) => {
+        const state = makeInitialState({
+          sequence_num: currentSeq,
+          connected_at: Date.now() - 60000,
+          healthy: true,
+          status: "running",
+          capabilities: AgentCapabilities.ReportsStatus,
+        });
+        const msg: AgentToServer = {
+          instance_uid: new Uint8Array(16),
+          sequence_num: currentSeq + 1,
+          capabilities: AgentCapabilities.ReportsStatus,
+          flags: 0,
+          // No health, no config status, no description, no disconnect
+        };
+        const result = processFrame(state, msg);
+        expect(result.shouldPersist).toBe(false);
+        expect(result.events).toHaveLength(0);
+      }),
       { numRuns: 200 },
     );
   });
 
   it("CONFIG_APPLIED event only emitted for APPLIED status", () => {
     fc.assert(
-      fc.property(
-        arbConfigStatus,
-        arbUint8Array(32),
-        (status, hash) => {
-          const state = makeInitialState({
-            sequence_num: 5,
-            connected_at: Date.now(),
-          });
-          const msg: AgentToServer = {
-            instance_uid: new Uint8Array(16),
-            sequence_num: 6,
-            capabilities: AgentCapabilities.ReportsStatus,
-            flags: 0,
-            remote_config_status: {
-              last_remote_config_hash: hash,
-              status,
-              error_message: "",
-            },
-          };
-          const result = processFrame(state, msg);
+      fc.property(arbConfigStatus, arbUint8Array(32), (status, hash) => {
+        const state = makeInitialState({
+          sequence_num: 5,
+          connected_at: Date.now(),
+        });
+        const msg: AgentToServer = {
+          instance_uid: new Uint8Array(16),
+          sequence_num: 6,
+          capabilities: AgentCapabilities.ReportsStatus,
+          flags: 0,
+          remote_config_status: {
+            last_remote_config_hash: hash,
+            status,
+            error_message: "",
+          },
+        };
+        const result = processFrame(state, msg);
 
-          const appliedEvents = result.events.filter(
-            (e) => e.type === FleetEventType.CONFIG_APPLIED,
-          );
-          const rejectedEvents = result.events.filter(
-            (e) => e.type === FleetEventType.CONFIG_REJECTED,
-          );
+        const appliedEvents = result.events.filter((e) => e.type === FleetEventType.CONFIG_APPLIED);
+        const rejectedEvents = result.events.filter(
+          (e) => e.type === FleetEventType.CONFIG_REJECTED,
+        );
 
-          if (status === RemoteConfigStatuses.APPLIED) {
-            expect(appliedEvents).toHaveLength(1);
-            expect(rejectedEvents).toHaveLength(0);
-          } else if (status === RemoteConfigStatuses.FAILED) {
-            expect(appliedEvents).toHaveLength(0);
-            expect(rejectedEvents).toHaveLength(1);
-          } else {
-            // UNSET or APPLYING — no config events
-            expect(appliedEvents).toHaveLength(0);
-            expect(rejectedEvents).toHaveLength(0);
-          }
-        },
-      ),
+        if (status === RemoteConfigStatuses.APPLIED) {
+          expect(appliedEvents).toHaveLength(1);
+          expect(rejectedEvents).toHaveLength(0);
+        } else if (status === RemoteConfigStatuses.FAILED) {
+          expect(appliedEvents).toHaveLength(0);
+          expect(rejectedEvents).toHaveLength(1);
+        } else {
+          // UNSET or APPLYING — no config events
+          expect(appliedEvents).toHaveLength(0);
+          expect(rejectedEvents).toHaveLength(0);
+        }
+      }),
       { numRuns: 200 },
     );
   });

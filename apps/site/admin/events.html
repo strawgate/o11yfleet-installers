@@ -1,61 +1,128 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Audit events — O11yFleet Admin</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-<link rel="stylesheet" href="../admin.css" />
-</head>
-<body>
-<div class="admin-stripe"></div>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head"><div><h1>Audit events</h1><div class="sub">All staff actions and tenant security events. Immutable, retained 2 years.</div></div><div class="actions"><button class="btn btn-secondary btn-sm">Export</button></div></div>
-      <div class="dt-card">
-        <div class="dt-toolbar">
-          <input class="input" placeholder="Filter…" style="width: 240px; height: 30px;" />
-          <select class="select" style="width: auto; height: 30px;"><option>All categories</option><option>auth</option><option>tenant</option><option>billing</option><option>feature_flag</option><option>security</option></select>
-          <select class="select" style="width: auto; height: 30px;"><option>Last 24h</option><option>Last 7d</option><option>Last 30d</option></select>
-          <span class="count" style="margin-left: 8px;">412 events</span>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Audit events — O11yFleet Admin</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+    <link rel="stylesheet" href="../admin.css" />
+  </head>
+  <body>
+    <div class="admin-stripe"></div>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Audit events</h1>
+              <div class="sub">
+                All staff actions and tenant security events. Immutable, retained 2 years.
+              </div>
+            </div>
+            <div class="actions"><button class="btn btn-secondary btn-sm">Export</button></div>
+          </div>
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <input class="input" placeholder="Filter…" style="width: 240px; height: 30px" />
+              <select class="select" style="width: auto; height: 30px">
+                <option>All categories</option>
+                <option>auth</option>
+                <option>tenant</option>
+                <option>billing</option>
+                <option>feature_flag</option>
+                <option>security</option>
+              </select>
+              <select class="select" style="width: auto; height: 30px">
+                <option>Last 24h</option>
+                <option>Last 7d</option>
+                <option>Last 30d</option>
+              </select>
+              <span class="count" style="margin-left: 8px">412 events</span>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>When</th>
+                  <th>Actor</th>
+                  <th>Category</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>IP</th>
+                </tr>
+              </thead>
+              <tbody id="erows"></tbody>
+            </table>
+          </div>
         </div>
-        <table class="dt">
-          <thead><tr><th>When</th><th>Actor</th><th>Category</th><th>Action</th><th>Target</th><th>IP</th></tr></thead>
-          <tbody id="erows"></tbody>
-        </table>
-      </div>
+      </main>
     </div>
-  </main>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>
-FB.shell({ role:'admin', current:'events', crumbs:[{label:'Operations'},{label:'Audit events'}], prototype: 'Audit events are hardcoded. Real audit logging requires backend support (issue #18).' });
-(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();
-const events = [
-  ['09:14','sam@o11y','feature_flag','flag.enable','tail_sampling_v2 / plan>=business','10.0.4.21'],
-  ['09:02','system','alerting','alert.fire','region=eu-west-1 p99>250ms','—'],
-  ['08:58','priya@o11y','tenant','tenant.impersonate','Hooli (read-only)','10.0.4.18'],
-  ['08:45','system','tenant','tenant.create','Globex Industries','—'],
-  ['08:30','system','support','ticket.p1','Initech — config not propagating','—'],
-  ['07:18','—','security','auth.brute_force','rejected · 14 attempts','203.0.113.84'],
-  ['06:42','sam@o11y','billing','plan.override','Hooli · seats=20','10.0.4.21'],
-  ['05:18','jordan@o11y','tenant','tenant.suspend','Cyberdyne (past_due 14d)','10.0.4.12'],
-  ['04:30','system','release','deploy','control-plane v2.18.4 → us-east-1','—'],
-  ['02:08','rishi@o11y','feature_flag','flag.disable','rollout_v3 / acme','10.0.4.31'],
-  ['Yesterday 23:14','—','security','auth.success','sam@o11y · 2FA','10.0.4.21'],
-  ['Yesterday 22:08','priya@o11y','tenant','limit.override','acme · managed_configs=50','10.0.4.18'],
-];
-document.getElementById('erows').innerHTML = events.map(([w,a,c,ac,t,ip]) => {
-  const cat = c==='security' ? 't-err' : (c==='alerting' ? 't-warn' : c==='feature_flag' ? '' : '');
-  const tag = c==='security' ? 'tag-err' : c==='alerting' ? 'tag-warn' : '';
-  return `<tr><td class="meta">${w}</td><td class="mono-cell">${a}</td><td><span class="tag ${tag}">${c}</span></td><td class="mono-cell">${ac}</td><td class="meta">${t}</td><td class="mono-cell t-muted">${ip}</td></tr>`;
-}).join('');
-</script>
-</body>
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({
+        role: "admin",
+        current: "events",
+        crumbs: [{ label: "Operations" }, { label: "Audit events" }],
+        prototype:
+          "Audit events are hardcoded. Real audit logging requires backend support (issue #18).",
+      });
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
+      })();
+      const events = [
+        [
+          "09:14",
+          "sam@o11y",
+          "feature_flag",
+          "flag.enable",
+          "tail_sampling_v2 / plan>=business",
+          "10.0.4.21",
+        ],
+        ["09:02", "system", "alerting", "alert.fire", "region=eu-west-1 p99>250ms", "—"],
+        ["08:58", "priya@o11y", "tenant", "tenant.impersonate", "Hooli (read-only)", "10.0.4.18"],
+        ["08:45", "system", "tenant", "tenant.create", "Globex Industries", "—"],
+        ["08:30", "system", "support", "ticket.p1", "Initech — config not propagating", "—"],
+        ["07:18", "—", "security", "auth.brute_force", "rejected · 14 attempts", "203.0.113.84"],
+        ["06:42", "sam@o11y", "billing", "plan.override", "Hooli · seats=20", "10.0.4.21"],
+        [
+          "05:18",
+          "jordan@o11y",
+          "tenant",
+          "tenant.suspend",
+          "Cyberdyne (past_due 14d)",
+          "10.0.4.12",
+        ],
+        ["04:30", "system", "release", "deploy", "control-plane v2.18.4 → us-east-1", "—"],
+        ["02:08", "rishi@o11y", "feature_flag", "flag.disable", "rollout_v3 / acme", "10.0.4.31"],
+        ["Yesterday 23:14", "—", "security", "auth.success", "sam@o11y · 2FA", "10.0.4.21"],
+        [
+          "Yesterday 22:08",
+          "priya@o11y",
+          "tenant",
+          "limit.override",
+          "acme · managed_configs=50",
+          "10.0.4.18",
+        ],
+      ];
+      document.getElementById("erows").innerHTML = events
+        .map(([w, a, c, ac, t, ip]) => {
+          const cat =
+            c === "security"
+              ? "t-err"
+              : c === "alerting"
+                ? "t-warn"
+                : c === "feature_flag"
+                  ? ""
+                  : "";
+          const tag = c === "security" ? "tag-err" : c === "alerting" ? "tag-warn" : "";
+          return `<tr><td class="meta">${w}</td><td class="mono-cell">${a}</td><td><span class="tag ${tag}">${c}</span></td><td class="mono-cell">${ac}</td><td class="meta">${t}</td><td class="mono-cell t-muted">${ip}</td></tr>`;
+        })
+        .join("");
+    </script>
+  </body>
 </html>

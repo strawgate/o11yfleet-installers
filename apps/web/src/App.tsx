@@ -24,7 +24,13 @@ export function App() {
       <Route path="/admin-login" element={<AdminLoginPage />} />
 
       {/* Portal */}
-      <Route element={<RequireAuth><PortalLayout /></RequireAuth>}>
+      <Route
+        element={
+          <RequireAuth>
+            <PortalLayout />
+          </RequireAuth>
+        }
+      >
         <Route path="/portal/overview" element={<OverviewPage />} />
         <Route path="/portal/configurations" element={<ConfigurationsPage />} />
         <Route path="/portal/configurations/:id" element={<ConfigurationDetailPage />} />
@@ -38,7 +44,13 @@ export function App() {
       </Route>
 
       {/* Admin */}
-      <Route element={<RequireAdmin><AdminLayout /></RequireAdmin>}>
+      <Route
+        element={
+          <RequireAdmin>
+            <AdminLayout />
+          </RequireAdmin>
+        }
+      >
         <Route path="/admin/overview" element={<AdminOverviewPage />} />
         <Route path="/admin/tenants" element={<TenantsPage />} />
         <Route path="/admin/tenants/:id" element={<TenantDetailPage />} />

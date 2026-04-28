@@ -1,59 +1,162 @@
 <!doctype html>
 <html lang="en" data-theme="dark">
-<head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Plan & billing — O11yFleet</title>
-<link rel="stylesheet" href="../styles.css" />
-<link rel="stylesheet" href="../portal-shared.css" />
-</head>
-<body>
-<div class="app">
-  <div id="shell-sidebar"></div>
-  <div id="shell-topbar"></div>
-  <main class="main">
-    <div class="main-wide">
-      <div class="page-head"><div><h1>Plan &amp; billing</h1><div class="sub">You're on the <strong style="color: var(--fg);">Business</strong> plan.</div></div></div>
-
-      <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px;">
-        <div class="card card-pad" style="padding: 22px;">
-          <div class="flex-row justify-between"><div><div class="t-mono text-sm" style="color: var(--accent);">CURRENT PLAN</div><div style="font-size: 22px; font-weight: 500; margin-top: 4px;">Business</div></div><div style="text-align: right;"><div class="t-mono" style="font-size: 22px;">$249</div><div class="t-muted text-sm">/ month · billed monthly</div></div></div>
-          <div style="margin-top: 22px; display: flex; flex-direction: column; gap: 14px;">
-            <div><div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Managed configurations</span><span class="t-mono" style="flex-shrink: 0;">7 / 25</span></div><div class="bar mt-2"><i style="width: 28%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">GitHub repos connected</span><span class="t-mono" style="flex-shrink: 0;">2 / 3</span></div><div class="bar mt-2"><i style="width: 67%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0;"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Team members</span><span class="t-mono" style="flex-shrink: 0;">6 / 10</span></div><div class="bar mt-2"><i style="width: 60%;"></i></div></div>
-            <div><div class="flex-row justify-between text-sm" style="gap: 12px;"><span style="white-space: nowrap;">Audit log retention</span><span class="t-mono" style="flex-shrink: 0;">90 days</span></div></div>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Plan & billing — O11yFleet</title>
+    <link rel="stylesheet" href="../styles.css" />
+    <link rel="stylesheet" href="../portal-shared.css" />
+  </head>
+  <body>
+    <div class="app">
+      <div id="shell-sidebar"></div>
+      <div id="shell-topbar"></div>
+      <main class="main">
+        <div class="main-wide">
+          <div class="page-head">
+            <div>
+              <h1>Plan &amp; billing</h1>
+              <div class="sub">
+                You're on the <strong style="color: var(--fg)">Business</strong> plan.
+              </div>
+            </div>
           </div>
-          <div class="flex-row mt-6" style="gap: 10px;"><button class="btn btn-secondary btn-sm">Switch to annual (save 17%)</button><a href="../pricing.html" class="btn btn-ghost btn-sm">Compare plans</a></div>
-        </div>
-        <div class="card card-pad" style="padding: 22px;">
-          <div class="t-mono text-sm" style="color: var(--accent);">PAYMENT</div>
-          <div class="flex-row mt-3" style="gap: 12px;"><div style="width: 36px; height: 24px; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: var(--font-mono); font-size: 9px;">VISA</div><div><div class="t-mono text-sm">•••• 4242</div><div class="t-muted text-sm">Exp 09/27</div></div></div>
-          <button class="btn btn-secondary btn-sm mt-4" style="width: 100%;">Update card</button>
-          <div class="t-mono text-sm mt-6" style="color: var(--accent);">NEXT INVOICE</div>
-          <div class="t-mono mt-2" style="font-size: 18px;">$249.00</div>
-          <div class="t-muted text-sm">on Apr 27, 2026</div>
-        </div>
-      </div>
 
-      <h3 style="font-size: 15px; font-weight: 500; margin: 32px 0 10px;">Invoices</h3>
-      <div class="dt-card">
-        <table class="dt">
-          <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr><td class="meta">Mar 27, 2026</td><td>Business · monthly</td><td class="mono-cell">$249.00</td><td><span class="tag tag-ok">paid</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td></tr>
-            <tr><td class="meta">Feb 27, 2026</td><td>Business · monthly</td><td class="mono-cell">$249.00</td><td><span class="tag tag-ok">paid</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td></tr>
-            <tr><td class="meta">Jan 27, 2026</td><td>Pro → Business (prorated)</td><td class="mono-cell">$187.00</td><td><span class="tag tag-ok">paid</span></td><td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td></tr>
-          </tbody>
-        </table>
-      </div>
+          <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px">
+            <div class="card card-pad" style="padding: 22px">
+              <div class="flex-row justify-between">
+                <div>
+                  <div class="t-mono text-sm" style="color: var(--accent)">CURRENT PLAN</div>
+                  <div style="font-size: 22px; font-weight: 500; margin-top: 4px">Business</div>
+                </div>
+                <div style="text-align: right">
+                  <div class="t-mono" style="font-size: 22px">$249</div>
+                  <div class="t-muted text-sm">/ month · billed monthly</div>
+                </div>
+              </div>
+              <div style="margin-top: 22px; display: flex; flex-direction: column; gap: 14px">
+                <div>
+                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
+                      >Managed configurations</span
+                    ><span class="t-mono" style="flex-shrink: 0">7 / 25</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 28%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
+                      >GitHub repos connected</span
+                    ><span class="t-mono" style="flex-shrink: 0">2 / 3</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 67%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
+                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
+                      >Team members</span
+                    ><span class="t-mono" style="flex-shrink: 0">6 / 10</span>
+                  </div>
+                  <div class="bar mt-2"><i style="width: 60%"></i></div>
+                </div>
+                <div>
+                  <div class="flex-row justify-between text-sm" style="gap: 12px">
+                    <span style="white-space: nowrap">Audit log retention</span
+                    ><span class="t-mono" style="flex-shrink: 0">90 days</span>
+                  </div>
+                </div>
+              </div>
+              <div class="flex-row mt-6" style="gap: 10px">
+                <button class="btn btn-secondary btn-sm">Switch to annual (save 17%)</button
+                ><a href="../pricing.html" class="btn btn-ghost btn-sm">Compare plans</a>
+              </div>
+            </div>
+            <div class="card card-pad" style="padding: 22px">
+              <div class="t-mono text-sm" style="color: var(--accent)">PAYMENT</div>
+              <div class="flex-row mt-3" style="gap: 12px">
+                <div
+                  style="
+                    width: 36px;
+                    height: 24px;
+                    border: 1px solid var(--line);
+                    border-radius: 4px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    font-family: var(--font-mono);
+                    font-size: 9px;
+                  "
+                >
+                  VISA
+                </div>
+                <div>
+                  <div class="t-mono text-sm">•••• 4242</div>
+                  <div class="t-muted text-sm">Exp 09/27</div>
+                </div>
+              </div>
+              <button class="btn btn-secondary btn-sm mt-4" style="width: 100%">Update card</button>
+              <div class="t-mono text-sm mt-6" style="color: var(--accent)">NEXT INVOICE</div>
+              <div class="t-mono mt-2" style="font-size: 18px">$249.00</div>
+              <div class="t-muted text-sm">on Apr 27, 2026</div>
+            </div>
+          </div>
+
+          <h3 style="font-size: 15px; font-weight: 500; margin: 32px 0 10px">Invoices</h3>
+          <div class="dt-card">
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Description</th>
+                  <th>Amount</th>
+                  <th>Status</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td class="meta">Mar 27, 2026</td>
+                  <td>Business · monthly</td>
+                  <td class="mono-cell">$249.00</td>
+                  <td><span class="tag tag-ok">paid</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
+                </tr>
+                <tr>
+                  <td class="meta">Feb 27, 2026</td>
+                  <td>Business · monthly</td>
+                  <td class="mono-cell">$249.00</td>
+                  <td><span class="tag tag-ok">paid</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
+                </tr>
+                <tr>
+                  <td class="meta">Jan 27, 2026</td>
+                  <td>Pro → Business (prorated)</td>
+                  <td class="mono-cell">$187.00</td>
+                  <td><span class="tag tag-ok">paid</span></td>
+                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </main>
     </div>
-  </main>
-</div>
-<script src="../portal-api.js"></script>
-<script src="../portal-shell.js"></script>
-<script src="../portal-shell-render.js"></script>
-<script>FB.shell({ current: 'billing', crumbs: [{label:'Settings'},{label:'Plan & billing'}], prototype: 'Billing data is hardcoded. Billing integration requires Stripe setup (issue #15).' });</script>
-<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
-</body>
+    <script src="../portal-api.js"></script>
+    <script src="../portal-shell.js"></script>
+    <script src="../portal-shell-render.js"></script>
+    <script>
+      FB.shell({
+        current: "billing",
+        crumbs: [{ label: "Settings" }, { label: "Plan & billing" }],
+        prototype:
+          "Billing data is hardcoded. Billing integration requires Stripe setup (issue #15).",
+      });
+    </script>
+    <script>
+      (async function () {
+        var authed = await FP.checkAuth();
+        if (!authed) return;
+      })();
+    </script>
+  </body>
 </html>

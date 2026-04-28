@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { describe, it, expect } from "vitest";
-import { ConfigDurableObject } from "../src/durable-objects/config-do.js";
+import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { runInDurableObject } from "cloudflare:test";
 
 describe("Config Durable Object", () => {
@@ -69,11 +69,14 @@ describe("Config Durable Object", () => {
     await stub.fetch("http://internal/stats");
 
     // Verify the table exists by using runInDurableObject
-    await runInDurableObject(stub, async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
-      const tables = state.storage.sql
-        .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'")
-        .toArray();
-      expect(tables).toHaveLength(1);
-    });
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const tables = state.storage.sql
+          .exec("SELECT name FROM sqlite_master WHERE type='table' AND name='agents'")
+          .toArray();
+        expect(tables).toHaveLength(1);
+      },
+    );
   });
 });

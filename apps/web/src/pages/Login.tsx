@@ -8,7 +8,8 @@ export function LoginPage() {
   const { login } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
-  const from = (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/portal/overview";
+  const from =
+    (location.state as { from?: { pathname: string } })?.from?.pathname ?? "/portal/overview";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");

@@ -12,10 +12,7 @@ export function AdminOverviewPage() {
       <h1 className="text-lg font-semibold text-fg mb-6">Admin Overview</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <StatCard
-          label="Tenants"
-          value={isLoading ? "—" : (overview?.total_tenants ?? 0)}
-        />
+        <StatCard label="Tenants" value={isLoading ? "—" : (overview?.total_tenants ?? 0)} />
         <StatCard
           label="Configurations"
           value={isLoading ? "—" : (overview?.total_configurations ?? 0)}
@@ -24,10 +21,7 @@ export function AdminOverviewPage() {
           label="Active Tokens"
           value={isLoading ? "—" : (overview?.total_active_tokens ?? 0)}
         />
-        <StatCard
-          label="Users"
-          value={isLoading ? "—" : (overview?.total_users ?? 0)}
-        />
+        <StatCard label="Users" value={isLoading ? "—" : (overview?.total_users ?? 0)} />
       </div>
 
       <h2 className="text-sm font-semibold text-fg mb-3">Recent Tenants</h2>

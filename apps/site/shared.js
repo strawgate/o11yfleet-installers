@@ -34,9 +34,9 @@ window.FB = (function () {
           <a href="enterprise.html">Enterprise collector governance<small>SSO, RBAC, audit</small></a>
         </div>
       </div>
-      <a href="pricing.html" ${active==='pricing'?'aria-current="page"':''}>Pricing</a>
+      <a href="pricing.html" ${active === "pricing" ? 'aria-current="page"' : ""}>Pricing</a>
       <a href="#">Docs</a>
-      <a href="enterprise.html" ${active==='enterprise'?'aria-current="page"':''}>Enterprise</a>
+      <a href="enterprise.html" ${active === "enterprise" ? 'aria-current="page"' : ""}>Enterprise</a>
     </nav>
     <div class="header-right">
       <button class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
@@ -99,10 +99,10 @@ window.FB = (function () {
   }
   return {
     render: function (active) {
-      const h = document.getElementById('site-header');
-      const f = document.getElementById('site-footer');
+      const h = document.getElementById("site-header");
+      const f = document.getElementById("site-footer");
       if (h) h.outerHTML = header(active);
       if (f) f.outerHTML = footer();
-    }
+    },
   };
 })();

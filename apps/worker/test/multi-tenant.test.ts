@@ -2,7 +2,6 @@
 // Verifies that tenants cannot see each other's configs, agents, stats, or data.
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { env, exports } from "cloudflare:workers";
 import { apiFetch } from "./helpers.js";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
@@ -15,7 +14,6 @@ import {
   connectWithEnrollment,
   sendHello,
   getConfigStats,
-  getAgentSummaries,
   rolloutConfig,
   waitForMsg,
   msgToBuffer,
@@ -43,7 +41,10 @@ describe("Multi-Tenant Isolation", () => {
 
     // Upload different YAML to each
     await uploadConfigVersion(configA.id, "receivers:\n  otlp:\n    protocols:\n      grpc:\n");
-    await uploadConfigVersion(configB.id, "receivers:\n  prometheus:\n    config:\n      scrape_configs: []\n");
+    await uploadConfigVersion(
+      configB.id,
+      "receivers:\n  prometheus:\n    config:\n      scrape_configs: []\n",
+    );
 
     tokenA = await createEnrollmentToken(configA.id);
     tokenB = await createEnrollmentToken(configB.id);
@@ -145,14 +146,10 @@ describe("Multi-Tenant Isolation", () => {
   });
 
   it("tenant configs are isolated in D1 listings", async () => {
-    const listA = await apiFetch(
-      `http://localhost/api/tenants/${tenantA.id}/configurations`,
-    );
+    const listA = await apiFetch(`http://localhost/api/tenants/${tenantA.id}/configurations`);
     const dataA = await listA.json<{ configurations: { id: string }[] }>();
 
-    const listB = await apiFetch(
-      `http://localhost/api/tenants/${tenantB.id}/configurations`,
-    );
+    const listB = await apiFetch(`http://localhost/api/tenants/${tenantB.id}/configurations`);
     const dataB = await listB.json<{ configurations: { id: string }[] }>();
 
     // Tenant A should only see config A

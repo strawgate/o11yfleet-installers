@@ -170,29 +170,35 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       try {
         const signedClaim = await signClaim(claim, this.env.CLAIM_SECRET);
 
-        server.send(JSON.stringify({
-          type: "enrollment_complete",
-          assignment_claim: signedClaim,
-          instance_uid: instanceUid,
-        }));
+        server.send(
+          JSON.stringify({
+            type: "enrollment_complete",
+            assignment_claim: signedClaim,
+            instance_uid: instanceUid,
+          }),
+        );
 
-        server.send(encodeServerToAgent({
-          instance_uid: hexToUint8Array(instanceUid),
-          flags: 0,
-          capabilities: 0x00000003,
-          agent_identification: {
-            new_instance_uid: hexToUint8Array(instanceUid),
+        server.send(
+          encodeServerToAgent({
+            instance_uid: hexToUint8Array(instanceUid),
+            flags: 0,
+            capabilities: 0x00000003,
+            agent_identification: {
+              new_instance_uid: hexToUint8Array(instanceUid),
+            },
+          }),
+        );
+
+        await this.emitEvents([
+          {
+            type: FleetEventType.AGENT_ENROLLED,
+            tenant_id: tenantId,
+            config_id: configId,
+            instance_uid: instanceUid,
+            timestamp: Date.now(),
+            generation: 1,
           },
-        }));
-
-        await this.emitEvents([{
-          type: FleetEventType.AGENT_ENROLLED,
-          tenant_id: tenantId,
-          config_id: configId,
-          instance_uid: instanceUid,
-          timestamp: Date.now(),
-          generation: 1,
-        }]);
+        ]);
       } catch {
         server.close(4500, "Enrollment failed");
         return new Response(null, { status: 101, webSocket: client });
@@ -229,7 +235,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const config = loadDesiredConfig(this.ctx.storage.sql);
     const configBytes = config.content ? new TextEncoder().encode(config.content) : null;
 
-    const span = startWsMessageSpan(attachment.instance_uid, attachment.tenant_id, attachment.config_id);
+    const span = startWsMessageSpan(
+      attachment.instance_uid,
+      attachment.tenant_id,
+      attachment.config_id,
+    );
     try {
       const agentMsg = decodeAgentToServer(message);
       span.setAttribute("opamp.sequence_num", agentMsg.sequence_num);
@@ -275,14 +285,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const span = startWsLifecycleSpan("close", attachment.instance_uid);
     try {
       markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
-      await this.emitEvents([{
-        type: FleetEventType.AGENT_DISCONNECTED,
-        tenant_id: attachment.tenant_id,
-        config_id: attachment.config_id,
-        instance_uid: attachment.instance_uid,
-        timestamp: Date.now(),
-        reason: "websocket_close",
-      }]);
+      await this.emitEvents([
+        {
+          type: FleetEventType.AGENT_DISCONNECTED,
+          tenant_id: attachment.tenant_id,
+          config_id: attachment.config_id,
+          instance_uid: attachment.instance_uid,
+          timestamp: Date.now(),
+          reason: "websocket_close",
+        },
+      ]);
     } finally {
       span.end();
     }
@@ -297,14 +309,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     try {
       if (attachment) {
         markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
-        await this.emitEvents([{
-          type: FleetEventType.AGENT_DISCONNECTED,
-          tenant_id: attachment.tenant_id,
-          config_id: attachment.config_id,
-          instance_uid: attachment.instance_uid,
-          timestamp: Date.now(),
-          reason: "websocket_error",
-        }]);
+        await this.emitEvents([
+          {
+            type: FleetEventType.AGENT_DISCONNECTED,
+            tenant_id: attachment.tenant_id,
+            config_id: attachment.config_id,
+            instance_uid: attachment.instance_uid,
+            timestamp: Date.now(),
+            reason: "websocket_error",
+          },
+        ]);
       }
       try {
         ws.close(1011, "Internal error");
@@ -370,15 +384,17 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (!attachment) continue;
 
       try {
-        ws.send(encodeServerToAgent({
-          instance_uid: hexToUint8Array(attachment.instance_uid),
-          flags: 0,
-          capabilities: 0x00000003,
-          remote_config: {
-            config: { config_map: configMap },
-            config_hash: desiredHashBytes,
-          },
-        }));
+        ws.send(
+          encodeServerToAgent({
+            instance_uid: hexToUint8Array(attachment.instance_uid),
+            flags: 0,
+            capabilities: 0x00000003,
+            remote_config: {
+              config: { config_map: configMap },
+              config_hash: desiredHashBytes,
+            },
+          }),
+        );
         pushed++;
       } catch {
         // Socket may have closed
@@ -391,7 +407,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   /**
    * Build the config_map with actual YAML content if available.
    */
-  private buildConfigMap(content: string | null): Record<string, { body: Uint8Array; content_type: string }> {
+  private buildConfigMap(
+    content: string | null,
+  ): Record<string, { body: Uint8Array; content_type: string }> {
     if (!content) return {};
     return {
       "": {
@@ -423,9 +441,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private async emitEvents(events: AnyFleetEvent[]): Promise<void> {
     try {
       // Send each event independently so a single failure doesn't drop the rest
-      await Promise.allSettled(
-        events.map((event) => this.env.FP_EVENTS.send(event)),
-      );
+      await Promise.allSettled(events.map((event) => this.env.FP_EVENTS.send(event)));
     } catch {
       // Queue failure should not break WS handling
     }

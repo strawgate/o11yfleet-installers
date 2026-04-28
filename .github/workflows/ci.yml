@@ -112,7 +112,7 @@ jobs:
           cd apps/worker
           npx wrangler deploy --dry-run --outdir dist 2>&1 | tail -20 || true
 
-      - name: Check bundle size (Workers limit: 10MB compressed)
+      - name: "Check bundle size (Workers limit: 10MB compressed)"
         run: |
           BUNDLE=$(find apps/worker/dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
           if [ -z "$BUNDLE" ]; then
@@ -173,8 +173,28 @@ jobs:
           terraform init -backend=false
           terraform validate
 
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Web app tests
+        run: pnpm --filter @o11yfleet/web test
+
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-worker, bundle-size, terraform]
+    needs: [lint-format, typecheck, test-core, test-worker, test-web, bundle-size, terraform]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging

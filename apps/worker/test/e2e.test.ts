@@ -1,4 +1,4 @@
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
@@ -6,26 +6,38 @@ import { decodeFrame } from "@o11yfleet/core/codec";
 import { apiFetch } from "./helpers.js";
 import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { AgentCapabilities, ServerToAgentFlags } from "@o11yfleet/core/codec";
-import { runInDurableObject } from "cloudflare:test";
-import { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
 async function setupD1() {
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
 }
 
 function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Timeout waiting for message")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      clearTimeout(timer);
-      resolve(event);
-    }, { once: true });
+    ws.addEventListener(
+      "message",
+      (event) => {
+        clearTimeout(timer);
+        resolve(event);
+      },
+      { once: true },
+    );
   });
 }
 
@@ -56,10 +68,10 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
 
     // 3. Upload YAML v1
     const yamlV1 = "receivers:\n  otlp:\n    protocols:\n      grpc:\n";
-    const uploadRes = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: yamlV1 },
-    );
+    const uploadRes = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: yamlV1,
+    });
     expect(uploadRes.status).toBe(201);
 
     // 4. Create enrollment token
@@ -77,8 +89,8 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     // 5. Agent connects with enrollment token
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {
-        "Upgrade": "websocket",
-        "Authorization": `Bearer ${tokenBody.token}`,
+        Upgrade: "websocket",
+        Authorization: `Bearer ${tokenBody.token}`,
       },
     });
     expect(wsRes.status).toBe(101);
@@ -95,9 +107,10 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     // 7. Receive initial OpAMP binary response
     const opampEvent = await waitForMsg(ws);
     // Binary data arrives as Blob in workerd test environment
-    const buf = opampEvent.data instanceof Blob
-      ? await (opampEvent.data as Blob).arrayBuffer()
-      : opampEvent.data as ArrayBuffer;
+    const buf =
+      opampEvent.data instanceof Blob
+        ? await (opampEvent.data as Blob).arrayBuffer()
+        : (opampEvent.data as ArrayBuffer);
     const initialResponse = decodeFrame<ServerToAgent>(buf);
     expect(initialResponse.instance_uid).toBeDefined();
 
@@ -131,7 +144,7 @@ describe("E2E Scenario #1: New enrollment", () => {
     const { token } = await tokenRes.json<{ token: string }>();
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
-      headers: { "Upgrade": "websocket", "Authorization": `Bearer ${token}` },
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
     });
     expect(wsRes.status).toBe(101);
     const ws = wsRes.webSocket!;
@@ -160,7 +173,7 @@ describe("E2E Scenario #2: Reconnect with claim", () => {
     const signed = await signClaim(claim, CLAIM_SECRET);
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
-      headers: { "Upgrade": "websocket", "Authorization": `Bearer ${signed}` },
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${signed}` },
     });
     expect(wsRes.status).toBe(101);
     const ws = wsRes.webSocket!;
@@ -184,7 +197,7 @@ describe("E2E Scenario #3: Config push via DO", () => {
 
     const wsRes = await stub.fetch("http://internal/ws", {
       headers: {
-        "Upgrade": "websocket",
+        Upgrade: "websocket",
         "x-fp-tenant-id": "s3-tenant",
         "x-fp-config-id": "s3-config",
         "x-fp-instance-uid": "s3uid123456789ab",
@@ -266,7 +279,7 @@ describe("E2E Scenario #5: Disconnect tracking", () => {
     const signed = await signClaim(claim, CLAIM_SECRET);
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
-      headers: { "Upgrade": "websocket", "Authorization": `Bearer ${signed}` },
+      headers: { Upgrade: "websocket", Authorization: `Bearer ${signed}` },
     });
     const ws = wsRes.webSocket!;
     ws.accept();
@@ -289,7 +302,7 @@ describe("E2E Scenario #6: Hibernation attachment", () => {
 
     const wsRes = await stub.fetch("http://internal/ws", {
       headers: {
-        "Upgrade": "websocket",
+        Upgrade: "websocket",
         "x-fp-tenant-id": "s6-tenant",
         "x-fp-config-id": "s6-config",
         "x-fp-instance-uid": "s6uid123456789ab",
@@ -320,12 +333,16 @@ describe("E2E Scenario #7: Queue consumer idempotency", () => {
         `INSERT INTO agent_summaries (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, created_at, updated_at)
          VALUES (?, 's7-t', 's7-c', 'connected', 1, datetime('now'), datetime('now'), datetime('now'), datetime('now'))
          ON CONFLICT(instance_uid) DO UPDATE SET status = 'connected', last_seen_at = datetime('now')`,
-      ).bind(uid).run();
+      )
+        .bind(uid)
+        .run();
     }
 
     const result = await env.FP_DB.prepare(
       `SELECT COUNT(*) as count FROM agent_summaries WHERE instance_uid = ?`,
-    ).bind(uid).first<{ count: number }>();
+    )
+      .bind(uid)
+      .first<{ count: number }>();
     expect(result!.count).toBe(1);
   });
 });
@@ -348,16 +365,16 @@ describe("E2E Scenario #8: R2 dedup", () => {
 
     const yaml = "processors:\n  batch:\n    timeout: 10s\n";
 
-    const r1 = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: yaml },
-    );
+    const r1 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: yaml,
+    });
     const b1 = await r1.json<{ hash: string; deduplicated: boolean }>();
 
-    const r2 = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/versions`,
-      { method: "POST", body: yaml },
-    );
+    const r2 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: yaml,
+    });
     const b2 = await r2.json<{ hash: string; deduplicated: boolean }>();
 
     expect(b1.hash).toBe(b2.hash);
@@ -398,7 +415,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
 describe("E2E Scenario #10: Auth failures", () => {
   it("invalid claim returns 401", async () => {
     const res = await apiFetch("http://localhost/v1/opamp", {
-      headers: { "Upgrade": "websocket", "Authorization": "Bearer invalid.claim" },
+      headers: { Upgrade: "websocket", Authorization: "Bearer invalid.claim" },
     });
     expect(res.status).toBe(401);
   });
@@ -417,8 +434,8 @@ describe("E2E Scenario #10: Auth failures", () => {
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {
-        "Upgrade": "websocket",
-        "Authorization": `Bearer ${signed}`,
+        Upgrade: "websocket",
+        Authorization: `Bearer ${signed}`,
         "x-fp-tenant-id": "evil-spoofed",
       },
     });
@@ -429,7 +446,7 @@ describe("E2E Scenario #10: Auth failures", () => {
 
   it("missing authorization returns 401", async () => {
     const res = await apiFetch("http://localhost/v1/opamp", {
-      headers: { "Upgrade": "websocket" },
+      headers: { Upgrade: "websocket" },
     });
     expect(res.status).toBe(401);
   });

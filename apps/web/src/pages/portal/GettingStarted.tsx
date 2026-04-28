@@ -1,9 +1,5 @@
 import { useState } from "react";
-import {
-  useConfigurations,
-  useCreateEnrollmentToken,
-  useConfigStats,
-} from "../../hooks/queries";
+import { useConfigurations, useCreateEnrollmentToken, useConfigStats } from "../../hooks/queries";
 import { Button } from "../../components/ui/Button";
 import { toast } from "../../components/ui/Toast";
 import { clsx } from "clsx";
@@ -57,17 +53,13 @@ export function GettingStartedPage() {
             key={s.key}
             className={clsx(
               "flex items-center gap-2 px-3 py-1.5 rounded-md text-xs",
-              step === s.key
-                ? "bg-brand/10 text-brand font-medium"
-                : "text-fg-4",
+              step === s.key ? "bg-brand/10 text-brand font-medium" : "text-fg-4",
             )}
           >
             <span
               className={clsx(
                 "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
-                step === s.key
-                  ? "bg-brand text-gray-950"
-                  : "bg-surface-2 text-fg-4",
+                step === s.key ? "bg-brand text-gray-950" : "bg-surface-2 text-fg-4",
               )}
             >
               {s.num}
@@ -80,9 +72,7 @@ export function GettingStartedPage() {
       {/* Step: Select configuration */}
       {step === "select" && (
         <div>
-          <h2 className="text-sm font-semibold text-fg mb-3">
-            Choose a configuration
-          </h2>
+          <h2 className="text-sm font-semibold text-fg mb-3">Choose a configuration</h2>
           {isLoading ? (
             <div className="animate-pulse space-y-2">
               {[1, 2].map((i) => (
@@ -114,9 +104,7 @@ export function GettingStartedPage() {
                   )}
                 >
                   <p className="text-sm font-medium text-fg">{c.name}</p>
-                  <p className="text-xs text-fg-4 mt-0.5">
-                    {c.environment ?? "No environment"}
-                  </p>
+                  <p className="text-xs text-fg-4 mt-0.5">{c.environment ?? "No environment"}</p>
                 </button>
               ))}
             </div>
@@ -127,18 +115,12 @@ export function GettingStartedPage() {
       {/* Step: Generate token */}
       {step === "token" && (
         <div>
-          <h2 className="text-sm font-semibold text-fg mb-3">
-            Generate an enrollment token
-          </h2>
+          <h2 className="text-sm font-semibold text-fg mb-3">Generate an enrollment token</h2>
           <p className="text-xs text-fg-3 mb-4">
             This token lets your collectors register with the{" "}
-            <span className="font-medium text-fg">{selectedConfig?.name}</span>{" "}
-            configuration.
+            <span className="font-medium text-fg">{selectedConfig?.name}</span> configuration.
           </p>
-          <Button
-            onClick={handleGenerateToken}
-            disabled={tokenMutation.isPending}
-          >
+          <Button onClick={handleGenerateToken} disabled={tokenMutation.isPending}>
             {tokenMutation.isPending ? "Generating…" : "Generate Token"}
           </Button>
           <button
@@ -153,9 +135,7 @@ export function GettingStartedPage() {
       {/* Step: Install */}
       {step === "install" && generatedToken && (
         <div>
-          <h2 className="text-sm font-semibold text-fg mb-3">
-            Install the collector
-          </h2>
+          <h2 className="text-sm font-semibold text-fg mb-3">Install the collector</h2>
           <p className="text-xs text-fg-3 mb-4">
             Run this command on each host to install and enroll:
           </p>
@@ -180,9 +160,7 @@ bash -c "$(curl -fsSL https://get.o11yfleet.com/install.sh)"`}
 
           <div className="mt-4 rounded-lg border border-line bg-surface p-4">
             <p className="text-xs text-fg-3 mb-2">Enrollment token:</p>
-            <code className="text-xs font-mono text-fg break-all">
-              {generatedToken}
-            </code>
+            <code className="text-xs font-mono text-fg break-all">{generatedToken}</code>
             <button
               onClick={() => copyToClipboard(generatedToken)}
               className="ml-2 text-xs text-fg-4 hover:text-fg"
@@ -198,9 +176,7 @@ bash -c "$(curl -fsSL https://get.o11yfleet.com/install.sh)"`}
       )}
 
       {/* Step: Verify */}
-      {step === "verify" && selectedConfigId && (
-        <VerifyStep configId={selectedConfigId} />
-      )}
+      {step === "verify" && selectedConfigId && <VerifyStep configId={selectedConfigId} />}
     </div>
   );
 }
@@ -210,9 +186,7 @@ function VerifyStep({ configId }: { configId: string }) {
 
   return (
     <div>
-      <h2 className="text-sm font-semibold text-fg mb-3">
-        Waiting for agents…
-      </h2>
+      <h2 className="text-sm font-semibold text-fg mb-3">Waiting for agents…</h2>
 
       <div className="rounded-lg border border-line bg-surface p-6 text-center">
         {stats && stats.connected_agents > 0 ? (
@@ -222,25 +196,16 @@ function VerifyStep({ configId }: { configId: string }) {
               {stats.connected_agents} agent
               {stats.connected_agents === 1 ? "" : "s"} connected!
             </p>
-            <p className="mt-1 text-xs text-fg-3">
-              Your fleet is reporting to O11yFleet.
-            </p>
-            <Link
-              to={`/portal/configurations/${configId}`}
-              className="inline-block mt-4"
-            >
+            <p className="mt-1 text-xs text-fg-3">Your fleet is reporting to O11yFleet.</p>
+            <Link to={`/portal/configurations/${configId}`} className="inline-block mt-4">
               <Button>View Configuration →</Button>
             </Link>
           </>
         ) : (
           <>
             <div className="h-8 w-8 mx-auto animate-spin rounded-full border-2 border-brand border-t-transparent" />
-            <p className="mt-3 text-sm text-fg-3">
-              Polling for connected agents…
-            </p>
-            <p className="mt-1 text-xs text-fg-4">
-              This updates automatically every 10 seconds.
-            </p>
+            <p className="mt-3 text-sm text-fg-3">Polling for connected agents…</p>
+            <p className="mt-1 text-xs text-fg-4">This updates automatically every 10 seconds.</p>
           </>
         )}
       </div>

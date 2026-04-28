@@ -92,11 +92,12 @@ export class FakeOpampAgent {
         }
 
         // Binary frames = OpAMP protocol
-        const data = event.data instanceof ArrayBuffer
-          ? event.data
-          : (event.data as Blob).arrayBuffer
-            ? null // shouldn't happen with binaryType=arraybuffer
-            : event.data;
+        const data =
+          event.data instanceof ArrayBuffer
+            ? event.data
+            : (event.data as Blob).arrayBuffer
+              ? null // shouldn't happen with binaryType=arraybuffer
+              : event.data;
         if (!data) return;
 
         const msg = decodeFrame<ServerToAgent>(data as ArrayBuffer);
@@ -157,12 +158,8 @@ export class FakeOpampAgent {
         component_health_map: {},
       },
       agent_description: {
-        identifying_attributes: [
-          { key: "service.name", value: { string_value: this.agentName } },
-        ],
-        non_identifying_attributes: [
-          { key: "os.type", value: { string_value: "test" } },
-        ],
+        identifying_attributes: [{ key: "service.name", value: { string_value: this.agentName } }],
+        non_identifying_attributes: [{ key: "os.type", value: { string_value: "test" } }],
       },
     };
     this.send(msg);
@@ -209,14 +206,16 @@ export class FakeOpampAgent {
     if (queued) return queued;
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("Timeout waiting for server message")),
-        timeoutMs,
-      );
-      this.waiters.push((msg) => {
+      const waiter = (msg: ServerToAgent) => {
         clearTimeout(timer);
         resolve(msg);
-      });
+      };
+      const timer = setTimeout(() => {
+        const idx = this.waiters.indexOf(waiter);
+        if (idx !== -1) this.waiters.splice(idx, 1);
+        reject(new Error("Timeout waiting for server message"));
+      }, timeoutMs);
+      this.waiters.push(waiter);
     });
   }
 
@@ -225,14 +224,16 @@ export class FakeOpampAgent {
     if (queued) return queued;
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(
-        () => reject(new Error("Timeout waiting for text message")),
-        timeoutMs,
-      );
-      this.textWaiters.push((msg) => {
+      const waiter = (msg: string) => {
         clearTimeout(timer);
         resolve(msg);
-      });
+      };
+      const timer = setTimeout(() => {
+        const idx = this.textWaiters.indexOf(waiter);
+        if (idx !== -1) this.textWaiters.splice(idx, 1);
+        reject(new Error("Timeout waiting for text message"));
+      }, timeoutMs);
+      this.textWaiters.push(waiter);
     });
   }
 
@@ -267,6 +268,23 @@ export class FakeOpampAgent {
   }
 
   close(): void {
+    // Reject any pending waiters so tests don't hang
+    const pendingWaiters = this.waiters.splice(0);
+    for (const waiter of pendingWaiters) {
+      try {
+        waiter(null as unknown as ServerToAgent);
+      } catch {
+        /* ignore */
+      }
+    }
+    const pendingTextWaiters = this.textWaiters.splice(0);
+    for (const waiter of pendingTextWaiters) {
+      try {
+        waiter(null as unknown as string);
+      } catch {
+        /* ignore */
+      }
+    }
     if (this.ws) {
       this.ws.close();
       this.ws = null;

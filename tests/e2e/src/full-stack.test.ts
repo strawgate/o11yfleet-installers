@@ -39,7 +39,11 @@ function agent(opts: ConstructorParameters<typeof FakeOpampAgent>[0]): FakeOpamp
 afterEach(() => {
   // Close all agents created during the test
   for (const a of liveAgents) {
-    try { a.close(); } catch { /* ignore */ }
+    try {
+      a.close();
+    } catch {
+      /* ignore */
+    }
   }
   liveAgents.length = 0;
 });
@@ -192,7 +196,8 @@ describe("Config Push", () => {
     const tok = await createEnrollmentToken(c.id);
 
     // Upload a config
-    const yaml = "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: 0.0.0.0:4317\n";
+    const yaml =
+      "receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: 0.0.0.0:4317\n";
     await uploadConfigVersion(c.id, yaml);
 
     // Connect agent
@@ -212,22 +217,19 @@ describe("Config Push", () => {
     expect(pushMsg.remote_config!.config_hash).toBeTruthy();
 
     // ACK the config
-    const configHash = pushMsg.remote_config!.config_hash instanceof Uint8Array
-      ? pushMsg.remote_config!.config_hash
-      : new Uint8Array(pushMsg.remote_config!.config_hash as ArrayBufferLike);
+    const configHash =
+      pushMsg.remote_config!.config_hash instanceof Uint8Array
+        ? pushMsg.remote_config!.config_hash
+        : new Uint8Array(pushMsg.remote_config!.config_hash as ArrayBufferLike);
     await a.applyConfig(configHash);
 
     // Verify the config content contains our YAML
     if (pushMsg.remote_config!.config_map) {
       const files = Object.values(pushMsg.remote_config!.config_map);
-      const hasOtlp = files.some(
-        (f: any) => {
-          const body = typeof f.body === "string"
-            ? f.body
-            : new TextDecoder().decode(f.body);
-          return body.includes("otlp");
-        },
-      );
+      const hasOtlp = files.some((f: any) => {
+        const body = typeof f.body === "string" ? f.body : new TextDecoder().decode(f.body);
+        return body.includes("otlp");
+      });
       expect(hasOtlp).toBe(true);
     }
   });
@@ -328,9 +330,7 @@ describe("Multi-Tenant Isolation", () => {
     expect(pushA.remote_config).toBeDefined();
 
     // Agent B should NOT get config (timeout expected)
-    await expect(
-      agentB.waitForMessage(2000),
-    ).rejects.toThrow("Timeout");
+    await expect(agentB.waitForMessage(2000)).rejects.toThrow("Timeout");
   });
 
   it("stats are isolated between tenants", async () => {
@@ -374,7 +374,10 @@ describe("Scale: 20 concurrent agents", () => {
         name: `scale-agent-${i}`,
       });
       agents.push(a);
-      return a.connectAndEnroll().then(() => a.sendHello()).then(() => a.waitForMessage(5000));
+      return a
+        .connectAndEnroll()
+        .then(() => a.sendHello())
+        .then(() => a.waitForMessage(5000));
     });
 
     const results = await Promise.allSettled(connectPromises);

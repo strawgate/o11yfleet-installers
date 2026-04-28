@@ -1,7 +1,5 @@
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
-import { runInDurableObject } from "cloudflare:test";
-import { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
@@ -11,20 +9,34 @@ import { apiFetch } from "./helpers.js";
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
 beforeAll(async () => {
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`);
-  await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`);
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
 });
 
 function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Timeout waiting for message")), timeoutMs);
-    ws.addEventListener("message", (event) => {
-      clearTimeout(timer);
-      resolve(event);
-    }, { once: true });
+    ws.addEventListener(
+      "message",
+      (event) => {
+        clearTimeout(timer);
+        resolve(event);
+      },
+      { once: true },
+    );
   });
 }
 
@@ -93,7 +105,7 @@ describe("DO Protocol Enforcement", () => {
   });
 
   it("binary hello message gets a valid response", async () => {
-    const { claim, token } = await makeSignedClaim();
+    const { token } = await makeSignedClaim();
 
     const response = await apiFetch(
       `http://localhost/v1/opamp?token=${encodeURIComponent(token)}`,
@@ -121,9 +133,8 @@ describe("DO Protocol Enforcement", () => {
     ws.send(encodeFrame(hello));
 
     const msg = await waitForMsg(ws);
-    const buf = msg.data instanceof Blob
-      ? await (msg.data as Blob).arrayBuffer()
-      : msg.data as ArrayBuffer;
+    const buf =
+      msg.data instanceof Blob ? await (msg.data as Blob).arrayBuffer() : (msg.data as ArrayBuffer);
     const serverMsg = decodeFrame<ServerToAgent>(buf);
     expect(serverMsg.instance_uid).toBeDefined();
     expect(serverMsg.capabilities).toBeDefined();
@@ -259,9 +270,10 @@ describe("Framing Edge Cases", () => {
     };
     ws.send(encodeFrame(gapMsg));
     const gapResponse = await waitForMsg(ws);
-    const buf2 = gapResponse.data instanceof Blob
-      ? await (gapResponse.data as Blob).arrayBuffer()
-      : gapResponse.data as ArrayBuffer;
+    const buf2 =
+      gapResponse.data instanceof Blob
+        ? await (gapResponse.data as Blob).arrayBuffer()
+        : (gapResponse.data as ArrayBuffer);
     const serverMsg = decodeFrame<ServerToAgent>(buf2);
 
     // Server should request full state report

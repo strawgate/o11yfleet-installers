@@ -316,9 +316,7 @@ function handleBinaryMessage(
           )
         : null;
 
-      log.ok(
-        `[${name}] 📦 Config push received! hash=${hash?.slice(0, 16) ?? "null"}`,
-      );
+      log.ok(`[${name}] 📦 Config push received! hash=${hash?.slice(0, 16) ?? "null"}`);
 
       // "Apply" the config
       if (hash && msg.remote_config.config_hash) {

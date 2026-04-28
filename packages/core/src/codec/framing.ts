@@ -45,7 +45,9 @@ export function decodeFrame<T = AgentToServer | ServerToAgent>(buf: ArrayBuffer)
     throw new Error(`Frame payload too large: ${payloadLen} bytes (max ${MAX_FRAME_BYTES})`);
   }
   if (buf.byteLength < HEADER_SIZE + payloadLen) {
-    throw new Error(`Incomplete frame: expected ${payloadLen} payload bytes, got ${buf.byteLength - HEADER_SIZE}`);
+    throw new Error(
+      `Incomplete frame: expected ${payloadLen} payload bytes, got ${buf.byteLength - HEADER_SIZE}`,
+    );
   }
   const payloadBytes = new Uint8Array(buf, HEADER_SIZE, payloadLen);
   const json = TEXT_DECODER.decode(payloadBytes);
