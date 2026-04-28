@@ -7,6 +7,7 @@
 import type { Env } from "../../index.js";
 import { uploadConfigVersion, validateYaml } from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
+import { VALID_PLANS, getPlanLimits } from "../../shared/plans.js";
 
 // ─── Error helpers ──────────────────────────────────────────────────
 
@@ -173,20 +174,18 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
     return jsonError("name must be 255 characters or fewer", 400);
   }
 
-  const validPlans = ["free", "pro", "enterprise"];
   const plan = body.plan ?? "free";
-  if (!validPlans.includes(plan)) {
-    return jsonError(`Invalid plan. Must be one of: ${validPlans.join(", ")}`, 400);
+  if (!VALID_PLANS.includes(plan)) {
+    return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
   }
 
-  const maxConfigs = plan === "enterprise" ? 1000 : plan === "pro" ? 50 : 5;
-  const maxAgents = plan === "enterprise" ? 500000 : plan === "pro" ? 100000 : 50000;
+  const { max_configs, max_agents_per_config } = getPlanLimits(plan);
 
   const id = crypto.randomUUID();
   await env.FP_DB.prepare(
     `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)`,
   )
-    .bind(id, body.name.trim(), plan, maxConfigs, maxAgents)
+    .bind(id, body.name.trim(), plan, max_configs, max_agents_per_config)
     .run();
 
   return Response.json({ id, name: body.name.trim(), plan }, { status: 201 });

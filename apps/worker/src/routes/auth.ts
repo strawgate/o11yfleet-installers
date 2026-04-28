@@ -2,6 +2,7 @@
 
 import type { Env } from "../index.js";
 import { timingSafeEqual } from "../utils/crypto.js";
+import { getPlanLimits } from "../shared/plans.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
 
@@ -227,10 +228,12 @@ async function handleSeed(env: Env): Promise<Response> {
   }>();
   if (!tenant) {
     const tenantId = crypto.randomUUID();
+    const seedPlan = "pro";
+    const { max_configs, max_agents_per_config } = getPlanLimits(seedPlan);
     await env.FP_DB.prepare(
       "INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)",
     )
-      .bind(tenantId, "Demo Org", "pro", 50, 100000)
+      .bind(tenantId, "Demo Org", seedPlan, max_configs, max_agents_per_config)
       .run();
     tenant = { id: tenantId };
     results.push(`Created demo tenant: ${tenantId}`);

@@ -2,6 +2,7 @@
 // These endpoints require admin auth (currently: API_SECRET bearer token)
 
 import type { Env } from "../../index.js";
+import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
 
 // ─── Error helpers ──────────────────────────────────────────────────
 
@@ -90,16 +91,6 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   return jsonError("Not found", 404);
 }
-
-// ─── Plan Limits ─────────────────────────────────────────────────────
-
-const PLAN_LIMITS: Record<string, { max_configs: number; max_agents_per_config: number }> = {
-  free: { max_configs: 5, max_agents_per_config: 50000 },
-  pro: { max_configs: 50, max_agents_per_config: 100000 },
-  enterprise: { max_configs: 1000, max_agents_per_config: 500000 },
-};
-
-const VALID_PLANS = Object.keys(PLAN_LIMITS);
 
 // ─── Tenant Handlers ────────────────────────────────────────────────
 

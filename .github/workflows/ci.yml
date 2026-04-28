@@ -11,24 +11,18 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  PNPM_VERSION: 9.15.4
-  NODE_VERSION: "22"
-
 jobs:
-  lint-and-typecheck:
+  lint-format:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          node-version: "22"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -39,48 +33,71 @@ jobs:
       - name: Format check
         run: pnpm prettier --check .
 
-      - name: Type check
-        run: pnpm turbo typecheck
-
-   test:
-     runs-on: ubuntu-latest
-     steps:
-       - uses: actions/checkout@v4
-
-       - uses: pnpm/action-setup@v4
-         with:
-           version: ${{ env.PNPM_VERSION }}
-
-       - uses: actions/setup-node@v4
-         with:
-           node-version: ${{ env.NODE_VERSION }}
-           cache: pnpm
-
-       - name: Install dependencies
-         run: pnpm install --frozen-lockfile
-
-       - name: Core tests (codec, state machine, auth)
-         run: pnpm --filter @o11yfleet/core test
-
-       - name: Worker tests (workerd runtime)
-         run: pnpm --filter @o11yfleet/worker test
-
-       - name: Web app tests
-         run: pnpm --filter @o11yfleet/web test
-
-  bundle-and-terraform:
+  typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Type check
+        run: pnpm turbo typecheck
+
+  test-core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Core tests (codec, state machine, auth)
+        run: pnpm --filter @o11yfleet/core test
+
+  test-worker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Worker tests (workerd runtime)
+        run: pnpm --filter @o11yfleet/worker test
+
+  bundle-size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -90,7 +107,7 @@ jobs:
           cd apps/worker
           npx wrangler deploy --dry-run --outdir dist 2>&1 | tail -20 || true
 
-      - name: "Check bundle size (CI budget: 3MB compressed)"
+      - name: "Check bundle size (Workers limit: 10MB compressed)"
         run: |
           BUNDLE=$(find apps/worker/dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
           if [ -z "$BUNDLE" ]; then
@@ -102,38 +119,25 @@ jobs:
           echo "Bundle: $BUNDLE"
           echo "Raw size: $((RAW_SIZE / 1024)) KB"
           echo "Gzip size: $((GZIP_SIZE / 1024)) KB"
-          MAX_GZIP=$((3 * 1024 * 1024))
+          # Workers limit: 10MB compressed for paid, 1MB free
+          MAX_GZIP=$((3 * 1024 * 1024))  # 3MB compressed budget
           if [ "$GZIP_SIZE" -gt "$MAX_GZIP" ]; then
             echo "❌ Bundle exceeds 3MB compressed budget ($((GZIP_SIZE / 1024)) KB)"
             exit 1
           fi
           echo "✓ Bundle size OK"
 
-      - name: Terraform validate
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9"
-
-      - name: Validate Terraform
-        run: |
-          cd infra/terraform
-          terraform init -backend=false
-          terraform validate
-
   benchmark:
     runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
     steps:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          node-version: "22"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -148,8 +152,40 @@ jobs:
           path: benchmark-results.txt
           retention-days: 30
 
+  terraform:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Terraform validate
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+      - run: |
+          cd infra/terraform
+          terraform init -backend=false
+          terraform validate
+
+  test-web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Web app tests
+        run: pnpm --filter @o11yfleet/web test
+
   deploy-staging:
-    needs: [lint-and-typecheck, test, bundle-and-terraform]
+    needs: [lint-format, typecheck, test-core, test-worker, test-web, bundle-size, terraform]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
@@ -157,13 +193,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
 
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+          node-version: "22"
+          cache: "pnpm"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile

@@ -1,0 +1,130 @@
+import { Link } from "react-router-dom";
+
+export default function AboutPage() {
+  return (
+    <>
+      <section className="hero wrap">
+        <div className="hero-meta">
+          <span className="pin">About</span>
+        </div>
+        <h1>
+          OpenTelemetry is open.
+          <br />
+          Collector management should be too.
+        </h1>
+        <div
+          style={{
+            marginTop: 48,
+            display: "grid",
+            gridTemplateColumns: "1fr 1fr",
+            gap: 64,
+            maxWidth: 1000,
+          }}
+        >
+          <p className="lede">
+            OpenTelemetry Collector has become the standard way to receive, process, and export
+            telemetry. But the operational experience around collector fleets is still too manual.
+          </p>
+          <p className="lede">
+            Teams end up with scattered YAML, unclear rollout history, and limited visibility into
+            what is actually running. We are building a hosted OpAMP control plane so teams can
+            adopt collector management incrementally — monitor first, manage when ready, and keep
+            telemetry flowing to the systems they already trust.
+          </p>
+        </div>
+      </section>
+
+      <section className="section section-tight">
+        <div className="wrap">
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 2fr",
+              gap: 64,
+            }}
+          >
+            <div>
+              <span className="eyebrow">Manifesto</span>
+            </div>
+            <blockquote style={{ fontSize: "1.5rem", lineHeight: 1.5, margin: 0 }}>
+              Telemetry should be portable. Configuration should be auditable. Adoption should be
+              incremental. We are not trying to become another required destination — we are trying
+              to make the layer that already exists feel operable.
+            </blockquote>
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
+          <div className="section-head">
+            <span className="eyebrow">What we believe</span>
+          </div>
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "1fr 1fr 1fr",
+              gap: 0,
+            }}
+          >
+            {[
+              {
+                title: "Open standards over proprietary agents",
+                desc: "Built on OpAMP and OpenTelemetry — not another bespoke agent.",
+              },
+              {
+                title: "Control without lock-in",
+                desc: "Your telemetry goes wherever you point it. We manage the fleet, not the data.",
+              },
+              {
+                title: "Monitor-only adoption path",
+                desc: "Start with visibility. Take over config management only when you're ready.",
+              },
+              {
+                title: "Git-backed workflows",
+                desc: "Configs live in your repo. PR review, branch protection, and audit trail come free.",
+              },
+              {
+                title: "Transparent pricing",
+                desc: "Pay for management, not for data volume. No per-GB surprises.",
+              },
+              {
+                title: "Safe rollouts over magical automation",
+                desc: "Label-targeted, canary-first, with automatic rollback on failure.",
+              },
+            ].map((v) => (
+              <div
+                key={v.title}
+                style={{
+                  padding: "32px 28px",
+                  borderRight: "1px solid var(--border, #e2e2e2)",
+                  borderBottom: "1px solid var(--border, #e2e2e2)",
+                }}
+              >
+                <h3>{v.title}</h3>
+                <p>{v.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
+          <div className="cta-block">
+            <h2>Want to follow along?</h2>
+            <p className="lede">
+              We share progress in the open. Star the repo, join the community, or just keep an eye
+              on the changelog.
+            </p>
+            <div className="hero-actions">
+              <Link to="/signup" className="btn btn-primary btn-lg">
+                Start free →
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  );
+}
