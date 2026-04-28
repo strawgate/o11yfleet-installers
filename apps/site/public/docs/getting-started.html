@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Getting started — O11yFleet</title>
+    <meta
+      name="description"
+      content="Get up and running with O11yFleet in minutes — connect your first collector, view health, and roll out a configuration."
+    />
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <header class="site-header" style="border-bottom: 1px solid var(--line)">
+      <div class="wrap" style="display: flex; align-items: center; justify-content: space-between">
+        <a href="/" class="logo" aria-label="O11yFleet home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+            <path
+              d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          O11yFleet
+        </a>
+        <nav class="nav nav-inline">
+          <a href="/product">Product</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/enterprise">Enterprise</a>
+          <a href="/about">About</a>
+          <a href="index.html" class="active">Docs</a>
+        </nav>
+        <div class="header-right">
+          <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
+            </svg>
+            <svg
+              class="icon-moon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <a href="/signup" class="btn btn-primary btn-sm">Start free</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <nav class="docs-nav">
+          <div class="docs-nav-section">
+            <a href="index.html" class="docs-nav-title">Introduction</a>
+            <a href="index.html#overview" class="docs-nav-link">Overview</a>
+            <a href="index.html#how-it-works" class="docs-nav-link">How it works</a>
+            <a href="index.html#key-concepts" class="docs-nav-link">Key concepts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Guides</span>
+            <a href="getting-started.html" class="docs-nav-link active">Getting started</a>
+            <a href="how-to/install.html" class="docs-nav-link">Install O11yFleet</a>
+            <a href="how-to/connect-collector.html" class="docs-nav-link">Connect a collector</a>
+            <a href="how-to/create-config.html" class="docs-nav-link">Create a configuration</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >GitOps workflow</span
+            >
+            <a href="how-to/rollouts.html" class="docs-nav-link">Manage rollouts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Concepts</span>
+            <a href="concepts/opamp.html" class="docs-nav-link">OpAMP protocol</a>
+            <a href="concepts/collectors.html" class="docs-nav-link">Collectors</a>
+            <a href="concepts/configurations.html" class="docs-nav-link">Configurations</a>
+            <a href="concepts/tenants.html" class="docs-nav-link">Tenants & multi-tenancy</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >Monitor-only vs Managed</span
+            >
+            <a href="concepts/rollouts.html" class="docs-nav-link">Rollouts & versions</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Reference</span>
+            <a href="architecture.html" class="docs-nav-link">Architecture</a>
+            <a href="api/authentication.html" class="docs-nav-link">API authentication</a>
+            <a href="api/endpoints.html" class="docs-nav-link">API endpoints</a>
+            <a href="cli/index.html" class="docs-nav-link">CLI reference</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Help</span>
+            <a href="troubleshooting.html" class="docs-nav-link">Troubleshooting</a>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Content -->
+      <main class="docs-content">
+        <article class="docs-article">
+          <span class="eyebrow">Getting started</span>
+          <h1>Get up and running with O11yFleet</h1>
+
+          <p class="lede">
+            Connect your first OpenTelemetry Collector, view health metrics, and roll out your first
+            configuration — all in about 10 minutes.
+          </p>
+
+          <div
+            class="alert"
+            style="
+              background: var(--accent-soft);
+              border: 1px solid var(--accent-line);
+              border-radius: var(--radius);
+              padding: 16px;
+              margin: 24px 0;
+            "
+          >
+            <div style="display: flex; gap: 12px; align-items: flex-start">
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                style="color: var(--accent); flex-shrink: 0"
+              >
+                <circle cx="12" cy="12" r="10" />
+                <path d="M12 16v-4M12 8h.01" />
+              </svg>
+              <div>
+                <strong>Quick option:</strong> If you just want to try O11yFleet locally, run
+                <code class="mono">just setup</code> in the repo to spin up a local worker, migrate
+                the DB, seed a demo tenant, and launch a fake collector. No account needed.
+              </div>
+            </div>
+          </div>
+
+          <h2 id="step-1-set-up">Step 1 — Set up O11yFleet</h2>
+          <p>
+            Choose either the <strong>hosted SaaS</strong> (sign up at o11yfleet.com) or run
+            <strong>locally</strong> for development/testing.
+          </p>
+          <p><strong>Local development:</strong></p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>git clone https://github.com/strawgate/o11yfleet.git
+cd o11yfleet
+just setup
+just dev</code></pre>
+          <p>
+            This starts O11yFleet at <code class="mono">http://localhost:8787</code> and seeds a
+            demo tenant with sample data.
+          </p>
+
+          <h2 id="step-2-enroll">Step 2 — Create an enrollment token</h2>
+          <p>
+            Enrollment tokens are used once by a collector to authenticate with O11yFleet. After the
+            initial connection, the collector receives a signed claim that lasts for 30 days.
+          </p>
+          <p>
+            <strong>Note:</strong> The UI does not yet have an enrollment token creation page. Use
+            the CLI:
+          </p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code># If you ran `just setup`, a demo tenant already exists
+# Create an enrollment token for a configuration
+o11yfleet token:create --config-id &lt;config-id&gt; --label "prod-ingress"</code></pre>
+          <p>Copy the token — you'll use it in the next step.</p>
+
+          <h2 id="step-3-connect">Step 3 — Connect a collector</h2>
+          <p>
+            Now you'll run an OpenTelemetry Collector with OpAMP enabled and point it at O11yFleet.
+          </p>
+          <ol>
+            <li>
+              Install the OpenTelemetry Collector binary (if you haven't already):
+              <pre
+                style="
+                  background: var(--surface-2);
+                  padding: 12px 14px;
+                  border-radius: var(--radius);
+                  overflow-x: auto;
+                  font-size: 13px;
+                "
+              ><code># macOS (Homebrew)
+brew install open-telemetry/opentelemetry-collector/opentelemetry-collector
+
+# Linux (binary)
+curl -L https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v0.105.0/otelcol-contrib_0.105.0_linux_amd64.tar.gz | tar xz
+
+# Docker
+docker run -p 4317:4317 otel/opentelemetry-collector-contrib:latest</code></pre>
+            </li>
+            <li>
+              Create a config file that enables OpAMP:
+              <pre
+                style="
+                  background: var(--surface-2);
+                  padding: 12px 14px;
+                  border-radius: var(--radius);
+                  overflow-x: auto;
+                  font-size: 13px;
+                "
+              ><code>receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+exporters:
+  otlp:
+    endpoint: "your-backend:4317"
+
+service:
+  telemetry:
+    logs:
+      level: "info"
+  extensions:
+    - opamp
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [otlp]
+
+extensions:
+  opamp:
+    server_url: "http://localhost:8787/v1/opamp"   # or wss://api.o11yfleet.com/v1/opamp for SaaS
+    enrollment_token: "YOUR_TOKEN_HERE"</code></pre>
+            </li>
+            <li>
+              Run the collector:
+              <pre
+                style="
+                  background: var(--surface-2);
+                  padding: 12px 14px;
+                  border-radius: var(--radius);
+                  overflow-x: auto;
+                  font-size: 13px;
+                "
+              ><code>./otelcol-contrib --config=config.yaml</code></pre>
+            </li>
+          </ol>
+          <p>
+            Within a few seconds, the collector should appear in your O11yFleet portal with a green
+            <strong>healthy</strong> status.
+          </p>
+
+          <h2 id="step-4-verify">Step 4 — Verify connection</h2>
+          <p>
+            In the O11yFleet portal, go to <strong>Agents</strong>. You should see your newly
+            connected collector listed with:
+          </p>
+          <ul>
+            <li><strong>Status:</strong> Connected</li>
+            <li><strong>Health:</strong> Healthy (green dot)</li>
+            <li><strong>Version:</strong> The collector version you're running</li>
+            <li><strong>Heartbeat:</strong> "just now" or "a few seconds ago"</li>
+          </ul>
+          <p>If the collector shows as <em>offline</em> or <em>degraded</em>, check:</p>
+          <ul>
+            <li>WebSocket connection in the collector logs</li>
+            <li>Enrollment token validity (tokens expire after 24h)</li>
+            <li>
+              Network/firewall rules allowing outbound WebSocket to
+              <code class="mono">api.o11yfleet.com:443</code> (SaaS) or
+              <code class="mono">localhost:8787</code> (local)
+            </li>
+            <li>Correct OpAMP extension configuration</li>
+          </ul>
+
+          <h2 id="step-5-manage">Step 5 — Manage your collector</h2>
+          <p>Now that your collector is connected, you can:</p>
+          <ul>
+            <li><strong>View health</strong> — connection status, last seen, version</li>
+            <li>
+              <strong>See effective config</strong> — what configuration the collector is actually
+              running
+            </li>
+            <li><strong>Edit the config</strong> — upload a new YAML file, then start a rollout</li>
+            <li>
+              <strong>Roll out updates</strong> — push the current config to all connected agents
+              immediately (progressive delivery coming soon)
+            </li>
+          </ul>
+
+          <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 32px 0">
+            <div class="card card-pad" style="border-color: var(--accent-line)">
+              <h3 style="margin-top: 0">Next: Core concepts</h3>
+              <p style="font-size: 14px; margin: 0 0 12px 0">
+                Understand tenants, collectors, configurations, enrollment tokens, and modes.
+              </p>
+              <a href="index.html#key-concepts" class="btn btn-secondary btn-sm">Learn concepts</a>
+            </div>
+            <div class="card card-pad">
+              <h3 style="margin-top: 0">Walk through: Connect a collector</h3>
+              <p style="font-size: 14px; margin: 0 0 12px 0">
+                Step-by-step guide to connecting a collector in different environments.
+              </p>
+              <a href="how-to/connect-collector.html" class="btn btn-secondary btn-sm"
+                >Read guide</a
+              >
+            </div>
+          </div>
+
+          <div class="docs-page-nav">
+            <span>← <a href="index.html">Introduction</a></span>
+            <span><a href="how-to/install.html">Install O11yFleet →</a></span>
+          </div>
+        </article>
+      </main>
+    </div>
+
+    <footer class="site-footer" style="border-top: 1px solid var(--line); margin-top: 64px">
+      <div class="wrap">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+          "
+        >
+          <div>
+            <a href="/" class="logo" style="font-size: 14px; font-weight: 500">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+                <path
+                  d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+              O11yFleet
+            </a>
+            <p style="font-size: 13px; color: var(--fg-4); margin: 8px 0 0 0">
+              OpAMP control plane for OpenTelemetry Collectors
+            </p>
+          </div>
+          <div style="display: flex; gap: 24px; font-size: 13px">
+            <a href="/">Home</a>
+            <a href="/pricing">Pricing</a>
+            <a href="index.html">Docs</a>
+            <a href="https://github.com/strawgate/o11yfleet">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../app.js"></script>
+  </body>
+</html>

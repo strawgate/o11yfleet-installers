@@ -1,0 +1,372 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>API endpoints — O11yFleet</title>
+    <meta name="description" content="O11yFleet API endpoint reference." />
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <header class="site-header" style="border-bottom: 1px solid var(--line)">
+      <div class="wrap" style="display: flex; align-items: center; justify-content: space-between">
+        <a href="/" class="logo" aria-label="O11yFleet home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+            <path
+              d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          O11yFleet
+        </a>
+        <nav class="nav nav-inline">
+          <a href="/product">Product</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/enterprise">Enterprise</a>
+          <a href="/about">About</a>
+          <a href="../index.html" class="active">Docs</a>
+        </nav>
+        <div class="header-right">
+          <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
+            </svg>
+            <svg
+              class="icon-moon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <a href="/signup" class="btn btn-primary btn-sm">Start free</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <nav class="docs-nav">
+          <div class="docs-nav-section">
+            <a href="../index.html" class="docs-nav-title">Introduction</a>
+            <a href="../index.html#overview" class="docs-nav-link">Overview</a>
+            <a href="../index.html#how-it-works" class="docs-nav-link">How it works</a>
+            <a href="../index.html#key-concepts" class="docs-nav-link">Key concepts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Guides</span>
+            <a href="../getting-started.html" class="docs-nav-link">Getting started</a>
+            <a href="../how-to/install.html" class="docs-nav-link">Install O11yFleet</a>
+            <a href="../how-to/connect-collector.html" class="docs-nav-link">Connect a collector</a>
+            <a href="../how-to/create-config.html" class="docs-nav-link">Create a configuration</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >GitOps workflow</span
+            >
+            <a href="../how-to/rollouts.html" class="docs-nav-link">Manage rollouts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Concepts</span>
+            <a href="../concepts/opamp.html" class="docs-nav-link">OpAMP protocol</a>
+            <a href="../concepts/collectors.html" class="docs-nav-link">Collectors</a>
+            <a href="../concepts/configurations.html" class="docs-nav-link">Configurations</a>
+            <a href="../concepts/tenants.html" class="docs-nav-link">Tenants & multi-tenancy</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >Monitor-only vs Managed</span
+            >
+            <a href="../concepts/rollouts.html" class="docs-nav-link">Rollouts & versions</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Reference</span>
+            <a href="../architecture.html" class="docs-nav-link">Architecture</a>
+            <a href="../api/authentication.html" class="docs-nav-link">API authentication</a>
+            <a href="../api/endpoints.html" class="docs-nav-link active">API endpoints</a>
+            <a href="../cli/index.html" class="docs-nav-link">CLI reference</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Help</span>
+            <a href="../troubleshooting.html" class="docs-nav-link">Troubleshooting</a>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Content -->
+      <main class="docs-content">
+        <article class="docs-article">
+          <span class="eyebrow">Reference</span>
+          <h1>API endpoints</h1>
+
+          <p class="lede">
+            The O11yFleet API provides REST endpoints for managing configurations, agents, and
+            enrollment tokens. Base URL: <code class="mono">https://api.o11yfleet.com/v1</code>
+          </p>
+
+          <h2 id="base-url">Base URL</h2>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>https://api.o11yfleet.com/v1</code></pre>
+
+          <h2 id="authentication">Authentication</h2>
+          <p>
+            All API requests require a Bearer token in the
+            <code class="mono">Authorization</code> header:
+          </p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>Authorization: Bearer &lt;your-api-key&gt;</code></pre>
+
+          <h2 id="tenancy">Tenant scoping</h2>
+          <p>Include your tenant ID in the <code class="mono">X-Tenant-Id</code> header:</p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>X-Tenant-Id: &lt;your-tenant-id&gt;</code></pre>
+
+          <h2 id="configurations">Configurations</h2>
+
+          <h3>List configurations</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>GET /configurations</code></pre>
+          <p>Response:</p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>[{ "id": "cfg_xxx", "name": "prod-ingress", "current_version": 14, "updated_at": "2026-04-28T12:00:00Z" }]</code></pre>
+
+          <h3>Get configuration</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>GET /configurations/:id</code></pre>
+
+          <h3>Create configuration</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>POST /configurations
+{
+  "name": "prod-ingress",
+  "description": "Ingress gateway config"
+}</code></pre>
+          <p><strong>Note:</strong> YAML config is uploaded separately as a version.</p>
+
+          <h3>Upload configuration YAML (create version)</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>POST /configurations/:id/versions
+Content-Type: text/yaml
+
+receivers:
+  otlp:
+    protocols:
+      grpc:</code></pre>
+
+          <h3>List versions</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>GET /configurations/:id/versions</code></pre>
+
+          <h3>Get current YAML</h3>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>GET /configurations/:id/yaml</code></pre>
+          <p>Returns the raw YAML for the current version.</p>
+
+          <h2 id="agents">Agents</h2>
+          <ul>
+            <li>
+              <code class="mono">GET /configurations/:id/agents</code> — list agents for a config
+            </li>
+            <li>
+              <code class="mono">GET /configurations/:id/agents/:instance_uid</code> — get agent
+              details
+            </li>
+            <li><code class="mono">GET /configurations/:id/stats</code> — config fleet stats</li>
+          </ul>
+
+          <h2 id="enrollment-tokens">Enrollment tokens</h2>
+          <ul>
+            <li>
+              <code class="mono">POST /configurations/:id/enrollment-token</code> — create token
+            </li>
+            <li>
+              <code class="mono">DELETE /configurations/:id/enrollment-tokens/:token_id</code> —
+              revoke token
+            </li>
+            <li>
+              <code class="mono">GET /configurations/:id/enrollment-tokens</code> — list tokens
+            </li>
+          </ul>
+
+          <h2 id="rollout">Rollout</h2>
+          <p>
+            Config versions become current when uploaded. Call the rollout endpoint to push the
+            current version immediately to all connected collectors. There is no strategy selection
+            or progressive delivery yet.
+          </p>
+          <p><strong>Current behavior:</strong></p>
+          <ul>
+            <li>
+              <code class="mono">POST /configurations/:id/rollout</code> pushes the current version
+              to every connected agent for that config.
+            </li>
+            <li>No batching, gradual delivery, targeting, or per-agent rollout record yet.</li>
+          </ul>
+          <p><strong>Planned:</strong></p>
+          <ul>
+            <li>Strategy and targeting options for progressive rollout workflows</li>
+            <li>Rollout progress resources and per-agent apply state</li>
+          </ul>
+
+          <div class="coming-soon-banner">
+            <strong>🚧 API extensions in progress:</strong> Rollout strategies, progress tracking,
+            label-based targeting, and audit logs are under development.
+          </div>
+
+          <div class="docs-page-nav">
+            <span>← <a href="authentication.html">API authentication</a></span>
+            <span><a href="../cli/index.html">CLI reference →</a></span>
+          </div>
+        </article>
+      </main>
+    </div>
+
+    <footer class="site-footer" style="border-top: 1px solid var(--line); margin-top: 64px">
+      <div class="wrap">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+          "
+        >
+          <div>
+            <a href="/" class="logo" style="font-size: 14px; font-weight: 500">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+                <path
+                  d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+              O11yFleet
+            </a>
+            <p style="font-size: 13px; color: var(--fg-4); margin: 8px 0 0 0">
+              OpAMP control plane for OpenTelemetry Collectors
+            </p>
+          </div>
+          <div style="display: flex; gap: 24px; font-size: 13px">
+            <a href="/">Home</a>
+            <a href="/pricing">Pricing</a>
+            <a href="../index.html">Docs</a>
+            <a href="https://github.com/strawgate/o11yfleet">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../../app.js"></script>
+  </body>
+</html>

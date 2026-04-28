@@ -1,0 +1,389 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Architecture — O11yFleet</title>
+    <meta
+      name="description"
+      content="Deep dive into O11yFleet's architecture: Cloudflare Workers, Durable Objects, D1, R2, and Queues."
+    />
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="../styles.css" />
+  </head>
+  <body>
+    <header class="site-header" style="border-bottom: 1px solid var(--line)">
+      <div class="wrap" style="display: flex; align-items: center; justify-content: space-between">
+        <a href="/" class="logo" aria-label="O11yFleet home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+            <path
+              d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          O11yFleet
+        </a>
+        <nav class="nav nav-inline">
+          <a href="/product">Product</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/enterprise">Enterprise</a>
+          <a href="/about">About</a>
+          <a href="index.html" class="active">Docs</a>
+        </nav>
+        <div class="header-right">
+          <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
+            </svg>
+            <svg
+              class="icon-moon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <a href="/signup" class="btn btn-primary btn-sm">Start free</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <nav class="docs-nav">
+          <div class="docs-nav-section">
+            <a href="index.html" class="docs-nav-title">Introduction</a>
+            <a href="index.html#overview" class="docs-nav-link">Overview</a>
+            <a href="index.html#how-it-works" class="docs-nav-link">How it works</a>
+            <a href="index.html#key-concepts" class="docs-nav-link">Key concepts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Guides</span>
+            <a href="getting-started.html" class="docs-nav-link">Getting started</a>
+            <a href="how-to/install.html" class="docs-nav-link">Install O11yFleet</a>
+            <a href="how-to/connect-collector.html" class="docs-nav-link">Connect a collector</a>
+            <a href="how-to/create-config.html" class="docs-nav-link">Create a configuration</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >GitOps workflow</span
+            >
+            <a href="how-to/rollouts.html" class="docs-nav-link">Manage rollouts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Concepts</span>
+            <a href="concepts/opamp.html" class="docs-nav-link">OpAMP protocol</a>
+            <a href="concepts/collectors.html" class="docs-nav-link">Collectors</a>
+            <a href="concepts/configurations.html" class="docs-nav-link">Configurations</a>
+            <a href="concepts/tenants.html" class="docs-nav-link">Tenants & multi-tenancy</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >Monitor-only vs Managed</span
+            >
+            <a href="concepts/rollouts.html" class="docs-nav-link">Rollouts & versions</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Reference</span>
+            <a href="architecture.html" class="docs-nav-link active">Architecture</a>
+            <a href="api/authentication.html" class="docs-nav-link">API authentication</a>
+            <a href="api/endpoints.html" class="docs-nav-link">API endpoints</a>
+            <a href="cli/index.html" class="docs-nav-link">CLI reference</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Help</span>
+            <a href="troubleshooting.html" class="docs-nav-link">Troubleshooting</a>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Content -->
+      <main class="docs-content">
+        <article class="docs-article">
+          <span class="eyebrow">Reference</span>
+          <h1>Architecture</h1>
+
+          <p class="lede">
+            O11yFleet is built on Cloudflare's edge platform using Workers, Durable Objects, D1, R2,
+            and Queues. This architecture provides global distribution, automatic scaling, and
+            sub-millisecond latency for agent management.
+          </p>
+
+          <h2 id="overview">System overview</h2>
+          <p>The system has three main planes:</p>
+          <ol>
+            <li>
+              <strong>Agent Control Plane</strong> — Durable Objects manage real-time agent
+              connections, config delivery, health tracking
+            </li>
+            <li>
+              <strong>Management API</strong> — Worker-based REST API for tenant/config/token CRUD
+            </li>
+            <li>
+              <strong>Auth Layer</strong> — Session-based auth for portal, Bearer token for
+              programmatic access
+            </li>
+          </ol>
+
+          <div class="win" style="margin: 24px 0; border-color: var(--accent-line)">
+            <div class="win-bar">
+              <div class="lights"><i></i><i></i><i></i></div>
+              <div class="title">Data Flow</div>
+            </div>
+            <div class="win-body" style="padding: 18px">
+              <pre
+                style="font-family: var(--font-mono); font-size: 13px; margin: 0; line-height: 1.7"
+              ><code style="color: var(--fg-2)">Agent (OpenTelemetry Collector)
+         │
+         │ WebSocket (OpAMP)
+         ▼
+    ┌─────────────────┐
+    │ Worker Ingress  │  ← Authenticates, routes
+    └────────┬────────┘
+             │
+             ▼
+    ┌─────────────────┐
+    │ Config DO       │  ← One per (tenant, config)
+    │ (per-tenant)    │     Manages agent state, sends configs
+    └────────┬────────┘
+             │
+      ┌──────┼──────┐
+      │      │      │
+      ▼      ▼      ▼
+    R2    Queue   SQLite
+    (config  │    (agent state
+     content) │     inside DO)
+              ▼
+       ┌──────────────┐
+       │ Event        │
+       │ Consumer     │  ← Batches agent updates
+       └────────┬─────┘
+                │
+                ▼
+           ┌──────────────────┐
+           │ Analytics Engine │  ← Event datapoints
+           └──────────────────┘</code></pre>
+            </div>
+          </div>
+
+          <h2 id="key-design-decisions">Key design decisions</h2>
+
+          <h3 id="config-as-do">Config-as-Durable-Object partitioning</h3>
+          <p>
+            Each <code class="mono">(tenant_id, config_id)</code> pair maps to one Durable Object.
+            This gives us:
+          </p>
+          <ul>
+            <li><strong>Natural sharding</strong> — each config group gets its own DO</li>
+            <li><strong>Zero-cost hibernation</strong> — idle DOs sleep; no CPU charges</li>
+            <li>
+              <strong>Per-config state</strong> — DO internal SQLite stores agent state without
+              hitting D1
+            </li>
+            <li>
+              <strong>Geographic distribution</strong> — Cloudflare automatically runs DOs close to
+              agents
+            </li>
+          </ul>
+
+          <h3 id="signed-claims">Signed assignment claims</h3>
+          <p>
+            After enrollment, each agent receives a signed HMAC-SHA256 claim containing
+            <code class="mono">tenant_id</code>, <code class="mono">config_id</code>,
+            <code class="mono">instance_uid</code>, and <code class="mono">generation</code>.
+            Hot-path connections verify locally — no D1 lookup. Only enrollment hits the database.
+          </p>
+
+          <h3 id="r2-storage">R2 content-addressed config storage</h3>
+          <p>Config YAML is stored in R2 keyed by SHA-256 hash:</p>
+          <ul>
+            <li>Key format: <code class="mono">configs/sha256/{hash}.yaml</code></li>
+            <li>Identical configs share one R2 object (deduplication)</li>
+            <li>Config DO references hash; never stores full YAML</li>
+          </ul>
+
+          <h3 id="queue-analytics">Queue-based analytics</h3>
+          <p>
+            Config DO emits events to a Queue on agent state changes. The current consumer writes
+            analytics datapoints to Analytics Engine. Agent state for API reads lives in DO-local
+            SQLite; the old D1 <code class="mono">agent_summaries</code> read model is not used.
+          </p>
+
+          <h2 id="component-map">Component map</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th
+                  style="padding: 10px 14px; text-align: left; color: var(--fg-3); font-weight: 500"
+                >
+                  Component
+                </th>
+                <th
+                  style="padding: 10px 14px; text-align: left; color: var(--fg-3); font-weight: 500"
+                >
+                  Location
+                </th>
+                <th
+                  style="padding: 10px 14px; text-align: left; color: var(--fg-3); font-weight: 500"
+                >
+                  Runtime
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">OpAMP Codec</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">packages/core/src/codec/</code>
+                </td>
+                <td style="padding: 10px 14px">Pure TS, no CF</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">State Machine</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">packages/core/src/state-machine/</code>
+                </td>
+                <td style="padding: 10px 14px">Pure TS, no CF</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Auth/Claims</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">packages/core/src/auth/</code>
+                </td>
+                <td style="padding: 10px 14px">Pure TS, Web Crypto</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">D1 Schema</td>
+                <td style="padding: 10px 14px"><code class="mono">packages/db/</code></td>
+                <td style="padding: 10px 14px">SQL</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Worker</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">apps/worker/src/index.ts</code>
+                </td>
+                <td style="padding: 10px 14px">CF Worker</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Config DO</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">apps/worker/src/durable-objects/</code>
+                </td>
+                <td style="padding: 10px 14px">CF DO</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Config Store</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">apps/worker/src/config-store.ts</code>
+                </td>
+                <td style="padding: 10px 14px">CF Worker + R2</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Event Consumer</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">apps/worker/src/event-consumer.ts</code>
+                </td>
+                <td style="padding: 10px 14px">CF Queue</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="infrastructure">Infrastructure</h2>
+          <p>
+            The entire stack is defined as Infrastructure as Code using Terraform. Cloudflare
+            resources (Workers, Durable Objects, D1 databases, R2 buckets, Queues) are provisioned
+            automatically on deploy.
+          </p>
+          <p>
+            See <code class="mono">infra/terraform/</code> in the repository for full definitions.
+          </p>
+
+          <div class="docs-page-nav">
+            <span>← <a href="index.html">Introduction</a></span>
+            <span><a href="concepts/opamp.html">OpAMP protocol →</a></span>
+          </div>
+        </article>
+      </main>
+    </div>
+
+    <footer class="site-footer" style="border-top: 1px solid var(--line); margin-top: 64px">
+      <div class="wrap">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+          "
+        >
+          <div>
+            <a href="/" class="logo" style="font-size: 14px; font-weight: 500">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+                <path
+                  d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+              O11yFleet
+            </a>
+            <p style="font-size: 13px; color: var(--fg-4); margin: 8px 0 0 0">
+              OpAMP control plane for OpenTelemetry Collectors
+            </p>
+          </div>
+          <div style="display: flex; gap: 24px; font-size: 13px">
+            <a href="/">Home</a>
+            <a href="/pricing">Pricing</a>
+            <a href="index.html">Docs</a>
+            <a href="https://github.com/strawgate/o11yfleet">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../app.js"></script>
+  </body>
+</html>

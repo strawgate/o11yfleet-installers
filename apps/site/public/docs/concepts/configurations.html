@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Configurations — O11yFleet</title>
+    <meta
+      name="description"
+      content="Understanding configurations in O11yFleet: versioning, storage, and delivery."
+    />
+    <link rel="icon" href="data:," />
+
+    <link rel="stylesheet" href="../../styles.css" />
+  </head>
+  <body>
+    <header class="site-header" style="border-bottom: 1px solid var(--line)">
+      <div class="wrap" style="display: flex; align-items: center; justify-content: space-between">
+        <a href="/" class="logo" aria-label="O11yFleet home">
+          <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path
+              d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linejoin="round"
+            />
+            <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+            <path
+              d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+            />
+          </svg>
+          O11yFleet
+        </a>
+        <nav class="nav nav-inline">
+          <a href="/product">Product</a>
+          <a href="/pricing">Pricing</a>
+          <a href="/enterprise">Enterprise</a>
+          <a href="/about">About</a>
+          <a href="../index.html" class="active">Docs</a>
+        </nav>
+        <div class="header-right">
+          <button type="button" class="theme-toggle" data-theme-toggle aria-label="Toggle theme">
+            <svg
+              class="icon-sun"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle cx="12" cy="12" r="4" />
+              <path
+                d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"
+              />
+            </svg>
+            <svg
+              class="icon-moon"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.6"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
+            </svg>
+          </button>
+          <a href="/signup" class="btn btn-primary btn-sm">Start free</a>
+        </div>
+      </div>
+    </header>
+
+    <div class="docs-layout">
+      <!-- Sidebar -->
+      <aside class="docs-sidebar">
+        <nav class="docs-nav">
+          <div class="docs-nav-section">
+            <a href="../index.html" class="docs-nav-title">Introduction</a>
+            <a href="../index.html#overview" class="docs-nav-link">Overview</a>
+            <a href="../index.html#how-it-works" class="docs-nav-link">How it works</a>
+            <a href="../index.html#key-concepts" class="docs-nav-link">Key concepts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Guides</span>
+            <a href="../getting-started.html" class="docs-nav-link">Getting started</a>
+            <a href="../how-to/install.html" class="docs-nav-link">Install O11yFleet</a>
+            <a href="../how-to/connect-collector.html" class="docs-nav-link">Connect a collector</a>
+            <a href="../how-to/create-config.html" class="docs-nav-link">Create a configuration</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >GitOps workflow</span
+            >
+            <a href="../how-to/rollouts.html" class="docs-nav-link">Manage rollouts</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Concepts</span>
+            <a href="../concepts/opamp.html" class="docs-nav-link">OpAMP protocol</a>
+            <a href="../concepts/collectors.html" class="docs-nav-link">Collectors</a>
+            <a href="../concepts/configurations.html" class="docs-nav-link active"
+              >Configurations</a
+            >
+            <a href="../concepts/tenants.html" class="docs-nav-link">Tenants & multi-tenancy</a>
+            <span class="docs-nav-link docs-nav-coming-soon" title="Coming soon"
+              >Monitor-only vs Managed</span
+            >
+            <a href="../concepts/rollouts.html" class="docs-nav-link">Rollouts & versions</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Reference</span>
+            <a href="../architecture.html" class="docs-nav-link">Architecture</a>
+            <a href="../api/authentication.html" class="docs-nav-link">API authentication</a>
+            <a href="../api/endpoints.html" class="docs-nav-link">API endpoints</a>
+            <a href="../cli/index.html" class="docs-nav-link">CLI reference</a>
+          </div>
+
+          <div class="docs-nav-section">
+            <span class="docs-nav-heading">Help</span>
+            <a href="../troubleshooting.html" class="docs-nav-link">Troubleshooting</a>
+          </div>
+        </nav>
+      </aside>
+
+      <!-- Content -->
+      <main class="docs-content">
+        <article class="docs-article">
+          <span class="eyebrow">Concept</span>
+          <h1>Configurations</h1>
+
+          <p class="lede">
+            A configuration is a named set of OpenTelemetry Collector YAML. Configurations are
+            versioned — every change creates an immutable snapshot that can be rolled out and rolled
+            back.
+          </p>
+
+          <h2 id="immutable-versions">Immutable versions</h2>
+          <p>
+            Configurations in O11yFleet are immutable. When you edit a config (either in the portal
+            or via Git), a <strong>new version</strong> is created. The old version remains stored
+            forever, allowing instant rollback.
+          </p>
+          <p>This means there's no "edit" — only "create new version". This is intentional:</p>
+          <ul>
+            <li><strong>Audit trail</strong> — full history of who changed what and when</li>
+            <li>
+              <strong>Manual rollback</strong> — redeploy an old version by uploading it again and
+              starting a rollout
+            </li>
+            <li>
+              <strong>Deduplication</strong> — identical configs share the same R2 object (by
+              SHA-256 hash)
+            </li>
+            <li>
+              <strong>Drift detection</strong> — O11yFleet compares intended vs effective config;
+              drift flag coming soon
+            </li>
+          </ul>
+
+          <h2 id="content-addressed-storage">Content-addressed storage</h2>
+          <p>Config YAML is stored in Cloudflare R2 using a content-addressed scheme:</p>
+          <pre
+            style="
+              background: var(--surface-2);
+              padding: 12px 14px;
+              border-radius: var(--radius);
+              overflow-x: auto;
+              font-size: 13px;
+            "
+          ><code>Key: configs/sha256/&lt;sha256-hash-of-yaml&gt;.yaml</code></pre>
+          <p>
+            If two versions have identical content, they share the same R2 object. Only the version
+            metadata (name, creator, timestamp) differs.
+          </p>
+
+          <h2 id="version-lifecycle">Version lifecycle</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th
+                  style="padding: 10px 14px; text-align: left; color: var(--fg-3); font-weight: 500"
+                >
+                  State
+                </th>
+                <th
+                  style="padding: 10px 14px; text-align: left; color: var(--fg-3); font-weight: 500"
+                >
+                  Description
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Pending</td>
+                <td style="padding: 10px 14px">
+                  Uploaded and current in D1, but not pushed until rollout starts
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Rolling out</td>
+                <td style="padding: 10px 14px">
+                  Currently being delivered to all connected collectors
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Applied</td>
+                <td style="padding: 10px 14px">
+                  Reported by collectors after they apply the pushed config
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">Rolled back</td>
+                <td style="padding: 10px 14px">A newer version replaced this one</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="config-validation">Validation</h2>
+          <p>
+            On upload, O11yFleet validates that the request body is parseable YAML and that it
+            parses to a mapping/object. It does not yet validate against the full OpenTelemetry
+            Collector schema or check receiver/exporter compatibility.
+          </p>
+
+          <div class="docs-page-nav">
+            <span>← <a href="collectors.html">Collectors</a></span>
+            <span><a href="tenants.html">Tenants & multi-tenancy →</a></span>
+          </div>
+        </article>
+      </main>
+    </div>
+
+    <footer class="site-footer" style="border-top: 1px solid var(--line); margin-top: 64px">
+      <div class="wrap">
+        <div
+          style="
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 16px;
+          "
+        >
+          <div>
+            <a href="/" class="logo" style="font-size: 14px; font-weight: 500">
+              <svg
+                viewBox="0 0 24 24"
+                fill="none"
+                style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle"
+                aria-hidden="true"
+              >
+                <path
+                  d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linejoin="round"
+                />
+                <circle cx="12" cy="11" r="2.2" fill="currentColor" />
+                <path
+                  d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
+                  stroke="currentColor"
+                  stroke-width="1.6"
+                  stroke-linecap="round"
+                />
+              </svg>
+              O11yFleet
+            </a>
+            <p style="font-size: 13px; color: var(--fg-4); margin: 8px 0 0 0">
+              OpAMP control plane for OpenTelemetry Collectors
+            </p>
+          </div>
+          <div style="display: flex; gap: 24px; font-size: 13px">
+            <a href="/">Home</a>
+            <a href="/pricing">Pricing</a>
+            <a href="../index.html">Docs</a>
+            <a href="https://github.com/strawgate/o11yfleet">GitHub</a>
+          </div>
+        </div>
+      </div>
+    </footer>
+
+    <script src="../../app.js"></script>
+  </body>
+</html>

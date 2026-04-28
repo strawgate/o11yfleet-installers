@@ -6,6 +6,7 @@ const NAV_LINKS = [
   { label: "Pricing", to: "/pricing" },
   { label: "Enterprise", to: "/enterprise" },
   { label: "About", to: "/about" },
+  { label: "Docs", to: "/docs/index.html" },
 ] as const;
 
 const FOOTER_PRODUCT = [
@@ -15,7 +16,7 @@ const FOOTER_PRODUCT = [
   { label: "Enterprise", to: "/enterprise" },
 ];
 const FOOTER_RESOURCES = [
-  { label: "Docs", to: "#" },
+  { label: "Docs", to: "/docs/index.html" },
   { label: "OpAMP guide", to: "#" },
   { label: "Collector guide", to: "#" },
   { label: "Pricing", to: "/pricing" },
