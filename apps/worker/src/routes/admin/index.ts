@@ -2,6 +2,7 @@
 // These endpoints require admin auth (currently: API_SECRET bearer token)
 
 import type { Env } from "../../index.js";
+import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
 import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
 
 // ─── Error helpers ──────────────────────────────────────────────────
@@ -34,6 +35,9 @@ export async function handleAdminRequest(request: Request, env: Env, url: URL): 
     if (err instanceof AdminApiError) {
       return jsonError(err.message, err.status);
     }
+    if (err instanceof AiApiError) {
+      return jsonError(err.message, err.status);
+    }
     console.error("Admin API error:", err);
     return jsonError("Internal server error", 500);
   }
@@ -47,6 +51,12 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   if (path === "/api/admin/overview" && method === "GET") {
     return handleAdminOverview(env);
+  }
+
+  // ─── AI Guidance ───────────────────────────────────────────
+
+  if (path === "/api/admin/ai/guidance" && method === "POST") {
+    return handleAdminGuidanceRequest(request);
   }
 
   // ─── Tenants ────────────────────────────────────────────────

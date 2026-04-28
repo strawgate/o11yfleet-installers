@@ -4,6 +4,7 @@
 import type { Env } from "../../index.js";
 import { uploadConfigVersion, validateYaml } from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
+import { AiApiError, handleTenantGuidanceRequest } from "../../ai/guidance.js";
 
 // ─── Error helpers ──────────────────────────────────────────────────
 
@@ -38,6 +39,9 @@ export async function handleV1Request(
     return await routeV1Request(request, env, url, tenantId);
   } catch (err) {
     if (err instanceof V1ApiError) {
+      return jsonError(err.message, err.status);
+    }
+    if (err instanceof AiApiError) {
       return jsonError(err.message, err.status);
     }
     console.error("V1 API error:", err);
@@ -76,6 +80,12 @@ async function routeV1Request(
 
   if (path === "/api/v1/overview" && method === "GET") {
     return handleGetOverview(env, tenantId);
+  }
+
+  // ─── AI Guidance ───────────────────────────────────────────
+
+  if (path === "/api/v1/ai/guidance" && method === "POST") {
+    return handleTenantGuidanceRequest(request, tenantId);
   }
 
   // ─── Configurations ────────────────────────────────────────

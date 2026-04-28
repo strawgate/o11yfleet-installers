@@ -7,3 +7,4 @@ export * from "./auth/index.js";
 export * from "./events.js";
 export * from "./hex.js";
 export * from "./assert-never.js";
+export * from "./ai/index.js";

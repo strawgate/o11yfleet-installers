@@ -18,6 +18,10 @@ export interface Env {
   FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
   API_SECRET?: string;
+  MINIMAX_API_KEY?: string;
+  LLM_PROVIDER?: string;
+  LLM_MODEL?: string;
+  LLM_BASE_URL?: string;
   SEED_TENANT_USER_EMAIL?: string;
   SEED_TENANT_USER_PASSWORD?: string;
   SEED_ADMIN_EMAIL?: string;
