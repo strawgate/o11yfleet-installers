@@ -54,22 +54,103 @@
       "new_sqlite_classes": ["ConfigDurableObject"],
     },
   ],
-  // TODO: Re-enable after activating Analytics Engine in CF Dashboard
-  // "analytics_engine_datasets": [
-  // 	{
-  // 		"binding": "FP_ANALYTICS",
-  // 		"dataset": "fp_analytics"
-  // 	}
-  // ],
   // ─── Environment overrides ─────────────────────────────────────────
   // Staging and production use the instrumented entry point for OTel auto-tracing.
   // Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
   "env": {
     "staging": {
       "main": "src/instrumented.ts",
+      "vars": {},
+      "d1_databases": [
+        {
+          "binding": "FP_DB",
+          "database_name": "fp-db",
+          "database_id": "192ca9ca-bd47-4bd2-9321-fcdf62d9cf05",
+          "migrations_dir": "../../packages/db/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FP_CONFIGS",
+          "bucket_name": "fp-configs",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "FP_EVENTS",
+            "queue": "fp-events",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "fp-events",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+          },
+        ],
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CONFIG_DO",
+            "class_name": "ConfigDurableObject",
+          },
+        ],
+      },
+      "analytics_engine_datasets": [
+        {
+          "binding": "FP_ANALYTICS",
+          "dataset": "fp_analytics",
+        },
+      ],
     },
     "production": {
       "main": "src/instrumented.ts",
+      "vars": {},
+      "d1_databases": [
+        {
+          "binding": "FP_DB",
+          "database_name": "fp-db",
+          "database_id": "192ca9ca-bd47-4bd2-9321-fcdf62d9cf05",
+          "migrations_dir": "../../packages/db/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FP_CONFIGS",
+          "bucket_name": "fp-configs",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "FP_EVENTS",
+            "queue": "fp-events",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "fp-events",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+          },
+        ],
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CONFIG_DO",
+            "class_name": "ConfigDurableObject",
+          },
+        ],
+      },
+      "analytics_engine_datasets": [
+        {
+          "binding": "FP_ANALYTICS",
+          "dataset": "fp_analytics",
+        },
+      ],
     },
   },
 }

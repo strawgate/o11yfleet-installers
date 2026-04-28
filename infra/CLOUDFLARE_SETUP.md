@@ -45,11 +45,38 @@ Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
 
 Zone resources: Include all zones in account.
 
+## Worker Runtime Secrets
+
+Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars` as plaintext Worker configuration. Provision these as Worker secrets for each deployed environment:
+
+```bash
+cd apps/worker
+pnpm wrangler secret put CLAIM_SECRET --env staging
+pnpm wrangler secret put API_SECRET --env staging
+pnpm wrangler secret put SEED_TENANT_USER_EMAIL --env staging
+pnpm wrangler secret put SEED_TENANT_USER_PASSWORD --env staging
+pnpm wrangler secret put SEED_ADMIN_EMAIL --env staging
+pnpm wrangler secret put SEED_ADMIN_PASSWORD --env staging
+
+pnpm wrangler secret put CLAIM_SECRET --env production
+pnpm wrangler secret put API_SECRET --env production
+pnpm wrangler secret put SEED_TENANT_USER_EMAIL --env production
+pnpm wrangler secret put SEED_TENANT_USER_PASSWORD --env production
+pnpm wrangler secret put SEED_ADMIN_EMAIL --env production
+pnpm wrangler secret put SEED_ADMIN_PASSWORD --env production
+```
+
 ## Analytics Engine
 
-Enable at: https://dash.cloudflare.com/417e8c0fd8f1a64e9f2c4845afa6dc56/workers/analytics-engine
+`apps/worker/wrangler.jsonc` binds `FP_ANALYTICS` to the `fp_analytics` dataset in staging and production. Cloudflare creates Workers Analytics Engine datasets automatically on the first write after a Worker binding is deployed, so there is no separate dataset resource to create in Terraform.
 
-Then uncomment the `analytics_engine_datasets` block in `apps/worker/wrangler.jsonc` and redeploy.
+To verify after deployment:
+
+```bash
+curl "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6dc56/analytics_engine/sql" \
+  --header "Authorization: Bearer <API_TOKEN_WITH_ACCOUNT_ANALYTICS_READ>" \
+  --data "SELECT event_type, count() FROM fp_analytics GROUP BY event_type LIMIT 10"
+```
 
 ## Current Resource IDs
 

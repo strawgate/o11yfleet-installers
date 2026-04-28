@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
 import { decodeAgentToServer, encodeServerToAgent, detectCodecFormat } from "@o11yfleet/core/codec";
 import type { CodecFormat } from "@o11yfleet/core/codec";
+import { ServerCapabilities } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
@@ -309,7 +310,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     const span = startWsLifecycleSpan("close", attachment.instance_uid);
     try {
+      const config = loadDesiredConfig(this.ctx.storage.sql);
+      const state = loadAgentState(
+        this.ctx.storage.sql,
+        attachment.instance_uid,
+        attachment.tenant_id,
+        attachment.config_id,
+        config.hash,
+      );
       markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
+      if (state.status === "disconnected") {
+        return;
+      }
       await this.emitEvents([
         {
           type: FleetEventType.AGENT_DISCONNECTED,
@@ -418,7 +430,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             {
               instance_uid: hexToUint8Array(attachment.instance_uid),
               flags: 0,
-              capabilities: 0x00000003,
+              capabilities:
+                ServerCapabilities.AcceptsStatus |
+                ServerCapabilities.OffersRemoteConfig |
+                ServerCapabilities.AcceptsEffectiveConfig,
               remote_config: {
                 config: { config_map: configMap },
                 config_hash: desiredHashBytes,

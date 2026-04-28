@@ -81,6 +81,16 @@ export async function uploadConfigVersion(
     ).bind(hash, configId, tenantId),
   ]);
 
+  if (deduplicated) {
+    await env.FP_CONFIGS.put(r2Key, yamlBytes, {
+      httpMetadata: { contentType: "text/yaml" },
+      customMetadata: {
+        tenant_id: tenantId,
+        config_id: configId,
+      },
+    });
+  }
+
   return {
     hash,
     r2Key,
@@ -94,4 +104,35 @@ export async function getConfigContent(env: ConfigStoreEnv, hash: string): Promi
   const obj = await env.FP_CONFIGS.get(r2Key);
   if (!obj) return null;
   return obj.text();
+}
+
+export async function deleteConfigContentIfUnreferenced(
+  env: ConfigStoreEnv,
+  r2Key: string,
+): Promise<void> {
+  const remainingBeforeDelete = await env.FP_DB.prepare(
+    `SELECT 1 as found FROM config_versions WHERE r2_key = ? LIMIT 1`,
+  )
+    .bind(r2Key)
+    .first<{ found: number }>();
+  if (remainingBeforeDelete) return;
+
+  const object = await env.FP_CONFIGS.get(r2Key);
+  const bytes = object ? await object.arrayBuffer() : null;
+  const contentType = object?.httpMetadata?.contentType;
+  const customMetadata = object?.customMetadata;
+
+  await env.FP_CONFIGS.delete(r2Key);
+
+  const remainingAfterDelete = await env.FP_DB.prepare(
+    `SELECT 1 as found FROM config_versions WHERE r2_key = ? LIMIT 1`,
+  )
+    .bind(r2Key)
+    .first<{ found: number }>();
+  if (remainingAfterDelete && bytes) {
+    await env.FP_CONFIGS.put(r2Key, bytes, {
+      httpMetadata: contentType ? { contentType } : undefined,
+      customMetadata,
+    });
+  }
 }

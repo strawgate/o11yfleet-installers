@@ -204,6 +204,8 @@ describe("state-machine/processFrame", () => {
     expect(result.response).toBeNull();
     expect(result.shouldPersist).toBe(true);
     expect(result.events[0].type).toBe(FleetEventType.AGENT_DISCONNECTED);
+    expect(result.newState.status).toBe("disconnected");
+    expect(result.newState.connected_at).toBe(0);
   });
 
   it("handles config rejected — emits event", () => {
@@ -228,6 +230,55 @@ describe("state-machine/processFrame", () => {
     expect(result.shouldPersist).toBe(true);
     const rejectEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED);
     expect(rejectEvent).toBeDefined();
+  });
+
+  it("handles config rejected without hash — does not throw", () => {
+    const state = makeDefaultState({
+      sequence_num: 3,
+      connected_at: Date.now(),
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 4,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsRemoteConfig,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: undefined as unknown as Uint8Array,
+        status: RemoteConfigStatuses.FAILED,
+        error_message: "failed without hash",
+      },
+    };
+
+    expect(() => processFrame(state, msg)).not.toThrow();
+    const result = processFrame(state, msg);
+    const rejectEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED);
+    expect(rejectEvent).toBeDefined();
+  });
+
+  it("does not emit config applied when applied hash is unchanged", () => {
+    const hash = new Uint8Array([0xaa, 0xbb]);
+    const state = makeDefaultState({
+      sequence_num: 2,
+      connected_at: Date.now(),
+      current_config_hash: hash,
+      desired_config_hash: hash,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsRemoteConfig,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 3,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsRemoteConfig,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: hash,
+        status: RemoteConfigStatuses.APPLIED,
+        error_message: "",
+      },
+    };
+
+    const result = processFrame(state, msg);
+    expect(result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED)).toBeUndefined();
+    expect(result.shouldPersist).toBe(false);
   });
 
   it("updates agent description — persists", () => {

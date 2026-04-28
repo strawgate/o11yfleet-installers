@@ -17,8 +17,19 @@ export default function OverviewPage() {
   const ov = overview.data;
   const cfgList = configs.data ?? [];
 
-  const totalConfigs = ov?.configurations ?? cfgList.length;
-  const totalAgents = ov?.agents ?? 0;
+  const totalConfigs =
+    typeof ov?.configs_count === "number"
+      ? ov.configs_count
+      : Array.isArray(ov?.configurations)
+        ? ov.configurations.length
+        : cfgList.length;
+  const totalAgents =
+    typeof ov?.total_agents === "number"
+      ? ov.total_agents
+      : typeof ov?.agents === "number"
+        ? ov.agents
+        : 0;
+  const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
 
   return (
     <div className="main-wide">
@@ -41,8 +52,9 @@ export default function OverviewPage() {
           <div className="label">Total agents</div>
         </div>
         <div className="stat">
-          <div className="val">0</div>
+          <div className="val">{activeRollouts ?? "—"}</div>
           <div className="label">Active rollouts</div>
+          {activeRollouts === null ? <div className="delta">Not exposed by API yet</div> : null}
         </div>
       </div>
 

@@ -2,7 +2,11 @@
 // All operations are scoped to a single tenant via X-Tenant-Id header (stub auth)
 
 import type { Env } from "../../index.js";
-import { uploadConfigVersion, validateYaml } from "../../config-store.js";
+import {
+  deleteConfigContentIfUnreferenced,
+  uploadConfigVersion,
+  validateYaml,
+} from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import { AiApiError, handleTenantGuidanceRequest } from "../../ai/guidance.js";
 
@@ -262,26 +266,26 @@ async function handleCreateConfiguration(
     return jsonError("name must be 255 characters or fewer", 400);
   }
 
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
-
-  const countResult = await env.FP_DB.prepare(
-    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
-  )
-    .bind(tenantId)
-    .first<{ count: number }>();
-  if (countResult && countResult.count >= (tenant["max_configs"] as number)) {
-    return jsonError(`Configuration limit reached (${tenant["max_configs"]})`, 429);
-  }
-
   const id = crypto.randomUUID();
-  await env.FP_DB.prepare(
-    `INSERT INTO configurations (id, tenant_id, name, description) VALUES (?, ?, ?, ?)`,
+  const insertResult = await env.FP_DB.prepare(
+    `INSERT INTO configurations (id, tenant_id, name, description)
+     SELECT ?, t.id, ?, ?
+     FROM tenants t
+     WHERE t.id = ?
+       AND (
+         SELECT COUNT(*) FROM configurations c WHERE c.tenant_id = t.id
+       ) < t.max_configs`,
   )
-    .bind(id, tenantId, body.name.trim(), body.description ?? null)
+    .bind(id, body.name.trim(), body.description ?? null, tenantId)
     .run();
+
+  if ((insertResult.meta.changes ?? 0) === 0) {
+    const tenant = await env.FP_DB.prepare(`SELECT max_configs FROM tenants WHERE id = ?`)
+      .bind(tenantId)
+      .first<{ max_configs: number }>();
+    if (!tenant) return jsonError("Tenant not found", 404);
+    return jsonError(`Configuration limit reached (${tenant.max_configs})`, 429);
+  }
 
   return Response.json({ id, tenant_id: tenantId, name: body.name.trim() }, { status: 201 });
 }
@@ -341,6 +345,12 @@ async function handleDeleteConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
+  const versions = await env.FP_DB.prepare(
+    `SELECT DISTINCT r2_key FROM config_versions WHERE config_id = ?`,
+  )
+    .bind(configId)
+    .all<{ r2_key: string }>();
+
   await env.FP_DB.batch([
     env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`).bind(configId),
     env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`).bind(configId),
@@ -349,6 +359,10 @@ async function handleDeleteConfiguration(
       tenantId,
     ),
   ]);
+
+  for (const { r2_key: r2Key } of versions.results) {
+    await deleteConfigContentIfUnreferenced(env, r2Key);
+  }
 
   return new Response(null, { status: 204 });
 }

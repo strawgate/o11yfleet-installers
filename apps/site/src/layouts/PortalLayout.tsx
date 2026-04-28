@@ -2,6 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/api/hooks/auth";
 import { useLogout } from "@/api/hooks/auth";
+import { useTenant } from "@/api/hooks/portal";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import "@/styles/portal-shared.css";
 
@@ -323,6 +324,7 @@ function Breadcrumbs() {
 
 export default function PortalLayout() {
   const { user, isLoading } = useAuth();
+  const tenant = useTenant(Boolean(user) && !isLoading);
   const navigate = useNavigate();
   const logoutMutation = useLogout();
 
@@ -344,8 +346,10 @@ export default function PortalLayout() {
 
   const userName = user.name ?? user.email ?? "User";
   const userEmail = user.email ?? "";
-  const orgName = "My Workspace";
-  const orgPlan = "";
+  const orgName =
+    tenant.data?.name?.trim() || (tenant.isLoading ? "Loading workspace…" : "Workspace");
+  const orgPlan =
+    tenant.data?.plan?.trim() || (tenant.isLoading ? "Loading plan…" : "Plan unavailable");
   const orgInitials = orgName
     .split(" ")
     .map((w: string) => w[0])

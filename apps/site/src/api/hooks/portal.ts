@@ -6,8 +6,11 @@ import { apiGet, apiPost, apiPostText, apiPut, apiDel, apiFetch, ApiError } from
 /* ------------------------------------------------------------------ */
 
 export interface Overview {
-  configurations: number;
-  agents: number;
+  configurations?: Configuration[];
+  configs_count?: number;
+  agents?: number;
+  total_agents?: number;
+  active_rollouts?: number | null;
   [key: string]: unknown;
 }
 
@@ -132,10 +135,11 @@ export function useConfigurationStats(id: string | undefined) {
   });
 }
 
-export function useTenant() {
+export function useTenant(enabled = true) {
   return useQuery({
     queryKey: ["tenant"],
     queryFn: () => apiGet<Tenant>("/api/v1/tenant"),
+    enabled,
   });
 }
 

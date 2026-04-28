@@ -59,6 +59,8 @@ export function processFrame(
 
   // Handle disconnect
   if (msg.agent_disconnect) {
+    newState.status = "disconnected";
+    newState.connected_at = 0;
     events.push({
       type: FleetEventType.AGENT_DISCONNECTED,
       tenant_id: state.tenant_id,
@@ -131,17 +133,21 @@ export function processFrame(
   // Process remote config status
   if (msg.remote_config_status) {
     const hash = msg.remote_config_status.last_remote_config_hash;
+    const hashHex = hash ? uint8ToHex(hash) : "";
     if (msg.remote_config_status.status === RemoteConfigStatuses.APPLIED) {
-      newState.current_config_hash = hash;
-      shouldPersist = true;
-      events.push({
-        type: FleetEventType.CONFIG_APPLIED,
-        tenant_id: state.tenant_id,
-        config_id: state.config_id,
-        instance_uid: uint8ToHex(state.instance_uid),
-        timestamp: now,
-        config_hash: uint8ToHex(hash),
-      });
+      const hashChanged = !arraysEqual(state.current_config_hash, hash ?? null);
+      if (hash && hashChanged) {
+        newState.current_config_hash = hash;
+        shouldPersist = true;
+        events.push({
+          type: FleetEventType.CONFIG_APPLIED,
+          tenant_id: state.tenant_id,
+          config_id: state.config_id,
+          instance_uid: uint8ToHex(state.instance_uid),
+          timestamp: now,
+          config_hash: hashHex,
+        });
+      }
     } else if (msg.remote_config_status.status === RemoteConfigStatuses.FAILED) {
       shouldPersist = true;
       events.push({
@@ -150,7 +156,7 @@ export function processFrame(
         config_id: state.config_id,
         instance_uid: uint8ToHex(state.instance_uid),
         timestamp: now,
-        config_hash: uint8ToHex(hash),
+        config_hash: hashHex,
         error_message: msg.remote_config_status.error_message,
       });
     }

@@ -5,7 +5,11 @@
 // Consistent error contract: { error: string } with appropriate HTTP status
 
 import type { Env } from "../../index.js";
-import { uploadConfigVersion, validateYaml } from "../../config-store.js";
+import {
+  deleteConfigContentIfUnreferenced,
+  uploadConfigVersion,
+  validateYaml,
+} from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import { VALID_PLANS, getPlanLimits } from "../../shared/plans.js";
 
@@ -261,38 +265,39 @@ async function handleCreateConfiguration(request: Request, env: Env): Promise<Re
     name: string;
     description?: string;
   }>(request);
-  if (!body.tenant_id || !body.name) {
+  const trimmedName = body.name?.trim();
+  if (!body.tenant_id || !trimmedName) {
     return jsonError("tenant_id and name are required", 400);
   }
-  if (body.name.length > 255) {
+  if (trimmedName.length > 255) {
     return jsonError("name must be 255 characters or fewer", 400);
   }
   if (body.description && body.description.length > 1024) {
     return jsonError("description must be 1024 characters or fewer", 400);
   }
 
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(body.tenant_id)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
-
-  const countResult = await env.FP_DB.prepare(
-    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
-  )
-    .bind(body.tenant_id)
-    .first<{ count: number }>();
-  if (countResult && countResult.count >= (tenant["max_configs"] as number)) {
-    return jsonError(`Configuration limit reached (${tenant["max_configs"]})`, 429);
-  }
-
   const id = crypto.randomUUID();
-  await env.FP_DB.prepare(
-    `INSERT INTO configurations (id, tenant_id, name, description) VALUES (?, ?, ?, ?)`,
+  const insertResult = await env.FP_DB.prepare(
+    `INSERT INTO configurations (id, tenant_id, name, description)
+     SELECT ?, t.id, ?, ?
+     FROM tenants t
+     WHERE t.id = ?
+       AND (
+         SELECT COUNT(*) FROM configurations c WHERE c.tenant_id = t.id
+       ) < t.max_configs`,
   )
-    .bind(id, body.tenant_id, body.name, body.description ?? null)
+    .bind(id, trimmedName, body.description ?? null, body.tenant_id)
     .run();
 
-  return Response.json({ id, tenant_id: body.tenant_id, name: body.name }, { status: 201 });
+  if ((insertResult.meta.changes ?? 0) === 0) {
+    const tenant = await env.FP_DB.prepare(`SELECT max_configs FROM tenants WHERE id = ?`)
+      .bind(body.tenant_id)
+      .first<{ max_configs: number }>();
+    if (!tenant) return jsonError("Tenant not found", 404);
+    return jsonError(`Configuration limit reached (${tenant.max_configs})`, 429);
+  }
+
+  return Response.json({ id, tenant_id: body.tenant_id, name: trimmedName }, { status: 201 });
 }
 
 async function handleGetConfiguration(
@@ -352,11 +357,21 @@ async function handleDeleteConfiguration(
   const config = await getConfigWithOwnershipCheck(env, configId, tenantId);
   if (!config) return jsonError("Configuration not found", 404);
 
+  const versions = await env.FP_DB.prepare(
+    `SELECT DISTINCT r2_key FROM config_versions WHERE config_id = ?`,
+  )
+    .bind(configId)
+    .all<{ r2_key: string }>();
+
   await env.FP_DB.batch([
     env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`).bind(configId),
     env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`).bind(configId),
     env.FP_DB.prepare(`DELETE FROM configurations WHERE id = ?`).bind(configId),
   ]);
+
+  for (const { r2_key: r2Key } of versions.results) {
+    await deleteConfigContentIfUnreferenced(env, r2Key);
+  }
 
   return new Response(null, { status: 204 });
 }

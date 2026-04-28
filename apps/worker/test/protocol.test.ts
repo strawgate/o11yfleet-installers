@@ -2,7 +2,12 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
+import {
+  encodeFrame,
+  decodeFrame,
+  AgentCapabilities,
+  ServerCapabilities,
+} from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 import { apiFetch } from "./helpers.js";
 
@@ -138,6 +143,59 @@ describe("DO Protocol Enforcement", () => {
     const serverMsg = decodeFrame<ServerToAgent>(buf);
     expect(serverMsg.instance_uid).toBeDefined();
     expect(serverMsg.capabilities).toBeDefined();
+    expect(serverMsg.capabilities).toBe(
+      ServerCapabilities.AcceptsStatus |
+        ServerCapabilities.OffersRemoteConfig |
+        ServerCapabilities.AcceptsEffectiveConfig,
+    );
+
+    ws.close();
+  });
+
+  it("desired-config push uses the same server capabilities as hello responses", async () => {
+    const { token } = await makeSignedClaim();
+    const response = await apiFetch(
+      `http://localhost/v1/opamp?token=${encodeURIComponent(token)}`,
+      { headers: { Upgrade: "websocket" } },
+    );
+    expect(response.status).toBe(101);
+
+    const ws = response.webSocket!;
+    ws.accept();
+
+    const hello: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+    };
+    ws.send(encodeFrame(hello));
+    await waitForMsg(ws); // hello response
+
+    const id = env.CONFIG_DO.idFromName("test-tenant:test-config");
+    const stub = env.CONFIG_DO.get(id);
+    const desiredConfigHash = "00112233445566778899aabbccddeeff";
+    const pushPromise = waitForMsg(ws);
+    const setRes = await stub.fetch("http://internal/command/set-desired-config", {
+      method: "POST",
+      body: JSON.stringify({ config_hash: desiredConfigHash, config_content: "receivers: {}" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(setRes.status).toBe(200);
+
+    const pushMsg = await pushPromise;
+    const pushBuf =
+      pushMsg.data instanceof Blob
+        ? await (pushMsg.data as Blob).arrayBuffer()
+        : (pushMsg.data as ArrayBuffer);
+    const push = decodeFrame<ServerToAgent>(pushBuf);
+
+    expect(push.capabilities).toBe(
+      ServerCapabilities.AcceptsStatus |
+        ServerCapabilities.OffersRemoteConfig |
+        ServerCapabilities.AcceptsEffectiveConfig,
+    );
+    expect(push.remote_config).toBeDefined();
 
     ws.close();
   });

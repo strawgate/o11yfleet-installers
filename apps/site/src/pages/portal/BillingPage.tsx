@@ -18,10 +18,20 @@ export default function BillingPage() {
   const plan = t?.plan ?? "free";
   const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
   const maxConfigs = (t?.["max_configs"] as number) ?? 5;
-  const usedConfigs = ov?.configurations ?? 0;
+  const usedConfigs =
+    typeof ov?.configs_count === "number"
+      ? ov.configs_count
+      : Array.isArray(ov?.configurations)
+        ? ov.configurations.length
+        : 0;
   const configPct =
     maxConfigs > 0 ? Math.min(100, Math.round((usedConfigs / maxConfigs) * 100)) : 0;
-  const totalAgents = ov?.agents ?? 0;
+  const totalAgents =
+    typeof ov?.total_agents === "number"
+      ? ov.total_agents
+      : typeof ov?.agents === "number"
+        ? ov.agents
+        : 0;
 
   return (
     <div className="main-wide">
