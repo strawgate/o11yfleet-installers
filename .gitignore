@@ -14,7 +14,7 @@ coverage/
 .terraform.lock.hcl
 terraform.tfvars
 .local-state.json
-
+.env
 # Profiling
 profiles/
 *.cpuprofile
@@ -25,3 +25,5 @@ profiles/
 load-test-results/
 O11yFleet.zip
 .playwright-cli/
+O11yFleet-update.zip
+*.tsbuildinfo

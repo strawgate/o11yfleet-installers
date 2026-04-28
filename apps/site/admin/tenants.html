@@ -31,17 +31,19 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script src="../portal-api.js"></script>
 <script>
-FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Operations'},{label:'Tenants'}] });
-FP.showConnectBarIfNeeded();
+FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Operations'},{label:'Tenants'}] });
+
+(async function () {
+var authed = await FP.checkAuth();
+if (!authed) return;
 
 function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
 async function loadTenants() {
-  if (!FP.ready()) return;
   const tbody = document.getElementById('trows');
   const countEl = document.querySelector('.page-head .sub');
   try {
@@ -88,6 +90,7 @@ async function loadTenants() {
 }
 
 FP.autoRefresh(loadTenants, 15000);
+})();
 </script>
 </body>
 </html>

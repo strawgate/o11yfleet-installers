@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand: oklch(0.78 0.17 152);
+  --color-brand-dim: oklch(0.72 0.18 152);
+  --color-brand-soft: oklch(0.78 0.17 152 / 0.12);
+  --color-surface: #0f1217;
+  --color-surface-2: #14181f;
+  --color-line: #1c2129;
+  --color-line-2: #262c36;
+  --color-fg: #e8eaef;
+  --color-fg-2: #b6bcc7;
+  --color-fg-3: #7d8593;
+  --color-fg-4: #545c68;
+  --color-ok: oklch(0.78 0.17 152);
+  --color-warn: oklch(0.82 0.13 78);
+  --color-err: oklch(0.70 0.18 24);
+  --color-info: oklch(0.72 0.10 230);
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  body {
+    font-family: var(--font-sans);
+    background: #08090b;
+  }
+}

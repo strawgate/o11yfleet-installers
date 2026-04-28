@@ -9,6 +9,28 @@ import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/cod
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 
 export const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
+export const API_SECRET = "test-api-secret-for-dev-only-32chars";
+
+/** Standard auth headers for API requests in tests */
+export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
+  return { "Authorization": `Bearer ${API_SECRET}`, ...extra };
+}
+
+/**
+ * Fetch wrapper that auto-adds Bearer auth for /api/ routes.
+ * Drop-in replacement for exports.default.fetch in tests.
+ */
+export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+  const needsAuth = url.includes("/api/");
+  if (needsAuth) {
+    const headers = new Headers(init?.headers);
+    if (!headers.has("Authorization")) {
+      headers.set("Authorization", `Bearer ${API_SECRET}`);
+    }
+    return exports.default.fetch(url, { ...init, headers });
+  }
+  return exports.default.fetch(url, init);
+}
 
 // ─── D1 Schema Setup ────────────────────────────────────────────────
 
@@ -109,7 +131,7 @@ export async function createTenant(name: string): Promise<TenantResult> {
   const res = await exports.default.fetch("http://localhost/api/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
   });
   expect(res.status).toBe(201);
   return res.json<TenantResult>();
@@ -125,7 +147,7 @@ export async function createConfig(
   const res = await exports.default.fetch("http://localhost/api/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, name }),
-    headers: { "Content-Type": "application/json" },
+    headers: authHeaders({ "Content-Type": "application/json" }),
   });
   expect(res.status).toBe(201);
   return res.json<ConfigResult>();
@@ -140,7 +162,7 @@ export async function uploadConfigVersion(
 ): Promise<{ hash: string; deduplicated: boolean }> {
   const res = await exports.default.fetch(
     `http://localhost/api/configurations/${configId}/versions`,
-    { method: "POST", body: yaml },
+    { method: "POST", body: yaml, headers: authHeaders() },
   );
   expect(res.status).toBe(201);
   return res.json<{ hash: string; deduplicated: boolean }>();
@@ -157,7 +179,7 @@ export async function createEnrollmentToken(
     {
       method: "POST",
       body: JSON.stringify({}),
-      headers: { "Content-Type": "application/json" },
+      headers: authHeaders({ "Content-Type": "application/json" }),
     },
   );
   expect(res.status).toBe(201);
@@ -172,7 +194,7 @@ export async function rolloutConfig(
 ): Promise<{ pushed: number; config_hash: string }> {
   const res = await exports.default.fetch(
     `http://localhost/api/configurations/${configId}/rollout`,
-    { method: "POST" },
+    { method: "POST", headers: authHeaders() },
   );
   expect(res.status).toBe(200);
   return res.json<{ pushed: number; config_hash: string }>();
@@ -192,6 +214,7 @@ export async function getConfigStats(
 }> {
   const res = await exports.default.fetch(
     `http://localhost/api/configurations/${configId}/stats`,
+    { headers: authHeaders() },
   );
   expect(res.status).toBe(200);
   return res.json();
@@ -205,6 +228,7 @@ export async function getAgentSummaries(
 ): Promise<{ agents: Record<string, unknown>[] }> {
   const res = await exports.default.fetch(
     `http://localhost/api/configurations/${configId}/agents`,
+    { headers: authHeaders() },
   );
   expect(res.status).toBe(200);
   return res.json();

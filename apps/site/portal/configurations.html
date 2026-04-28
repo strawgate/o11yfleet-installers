@@ -26,7 +26,7 @@
 
       <div class="dt-card">
         <div class="dt-toolbar">
-          <span class="count">7 configurations · 5 UI · 2 Git</span>
+          <span class="count" id="config-count">Loading…</span>
           <div class="spacer"></div>
           <select class="select" style="width: auto; height: 30px;"><option>All sources</option><option>UI</option><option>Git</option></select>
           <select class="select" style="width: auto; height: 30px;"><option>All environments</option><option>production</option><option>staging</option></select>
@@ -69,18 +69,19 @@
   </div>
 </div>
 
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script src="../portal-api.js"></script>
 <script>FB.shell({ current: 'configurations', crumbs: [{label:'Configurations'}] });</script>
 <script>
-(function () {
-  FP.showConnectBarIfNeeded();
-  const tbody = document.getElementById('config-rows');
-  const countEl = document.querySelector('.dt-toolbar .count');
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
+
+  var tbody = document.getElementById('config-rows');
+  var countEl = document.querySelector('.dt-toolbar .count');
 
   async function loadConfigs() {
-    if (!FP.ready()) return;
     try {
       const data = await FP.get('/api/v1/configurations');
       const configs = data.configurations || [];

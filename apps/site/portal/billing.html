@@ -50,8 +50,10 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>FB.shell({ current: 'billing', crumbs: [{label:'Settings'},{label:'Plan & billing'}], prototype: 'Billing data is hardcoded. Billing integration requires Stripe setup (issue #15).' });</script>
+<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
 </body>
 </html>

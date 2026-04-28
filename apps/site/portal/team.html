@@ -47,11 +47,13 @@
       <div class="field"><label>Email</label><input class="input" type="email" placeholder="teammate@company.com" /></div>
       <div class="field"><label>Role</label><select class="select"><option>Editor — can change configs</option><option>Admin — manage team & billing</option><option>Viewer — read-only</option></select></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Invitation sent','We emailed them a link.');">Send invite</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Not implemented','Team invitations are not yet available.','warn');">Send invite</button></div>
   </div>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>FB.shell({ current: 'team', crumbs: [{label:'Settings'},{label:'Team'}], prototype: 'Team members are hardcoded. Team management requires the RBAC/Team API (issue #16).' });</script>
+<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
 </body>
 </html>

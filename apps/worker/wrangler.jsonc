@@ -13,7 +13,12 @@
 	],
 	"workers_dev": true,
 	"vars": {
-		"CLAIM_SECRET": "dev-secret-key-for-testing-only-32ch"
+		"CLAIM_SECRET": "dev-secret-key-for-testing-only-32ch",
+		"API_SECRET": "test-api-secret-for-dev-only-32chars",
+		"SEED_TENANT_USER_EMAIL": "demo@o11yfleet.com",
+		"SEED_TENANT_USER_PASSWORD": "demo-password",
+		"SEED_ADMIN_EMAIL": "admin@o11yfleet.com",
+		"SEED_ADMIN_PASSWORD": "admin-password"
 	},
 	"d1_databases": [
 		{

@@ -46,6 +46,10 @@
       </div>
 
       <div data-tab-panel="summary" data-tabs-group="t" class="tab-panel active">
+        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Summary stats and notes show sample data</div>
+        </div>
         <div class="stat-grid mb-6">
           <div class="stat"><div class="label">Plan</div><div class="val" style="font-size: 18px;">Business</div><div class="delta">$249/mo</div></div>
           <div class="stat"><div class="label">Collectors</div><div class="val">42</div><div class="delta up">+3 last 7d</div></div>
@@ -60,6 +64,10 @@
       </div>
 
       <div data-tab-panel="usage" data-tabs-group="t" class="tab-panel">
+        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Usage tracking shows sample data</div>
+        </div>
         <div class="card card-pad" style="padding: 22px;">
           <h3 style="font-size: 14px; font-weight: 500;">Plan limits</h3>
           <div class="mt-4" style="display: flex; flex-direction: column; gap: 14px;">
@@ -72,6 +80,10 @@
       </div>
 
       <div data-tab-panel="billing" data-tabs-group="t" class="tab-panel">
+        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Billing data shows sample invoices</div>
+        </div>
         <div class="dt-card">
           <table class="dt">
             <thead><tr><th>Date</th><th>Description</th><th>Amount</th><th>Status</th></tr></thead>
@@ -85,6 +97,10 @@
       </div>
 
       <div data-tab-panel="members" data-tabs-group="t" class="tab-panel">
+        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Member list shows sample data</div>
+        </div>
         <div class="dt-card">
           <table class="dt">
             <thead><tr><th>Member</th><th>Role</th><th>Last active</th><th>2FA</th></tr></thead>
@@ -98,6 +114,10 @@
       </div>
 
       <div data-tab-panel="events" data-tabs-group="t" class="tab-panel">
+        <div class="banner warn mb-4" style="font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Audit events show sample data</div>
+        </div>
         <div class="dt-card"><table class="dt">
           <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Target</th></tr></thead>
           <tbody>
@@ -134,19 +154,20 @@
   <div class="field"><label>Reason (required)</label><input class="input" placeholder="e.g. Support ticket #4821 — config not propagating" /></div>
   <div class="field"><label>Scope</label><select class="select"><option>Read-only — see what they see</option><option>Edit — change settings on their behalf</option></select></div>
 </div><div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal>Start session</button></div></div></div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script src="../portal-api.js"></script>
 <script>
-(function () {
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
   const tenantId = new URLSearchParams(window.location.search).get('id');
-  FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label:'Loading…'}], prototype: 'Tenant detail stats and activity are hardcoded. Only name and plan are loaded from API.' });
-  FP.showConnectBarIfNeeded();
+  FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Tenants', href:'tenants.html'},{label:'Loading…'}] });
 
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
   async function loadTenant() {
-    if (!FP.ready() || !tenantId) return;
+    if (!tenantId) return;
     try {
       const t = await FP.get('/api/admin/tenants/' + tenantId);
       // Update header
@@ -160,7 +181,7 @@
       const idTag = document.querySelector('.page-head .flex-row .tag.t-mono');
       if (idTag) idTag.textContent = FP.trunc(t.id, 16);
       // Update breadcrumbs
-      FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label: t.name}], prototype: 'Tenant detail stats and activity are hardcoded. Only name and plan are loaded from API.' });
+      FB.shell({ role:'admin', current:'tenants', crumbs:[{label:'Tenants', href:'tenants.html'},{label: t.name}] });
       // Update stat cards
       const stats = document.querySelectorAll('.stat-grid .stat .val');
       if (stats[0]) stats[0].textContent = t.plan;

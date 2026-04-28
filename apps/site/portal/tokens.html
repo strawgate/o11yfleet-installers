@@ -30,9 +30,11 @@
 <div class="modal-backdrop" id="new-tok"><div class="modal"><div class="modal-head"><h3>New API token</h3><button class="modal-close" data-close-modal>×</button></div><div class="modal-body">
   <div class="field"><label>Name</label><input class="input" placeholder="e.g. prod-collectors" /></div>
   <div class="field"><label>Scope</label><select class="select"><option>collector — connect a collector</option><option>api · read</option><option>api · admin</option></select></div>
-</div><div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Token created','Save it now — it won\\'t be shown again.')">Create token</button></div></div></div>
+</div><div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Not implemented','API token creation is not yet available.','warn')">Create token</button></div></div></div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>FB.shell({ current: 'tokens', crumbs: [{label:'Setup'},{label:'API tokens'}], prototype: 'Tokens are hardcoded. API token management requires backend support (issue #17).' });</script>
+<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
 </body>
 </html>

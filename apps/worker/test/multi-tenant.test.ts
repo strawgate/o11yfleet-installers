@@ -3,6 +3,7 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { env, exports } from "cloudflare:workers";
+import { apiFetch } from "./helpers.js";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
   setupD1,
@@ -144,12 +145,12 @@ describe("Multi-Tenant Isolation", () => {
   });
 
   it("tenant configs are isolated in D1 listings", async () => {
-    const listA = await exports.default.fetch(
+    const listA = await apiFetch(
       `http://localhost/api/tenants/${tenantA.id}/configurations`,
     );
     const dataA = await listA.json<{ configurations: { id: string }[] }>();
 
-    const listB = await exports.default.fetch(
+    const listB = await apiFetch(
       `http://localhost/api/tenants/${tenantB.id}/configurations`,
     );
     const dataB = await listB.json<{ configurations: { id: string }[] }>();

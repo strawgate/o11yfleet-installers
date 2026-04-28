@@ -16,29 +16,33 @@
     <div class="main-narrow">
       <div class="page-head"><div><h1>Workspace settings</h1><div class="sub">General configuration for Acme Platform.</div></div></div>
 
-      <div class="admin-banner">
+      <div class="admin-banner" id="admin-banner" style="display:none;">
         <span class="pulse"></span>
         <span>Admin mode</span>
-        <span class="lbl">Changes here affect all 6 team members.</span>
-        <span class="who">Maya · Owner</span>
+        <span class="lbl" id="admin-banner-lbl">Changes here affect all team members.</span>
+        <span class="who" id="admin-banner-who"></span>
       </div>
 
       <div class="card card-pad" style="padding: 22px;">
         <h3 style="font-size: 15px; font-weight: 500;">General</h3>
-        <div class="field mt-4"><label>Workspace name</label><input class="input" value="Acme Platform" /></div>
-        <div class="field mt-3"><label>Slug</label><input class="input mono" value="acme" /><div class="help">URL: o11yfleet.com/<span class="t-mono" style="color: var(--accent);">acme</span></div></div>
+        <div class="field mt-4"><label>Workspace name</label><input id="ws-name" class="input" value="" /></div>
+        <div class="field mt-3"><label>Tenant ID</label><input id="ws-slug" class="input mono" value="" readonly /><div class="help">Read-only identifier for API use.</div></div>
         <div class="field mt-3"><label>Default rollout strategy</label><select class="select"><option>Canary 10% → 50% → 100%</option><option>50% → 100%</option><option>All at once</option></select></div>
-        <div class="flex-row mt-4" style="justify-content: flex-end;"><button class="btn btn-primary btn-sm" onclick="toast('Saved','Workspace settings updated.')">Save</button></div>
+        <div class="flex-row mt-4" style="justify-content: flex-end;"><button class="btn btn-primary btn-sm" id="save-general-btn">Save</button></div>
       </div>
 
-      <div class="card card-pad mt-6" style="padding: 22px;">
+      <div class="card card-pad mt-6" style="padding: 22px; position:relative;">
+        <div class="banner warn" style="margin:0 -22px;margin-top:-22px;padding:8px 14px;border-radius:8px 8px 0 0;border-bottom:1px solid var(--border);font-size:12px;margin-bottom:16px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Notification settings are not yet functional</div>
+        </div>
         <h3 style="font-size: 15px; font-weight: 500;">Notifications</h3>
         <p class="t-muted text-sm mt-2">Where rollout outcomes, drift alerts, and offline collectors are announced.</p>
         <div class="mt-4" style="display: flex; flex-direction: column; gap: 10px;">
-          <label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> Email maya@acmeplatform.com</label>
-          <label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> Slack <span class="t-mono t-muted">#platform-otel</span></label>
-          <label class="flex-row gap-sm text-sm"><input type="checkbox" /> PagerDuty (offline collectors only)</label>
-          <label class="flex-row gap-sm text-sm"><input type="checkbox" /> Webhook</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" disabled checked /> Email notifications</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" disabled /> Slack integration</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" disabled /> PagerDuty (offline collectors only)</label>
+          <label class="flex-row gap-sm text-sm"><input type="checkbox" disabled /> Webhook</label>
         </div>
       </div>
 
@@ -72,23 +76,55 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script src="../portal-api.js"></script>
 <script>
 FB.shell({ current: 'settings', crumbs: [{label:'Settings'},{label:'Workspace'}] });
-FP.showConnectBarIfNeeded();
+
 (async function () {
-  if (!FP.ready()) return;
+  var authed = await FP.checkAuth();
+  if (!authed) return;
+
+  // Show admin banner with real user info
+  var banner = document.getElementById('admin-banner');
+  if (FP.user) {
+    banner.style.display = '';
+    document.getElementById('admin-banner-who').textContent = (FP.user.display_name || FP.user.displayName || FP.user.email) + ' · ' + (FP.user.role || 'member');
+  }
+
   try {
-    const t = await FP.get('/api/v1/tenant');
-    document.querySelector('.page-head .sub').textContent = 'General configuration for ' + t.name + '.';
-    const nameInput = document.querySelector('.card .field .input');
+    var t = await FP.get('/api/v1/tenant');
+    document.querySelector('.page-head .sub').textContent = 'General configuration for ' + (t.name || 'your workspace') + '.';
+    var nameInput = document.getElementById('ws-name');
     if (nameInput && t.name) nameInput.value = t.name;
-    // Show tenant ID + plan
-    const idField = document.querySelector('.card .field .input.mono');
-    if (idField) idField.value = t.id || '';
+    var slugInput = document.getElementById('ws-slug');
+    if (slugInput) slugInput.value = t.id || '';
   } catch (e) { console.error('Failed to load tenant', e); }
+
+  // Save button
+  document.getElementById('save-general-btn').addEventListener('click', async function() {
+    var name = document.getElementById('ws-name').value.trim();
+    if (!name) return;
+    try {
+      await FP.put('/api/v1/tenant', { name: name });
+      toast('Saved', 'Workspace settings updated.');
+    } catch (e) {
+      toast('Error', e.message || 'Failed to save', 'err');
+    }
+  });
+
+  // Delete workspace button
+  document.querySelector('.danger-zone .btn-danger-solid').addEventListener('click', function() {
+    toast('Not implemented', 'Workspace deletion is not yet available.', 'warn');
+  });
+
+  // Pause rollouts / Revoke tokens buttons
+  document.querySelectorAll('.danger-zone .btn-danger').forEach(function(btn) {
+    btn.addEventListener('click', function() {
+      toast('Not implemented', 'This action is not yet available.', 'warn');
+    });
+  });
 })();
 </script>
 </body>

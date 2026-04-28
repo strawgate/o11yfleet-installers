@@ -31,23 +31,78 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>
-FB.shell({ current: 'agents', crumbs: [{label:'Agents'}], prototype: 'This page shows sample collector data. Real agent data requires the Agents API (issue #12).' });
-const rows = [];
-const regions = ['iad','sfo','fra','sin'];
-const roles = [['edge','prod-ingress','v14'],['gateway','prod-gateway','v9'],['k8s','k8s-daemon','v22']];
-let i = 0;
-for (const r of regions) {
-  for (const [role, cfg, ver] of roles) {
-    for (let n = 1; n <= 4 && i < 42; n++, i++) {
-      const status = i % 11 === 7 ? ['warn','queue 84%'] : (i % 17 === 0 ? ['err','offline 14m'] : ['ok','healthy']);
-      rows.push(`<tr class="clickable" onclick="window.location.href='agent-detail.html?a=${i % 4}'"><td class="name">otel-${role}-0${n}.${r}</td><td class="meta">env=production,role=${role},region=${r}</td><td class="mono-cell">0.105.0</td><td class="mono-cell"><a href="configuration-detail.html" style="color: var(--accent);" onclick="event.stopPropagation()">${cfg}@${ver}</a></td><td class="meta">${status[0]==='err'?'14m':'2s'} ago</td><td><span class="tag tag-${status[0]}"><span class="dot dot-${status[0]}"></span>${status[1]}</span></td></tr>`);
+FB.shell({ current: 'agents', crumbs: [{label:'Agents'}] });
+
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
+
+  var tbody = document.getElementById('agent-rows');
+  var countEl = document.querySelector('.dt-toolbar .count');
+  var subEl = document.querySelector('.page-head .sub');
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+  function statusTag(agent) {
+    if (!agent.connected) return '<span class="tag tag-err"><span class="dot dot-err"></span>offline</span>';
+    if (agent.health === 'healthy') return '<span class="tag tag-ok"><span class="dot dot-ok"></span>healthy</span>';
+    return '<span class="tag tag-warn"><span class="dot dot-warn"></span>degraded</span>';
+  }
+
+  async function loadAgents() {
+    try {
+      // Get all configurations, then load agents for each
+      var configData = await FP.get('/api/v1/configurations');
+      var configs = configData.configurations || [];
+      var allAgents = [];
+
+      for (var i = 0; i < configs.length; i++) {
+        try {
+          var data = await FP.get('/api/v1/configurations/' + configs[i].id + '/agents');
+          var agents = data.agents || [];
+          agents.forEach(function(a) { a._configName = configs[i].name; a._configId = configs[i].id; });
+          allAgents = allAgents.concat(agents);
+        } catch (e) { /* skip failed config */ }
+      }
+
+      countEl.textContent = allAgents.length + ' collector' + (allAgents.length !== 1 ? 's' : '');
+      subEl.textContent = allAgents.length + ' collectors phoning home.';
+
+      if (allAgents.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;">No agents connected yet. <a href="getting-started.html">Enroll a collector</a> to get started.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = allAgents.map(function(a) {
+        var uid = a.instance_uid || '';
+        var name = a.hostname || uid.slice(0, 12) || '—';
+        var labels = '';
+        if (a.labels && typeof a.labels === 'object') {
+          labels = Object.entries(a.labels).map(function(kv) { return kv[0] + '=' + kv[1]; }).join(', ');
+        }
+        var version = a.agent_version || '—';
+        var hb = a.last_seen ? FP.relTime(a.last_seen) : '—';
+        return '<tr class="clickable" onclick="window.location.href=\'agent-detail.html?config=' + esc(a._configId) + '&uid=' + esc(uid) + '\'">' +
+          '<td class="name">' + esc(name) + '</td>' +
+          '<td class="meta">' + esc(labels || '—') + '</td>' +
+          '<td class="mono-cell">' + esc(version) + '</td>' +
+          '<td class="mono-cell"><a href="configuration-detail.html?id=' + esc(a._configId) + '" style="color:var(--accent)" onclick="event.stopPropagation()">' + esc(a._configName) + '</a></td>' +
+          '<td class="meta">' + hb + '</td>' +
+          '<td>' + statusTag(a) + '</td>' +
+          '</tr>';
+      }).join('');
+    } catch (e) {
+      console.error('Failed to load agents', e);
+      tbody.innerHTML = '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load agents</td></tr>';
     }
   }
-}
-document.getElementById('agent-rows').innerHTML = rows.join('');
+
+  FP.autoRefresh(loadAgents, 10000);
+})();
 </script>
 </body>
 </html>

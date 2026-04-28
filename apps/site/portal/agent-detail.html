@@ -74,11 +74,16 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script src="../portal-pipeline.js"></script>
 <script>
-FB.shell({ current: 'agents', crumbs: [{label:'Agents', href:'agents.html'}, {label:'otel-edge-01.iad'}], prototype: 'This page shows hardcoded agent data. Real agent detail requires the Agents API (issue #12).' });
+FB.shell({ current: 'agents', crumbs: [{label:'Agents', href:'agents.html'}, {label:'Agent detail'}], prototype: 'This page shows hardcoded pipeline visualizations. Real agent detail data will be loaded from the API when available.' });
+
+(async function() {
+var authed = await FP.checkAuth();
+if (!authed) return;
 
 // --- Pick which example pipeline to show ---
 const SCENES = [
@@ -212,6 +217,7 @@ renderPipeline();
 renderInsights();
 OPipeline.attachResizeRedraw(stage, model);
 window.addEventListener('resize', () => OPipeline.drawWires(stage, model));
+})();
 </script>
 </body>
 </html>

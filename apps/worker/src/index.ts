@@ -4,6 +4,7 @@ export { ConfigDurableObject } from "./durable-objects/config-do.js";
 import { handleApiRequest } from "./routes/api/index.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
+import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { handleQueueBatch } from "./event-consumer.js";
 import { verifyClaim, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
@@ -15,15 +16,36 @@ export interface Env {
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
-  API_SECRET?: string; // C1 fix: optional API auth key
+  API_SECRET?: string;
+  SEED_TENANT_USER_EMAIL?: string;
+  SEED_TENANT_USER_PASSWORD?: string;
+  SEED_ADMIN_EMAIL?: string;
+  SEED_ADMIN_PASSWORD?: string;
 }
 
-// CORS headers for management UI
-const CORS_HEADERS = {
-  "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-  "Access-Control-Allow-Headers": "Content-Type, Authorization",
-};
+// Allowed CORS origins for credential-based requests
+const ALLOWED_ORIGINS = [
+  "https://app.o11yfleet.com",
+  "https://admin.o11yfleet.com",
+  "https://o11yfleet.com",
+  "https://www.o11yfleet.com",
+  "http://localhost:3000",
+  "http://localhost:8788",
+  "http://127.0.0.1:3000",
+  "http://127.0.0.1:8788",
+];
+
+function getCorsHeaders(request: Request): Record<string, string> {
+  const origin = request.headers.get("Origin") || "";
+  // Allow *.o11yfleet-site.pages.dev for Cloudflare Pages previews
+  const allowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".o11yfleet-site.pages.dev");
+  return {
+    "Access-Control-Allow-Origin": allowed ? origin : (ALLOWED_ORIGINS[0] ?? ""),
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
+    "Access-Control-Allow-Credentials": "true",
+  };
+}
 
 // Headers we use internally — MUST be stripped from external requests
 const INTERNAL_HEADERS = [
@@ -42,60 +64,101 @@ function timingSafeEqual(a: string, b: string): boolean {
   return crypto.subtle.timingSafeEqual(aBuf, bBuf);
 }
 
+function addCorsHeaders(resp: Response, request: Request): Response {
+  const corsResp = new Response(resp.body, resp);
+  const corsHeaders = getCorsHeaders(request);
+  for (const [k, v] of Object.entries(corsHeaders)) {
+    corsResp.headers.set(k, v);
+  }
+  return corsResp;
+}
+
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+    try {
+      return await handleRequest(request, env);
+    } catch (err) {
+      console.error("Unhandled error:", err);
+      const corsHeaders = getCorsHeaders(request);
+      return new Response(JSON.stringify({ error: "Internal server error" }), {
+        status: 500,
+        headers: { "Content-Type": "application/json", ...corsHeaders },
+      });
+    }
+  },
+
+  async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
+    await handleQueueBatch(batch, env as unknown as { FP_ANALYTICS: AnalyticsEngineDataset });
+  },
+};
+
+async function handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     // Health check
     if (url.pathname === "/healthz") {
-      return Response.json({ status: "ok", timestamp: new Date().toISOString() }, { headers: CORS_HEADERS });
+      return Response.json({ status: "ok", timestamp: new Date().toISOString() }, { headers: getCorsHeaders(request) });
     }
 
     // CORS preflight
     if (request.method === "OPTIONS") {
-      return new Response(null, { status: 204, headers: CORS_HEADERS });
+      return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+    }
+
+    // Auth routes — no auth required (they handle their own)
+    if (url.pathname.startsWith("/auth/")) {
+      const resp = await handleAuthRequest(request, env, url);
+      return addCorsHeaders(resp, request);
     }
 
     // API routes — with auth + CORS
     if (url.pathname.startsWith("/api/")) {
-      // Authenticate API requests when API_SECRET is set
+      // Check Bearer token first (programmatic API access)
+      let hasBearerAuth = false;
       if (env.API_SECRET) {
         const auth = request.headers.get("Authorization");
         const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-        if (!token || !timingSafeEqual(token, env.API_SECRET)) {
-          return Response.json({ error: "Unauthorized" }, { status: 401, headers: CORS_HEADERS });
+        if (token && timingSafeEqual(token, env.API_SECRET)) {
+          hasBearerAuth = true;
         }
       }
+
+      // Try session-based auth (cookie)
+      const sessionAuth = await authenticate(request, env);
 
       let resp: Response;
 
       // Admin routes — /api/admin/*
       if (url.pathname.startsWith("/api/admin/")) {
+        // Require either Bearer API_SECRET or admin session
+        if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
+          return addCorsHeaders(Response.json({ error: "Admin access required" }, { status: 403 }), request);
+        }
         resp = await handleAdminRequest(request, env, url);
       }
       // Tenant-scoped routes — /api/v1/*
       else if (url.pathname.startsWith("/api/v1/")) {
-        // Extract tenant context from header (stub auth — will be SSO later)
-        const tenantId = request.headers.get("X-Tenant-Id");
+        // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth)
+        let tenantId: string | null = null;
+        if (sessionAuth?.tenantId) {
+          tenantId = sessionAuth.tenantId;
+        } else if (hasBearerAuth) {
+          tenantId = request.headers.get("X-Tenant-Id");
+        }
         if (!tenantId) {
-          return Response.json(
-            { error: "X-Tenant-Id header required" },
-            { status: 401, headers: CORS_HEADERS },
-          );
+          return addCorsHeaders(Response.json({ error: "Authentication required" }, { status: 401 }), request);
         }
         resp = await handleV1Request(request, env, url, tenantId);
       }
-      // Legacy routes — /api/* (backward compat, delegates to old handler)
+      // Legacy routes — /api/*
       else {
+        if (!hasBearerAuth && !sessionAuth) {
+          return addCorsHeaders(Response.json({ error: "Authentication required" }, { status: 401 }), request);
+        }
         resp = await handleApiRequest(request, env, url);
       }
 
-      // Add CORS headers to all API responses
-      const corsResp = new Response(resp.body, resp);
-      for (const [k, v] of Object.entries(CORS_HEADERS)) {
-        corsResp.headers.set(k, v);
-      }
-      return corsResp;
+      return addCorsHeaders(resp, request);
     }
 
     // OpAMP WebSocket endpoint
@@ -104,12 +167,7 @@ export default {
     }
 
     return new Response("Not found", { status: 404 });
-  },
-
-  async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
-    await handleQueueBatch(batch, env as unknown as { FP_ANALYTICS: AnalyticsEngineDataset });
-  },
-};
+}
 
 /**
  * Phase 3A — Ingress Router for OpAMP WebSocket connections

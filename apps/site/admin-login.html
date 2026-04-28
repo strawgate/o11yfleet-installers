@@ -19,15 +19,45 @@
     </a>
     <h1>Staff sign in</h1>
     <p class="sub">Internal operations console. Access is logged.</p>
-    <form onsubmit="event.preventDefault(); window.location.href='admin/overview.html';">
-      <div class="field"><label>Staff email</label><input class="input" type="email" placeholder="you@o11yfleet.com" required /></div>
-      <div class="field"><label>Password</label><input class="input" type="password" required /></div>
-      <div class="field"><label>2FA code</label><input class="input mono" placeholder="123 456" required /></div>
-      <button type="submit" class="btn btn-primary" style="height: 38px;">Sign in</button>
+    <form id="admin-login-form">
+      <div id="admin-login-error" style="display:none; color: var(--red); font-size: 13px; margin-bottom: 12px; padding: 8px 12px; background: rgba(255,50,50,0.1); border-radius: 6px;"></div>
+      <div class="field"><label for="admin-email">Staff email</label><input id="admin-email" class="input" type="email" placeholder="you@o11yfleet.com" required /></div>
+      <div class="field"><label for="admin-pw">Password</label><input id="admin-pw" class="input" type="password" required /></div>
+      <button type="submit" id="admin-login-btn" class="btn btn-primary" style="height: 38px;">Sign in</button>
     </form>
     <div class="foot">Not a staff member? <a href="login.html">Customer sign in</a></div>
   </div>
 </div>
+<script src="portal-api.js"></script>
 <script src="portal-shell.js"></script>
+<script>
+(function() {
+  var form = document.getElementById('admin-login-form');
+  var btn = document.getElementById('admin-login-btn');
+  var errEl = document.getElementById('admin-login-error');
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    errEl.style.display = 'none';
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+    try {
+      await FP.login(
+        document.getElementById('admin-email').value,
+        document.getElementById('admin-pw').value
+      );
+      if (!FP.user || FP.user.role !== 'admin') {
+        throw new Error('Admin access required');
+      }
+      window.location.href = 'admin/overview.html';
+    } catch (err) {
+      errEl.textContent = err.message || 'Login failed';
+      errEl.style.display = 'block';
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    }
+  });
+})();
+</script>
 </body>
 </html>

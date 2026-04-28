@@ -37,7 +37,7 @@ dev:
 
 # Dev mode — start management UI
 ui:
-    cd apps/web && npx serve public -l 3000 -s
+    cd apps/web && pnpm dev
 
 # Generate protobuf types
 proto-gen:
@@ -161,10 +161,6 @@ tf-validate:
 # Deploy to staging
 deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
-
-# Run benchmarks
-bench:
-    pnpm --filter @o11yfleet/experiments bench
 
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
