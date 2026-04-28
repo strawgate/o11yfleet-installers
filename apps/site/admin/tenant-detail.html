@@ -57,253 +57,38 @@
             <button class="tab active" data-tab="summary">Summary</button>
             <button class="tab" data-tab="usage">Usage</button>
             <button class="tab" data-tab="billing">Billing</button>
-            <button class="tab" data-tab="members">Members <span class="count">6</span></button>
+            <button class="tab" data-tab="members">Members</button>
             <button class="tab" data-tab="events">Events</button>
             <button class="tab" data-tab="actions">Actions</button>
           </div>
 
           <div data-tab-panel="summary" data-tabs-group="t" class="tab-panel active">
-            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Summary stats and notes show sample data</div>
-            </div>
-            <div class="stat-grid mb-6">
-              <div class="stat">
-                <div class="label">Plan</div>
-                <div class="val" style="font-size: 18px">Business</div>
-                <div class="delta">$249/mo</div>
-              </div>
-              <div class="stat">
-                <div class="label">Collectors</div>
-                <div class="val">42</div>
-                <div class="delta up">+3 last 7d</div>
-              </div>
-              <div class="stat">
-                <div class="label">Configurations</div>
-                <div class="val">7</div>
-                <div class="delta">2 git-backed</div>
-              </div>
-              <div class="stat">
-                <div class="label">Members</div>
-                <div class="val">6 / 10</div>
-              </div>
-              <div class="stat">
-                <div class="label">MRR</div>
-                <div class="val">$249</div>
-                <div class="delta">paying since Jan</div>
-              </div>
-            </div>
-            <div class="card card-pad" style="padding: 22px">
-              <h3 style="font-size: 14px; font-weight: 500">Notes (internal)</h3>
-              <textarea class="textarea mt-3">
-Onboarded via product-led signup. Switched from Pro → Business 3w in. Slack channel: #cust-acme. Looking at GitOps integration with their Terraform setup.</textarea
-              >
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Tenant summary — coming soon</p>
             </div>
           </div>
 
           <div data-tab-panel="usage" data-tabs-group="t" class="tab-panel">
-            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Usage tracking shows sample data</div>
-            </div>
-            <div class="card card-pad" style="padding: 22px">
-              <h3 style="font-size: 14px; font-weight: 500">Plan limits</h3>
-              <div class="mt-4" style="display: flex; flex-direction: column; gap: 14px">
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>Managed configurations</span><span class="t-mono">7 / 25</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 28%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>GitHub repos</span><span class="t-mono">2 / 3</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 67%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>Team members</span><span class="t-mono">6 / 10</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 60%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>API requests (30d)</span><span class="t-mono">142,331</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 38%"></i></div>
-                </div>
-              </div>
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Usage tracking — coming soon</p>
             </div>
           </div>
 
           <div data-tab-panel="billing" data-tabs-group="t" class="tab-panel">
-            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Billing data shows sample invoices</div>
-            </div>
-            <div class="dt-card">
-              <table class="dt">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Description</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="meta">Mar 27, 2026</td>
-                    <td>Business · monthly</td>
-                    <td class="mono-cell">$249.00</td>
-                    <td><span class="tag tag-ok">paid</span></td>
-                  </tr>
-                  <tr>
-                    <td class="meta">Feb 27, 2026</td>
-                    <td>Business · monthly</td>
-                    <td class="mono-cell">$249.00</td>
-                    <td><span class="tag tag-ok">paid</span></td>
-                  </tr>
-                  <tr>
-                    <td class="meta">Jan 27, 2026</td>
-                    <td>Pro → Business prorated</td>
-                    <td class="mono-cell">$187.00</td>
-                    <td><span class="tag tag-ok">paid</span></td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Billing details — coming soon</p>
             </div>
           </div>
 
           <div data-tab-panel="members" data-tabs-group="t" class="tab-panel">
-            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Member list shows sample data</div>
-            </div>
-            <div class="dt-card">
-              <table class="dt">
-                <thead>
-                  <tr>
-                    <th>Member</th>
-                    <th>Role</th>
-                    <th>Last active</th>
-                    <th>2FA</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="name">
-                      Maya Patel <span class="meta">— maya@acmeplatform.com</span>
-                    </td>
-                    <td>
-                      <span
-                        class="tag"
-                        style="border-color: var(--accent-line); color: var(--accent)"
-                        >Owner</span
-                      >
-                    </td>
-                    <td class="meta">now</td>
-                    <td><span class="tag tag-ok">on</span></td>
-                  </tr>
-                  <tr>
-                    <td class="name">Jordan Nguyen <span class="meta">— jordan@…</span></td>
-                    <td><span class="tag">Admin</span></td>
-                    <td class="meta">12m</td>
-                    <td><span class="tag tag-ok">on</span></td>
-                  </tr>
-                  <tr>
-                    <td class="name">Sam Kim <span class="meta">— sam@…</span></td>
-                    <td><span class="tag">Editor</span></td>
-                    <td class="meta">2h</td>
-                    <td><span class="tag tag-ok">on</span></td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Team members — coming soon</p>
             </div>
           </div>
 
           <div data-tab-panel="events" data-tabs-group="t" class="tab-panel">
-            <div class="banner warn mb-4" style="font-size: 12px; padding: 8px 14px">
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Audit events show sample data</div>
-            </div>
-            <div class="dt-card">
-              <table class="dt">
-                <thead>
-                  <tr>
-                    <th>When</th>
-                    <th>Actor</th>
-                    <th>Action</th>
-                    <th>Target</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="meta">6m</td>
-                    <td>maya</td>
-                    <td>rollout.start</td>
-                    <td class="mono-cell">prod-ingress@v14</td>
-                  </tr>
-                  <tr>
-                    <td class="meta">2h</td>
-                    <td>github</td>
-                    <td>config.sync</td>
-                    <td class="mono-cell">k8s-daemon@a91f3b2</td>
-                  </tr>
-                  <tr>
-                    <td class="meta">5h</td>
-                    <td>sam</td>
-                    <td>member.invite</td>
-                    <td class="mono-cell">priya@acmeplatform.com</td>
-                  </tr>
-                </tbody>
-              </table>
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Audit events — coming soon</p>
             </div>
           </div>
 
@@ -419,16 +204,7 @@ Onboarded via product-led signup. Switched from Pro → Business 3w in. Slack ch
               current: "tenants",
               crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: t.name }],
             });
-            // Update stat cards
-            const stats = document.querySelectorAll(".stat-grid .stat .val");
-            if (stats[0]) stats[0].textContent = t.plan;
-            if (stats[1]) stats[1].textContent = "—"; // collector count not available yet
-            if (stats[3]) stats[3].textContent = "— / —"; // members not available yet
-
-            // Load configs
-            const configData = await FP.get("/api/admin/tenants/" + tenantId + "/configurations");
-            const configs = configData.configurations || [];
-            if (stats[2]) stats[2].textContent = configs.length;
+            // Update stat cards (removed — summary tab now shows coming-soon state)
 
             // "Open in customer portal" button
             const openBtn = document.querySelector(".actions .btn-secondary:last-child");

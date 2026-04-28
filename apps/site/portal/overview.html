@@ -42,22 +42,7 @@
           </div>
 
           <!-- AI Insights feed -->
-          <div class="dt-card mb-6" style="position: relative">
-            <div
-              class="banner warn"
-              style="margin: 0; border-radius: 8px 8px 0 0; border-bottom: 1px solid var(--border)"
-            >
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div>
-                <div class="b-title">Prototype — AI Insights</div>
-                <div class="b-body">
-                  This section shows sample data. AI analysis is not yet connected.
-                </div>
-              </div>
-            </div>
+          <div class="dt-card mb-6">
             <div class="dt-toolbar">
               <strong
                 style="font-size: 13.5px; display: inline-flex; align-items: center; gap: 8px"
@@ -79,105 +64,11 @@
                 >
                 Insights
               </strong>
-              <span class="count">5 active · 2 dismissed today</span>
-              <div class="spacer"></div>
-              <span class="t-muted text-sm" style="margin-right: 8px">last scan 4m ago</span>
-              <button class="btn btn-ghost btn-sm">Re-scan</button>
             </div>
-            <div style="padding: 14px; display: flex; flex-direction: column; gap: 10px">
-              <div class="insight-callout err">
-                <div class="ico">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <circle cx="8" cy="8" r="6" />
-                    <path d="M6 6l4 4M10 6l-4 4" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <div class="body">
-                  <div class="t">Remote write rejecting 2.3% of metric samples</div>
-                  <div class="d">
-                    k8s-daemon pipelines to <span class="t-mono">prometheusrw</span> are dropping
-                    samples for out-of-order timestamps. Likely caused by clock drift on 3 nodes.
-                  </div>
-                  <div class="src">
-                    <span class="ai-glyph">✦ AI insight</span><span class="sep">·</span
-                    ><span>spans 7 collectors</span><span class="sep">·</span><span>6m ago</span>
-                  </div>
-                </div>
-                <div class="actions">
-                  <a href="agent-detail.html?a=1" class="btn btn-secondary btn-sm">Investigate</a>
-                  <button class="dismiss">×</button>
-                </div>
-              </div>
-              <div class="insight-callout warn">
-                <div class="ico">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <path d="M8 2L1.5 13.5h13zM8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <div class="body">
-                  <div class="t">memory_limiter trips daily at 03:14 UTC on ingest-gateway</div>
-                  <div class="d">
-                    Spikes correlate with nightly batch jobs from prod-east. Bumping
-                    <span class="t-mono">limit_mib</span> to 6144 should stop drops without changing
-                    the rest of the pipeline.
-                  </div>
-                  <div class="src">
-                    <span class="ai-glyph">✦ AI insight</span><span class="sep">·</span
-                    ><span>otel-gateway-01.iad</span><span class="sep">·</span><span>22m ago</span>
-                  </div>
-                </div>
-                <div class="actions">
-                  <a href="agent-detail.html?a=3" class="btn btn-secondary btn-sm">Investigate</a>
-                  <button class="dismiss">×</button>
-                </div>
-              </div>
-              <div class="insight-callout info">
-                <div class="ico">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <circle cx="8" cy="8" r="6" />
-                    <path d="M8 5v3M8 11v.01" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <div class="body">
-                  <div class="t">Tail-sampling decision_wait can drop from 10s → 6s</div>
-                  <div class="d">
-                    Current setting catches 94% of error spans. Dropping wait time would barely
-                    change recall and free ~1.2GB heap on the gateway.
-                  </div>
-                  <div class="src">
-                    <span class="ai-glyph">✦ AI suggestion</span><span class="sep">·</span
-                    ><span>otel-gateway-01.iad · p2</span><span class="sep">·</span
-                    ><span>1h ago</span>
-                  </div>
-                </div>
-                <div class="actions">
-                  <a href="agent-detail.html?a=3" class="btn btn-secondary btn-sm">Apply</a>
-                  <button class="dismiss">×</button>
-                </div>
-              </div>
-              <div class="insight-callout info">
-                <div class="ico">
-                  <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                    <circle cx="8" cy="8" r="6" />
-                    <path d="M8 5v3M8 11v.01" stroke-linecap="round" />
-                  </svg>
-                </div>
-                <div class="body">
-                  <div class="t">k8s_events scoped to all 37 namespaces</div>
-                  <div class="d">
-                    Only 4 namespaces produced events in the last 7d. Limiting the receiver scope
-                    would cut log volume by ~80%.
-                  </div>
-                  <div class="src">
-                    <span class="ai-glyph">✦ AI suggestion</span><span class="sep">·</span
-                    ><span>k8s-daemon (12 collectors)</span><span class="sep">·</span
-                    ><span>3h ago</span>
-                  </div>
-                </div>
-                <div class="actions">
-                  <a href="agent-detail.html?a=1" class="btn btn-secondary btn-sm">Review</a>
-                  <button class="dismiss">×</button>
-                </div>
+            <div style="padding: 48px 24px; text-align: center">
+              <div class="t-muted">AI-powered insights are coming soon.</div>
+              <div class="t-muted text-sm mt-2">
+                Anomaly detection, optimization suggestions, and drift analysis will appear here.
               </div>
             </div>
           </div>
@@ -200,8 +91,8 @@
             </div>
             <div class="stat">
               <div class="label">Configurations</div>
-              <div class="val">7</div>
-              <div class="delta">2 git-backed</div>
+              <div class="val">—</div>
+              <div class="delta"></div>
             </div>
             <div class="stat" id="stat-rollouts">
               <div class="label">Active rollouts</div>
@@ -212,197 +103,49 @@
 
           <div style="display: grid; grid-template-columns: 1.6fr 1fr; gap: 18px">
             <div class="dt-card" style="position: relative">
-              <div
-                class="banner warn"
-                style="
-                  margin: 0;
-                  border-radius: 8px 8px 0 0;
-                  border-bottom: 1px solid var(--border);
-                  font-size: 12px;
-                  padding: 8px 14px;
-                "
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  style="width: 14px; height: 14px"
-                >
-                  <path d="M8 2L1.5 13.5h13z" />
-                  <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-                </svg>
-                <div><strong>Prototype</strong> — Rollouts not yet implemented</div>
-              </div>
               <div class="dt-toolbar">
-                <strong style="font-size: 13.5px">Active rollout</strong>
-                <span class="count">prod-ingress · v13 → v14</span>
-                <div class="spacer"></div>
-                <a href="rollouts.html" class="btn btn-ghost btn-sm">View all</a>
+                <strong style="font-size: 13.5px">Active rollouts</strong>
               </div>
-              <div style="padding: 18px">
-                <div class="flex-row justify-between mb-3">
-                  <span class="t-mono text-sm"
-                    >via commit <span style="color: var(--accent)">a91f3b2</span> · maya · 6m
-                    ago</span
-                  >
-                  <span class="tag" style="border-color: var(--accent-line); color: var(--accent)"
-                    ><span class="dot dot-ok dot-pulse"></span>rolling</span
-                  >
-                </div>
-                <div class="bar"><i style="width: 78%"></i></div>
-                <div
-                  style="
-                    margin-top: 14px;
-                    display: grid;
-                    grid-template-columns: repeat(3, 1fr);
-                    gap: 12px;
-                    font-family: var(--font-mono);
-                    font-size: 12px;
-                  "
-                >
-                  <div>
-                    <div class="t-muted text-sm">APPLIED</div>
-                    <div class="t-ok" style="font-size: 18px; margin-top: 2px">33</div>
-                  </div>
-                  <div>
-                    <div class="t-muted text-sm">PENDING</div>
-                    <div style="font-size: 18px; margin-top: 2px">8</div>
-                  </div>
-                  <div>
-                    <div class="t-muted text-sm">FAILED</div>
-                    <div style="font-size: 18px; margin-top: 2px">0</div>
-                  </div>
+              <div style="padding: 48px 24px; text-align: center">
+                <div class="t-muted">Rollout tracking coming soon.</div>
+                <div class="t-muted text-sm mt-2">
+                  Active and historical rollouts will appear here.
                 </div>
               </div>
             </div>
             <div class="dt-card" style="position: relative">
-              <div
-                class="banner warn"
-                style="
-                  margin: 0;
-                  border-radius: 8px 8px 0 0;
-                  border-bottom: 1px solid var(--border);
-                  font-size: 12px;
-                  padding: 8px 14px;
-                "
-              >
-                <svg
-                  viewBox="0 0 16 16"
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.6"
-                  style="width: 14px; height: 14px"
-                >
-                  <path d="M8 2L1.5 13.5h13z" />
-                  <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-                </svg>
-                <div><strong>Prototype</strong> — Plan limits not yet enforced</div>
-              </div>
               <div class="dt-toolbar">
                 <strong style="font-size: 13.5px">Plan usage</strong>
                 <div class="spacer"></div>
                 <a href="billing.html" class="btn btn-ghost btn-sm">Manage</a>
               </div>
-              <div style="padding: 18px; display: flex; flex-direction: column; gap: 16px">
+              <div
+                style="padding: 18px; display: flex; flex-direction: column; gap: 16px"
+                id="plan-usage"
+              >
                 <div>
                   <div class="flex-row justify-between text-sm">
-                    <span>Managed configurations</span><span class="t-mono">7 / 25</span>
+                    <span>Managed configurations</span
+                    ><span class="t-mono" id="plan-configs">— / —</span>
                   </div>
-                  <div class="bar mt-2"><i style="width: 28%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>GitHub repos</span><span class="t-mono">2 / 3</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 67%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm">
-                    <span>Team members</span><span class="t-mono">6 / 10</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 60%"></i></div>
+                  <div class="bar mt-2"><i id="plan-configs-bar" style="width: 0%"></i></div>
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="dt-card mt-6" style="position: relative">
-            <div
-              class="banner warn"
-              style="
-                margin: 0;
-                border-radius: 8px 8px 0 0;
-                border-bottom: 1px solid var(--border);
-                font-size: 12px;
-                padding: 8px 14px;
-              "
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Activity log shows sample data</div>
-            </div>
+          <div class="dt-card mt-6">
             <div class="dt-toolbar">
               <strong style="font-size: 13.5px">Recent activity</strong>
               <div class="spacer"></div>
-              <a href="audit.html" class="btn btn-ghost btn-sm">Open audit log</a>
+              <span class="t-muted text-sm">Audit log coming soon</span>
             </div>
-            <table class="dt">
-              <thead>
-                <tr>
-                  <th>When</th>
-                  <th>Actor</th>
-                  <th>Action</th>
-                  <th>Target</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="meta">6m ago</td>
-                  <td>maya</td>
-                  <td>started rollout</td>
-                  <td class="mono-cell">prod-ingress@v14</td>
-                  <td><span class="tag tag-ok">success</span></td>
-                </tr>
-                <tr>
-                  <td class="meta">14m ago</td>
-                  <td>—</td>
-                  <td>collector offline</td>
-                  <td class="mono-cell">otel-gateway-02</td>
-                  <td><span class="tag tag-err">err</span></td>
-                </tr>
-                <tr>
-                  <td class="meta">1h ago</td>
-                  <td>jordan</td>
-                  <td>edited config (UI)</td>
-                  <td class="mono-cell">staging-edge</td>
-                  <td><span class="tag">v8 → v9</span></td>
-                </tr>
-                <tr>
-                  <td class="meta">2h ago</td>
-                  <td>github</td>
-                  <td>commit synced</td>
-                  <td class="mono-cell">k8s-daemon@a91f3b2</td>
-                  <td><span class="tag tag-ok">applied</span></td>
-                </tr>
-                <tr>
-                  <td class="meta">5h ago</td>
-                  <td>sam</td>
-                  <td>invited member</td>
-                  <td class="mono-cell">priya@acmeplatform.com</td>
-                  <td><span class="tag">pending</span></td>
-                </tr>
-              </tbody>
-            </table>
+            <div style="padding: 48px 24px; text-align: center">
+              <div class="t-muted">Activity log coming soon.</div>
+              <div class="t-muted text-sm mt-2">
+                Configuration changes, rollout events, and team actions will appear here.
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -453,6 +196,18 @@
             if (statEls[3]) {
               statEls[3].querySelector(".val").textContent = data.configs_count;
               statEls[3].querySelector(".delta").textContent = "";
+            }
+
+            // Plan usage card
+            var planConfigs = document.getElementById("plan-configs");
+            var planConfigsBar = document.getElementById("plan-configs-bar");
+            if (planConfigs && data.tenant) {
+              var max = data.tenant.max_configs || 0;
+              planConfigs.textContent = data.configs_count + " / " + max;
+              if (planConfigsBar && max > 0) {
+                planConfigsBar.style.width =
+                  Math.min(100, Math.round((data.configs_count / max) * 100)) + "%";
+              }
             }
           } catch (e) {
             console.error("Failed to load overview", e);

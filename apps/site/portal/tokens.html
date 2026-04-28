@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>API tokens — O11yFleet</title>
+    <title>Enrollment tokens — O11yFleet</title>
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="../portal-shared.css" />
   </head>
@@ -15,57 +15,61 @@
         <div class="main-wide">
           <div class="page-head">
             <div>
-              <h1>API tokens</h1>
-              <div class="sub">Used by collectors to authenticate, and by CI to call the API.</div>
+              <h1>Enrollment tokens</h1>
+              <div class="sub">
+                Tokens used by collectors to enroll and authenticate with configurations.
+              </div>
             </div>
             <div class="actions">
               <button class="btn btn-primary btn-sm" data-open-modal="new-tok">New token</button>
             </div>
           </div>
+          <div id="token-created" class="banner info mb-4" style="display: none">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M3 8.5l3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
+            </svg>
+            <div style="flex: 1">
+              <div class="b-title">Token created — copy it now, it won't be shown again</div>
+              <div
+                class="b-body"
+                style="display: flex; align-items: center; gap: 8px; margin-top: 4px"
+              >
+                <code
+                  id="token-created-value"
+                  class="t-mono"
+                  style="font-size: 12px; word-break: break-all"
+                ></code>
+                <button class="btn btn-ghost btn-sm" id="token-copy-btn">Copy</button>
+              </div>
+            </div>
+            <button
+              class="btn btn-ghost btn-sm"
+              onclick="document.getElementById('token-created').style.display = 'none'"
+            >
+              Dismiss
+            </button>
+          </div>
           <div class="dt-card">
+            <div class="dt-toolbar">
+              <span class="count" id="token-count">Loading…</span>
+              <div class="spacer"></div>
+            </div>
             <table class="dt">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Token</th>
-                  <th>Scope</th>
-                  <th>Last used</th>
+                  <th>Label</th>
+                  <th>Configuration</th>
+                  <th>Status</th>
+                  <th>Expires</th>
                   <th>Created</th>
                   <th></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="token-rows">
                 <tr>
-                  <td class="name">prod-collectors</td>
-                  <td class="mono-cell">
-                    tok_live_a91f3b…<button class="copy" data-copy="tok_live_a91f3b2c8e">
-                      copy
-                    </button>
+                  <td colspan="6" class="meta" style="text-align: center; padding: 32px">
+                    Loading…
                   </td>
-                  <td><span class="tag">collector</span></td>
-                  <td class="meta">2s ago</td>
-                  <td class="meta">Mar 12</td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td>
-                </tr>
-                <tr>
-                  <td class="name">staging-collectors</td>
-                  <td class="mono-cell">
-                    tok_live_7c2ed1…<button class="copy" data-copy="tok_live_7c2ed11">copy</button>
-                  </td>
-                  <td><span class="tag">collector</span></td>
-                  <td class="meta">1m ago</td>
-                  <td class="meta">Feb 4</td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td>
-                </tr>
-                <tr>
-                  <td class="name">ci-deploy</td>
-                  <td class="mono-cell">
-                    tok_live_3a01f9…<button class="copy" data-copy="tok_live_3a01f9e">copy</button>
-                  </td>
-                  <td><span class="tag">api · admin</span></td>
-                  <td class="meta">3h ago</td>
-                  <td class="meta">Jan 20</td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">Revoke</button></td>
                 </tr>
               </tbody>
             </table>
@@ -76,31 +80,35 @@
     <div class="modal-backdrop" id="new-tok">
       <div class="modal">
         <div class="modal-head">
-          <h3>New API token</h3>
+          <h3>New enrollment token</h3>
           <button class="modal-close" data-close-modal>×</button>
         </div>
         <div class="modal-body">
           <div class="field">
-            <label>Name</label><input class="input" placeholder="e.g. prod-collectors" />
+            <label>Configuration</label>
+            <select class="select" id="tok-config-select">
+              <option value="">Loading configurations…</option>
+            </select>
           </div>
           <div class="field">
-            <label>Scope</label
-            ><select class="select">
-              <option>collector — connect a collector</option>
-              <option>api · read</option>
-              <option>api · admin</option>
+            <label>Label</label
+            ><input class="input" id="tok-label" placeholder="e.g. prod-collectors" />
+          </div>
+          <div class="field">
+            <label>Expiry</label>
+            <select class="select" id="tok-expiry">
+              <option value="">No expiry</option>
+              <option value="24">24 hours</option>
+              <option value="168">7 days</option>
+              <option value="720">30 days</option>
+              <option value="2160">90 days</option>
+              <option value="8760">1 year</option>
             </select>
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal>Cancel</button
-          ><button
-            class="btn btn-primary"
-            data-close-modal
-            onclick="toast('Not implemented', 'API token creation is not yet available.', 'warn')"
-          >
-            Create token
-          </button>
+          <button class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button class="btn btn-primary" id="create-token-btn">Create token</button>
         </div>
       </div>
     </div>
@@ -110,15 +118,175 @@
     <script>
       FB.shell({
         current: "tokens",
-        crumbs: [{ label: "Setup" }, { label: "API tokens" }],
-        prototype:
-          "Tokens are hardcoded. API token management requires backend support (issue #17).",
+        crumbs: [{ label: "Setup" }, { label: "Enrollment tokens" }],
       });
-    </script>
-    <script>
+
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
+
+        var configs = [];
+        var tbody = document.getElementById("token-rows");
+        var countEl = document.getElementById("token-count");
+
+        function esc(s) {
+          var d = document.createElement("div");
+          d.textContent = s || "";
+          return d.innerHTML;
+        }
+
+        function tokenStatus(tok) {
+          if (tok.revoked_at) return '<span class="tag tag-err">revoked</span>';
+          if (tok.expires_at && new Date(tok.expires_at) < new Date())
+            return '<span class="tag tag-warn">expired</span>';
+          return '<span class="tag tag-ok"><span class="dot dot-ok"></span>active</span>';
+        }
+
+        function isActive(tok) {
+          return !tok.revoked_at && (!tok.expires_at || new Date(tok.expires_at) >= new Date());
+        }
+
+        async function loadTokens() {
+          try {
+            var configData = await FP.get("/api/v1/configurations");
+            configs = configData.configurations || [];
+            var allTokens = [];
+
+            for (var i = 0; i < configs.length; i++) {
+              try {
+                var data = await FP.get(
+                  "/api/v1/configurations/" + configs[i].id + "/enrollment-tokens",
+                );
+                var tokens = data.tokens || [];
+                tokens.forEach(function (t) {
+                  t._configName = configs[i].name;
+                  t._configId = configs[i].id;
+                });
+                allTokens = allTokens.concat(tokens);
+              } catch (e) {
+                /* skip */
+              }
+            }
+
+            var active = allTokens.filter(isActive).length;
+            countEl.textContent =
+              allTokens.length +
+              " token" +
+              (allTokens.length !== 1 ? "s" : "") +
+              " · " +
+              active +
+              " active";
+
+            // Populate config selector
+            var sel = document.getElementById("tok-config-select");
+            sel.innerHTML = configs
+              .map(function (c) {
+                return '<option value="' + esc(c.id) + '">' + esc(c.name) + "</option>";
+              })
+              .join("");
+            if (configs.length === 0) {
+              sel.innerHTML = '<option value="">No configurations available</option>';
+            }
+
+            if (allTokens.length === 0) {
+              tbody.innerHTML =
+                '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;">No enrollment tokens yet. Create one to let collectors connect.</td></tr>';
+              return;
+            }
+
+            tbody.innerHTML = allTokens
+              .map(function (t) {
+                var revokeBtn = isActive(t)
+                  ? '<button class="btn btn-ghost btn-sm" onclick="revokeToken(\'' +
+                    esc(t._configId) +
+                    "','" +
+                    esc(t.id) +
+                    "')\">Revoke</button>"
+                  : "";
+                return (
+                  "<tr>" +
+                  '<td class="name">' +
+                  esc(t.label || "—") +
+                  "</td>" +
+                  '<td class="mono-cell"><a href="configuration-detail.html?id=' +
+                  esc(t._configId) +
+                  '" style="color:var(--accent)">' +
+                  esc(t._configName) +
+                  "</a></td>" +
+                  "<td>" +
+                  tokenStatus(t) +
+                  "</td>" +
+                  '<td class="meta">' +
+                  (t.expires_at ? FP.relTime(t.expires_at) : "Never") +
+                  "</td>" +
+                  '<td class="meta">' +
+                  FP.relTime(t.created_at) +
+                  "</td>" +
+                  '<td class="row-actions">' +
+                  revokeBtn +
+                  "</td>" +
+                  "</tr>"
+                );
+              })
+              .join("");
+          } catch (e) {
+            console.error("Failed to load tokens", e);
+            tbody.innerHTML =
+              '<tr><td colspan="6" class="meta" style="text-align:center;padding:32px;color:var(--err)">Failed to load tokens</td></tr>';
+          }
+        }
+
+        window.revokeToken = async function (configId, tokenId) {
+          if (!confirm("Revoke this token? Collectors using it will no longer be able to enroll."))
+            return;
+          try {
+            await FP.del("/api/v1/configurations/" + configId + "/enrollment-tokens/" + tokenId);
+            toast("Token revoked", "The enrollment token has been revoked.");
+            loadTokens();
+          } catch (e) {
+            toast("Revoke failed", e.message || "Failed to revoke token", "err");
+          }
+        };
+
+        document.getElementById("create-token-btn").addEventListener("click", async function () {
+          var configId = document.getElementById("tok-config-select").value;
+          if (!configId) {
+            toast("Error", "Select a configuration first", "err");
+            return;
+          }
+          var label = document.getElementById("tok-label").value.trim();
+          var expiryHours = document.getElementById("tok-expiry").value;
+          var body = {};
+          if (label) body.label = label;
+          if (expiryHours) body.expires_in_hours = parseInt(expiryHours, 10);
+          try {
+            var result = await FP.post(
+              "/api/v1/configurations/" + configId + "/enrollment-token",
+              body,
+            );
+            closeModal("new-tok");
+            document.getElementById("tok-label").value = "";
+            // Show the created token
+            var banner = document.getElementById("token-created");
+            var valueEl = document.getElementById("token-created-value");
+            valueEl.textContent = result.token;
+            banner.style.display = "";
+            // Wire copy button
+            document.getElementById("token-copy-btn").onclick = async function () {
+              try {
+                await navigator.clipboard.writeText(result.token);
+                toast("Copied", "Token copied to clipboard");
+              } catch (_) {
+                toast("Copy failed", "Could not copy to clipboard", "err");
+              }
+            };
+            loadTokens();
+          } catch (e) {
+            toast("Create failed", e.message || "Failed to create token", "err");
+          }
+        });
+
+        loadTokens();
       })();
     </script>
   </body>

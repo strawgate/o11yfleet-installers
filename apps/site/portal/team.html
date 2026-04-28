@@ -16,7 +16,7 @@
           <div class="page-head">
             <div>
               <h1>Team</h1>
-              <div class="sub">6 of 10 seats used on the Business plan.</div>
+              <div class="sub">Loading…</div>
             </div>
             <div class="actions">
               <button class="btn btn-primary btn-sm" data-open-modal="invite">Invite member</button>
@@ -24,7 +24,7 @@
           </div>
           <div class="dt-card">
             <div class="dt-toolbar">
-              <span class="count">6 members · 1 pending</span>
+              <span class="count" id="team-count">Loading…</span>
               <div class="spacer"></div>
             </div>
             <table class="dt">
@@ -32,105 +32,15 @@
                 <tr>
                   <th>Member</th>
                   <th>Role</th>
-                  <th>Last active</th>
-                  <th>2FA</th>
+                  <th>Joined</th>
                   <th></th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody id="team-rows">
                 <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">MP</span>
-                      <div>
-                        <div class="name">Maya Patel</div>
-                        <div class="meta">maya@acmeplatform.com</div>
-                      </div>
-                    </div>
+                  <td colspan="4" class="meta" style="text-align: center; padding: 32px">
+                    Loading…
                   </td>
-                  <td>
-                    <span class="tag" style="border-color: var(--accent-line); color: var(--accent)"
-                      >Owner</span
-                    >
-                  </td>
-                  <td class="meta">now</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">JN</span>
-                      <div>
-                        <div class="name">Jordan Nguyen</div>
-                        <div class="meta">jordan@acmeplatform.com</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="tag">Admin</span></td>
-                  <td class="meta">12m ago</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">SK</span>
-                      <div>
-                        <div class="name">Sam Kim</div>
-                        <div class="meta">sam@acmeplatform.com</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="tag">Editor</span></td>
-                  <td class="meta">2h ago</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">RT</span>
-                      <div>
-                        <div class="name">Riya Tan</div>
-                        <div class="meta">riya@acmeplatform.com</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="tag">Editor</span></td>
-                  <td class="meta">1d ago</td>
-                  <td><span class="tag tag-warn">off</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">AB</span>
-                      <div>
-                        <div class="name">Alex Brooks</div>
-                        <div class="meta">alex@acmeplatform.com</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="tag">Viewer</span></td>
-                  <td class="meta">3d ago</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">…</button></td>
-                </tr>
-                <tr>
-                  <td>
-                    <div class="flex-row gap-sm">
-                      <span class="avatar">PM</span>
-                      <div>
-                        <div class="name">priya@acmeplatform.com</div>
-                        <div class="meta">invited 5h ago</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td><span class="tag">Editor</span></td>
-                  <td class="meta">—</td>
-                  <td class="meta">—</td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">Resend</button></td>
                 </tr>
               </tbody>
             </table>
@@ -147,7 +57,12 @@
                 Available on Business and Enterprise. Enforce SSO for everyone in the workspace.
               </div>
             </div>
-            <button class="btn btn-secondary btn-sm">Configure</button>
+            <button
+              class="btn btn-secondary btn-sm"
+              onclick="toast('Coming soon', 'SSO configuration is not yet available.', 'warn')"
+            >
+              Configure
+            </button>
           </div>
         </div>
       </main>
@@ -164,8 +79,8 @@
             ><input class="input" type="email" placeholder="teammate@company.com" />
           </div>
           <div class="field">
-            <label>Role</label
-            ><select class="select">
+            <label>Role</label>
+            <select class="select">
               <option>Editor — can change configs</option>
               <option>Admin — manage team & billing</option>
               <option>Viewer — read-only</option>
@@ -173,11 +88,11 @@
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal>Cancel</button
-          ><button
+          <button class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button
             class="btn btn-primary"
             data-close-modal
-            onclick="toast('Not implemented', 'Team invitations are not yet available.', 'warn')"
+            onclick="toast('Coming soon', 'Team invitations are not yet available.', 'warn')"
           >
             Send invite
           </button>
@@ -188,17 +103,84 @@
     <script src="../portal-shell.js"></script>
     <script src="../portal-shell-render.js"></script>
     <script>
-      FB.shell({
-        current: "team",
-        crumbs: [{ label: "Settings" }, { label: "Team" }],
-        prototype:
-          "Team members are hardcoded. Team management requires the RBAC/Team API (issue #16).",
-      });
-    </script>
-    <script>
+      FB.shell({ current: "team", crumbs: [{ label: "Settings" }, { label: "Team" }] });
+
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
+
+        var tbody = document.getElementById("team-rows");
+        var countEl = document.getElementById("team-count");
+        var subEl = document.querySelector(".page-head .sub");
+
+        function esc(s) {
+          var d = document.createElement("div");
+          d.textContent = s || "";
+          return d.innerHTML;
+        }
+
+        function initials(name) {
+          return name
+            .split(" ")
+            .map(function (w) {
+              return w[0];
+            })
+            .slice(0, 2)
+            .join("")
+            .toUpperCase();
+        }
+
+        function roleTag(role) {
+          if (role === "admin")
+            return '<span class="tag" style="border-color:var(--accent-line);color:var(--accent)">Admin</span>';
+          return '<span class="tag">Member</span>';
+        }
+
+        try {
+          var data = await FP.get("/api/v1/team");
+          var members = data.members || [];
+          countEl.textContent = members.length + " member" + (members.length !== 1 ? "s" : "");
+          var plan = (FP.user && FP.user.plan) || "";
+          subEl.textContent =
+            members.length +
+            " member" +
+            (members.length !== 1 ? "s" : "") +
+            (plan ? " on the " + plan.charAt(0).toUpperCase() + plan.slice(1) + " plan." : ".");
+
+          if (members.length === 0) {
+            tbody.innerHTML =
+              '<tr><td colspan="4" class="meta" style="text-align:center;padding:32px">No team members yet.</td></tr>';
+            return;
+          }
+
+          tbody.innerHTML = members
+            .map(function (m) {
+              var name = m.display_name || m.email;
+              return (
+                "<tr>" +
+                '<td><div class="flex-row gap-sm"><span class="avatar">' +
+                esc(initials(name)) +
+                '</span><div><div class="name">' +
+                esc(name) +
+                '</div><div class="meta">' +
+                esc(m.email) +
+                "</div></div></div></td>" +
+                "<td>" +
+                roleTag(m.role) +
+                "</td>" +
+                '<td class="meta">' +
+                FP.relTime(m.created_at) +
+                "</td>" +
+                "<td></td>" +
+                "</tr>"
+              );
+            })
+            .join("");
+        } catch (e) {
+          console.error("Failed to load team", e);
+          tbody.innerHTML =
+            '<tr><td colspan="4" class="meta" style="text-align:center;padding:32px;color:var(--err)">Failed to load team members</td></tr>';
+        }
       })();
     </script>
   </body>

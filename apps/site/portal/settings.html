@@ -51,30 +51,6 @@
           </div>
 
           <div class="card card-pad mt-6" style="padding: 22px; position: relative">
-            <div
-              class="banner warn"
-              style="
-                margin: 0 -22px;
-                margin-top: -22px;
-                padding: 8px 14px;
-                border-radius: 8px 8px 0 0;
-                border-bottom: 1px solid var(--border);
-                font-size: 12px;
-                margin-bottom: 16px;
-              "
-            >
-              <svg
-                viewBox="0 0 16 16"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="1.6"
-                style="width: 14px; height: 14px"
-              >
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div><strong>Prototype</strong> — Notification settings are not yet functional</div>
-            </div>
             <h3 style="font-size: 15px; font-weight: 500">Notifications</h3>
             <p class="t-muted text-sm mt-2">
               Where rollout outcomes, drift alerts, and offline collectors are announced.
@@ -184,8 +160,18 @@
         // Delete workspace button
         document
           .querySelector(".danger-zone .btn-danger-solid")
-          .addEventListener("click", function () {
-            toast("Not implemented", "Workspace deletion is not yet available.", "warn");
+          .addEventListener("click", async function () {
+            if (!confirm("Are you sure you want to delete this workspace? This is irreversible."))
+              return;
+            try {
+              await FP.del("/api/v1/tenant");
+              toast("Workspace deleted", "Redirecting…");
+              setTimeout(function () {
+                window.location.href = "../index.html";
+              }, 1200);
+            } catch (e) {
+              toast("Delete failed", e.message || "Failed to delete workspace", "err");
+            }
           });
 
         // Pause rollouts / Revoke tokens buttons

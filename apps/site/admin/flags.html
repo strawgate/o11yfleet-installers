@@ -20,71 +20,9 @@
               <h1>Feature flags</h1>
               <div class="sub">Gate features by plan, tenant, or percentage.</div>
             </div>
-            <div class="actions"><button class="btn btn-primary btn-sm">New flag</button></div>
           </div>
-          <div class="dt-card">
-            <table class="dt">
-              <thead>
-                <tr>
-                  <th>Flag</th>
-                  <th>Targeting</th>
-                  <th>Rollout</th>
-                  <th>Updated</th>
-                  <th>State</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="name">tail_sampling_v2</td>
-                  <td class="meta">plan ≥ Business</td>
-                  <td class="mono-cell">100%</td>
-                  <td class="meta">9m ago · sam</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                </tr>
-                <tr>
-                  <td class="name">github_managed_configs</td>
-                  <td class="meta">plan ≥ Pro</td>
-                  <td class="mono-cell">100%</td>
-                  <td class="meta">14d ago</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                </tr>
-                <tr>
-                  <td class="name">opamp_3_0_preview</td>
-                  <td class="meta">tenants: globex, initech</td>
-                  <td class="mono-cell">2 / 1284</td>
-                  <td class="meta">3d ago</td>
-                  <td><span class="tag tag-warn">canary</span></td>
-                </tr>
-                <tr>
-                  <td class="name">slim_sidebar</td>
-                  <td class="meta">all</td>
-                  <td class="mono-cell">10%</td>
-                  <td class="meta">1d ago · rishi</td>
-                  <td><span class="tag tag-warn">canary</span></td>
-                </tr>
-                <tr>
-                  <td class="name">stripe_billing_portal</td>
-                  <td class="meta">all</td>
-                  <td class="mono-cell">100%</td>
-                  <td class="meta">2mo ago</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                </tr>
-                <tr>
-                  <td class="name">monitor_only_signup</td>
-                  <td class="meta">all</td>
-                  <td class="mono-cell">100%</td>
-                  <td class="meta">launched</td>
-                  <td><span class="tag tag-ok">on</span></td>
-                </tr>
-                <tr>
-                  <td class="name">drift_remediation</td>
-                  <td class="meta">internal</td>
-                  <td class="mono-cell">o11y staff</td>
-                  <td class="meta">5d ago</td>
-                  <td><span class="tag">dev</span></td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card card-pad" style="padding: 32px; text-align: center">
+            <p class="t-muted" style="font-size: 14px">Feature flags — coming soon</p>
           </div>
         </div>
       </main>
@@ -97,7 +35,6 @@
         role: "admin",
         current: "flags",
         crumbs: [{ label: "Plans" }, { label: "Feature flags" }],
-        prototype: "Feature flags are hardcoded. Requires feature flag backend.",
       });
     </script>
     <script>

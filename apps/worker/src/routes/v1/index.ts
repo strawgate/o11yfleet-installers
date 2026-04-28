@@ -62,6 +62,15 @@ async function routeV1Request(
   if (path === "/api/v1/tenant" && method === "PUT") {
     return handleUpdateTenant(request, env, tenantId);
   }
+  if (path === "/api/v1/tenant" && method === "DELETE") {
+    return handleDeleteTenant(env, tenantId);
+  }
+
+  // ─── Team ───────────────────────────────────────────────────
+
+  if (path === "/api/v1/team" && method === "GET") {
+    return handleGetTeam(env, tenantId);
+  }
 
   // ─── Overview (aggregate stats) ────────────────────────────
 
@@ -96,6 +105,12 @@ async function routeV1Request(
   const versionsGetMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/versions$/);
   if (versionsGetMatch && method === "GET") {
     return handleListVersions(env, tenantId, versionsGetMatch[1]!);
+  }
+
+  // GET /api/v1/configurations/:id/yaml — current YAML content from R2
+  const yamlMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/yaml$/);
+  if (yamlMatch && method === "GET") {
+    return handleGetConfigYaml(env, tenantId, yamlMatch[1]!);
   }
 
   // ─── Enrollment Tokens ─────────────────────────────────────
@@ -172,6 +187,45 @@ async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
     .first();
   if (!tenant) return jsonError("Tenant not found", 404);
   return Response.json(tenant);
+}
+
+async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
+  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
+    .bind(tenantId)
+    .first();
+  if (!tenant) return jsonError("Tenant not found", 404);
+
+  const configs = await env.FP_DB.prepare(
+    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
+  )
+    .bind(tenantId)
+    .first<{ count: number }>();
+  if (configs && configs.count > 0) {
+    return jsonError(
+      `Cannot delete tenant with ${configs.count} configuration(s). Delete configurations first.`,
+      409,
+    );
+  }
+
+  await env.FP_DB.batch([
+    env.FP_DB.prepare(
+      `DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id = ?)`,
+    ).bind(tenantId),
+    env.FP_DB.prepare(`DELETE FROM users WHERE tenant_id = ?`).bind(tenantId),
+    env.FP_DB.prepare(`DELETE FROM tenants WHERE id = ?`).bind(tenantId),
+  ]);
+  return new Response(null, { status: 204 });
+}
+
+// ─── Team Handler ───────────────────────────────────────────────────
+
+async function handleGetTeam(env: Env, tenantId: string): Promise<Response> {
+  const result = await env.FP_DB.prepare(
+    `SELECT id, email, display_name, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at ASC`,
+  )
+    .bind(tenantId)
+    .all();
+  return Response.json({ members: result.results });
 }
 
 // ─── Configuration Handlers ─────────────────────────────────────────
@@ -329,6 +383,33 @@ async function handleListVersions(env: Env, tenantId: string, configId: string):
   return Response.json({
     versions: result.results,
     current_config_hash: config["current_config_hash"],
+  });
+}
+
+// ─── YAML Content Handler ───────────────────────────────────────────
+
+async function handleGetConfigYaml(
+  env: Env,
+  tenantId: string,
+  configId: string,
+): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const hash = config["current_config_hash"] as string | null;
+  if (!hash) {
+    return jsonError("No config version uploaded yet", 404);
+  }
+
+  const r2Key = `configs/sha256/${hash}.yaml`;
+  const r2Obj = await env.FP_CONFIGS.get(r2Key);
+  if (!r2Obj) {
+    return jsonError("Config content not found in storage", 404);
+  }
+
+  const yamlText = await r2Obj.text();
+  return new Response(yamlText, {
+    headers: { "Content-Type": "text/yaml; charset=utf-8" },
   });
 }
 

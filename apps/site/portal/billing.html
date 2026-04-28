@@ -16,127 +16,33 @@
           <div class="page-head">
             <div>
               <h1>Plan &amp; billing</h1>
-              <div class="sub">
-                You're on the <strong style="color: var(--fg)">Business</strong> plan.
-              </div>
+              <div class="sub">Loading…</div>
             </div>
           </div>
 
-          <div style="display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px">
-            <div class="card card-pad" style="padding: 22px">
-              <div class="flex-row justify-between">
-                <div>
-                  <div class="t-mono text-sm" style="color: var(--accent)">CURRENT PLAN</div>
-                  <div style="font-size: 22px; font-weight: 500; margin-top: 4px">Business</div>
-                </div>
-                <div style="text-align: right">
-                  <div class="t-mono" style="font-size: 22px">$249</div>
-                  <div class="t-muted text-sm">/ month · billed monthly</div>
-                </div>
+          <div class="card card-pad" style="padding: 22px; max-width: 600px">
+            <div class="t-mono text-sm" style="color: var(--accent)">CURRENT PLAN</div>
+            <div style="font-size: 22px; font-weight: 500; margin-top: 4px" id="plan-name">—</div>
+            <div class="mt-4" style="display: flex; flex-direction: column; gap: 12px">
+              <div class="flex-row justify-between text-sm">
+                <span>Managed configurations</span>
+                <span class="t-mono" id="billing-configs">— / —</span>
               </div>
-              <div style="margin-top: 22px; display: flex; flex-direction: column; gap: 14px">
-                <div>
-                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
-                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
-                      >Managed configurations</span
-                    ><span class="t-mono" style="flex-shrink: 0">7 / 25</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 28%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
-                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
-                      >GitHub repos connected</span
-                    ><span class="t-mono" style="flex-shrink: 0">2 / 3</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 67%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm" style="gap: 12px; min-width: 0">
-                    <span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis"
-                      >Team members</span
-                    ><span class="t-mono" style="flex-shrink: 0">6 / 10</span>
-                  </div>
-                  <div class="bar mt-2"><i style="width: 60%"></i></div>
-                </div>
-                <div>
-                  <div class="flex-row justify-between text-sm" style="gap: 12px">
-                    <span style="white-space: nowrap">Audit log retention</span
-                    ><span class="t-mono" style="flex-shrink: 0">90 days</span>
-                  </div>
-                </div>
-              </div>
-              <div class="flex-row mt-6" style="gap: 10px">
-                <button class="btn btn-secondary btn-sm">Switch to annual (save 17%)</button
-                ><a href="../pricing.html" class="btn btn-ghost btn-sm">Compare plans</a>
-              </div>
+              <div class="bar mt-1"><i id="billing-configs-bar" style="width: 0%"></i></div>
             </div>
-            <div class="card card-pad" style="padding: 22px">
-              <div class="t-mono text-sm" style="color: var(--accent)">PAYMENT</div>
-              <div class="flex-row mt-3" style="gap: 12px">
-                <div
-                  style="
-                    width: 36px;
-                    height: 24px;
-                    border: 1px solid var(--line);
-                    border-radius: 4px;
-                    display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    font-family: var(--font-mono);
-                    font-size: 9px;
-                  "
-                >
-                  VISA
-                </div>
-                <div>
-                  <div class="t-mono text-sm">•••• 4242</div>
-                  <div class="t-muted text-sm">Exp 09/27</div>
-                </div>
-              </div>
-              <button class="btn btn-secondary btn-sm mt-4" style="width: 100%">Update card</button>
-              <div class="t-mono text-sm mt-6" style="color: var(--accent)">NEXT INVOICE</div>
-              <div class="t-mono mt-2" style="font-size: 18px">$249.00</div>
-              <div class="t-muted text-sm">on Apr 27, 2026</div>
+            <div class="flex-row mt-6" style="gap: 10px">
+              <a href="../pricing.html" class="btn btn-ghost btn-sm">Compare plans</a>
             </div>
           </div>
 
-          <h3 style="font-size: 15px; font-weight: 500; margin: 32px 0 10px">Invoices</h3>
-          <div class="dt-card">
-            <table class="dt">
-              <thead>
-                <tr>
-                  <th>Date</th>
-                  <th>Description</th>
-                  <th>Amount</th>
-                  <th>Status</th>
-                  <th></th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="meta">Mar 27, 2026</td>
-                  <td>Business · monthly</td>
-                  <td class="mono-cell">$249.00</td>
-                  <td><span class="tag tag-ok">paid</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
-                </tr>
-                <tr>
-                  <td class="meta">Feb 27, 2026</td>
-                  <td>Business · monthly</td>
-                  <td class="mono-cell">$249.00</td>
-                  <td><span class="tag tag-ok">paid</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
-                </tr>
-                <tr>
-                  <td class="meta">Jan 27, 2026</td>
-                  <td>Pro → Business (prorated)</td>
-                  <td class="mono-cell">$187.00</td>
-                  <td><span class="tag tag-ok">paid</span></td>
-                  <td class="row-actions"><button class="btn btn-ghost btn-sm">PDF</button></td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card card-pad mt-6" style="padding: 22px; max-width: 600px">
+            <div class="t-mono text-sm" style="color: var(--accent)">BILLING</div>
+            <div style="padding: 32px 0; text-align: center">
+              <div class="t-muted">Billing integration coming soon.</div>
+              <div class="t-muted text-sm mt-2">
+                Payment methods, invoices, and plan upgrades will be managed here.
+              </div>
+            </div>
           </div>
         </div>
       </main>
@@ -148,14 +54,32 @@
       FB.shell({
         current: "billing",
         crumbs: [{ label: "Settings" }, { label: "Plan & billing" }],
-        prototype:
-          "Billing data is hardcoded. Billing integration requires Stripe setup (issue #15).",
       });
-    </script>
-    <script>
+
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
+
+        try {
+          var tenant = await FP.get("/api/v1/tenant");
+          var planName = tenant.plan
+            ? tenant.plan.charAt(0).toUpperCase() + tenant.plan.slice(1)
+            : "Free";
+          document.getElementById("plan-name").textContent = planName;
+          document.querySelector(".page-head .sub").innerHTML =
+            'You\u2019re on the <strong style="color:var(--fg)">' + planName + "</strong> plan.";
+
+          var overview = await FP.get("/api/v1/overview");
+          var max = tenant.max_configs || 0;
+          var count = overview.configs_count || 0;
+          document.getElementById("billing-configs").textContent = count + " / " + max;
+          var bar = document.getElementById("billing-configs-bar");
+          if (bar && max > 0) {
+            bar.style.width = Math.min(100, Math.round((count / max) * 100)) + "%";
+          }
+        } catch (e) {
+          console.error("Failed to load billing data", e);
+        }
       })();
     </script>
   </body>

@@ -22,72 +22,9 @@
                 Editing here updates the public pricing page and Stripe products.
               </div>
             </div>
-            <div class="actions">
-              <button class="btn btn-secondary btn-sm">Preview pricing page</button
-              ><button class="btn btn-primary btn-sm">Publish changes</button>
-            </div>
           </div>
-          <div class="dt-card">
-            <table class="dt">
-              <thead>
-                <tr>
-                  <th>Plan</th>
-                  <th>Price</th>
-                  <th>Tenants</th>
-                  <th>Configs limit</th>
-                  <th>Repos</th>
-                  <th>Members</th>
-                  <th>Audit retention</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td class="name">Free</td>
-                  <td class="mono-cell">$0</td>
-                  <td class="mono-cell">912</td>
-                  <td class="mono-cell">monitor only · 25 collectors</td>
-                  <td class="mono-cell">—</td>
-                  <td class="mono-cell">3</td>
-                  <td class="mono-cell">7d</td>
-                </tr>
-                <tr>
-                  <td class="name">Pro</td>
-                  <td class="mono-cell">$49 / mo</td>
-                  <td class="mono-cell">241</td>
-                  <td class="mono-cell">5</td>
-                  <td class="mono-cell">1</td>
-                  <td class="mono-cell">3</td>
-                  <td class="mono-cell">30d</td>
-                </tr>
-                <tr>
-                  <td class="name">Business</td>
-                  <td class="mono-cell">$249 / mo</td>
-                  <td class="mono-cell">98</td>
-                  <td class="mono-cell">25</td>
-                  <td class="mono-cell">3</td>
-                  <td class="mono-cell">10</td>
-                  <td class="mono-cell">90d</td>
-                </tr>
-                <tr>
-                  <td class="name">Scale</td>
-                  <td class="mono-cell">$899 / mo</td>
-                  <td class="mono-cell">26</td>
-                  <td class="mono-cell">100</td>
-                  <td class="mono-cell">10</td>
-                  <td class="mono-cell">25</td>
-                  <td class="mono-cell">365d</td>
-                </tr>
-                <tr>
-                  <td class="name">Enterprise</td>
-                  <td class="mono-cell">custom</td>
-                  <td class="mono-cell">7</td>
-                  <td class="mono-cell">unlimited</td>
-                  <td class="mono-cell">unlimited</td>
-                  <td class="mono-cell">unlimited</td>
-                  <td class="mono-cell">2y + export</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="card card-pad" style="padding: 32px; text-align: center">
+            <p class="t-muted" style="font-size: 14px">Plan management — coming soon</p>
           </div>
         </div>
       </main>
@@ -100,7 +37,6 @@
         role: "admin",
         current: "plans",
         crumbs: [{ label: "Plans" }, { label: "Plans & pricing" }],
-        prototype: "Plan data is hardcoded. Plan management requires billing integration.",
       });
     </script>
     <script>

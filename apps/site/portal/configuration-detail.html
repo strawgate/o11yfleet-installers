@@ -16,11 +16,8 @@
           <div class="page-head">
             <div>
               <div class="flex-row gap-sm" style="margin-bottom: 6px" id="config-tags"></div>
-              <h1><span contenteditable class="inline-edit">prod-ingress</span></h1>
-              <div class="sub">
-                Latest <span class="t-mono">v14</span> · 12 collectors targeted by
-                <span class="t-mono">env=production,role=ingress</span>
-              </div>
+              <h1><span class="inline-edit">Loading…</span></h1>
+              <div class="sub">Loading…</div>
             </div>
             <div class="actions">
               <a href="builder.html" class="btn btn-secondary btn-sm" style="text-decoration: none"
@@ -37,7 +34,7 @@
               Agents <span class="count">12</span>
             </button>
             <button class="tab" data-tab="versions">Versions <span class="count">14</span></button>
-            <button class="tab" data-tab="rollouts">Rollouts <span class="count">23</span></button>
+            <button class="tab" data-tab="rollouts">Rollouts</button>
             <button class="tab" data-tab="yaml">YAML</button>
             <button class="tab" data-tab="settings">Settings</button>
           </div>
@@ -95,162 +92,48 @@
           </div>
 
           <div data-tab-panel="rollouts" data-tabs-group="cfg" class="tab-panel">
-            <div class="banner warn mb-4">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div>
-                <div class="b-title">Prototype</div>
-                <div class="b-body">
-                  Rollouts are not yet implemented. The data below is sample data.
-                </div>
+            <div style="padding: 48px 24px; text-align: center">
+              <div class="t-muted" style="font-size: 15px">Rollout tracking coming soon.</div>
+              <div class="t-muted text-sm mt-2">
+                Historical and in-progress rollouts will be tracked here.
               </div>
-            </div>
-            <div class="dt-card">
-              <div class="dt-toolbar"><span class="count">23 rollouts</span></div>
-              <table class="dt">
-                <thead>
-                  <tr>
-                    <th>Started</th>
-                    <th>Version</th>
-                    <th>Strategy</th>
-                    <th>Result</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  <tr>
-                    <td class="meta">6m ago</td>
-                    <td class="mono-cell">v14</td>
-                    <td>10% → 50% → 100%</td>
-                    <td>
-                      <span
-                        class="tag"
-                        style="border-color: var(--accent-line); color: var(--accent)"
-                        ><span class="dot dot-ok dot-pulse"></span>rolling</span
-                      >
-                    </td>
-                    <td class="row-actions"><button class="btn btn-ghost btn-sm">Pause</button></td>
-                  </tr>
-                  <tr>
-                    <td class="meta">2d ago</td>
-                    <td class="mono-cell">v13</td>
-                    <td>50% → 100%</td>
-                    <td><span class="tag tag-ok">42/42</span></td>
-                    <td></td>
-                  </tr>
-                  <tr>
-                    <td class="meta">4d ago</td>
-                    <td class="mono-cell">v12</td>
-                    <td>10%</td>
-                    <td><span class="tag tag-err">rolled back · 4/42</span></td>
-                    <td></td>
-                  </tr>
-                </tbody>
-              </table>
             </div>
           </div>
 
           <div data-tab-panel="yaml" data-tabs-group="cfg" class="tab-panel">
-            <div class="banner warn mb-4">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div>
-                <div class="b-title">Prototype</div>
-                <div class="b-body">
-                  YAML preview shows sample data. Actual configuration content will be displayed
-                  here when YAML storage is implemented.
-                </div>
-              </div>
-            </div>
-            <div class="code-block">
-              <button class="copy" data-copy="receivers...">copy</button
-              ><span class="c"># prod-ingress.yaml · v14</span> <span class="k">receivers</span>:
-              <span class="k">otlp</span>: <span class="k">protocols</span>:
-              <span class="k">grpc</span>: <span class="k">endpoint</span>:
-              <span class="s">0.0.0.0:4317</span> <span class="k">http</span>:
-              <span class="k">endpoint</span>: <span class="s">0.0.0.0:4318</span>
-
-              <span class="k">processors</span>: <span class="k">batch</span>:
-              <span class="k">timeout</span>: <span class="s">200ms</span>
-              <span class="k">send_batch_size</span>: <span class="s">4096</span>
-              <span class="k">send_batch_max_size</span>: <span class="s">4096</span>
-              <span class="k">memory_limiter</span>: <span class="k">check_interval</span>:
-              <span class="s">1s</span> <span class="k">limit_mib</span>:
-              <span class="s">1500</span>
-
-              <span class="k">exporters</span>: <span class="k">otlp</span>:
-              <span class="k">endpoint</span>: <span class="s">your-backend:4317</span>
-
-              <span class="k">service</span>: <span class="k">pipelines</span>:
-              <span class="k">traces</span>: <span class="k">receivers</span>: [<span class="s"
-                >otlp</span
-              >] <span class="k">processors</span>: [<span class="s">memory_limiter</span>,
-              <span class="s">batch</span>] <span class="k">exporters</span>: [<span class="s"
-                >otlp</span
-              >]
+            <div
+              id="yaml-content"
+              class="code-block"
+              style="white-space: pre-wrap; font-size: 12.5px; min-height: 120px"
+            >
+              Loading…
             </div>
           </div>
 
           <div data-tab-panel="settings" data-tabs-group="cfg" class="tab-panel">
-            <div class="banner warn mb-4">
-              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6">
-                <path d="M8 2L1.5 13.5h13z" />
-                <path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round" />
-              </svg>
-              <div>
-                <div class="b-title">Prototype</div>
-                <div class="b-body">
-                  Configuration settings (source, rollout strategy) are not yet functional.
-                </div>
-              </div>
-            </div>
             <div class="card card-pad" style="padding: 24px; max-width: 720px">
-              <h3 style="font-size: 16px; font-weight: 500">Source</h3>
-              <p class="t-muted text-sm mt-2">
-                This configuration is backed by GitHub. Changes flow through pull requests in
-                <span class="t-mono">otel-configs/main</span>.
-              </p>
-              <div
-                style="
-                  margin-top: 16px;
-                  padding: 12px 14px;
-                  border: 1px solid var(--line);
-                  border-radius: 8px;
-                  display: flex;
-                  align-items: center;
-                  gap: 12px;
-                "
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="currentColor"
-                  style="color: var(--fg-2)"
-                >
-                  <path
-                    d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.5.5.08.66-.22.66-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.08.63-1.33-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.65 0 0 .84-.27 2.75 1.02A9.6 9.6 0 0 1 12 6.8c.85.004 1.7.115 2.5.337 1.91-1.29 2.75-1.02 2.75-1.02.55 1.38.2 2.4.1 2.65.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.93.36.31.68.92.68 1.85V21c0 .27.16.57.67.48A10 10 0 0 0 22 12c0-5.52-4.48-10-10-10z"
-                  />
-                </svg>
-                <div style="flex: 1">
-                  <div class="t-mono text-sm">otel-configs/main</div>
-                  <div class="t-muted text-sm">configs/prod-ingress.yaml</div>
+              <h3 style="font-size: 16px; font-weight: 500">Configuration details</h3>
+              <div class="mt-4" style="display: flex; flex-direction: column; gap: 12px">
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Name</span><span id="cfg-name">—</span>
                 </div>
-                <button class="btn btn-ghost btn-sm">Switch to UI</button>
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Description</span><span id="cfg-desc">—</span>
+                </div>
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Config ID</span><span class="t-mono" id="cfg-id">—</span>
+                </div>
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Current hash</span
+                  ><span class="t-mono" id="cfg-hash">—</span>
+                </div>
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Created</span><span id="cfg-created">—</span>
+                </div>
+                <div class="flex-row justify-between text-sm">
+                  <span class="t-muted">Updated</span><span id="cfg-updated">—</span>
+                </div>
               </div>
-              <h3 style="font-size: 16px; font-weight: 500; margin-top: 28px">Rollout strategy</h3>
-              <p class="t-muted text-sm mt-2">
-                Default plan when applying new versions to targeted collectors.
-              </p>
-              <select class="select mt-3" style="max-width: 360px">
-                <option>Canary 10% → 50% → 100% (recommended)</option>
-                <option>50% → 100%</option>
-                <option>All at once</option>
-              </select>
               <h3 style="font-size: 16px; font-weight: 500; margin-top: 28px; color: var(--err)">
                 Danger zone
               </h3>
@@ -273,7 +156,7 @@
     <div class="modal-backdrop" id="rollout-modal">
       <div class="modal">
         <div class="modal-head">
-          <h3>Roll out v14</h3>
+          <h3 id="rollout-title">Roll out</h3>
           <button class="modal-close" data-close-modal>×</button>
         </div>
         <div class="modal-body">
@@ -292,8 +175,9 @@
                 <path d="M3 8.5l3 3 7-7" stroke-linecap="round" stroke-linejoin="round" />
               </svg>
               <div>
-                <div class="b-title">12 collectors will receive v14</div>
-                <div class="b-body t-muted">env=production,role=ingress</div>
+                <div class="b-title" id="rollout-targets">
+                  Collectors will receive the current config
+                </div>
               </div>
             </div>
           </div>
@@ -314,16 +198,16 @@
     <div class="modal-backdrop" id="del-cfg">
       <div class="modal danger">
         <div class="modal-head">
-          <h3>Delete prod-ingress?</h3>
+          <h3 id="del-title">Delete configuration?</h3>
           <button class="modal-close" data-close-modal>×</button>
         </div>
         <div class="modal-body">
           <p class="t-muted text-sm">
-            12 collectors are using this configuration. They'll keep their last effective config but
-            will no longer receive updates.
+            Collectors using this configuration will keep their last effective config but will no
+            longer receive updates.
           </p>
           <div class="field">
-            <label>Type <span class="t-mono">prod-ingress</span> to confirm</label
+            <label><span id="del-confirm-label">Type the configuration name to confirm</span></label
             ><input class="input mono" />
           </div>
         </div>
@@ -365,8 +249,53 @@
                 { label: c.name || configId },
               ],
             });
+            // Populate settings tab
+            var cfgName = document.getElementById("cfg-name");
+            if (cfgName) cfgName.textContent = c.name || "—";
+            var cfgDesc = document.getElementById("cfg-desc");
+            if (cfgDesc) cfgDesc.textContent = c.description || "No description";
+            var cfgIdEl = document.getElementById("cfg-id");
+            if (cfgIdEl) cfgIdEl.textContent = c.id || "—";
+            var cfgHash = document.getElementById("cfg-hash");
+            if (cfgHash) cfgHash.textContent = c.current_config_hash || "none";
+            var cfgCreated = document.getElementById("cfg-created");
+            if (cfgCreated) cfgCreated.textContent = c.created_at ? FP.relTime(c.created_at) : "—";
+            var cfgUpdated = document.getElementById("cfg-updated");
+            if (cfgUpdated) cfgUpdated.textContent = c.updated_at ? FP.relTime(c.updated_at) : "—";
+            // Update modals
+            var rolloutTitle = document.getElementById("rollout-title");
+            if (rolloutTitle) rolloutTitle.textContent = "Roll out " + (c.name || "");
+            var delTitle = document.getElementById("del-title");
+            if (delTitle) delTitle.textContent = "Delete " + (c.name || "configuration") + "?";
+            var delLabel = document.getElementById("del-confirm-label");
+            if (delLabel)
+              delLabel.innerHTML =
+                'Type <span class="t-mono">' + (c.name || "") + "</span> to confirm";
           } catch (e) {
             console.error("Failed to load config", e);
+          }
+        }
+
+        async function loadYaml() {
+          if (!configId) return;
+          var el = document.getElementById("yaml-content");
+          if (!el) return;
+          try {
+            var resp = await fetch(FP.apiBase + "/api/v1/configurations/" + configId + "/yaml", {
+              credentials: "include",
+            });
+            if (resp.ok) {
+              el.textContent = await resp.text();
+            } else if (resp.status === 404) {
+              el.textContent = "No YAML uploaded yet.";
+              el.style.color = "var(--fg-2)";
+            } else {
+              el.textContent = "Failed to load YAML.";
+              el.style.color = "var(--err)";
+            }
+          } catch (e) {
+            el.textContent = "Failed to load YAML.";
+            el.style.color = "var(--err)";
           }
         }
 
@@ -480,6 +409,7 @@
         });
 
         loadConfig();
+        loadYaml();
         FP.autoRefresh(() => {
           loadAgents();
           loadVersions();
