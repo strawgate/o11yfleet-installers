@@ -5,6 +5,7 @@ import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 
 export default function TenantsPage() {
@@ -39,20 +40,6 @@ export default function TenantsPage() {
       toast("Failed to create tenant", err instanceof Error ? err.message : "Unknown error", "err");
     }
   }
-
-  const planTag = (p: string) => {
-    const isPremium = p === "pro" || p === "enterprise";
-    return (
-      <span
-        className="tag"
-        style={
-          isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined
-        }
-      >
-        {p}
-      </span>
-    );
-  };
 
   return (
     <>
@@ -101,7 +88,9 @@ export default function TenantsPage() {
                   <td className="name">
                     <Link to={`/admin/tenants/${t.id}`}>{t.name}</Link>
                   </td>
-                  <td>{planTag(t.plan ?? "free")}</td>
+                  <td>
+                    <PlanTag plan={t.plan ?? "free"} />
+                  </td>
                   <td>{(t["max_configs"] as number) ?? "—"}</td>
                   <td>{(t["max_agents_per_config"] as number) ?? "—"}</td>
                   <td className="meta">{relTime(t.created_at)}</td>

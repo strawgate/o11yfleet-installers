@@ -819,12 +819,12 @@
   font-size: 12.5px;
   margin-top: 2px;
 }
-.btn-danger {
+.btn-danger-outline {
   background: transparent;
   color: var(--err);
   border-color: color-mix(in oklab, var(--err) 35%, var(--line));
 }
-.btn-danger:hover {
+.btn-danger-outline:hover {
   background: color-mix(in oklab, var(--err) 12%, transparent);
   border-color: var(--err);
   color: var(--err);

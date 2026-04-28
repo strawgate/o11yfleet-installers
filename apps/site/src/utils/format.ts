@@ -13,16 +13,3 @@ export function trunc(s: string | null | undefined, n: number): string {
   if (!s) return "—";
   return s.length > n ? s.slice(0, n) + "…" : s;
 }
-
-const ESC_MAP: Record<string, string> = {
-  "&": "&amp;",
-  "<": "&lt;",
-  ">": "&gt;",
-  '"': "&quot;",
-  "'": "&#39;",
-};
-
-/** Escape HTML entities in a string. */
-export function escHtml(s: string): string {
-  return s.replace(/[&<>"']/g, (ch) => ESC_MAP[ch]!);
-}

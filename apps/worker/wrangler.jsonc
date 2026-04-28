@@ -60,7 +60,9 @@
   "env": {
     "staging": {
       "main": "src/instrumented.ts",
-      "vars": {},
+      "vars": {
+        "ENVIRONMENT": "staging",
+      },
       "d1_databases": [
         {
           "binding": "FP_DB",
@@ -107,7 +109,9 @@
     },
     "production": {
       "main": "src/instrumented.ts",
-      "vars": {},
+      "vars": {
+        "ENVIRONMENT": "production",
+      },
       "d1_databases": [
         {
           "binding": "FP_DB",

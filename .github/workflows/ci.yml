@@ -14,6 +14,7 @@ concurrency:
 jobs:
   lint-format:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -35,6 +36,7 @@ jobs:
 
   typecheck:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +55,7 @@ jobs:
 
   test-core:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -71,6 +74,7 @@ jobs:
 
   test-worker:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -89,6 +93,7 @@ jobs:
 
   bundle-size:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -129,6 +134,7 @@ jobs:
 
   benchmark:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
 
@@ -154,6 +160,7 @@ jobs:
 
   terraform:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
 
@@ -168,6 +175,7 @@ jobs:
 
   test-web:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
 
@@ -187,6 +195,7 @@ jobs:
   deploy-staging:
     needs: [lint-format, typecheck, test-core, test-worker, test-web, bundle-size, terraform]
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
     steps:

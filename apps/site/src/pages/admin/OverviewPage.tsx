@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 
 export default function OverviewPage() {
@@ -36,20 +37,6 @@ export default function OverviewPage() {
       return db.localeCompare(da);
     })
     .slice(0, 5);
-
-  const planTag = (plan: string) => {
-    const isPremium = plan === "pro" || plan === "enterprise";
-    return (
-      <span
-        className="tag"
-        style={
-          isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined
-        }
-      >
-        {plan}
-      </span>
-    );
-  };
 
   return (
     <>
@@ -123,7 +110,9 @@ export default function OverviewPage() {
                     <td className="name">
                       <Link to={`/admin/tenants/${t.id}`}>{t.name}</Link>
                     </td>
-                    <td>{planTag(t.plan ?? "free")}</td>
+                    <td>
+                      <PlanTag plan={t.plan ?? "free"} />
+                    </td>
                     <td>{(t["max_configs"] as number) ?? "—"}</td>
                     <td>{(t["max_agents_per_config"] as number) ?? "—"}</td>
                     <td className="meta">{relTime(t.created_at)}</td>
@@ -156,7 +145,9 @@ export default function OverviewPage() {
               ) : (
                 Object.entries(planCounts).map(([plan, count]) => (
                   <tr key={plan}>
-                    <td>{planTag(plan)}</td>
+                    <td>
+                      <PlanTag plan={plan} />
+                    </td>
                     <td>{count}</td>
                   </tr>
                 ))

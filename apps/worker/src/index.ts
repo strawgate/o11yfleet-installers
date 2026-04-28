@@ -18,6 +18,7 @@ export interface Env {
   FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
   API_SECRET?: string;
+  ENVIRONMENT?: string;
   MINIMAX_API_KEY?: string;
   LLM_PROVIDER?: string;
   LLM_MODEL?: string;
@@ -28,25 +29,48 @@ export interface Env {
   SEED_ADMIN_PASSWORD?: string;
 }
 
-// Allowed CORS origins for credential-based requests
-const ALLOWED_ORIGINS = [
+// Production CORS origins (always allowed)
+const PRODUCTION_ORIGINS = [
   "https://app.o11yfleet.com",
   "https://admin.o11yfleet.com",
   "https://o11yfleet.com",
   "https://www.o11yfleet.com",
   "https://o11yfleet-site.pages.dev",
+];
+
+// Localhost origins (only allowed in non-production environments)
+const DEV_ORIGINS = [
   "http://localhost:3000",
   "http://localhost:8788",
   "http://127.0.0.1:3000",
   "http://127.0.0.1:8788",
 ];
 
-function getCorsHeaders(request: Request): Record<string, string> {
+function getAllowedOrigins(env: Env): string[] {
+  if (env.ENVIRONMENT === "production") {
+    return PRODUCTION_ORIGINS;
+  }
+  return [...PRODUCTION_ORIGINS, ...DEV_ORIGINS];
+}
+
+/** Check if origin is a Cloudflare Pages preview deploy (e.g. abc123.o11yfleet-site.pages.dev). */
+function isPagesPreview(origin: string): boolean {
+  try {
+    const host = new URL(origin).hostname;
+    const parts = host.split(".");
+    // Must be exactly <hash>.o11yfleet-site.pages.dev (4 segments)
+    return parts.length === 4 && host.endsWith(".o11yfleet-site.pages.dev");
+  } catch {
+    return false;
+  }
+}
+
+function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get("Origin") || "";
-  // Allow exact matches + *.o11yfleet-site.pages.dev for Cloudflare Pages previews
-  const allowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".o11yfleet-site.pages.dev");
+  const origins = getAllowedOrigins(env);
+  const allowed = origins.includes(origin) || isPagesPreview(origin);
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : (ALLOWED_ORIGINS[0] ?? ""),
+    "Access-Control-Allow-Origin": allowed ? origin : (origins[0] ?? ""),
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
     "Access-Control-Allow-Credentials": "true",
@@ -63,30 +87,40 @@ const INTERNAL_HEADERS = [
   "x-fp-codec",
 ];
 
-function addCorsHeaders(resp: Response, request: Request): Response {
+function addCorsHeaders(resp: Response, request: Request, env: Env): Response {
   const corsResp = new Response(resp.body, resp);
-  const corsHeaders = getCorsHeaders(request);
+  const corsHeaders = getCorsHeaders(request, env);
   for (const [k, v] of Object.entries(corsHeaders)) {
     corsResp.headers.set(k, v);
   }
   return corsResp;
 }
 
+function addSecurityHeaders(resp: Response): Response {
+  resp.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
+  resp.headers.set("X-Content-Type-Options", "nosniff");
+  resp.headers.set("X-Frame-Options", "DENY");
+  resp.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  resp.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
+  return resp;
+}
+
 // CSRF protection: validate Origin header on state-changing requests with cookie auth.
 // Browsers always send Origin on cross-origin requests; if missing, check Referer.
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
-function isTrustedOrigin(request: Request): boolean {
+function isTrustedOrigin(request: Request, env: Env): boolean {
+  const origins = getAllowedOrigins(env);
   const origin = request.headers.get("Origin");
   if (origin) {
-    return ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".o11yfleet-site.pages.dev");
+    return origins.includes(origin) || isPagesPreview(origin);
   }
   // Fallback: same-origin requests may omit Origin; check Referer
   const referer = request.headers.get("Referer");
   if (referer) {
     try {
       const refOrigin = new URL(referer).origin;
-      return ALLOWED_ORIGINS.includes(refOrigin) || refOrigin.endsWith(".o11yfleet-site.pages.dev");
+      return origins.includes(refOrigin) || isPagesPreview(refOrigin);
     } catch {
       return false;
     }
@@ -101,11 +135,13 @@ export default {
       return await handleRequest(request, env);
     } catch (err) {
       console.error("Unhandled error:", err);
-      const corsHeaders = getCorsHeaders(request);
-      return new Response(JSON.stringify({ error: "Internal server error" }), {
-        status: 500,
-        headers: { "Content-Type": "application/json", ...corsHeaders },
-      });
+      const corsHeaders = getCorsHeaders(request, env);
+      return addSecurityHeaders(
+        new Response(JSON.stringify({ error: "Internal server error" }), {
+          status: 500,
+          headers: { "Content-Type": "application/json", ...corsHeaders },
+        }),
+      );
     }
   },
 
@@ -119,32 +155,37 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // Health check
   if (url.pathname === "/healthz") {
-    return Response.json(
-      { status: "ok", timestamp: new Date().toISOString() },
-      { headers: getCorsHeaders(request) },
+    return addSecurityHeaders(
+      Response.json(
+        { status: "ok", timestamp: new Date().toISOString() },
+        { headers: getCorsHeaders(request, env) },
+      ),
     );
   }
 
   // CORS preflight
   if (request.method === "OPTIONS") {
-    return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+    return new Response(null, { status: 204, headers: getCorsHeaders(request, env) });
   }
 
   // CSRF protection — reject state-changing cookie-authenticated requests from untrusted origins.
   // Only applies when a session cookie is present; Bearer-token M2M clients are exempt.
   // This is required because we use SameSite=None cookies for cross-origin auth.
   const hasCookie = /(?:^|;\s*)fp_session=/.test(request.headers.get("Cookie") ?? "");
-  if (!CSRF_SAFE_METHODS.has(request.method) && hasCookie && !isTrustedOrigin(request)) {
-    return addCorsHeaders(
-      Response.json({ error: "Forbidden — origin not allowed" }, { status: 403 }),
-      request,
+  if (!CSRF_SAFE_METHODS.has(request.method) && hasCookie && !isTrustedOrigin(request, env)) {
+    return addSecurityHeaders(
+      addCorsHeaders(
+        Response.json({ error: "Forbidden — origin not allowed" }, { status: 403 }),
+        request,
+        env,
+      ),
     );
   }
 
   // Auth routes — no auth required (they handle their own)
   if (url.pathname.startsWith("/auth/")) {
     const resp = await handleAuthRequest(request, env, url);
-    return addCorsHeaders(resp, request);
+    return addSecurityHeaders(addCorsHeaders(resp, request, env));
   }
 
   // API routes — with auth + CORS
@@ -168,9 +209,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     if (url.pathname.startsWith("/api/admin/")) {
       // Require either Bearer API_SECRET or admin session
       if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
-        return addCorsHeaders(
-          Response.json({ error: "Admin access required" }, { status: 403 }),
-          request,
+        return addSecurityHeaders(
+          addCorsHeaders(
+            Response.json({ error: "Admin access required" }, { status: 403 }),
+            request,
+            env,
+          ),
         );
       }
       resp = await handleAdminRequest(request, env, url);
@@ -185,9 +229,12 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         tenantId = request.headers.get("X-Tenant-Id");
       }
       if (!tenantId) {
-        return addCorsHeaders(
-          Response.json({ error: "Authentication required" }, { status: 401 }),
-          request,
+        return addSecurityHeaders(
+          addCorsHeaders(
+            Response.json({ error: "Authentication required" }, { status: 401 }),
+            request,
+            env,
+          ),
         );
       }
       resp = await handleV1Request(request, env, url, tenantId);
@@ -195,15 +242,30 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     // Legacy routes — /api/*
     else {
       if (!hasBearerAuth && !sessionAuth) {
-        return addCorsHeaders(
-          Response.json({ error: "Authentication required" }, { status: 401 }),
-          request,
+        return addSecurityHeaders(
+          addCorsHeaders(
+            Response.json({ error: "Authentication required" }, { status: 401 }),
+            request,
+            env,
+          ),
         );
+      }
+      // Tenant management routes require admin privileges
+      if (url.pathname.startsWith("/api/tenants")) {
+        if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
+          return addSecurityHeaders(
+            addCorsHeaders(
+              Response.json({ error: "Admin access required" }, { status: 403 }),
+              request,
+              env,
+            ),
+          );
+        }
       }
       resp = await handleApiRequest(request, env, url, sessionAuth?.tenantId);
     }
 
-    return addCorsHeaders(resp, request);
+    return addSecurityHeaders(addCorsHeaders(resp, request, env));
   }
 
   // OpAMP WebSocket endpoint
@@ -214,7 +276,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     return handleOpampRequest(request, env);
   }
 
-  return new Response("Not found", { status: 404 });
+  return addSecurityHeaders(new Response("Not found", { status: 404 }));
 }
 
 /**

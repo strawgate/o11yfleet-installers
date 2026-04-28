@@ -4,6 +4,9 @@ import { useAuth } from "@/api/hooks/auth";
 import { useLogout } from "@/api/hooks/auth";
 import { useTenant } from "@/api/hooks/portal";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { Logo } from "@/components/common/Logo";
+import { useTheme } from "@/hooks/useTheme";
+import { useClickOutside } from "@/hooks/useClickOutside";
 import "@/styles/portal-shared.css";
 
 /* ------------------------------------------------------------------ */
@@ -153,15 +156,7 @@ function ProfileDropdown({
   const [open, setOpen] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    function handleClick(e: MouseEvent) {
-      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("click", handleClick);
-    return () => document.removeEventListener("click", handleClick);
-  }, []);
+  useClickOutside(wrapRef, () => setOpen(false));
 
   const userInit = userName
     .split(" ")
@@ -220,17 +215,9 @@ function ProfileDropdown({
 }
 
 function ThemeToggle() {
+  const { toggle } = useTheme();
   return (
-    <button
-      className="icon-btn"
-      aria-label="Theme"
-      onClick={() => {
-        const cur = document.documentElement.getAttribute("data-theme");
-        const next = cur === "dark" ? "light" : "dark";
-        document.documentElement.setAttribute("data-theme", next);
-        localStorage.setItem("fb-theme", next);
-      }}
-    >
+    <button className="icon-btn" aria-label="Theme" onClick={toggle}>
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
         <path d="M14 9.5A6 6 0 1 1 6.5 2c-.2 1.6.6 3.4 2 4.6 1.4 1.2 3.4 1.8 5.5.5z" />
       </svg>
@@ -259,26 +246,6 @@ function SearchBar() {
       <span>Search collectors, configs…</span>
       <span className="kbd-hint">⌘K</span>
     </div>
-  );
-}
-
-function BrandLogo() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none">
-      <path
-        d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="11" r="2.2" fill="currentColor" />
-      <path
-        d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
   );
 }
 
@@ -361,7 +328,7 @@ export default function PortalLayout() {
     <div className="app">
       <aside className="sidebar">
         <NavLink to="/portal/overview" className="sidebar-brand">
-          <BrandLogo />
+          <Logo />
           O11yFleet
         </NavLink>
 

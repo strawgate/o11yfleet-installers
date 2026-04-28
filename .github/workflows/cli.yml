@@ -16,18 +16,18 @@ jobs:
   lint:
     name: Lint
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
 
-      - run: pnpm install --no-frozen-lockfile
-        working-directory: apps/cli
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm run lint
         working-directory: apps/cli
@@ -35,18 +35,18 @@ jobs:
   typecheck:
     name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
 
-      - run: pnpm install --no-frozen-lockfile
-        working-directory: apps/cli
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm run typecheck
         working-directory: apps/cli
@@ -54,18 +54,18 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
 
-      - run: pnpm install --no-frozen-lockfile
-        working-directory: apps/cli
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm test
         working-directory: apps/cli
@@ -73,19 +73,19 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     needs: [lint, typecheck, test]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: "pnpm"
 
-      - run: pnpm install --no-frozen-lockfile
-        working-directory: apps/cli
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm run build
         working-directory: apps/cli
@@ -100,6 +100,7 @@ jobs:
   publish:
     name: Publish
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     needs: [build]
     if: github.event_name == 'release' && github.event.action == 'published'
     environment: npm-publish
@@ -107,17 +108,16 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v4
 
       - uses: pnpm/action-setup@v4
 
-      - uses: actions/setup-node@v5
+      - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
-      - run: pnpm install --no-frozen-lockfile
-        working-directory: apps/cli
+      - run: pnpm install --frozen-lockfile
 
       - run: pnpm run build
         working-directory: apps/cli

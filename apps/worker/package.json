@@ -16,7 +16,8 @@
     "@o11yfleet/core": "workspace:*",
     "@o11yfleet/db": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "^0.15.0",

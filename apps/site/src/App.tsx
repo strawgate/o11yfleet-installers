@@ -2,6 +2,7 @@ import { lazy, Suspense } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { QueryClient, QueryClientProvider, QueryCache, MutationCache } from "@tanstack/react-query";
 import { ToastProvider } from "./components/common/Toast";
+import { ErrorBoundary } from "./components/common/ErrorBoundary";
 import { AuthError } from "./api/client";
 import MarketingLayout from "./layouts/MarketingLayout";
 
@@ -158,55 +159,57 @@ export function App() {
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
         <BrowserRouter>
-          <Suspense fallback={<SuspenseFallback />}>
-            <Routes>
-              {/* Marketing */}
-              <Route element={<MarketingLayout />}>
-                <Route index element={<HomePage />} />
-                <Route path="about" element={<AboutPage />} />
-                <Route path="pricing" element={<PricingPage />} />
-                <Route path="enterprise" element={<EnterprisePage />} />
-                <Route path="product/configuration-management" element={<ProductConfigPage />} />
-                <Route path="solutions/gitops" element={<GitOpsPage />} />
-                <Route path="login" element={<LoginPage />} />
-                <Route path="admin-login" element={<AdminLoginPage />} />
-                <Route path="signup" element={<SignupPage />} />
-                <Route path="forgot" element={<ForgotPage />} />
-              </Route>
+          <ErrorBoundary>
+            <Suspense fallback={<SuspenseFallback />}>
+              <Routes>
+                {/* Marketing */}
+                <Route element={<MarketingLayout />}>
+                  <Route index element={<HomePage />} />
+                  <Route path="about" element={<AboutPage />} />
+                  <Route path="pricing" element={<PricingPage />} />
+                  <Route path="enterprise" element={<EnterprisePage />} />
+                  <Route path="product/configuration-management" element={<ProductConfigPage />} />
+                  <Route path="solutions/gitops" element={<GitOpsPage />} />
+                  <Route path="login" element={<LoginPage />} />
+                  <Route path="admin-login" element={<AdminLoginPage />} />
+                  <Route path="signup" element={<SignupPage />} />
+                  <Route path="forgot" element={<ForgotPage />} />
+                </Route>
 
-              {/* Portal (auth required — enforced by PortalLayout) */}
-              <Route path="portal" element={<PortalLayout />}>
-                <Route index element={<Navigate to="/portal/overview" replace />} />
-                <Route path="overview" element={<OverviewPage />} />
-                <Route path="agents" element={<AgentsPage />} />
-                <Route path="agents/:configId/:agentUid" element={<AgentDetailPage />} />
-                <Route path="configurations" element={<ConfigurationsPage />} />
-                <Route path="configurations/:id" element={<ConfigurationDetailPage />} />
-                <Route path="builder" element={<BuilderPage />} />
-                <Route path="getting-started" element={<GettingStartedPage />} />
-                <Route path="onboarding" element={<OnboardingPage />} />
-                <Route path="tokens" element={<TokensPage />} />
-                <Route path="team" element={<TeamPage />} />
-                <Route path="billing" element={<BillingPage />} />
-                <Route path="settings" element={<SettingsPage />} />
-              </Route>
+                {/* Portal (auth required — enforced by PortalLayout) */}
+                <Route path="portal" element={<PortalLayout />}>
+                  <Route index element={<Navigate to="/portal/overview" replace />} />
+                  <Route path="overview" element={<OverviewPage />} />
+                  <Route path="agents" element={<AgentsPage />} />
+                  <Route path="agents/:configId/:agentUid" element={<AgentDetailPage />} />
+                  <Route path="configurations" element={<ConfigurationsPage />} />
+                  <Route path="configurations/:id" element={<ConfigurationDetailPage />} />
+                  <Route path="builder" element={<BuilderPage />} />
+                  <Route path="getting-started" element={<GettingStartedPage />} />
+                  <Route path="onboarding" element={<OnboardingPage />} />
+                  <Route path="tokens" element={<TokensPage />} />
+                  <Route path="team" element={<TeamPage />} />
+                  <Route path="billing" element={<BillingPage />} />
+                  <Route path="settings" element={<SettingsPage />} />
+                </Route>
 
-              {/* Admin (admin auth required — enforced by AdminLayout) */}
-              <Route path="admin" element={<AdminLayout />}>
-                <Route index element={<Navigate to="/admin/overview" replace />} />
-                <Route path="overview" element={<AdminOverviewPage />} />
-                <Route path="tenants" element={<TenantsPage />} />
-                <Route path="tenants/:id" element={<TenantDetailPage />} />
-                <Route path="health" element={<HealthPage />} />
-                <Route path="events" element={<EventsPage />} />
-                <Route path="plans" element={<PlansPage />} />
-                <Route path="flags" element={<FlagsPage />} />
-              </Route>
+                {/* Admin (admin auth required — enforced by AdminLayout) */}
+                <Route path="admin" element={<AdminLayout />}>
+                  <Route index element={<Navigate to="/admin/overview" replace />} />
+                  <Route path="overview" element={<AdminOverviewPage />} />
+                  <Route path="tenants" element={<TenantsPage />} />
+                  <Route path="tenants/:id" element={<TenantDetailPage />} />
+                  <Route path="health" element={<HealthPage />} />
+                  <Route path="events" element={<EventsPage />} />
+                  <Route path="plans" element={<PlansPage />} />
+                  <Route path="flags" element={<FlagsPage />} />
+                </Route>
 
-              {/* 404 catch-all */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Suspense>
+                {/* 404 catch-all */}
+                <Route path="*" element={<NotFoundPage />} />
+              </Routes>
+            </Suspense>
+          </ErrorBoundary>
         </BrowserRouter>
       </ToastProvider>
     </QueryClientProvider>

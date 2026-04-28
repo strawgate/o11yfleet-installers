@@ -3,8 +3,6 @@
    Dark-first, single accent, geometric sans + mono
    ========================================================= */
 
-@import url("https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap");
-
 :root {
   /* Dark (default) */
   --bg: #08090b;

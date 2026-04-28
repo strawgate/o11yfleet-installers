@@ -1,22 +1,23 @@
 import { Link, Outlet, useLocation } from "react-router-dom";
+import { Logo } from "@/components/common/Logo";
 
 const NAV_LINKS = [
   { label: "Home", to: "/" },
-  { label: "Product", to: "/product" },
+  { label: "Product", to: "/product/configuration-management" },
   { label: "Pricing", to: "/pricing" },
   { label: "Enterprise", to: "/enterprise" },
   { label: "About", to: "/about" },
-  { label: "Docs", to: "/docs/index.html" },
+  { label: "Docs", to: "/docs/" },
 ] as const;
 
 const FOOTER_PRODUCT = [
-  { label: "Configuration management", to: "/product" },
+  { label: "Configuration management", to: "/product/configuration-management" },
   { label: "UI or Git workflow", to: "/solutions/gitops" },
   { label: "Pricing", to: "/pricing" },
   { label: "Enterprise", to: "/enterprise" },
 ];
 const FOOTER_RESOURCES = [
-  { label: "Docs", to: "/docs/index.html" },
+  { label: "Docs", to: "/docs/" },
   { label: "OpAMP guide", to: "#" },
   { label: "Collector guide", to: "#" },
   { label: "Pricing", to: "/pricing" },
@@ -31,26 +32,6 @@ const FOOTER_LEGAL = [
   { label: "Privacy", to: "#" },
   { label: "Terms", to: "#" },
 ];
-
-function LogoSvg() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <path
-        d="M3 6.5L12 2L21 6.5V13C21 17.5 17 20.5 12 22C7 20.5 3 17.5 3 13V6.5Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-      <circle cx="12" cy="11" r="2.2" fill="currentColor" />
-      <path
-        d="M7 11H9.5M14.5 11H17M12 6V8.5M12 13.5V16"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
 
 function FooterColumn({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
@@ -75,7 +56,7 @@ export default function MarketingLayout() {
       <header className="site-header">
         <div className="wrap">
           <Link to="/" className="logo" aria-label="O11yFleet home">
-            <LogoSvg />
+            <Logo />
             O11yFleet
           </Link>
 
@@ -104,7 +85,7 @@ export default function MarketingLayout() {
         <div className="wrap">
           <div className="footer-brand">
             <Link to="/" className="logo">
-              <LogoSvg />
+              <Logo />
               O11yFleet
             </Link>
             <p>The hosted OpAMP control plane for OpenTelemetry Collectors.</p>

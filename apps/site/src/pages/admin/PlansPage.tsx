@@ -1,6 +1,7 @@
 import { useAdminPlans } from "../../api/hooks/admin";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { PlanTag } from "@/components/common/PlanTag";
 
 export default function PlansPage() {
   const { data: plans, isLoading, error, refetch } = useAdminPlans();
@@ -9,20 +10,6 @@ export default function PlansPage() {
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
 
   const planList = plans ?? [];
-
-  const planTag = (name: string) => {
-    const isPremium = name === "pro" || name === "enterprise";
-    return (
-      <span
-        className="tag"
-        style={
-          isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined
-        }
-      >
-        {name}
-      </span>
-    );
-  };
 
   return (
     <>
@@ -50,7 +37,9 @@ export default function PlansPage() {
             ) : (
               planList.map((p) => (
                 <tr key={p.id}>
-                  <td>{planTag(p.name)}</td>
+                  <td>
+                    <PlanTag plan={p.name} />
+                  </td>
                   <td>{(p["max_configs"] as number) ?? "—"}</td>
                   <td>{(p["max_agents_per_config"] as number) ?? "—"}</td>
                   <td>{(p["price"] as string | number) ?? "—"}</td>

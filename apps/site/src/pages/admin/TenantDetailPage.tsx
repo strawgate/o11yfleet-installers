@@ -12,6 +12,7 @@ import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 
 type Tab = "overview" | "configurations" | "users" | "settings";
@@ -51,20 +52,6 @@ export default function TenantDetailPage() {
   const configList = configs.data ?? [];
   const userList = users.data ?? [];
 
-  const planTag = (plan: string) => {
-    const isPremium = plan === "pro" || plan === "enterprise";
-    return (
-      <span
-        className="tag"
-        style={
-          isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined
-        }
-      >
-        {plan}
-      </span>
-    );
-  };
-
   async function handleSave() {
     try {
       await updateTenant.mutateAsync({ name: editName.trim(), plan: editPlan });
@@ -98,7 +85,7 @@ export default function TenantDetailPage() {
           <h1>{t.name}</h1>
         </div>
         <div className="actions">
-          {planTag(t.plan ?? "free")}
+          {<PlanTag plan={t.plan ?? "free"} />}
           <Link
             to={`/portal/overview?tenant=${encodeURIComponent(t.id)}`}
             className="btn btn-ghost btn-sm"
@@ -128,7 +115,9 @@ export default function TenantDetailPage() {
             <tbody>
               <tr>
                 <td className="meta">Plan</td>
-                <td>{planTag(t.plan ?? "free")}</td>
+                <td>
+                  <PlanTag plan={t.plan ?? "free"} />
+                </td>
               </tr>
               <tr>
                 <td className="meta">Configurations</td>

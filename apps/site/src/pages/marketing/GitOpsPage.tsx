@@ -105,7 +105,7 @@ export default function GitOpsPage() {
               <Link to="/signup" className="btn btn-primary btn-lg">
                 Start free →
               </Link>
-              <Link to="/product/config" className="btn btn-secondary btn-lg">
+              <Link to="/product/configuration-management" className="btn btn-secondary btn-lg">
                 Learn about config management
               </Link>
             </div>
