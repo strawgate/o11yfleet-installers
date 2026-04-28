@@ -1,8 +1,8 @@
-# FleetPlane Architecture
+# o11yFleet Architecture
 
 ## Overview
 
-FleetPlane is an OpAMP (Open Agent Management Protocol) management service built on Cloudflare's edge platform. It manages OpenTelemetry Collector agents at scale using Cloudflare Workers, Durable Objects, D1, R2, and Queues.
+o11yFleet is an OpAMP (Open Agent Management Protocol) management service built on Cloudflare's edge platform. It manages OpenTelemetry Collector agents at scale using Cloudflare Workers, Durable Objects, D1, R2, and Queues.
 
 ## Key Design Decisions
 

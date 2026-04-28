@@ -1,4 +1,4 @@
-# FleetPlane — o11yfleet
+# o11yFleet
 
 # Default recipe
 default:
