@@ -9,6 +9,7 @@ import {
   useRollout,
   useUploadConfigVersion,
 } from "../../hooks/queries";
+import type { Agent, ConfigVersion } from "../../hooks/queries";
 import { Button } from "../../components/ui/Button";
 import { Badge } from "../../components/ui/Badge";
 import { StatCard } from "../../components/ui/StatCard";
@@ -201,11 +202,7 @@ export function ConfigurationDetailPage() {
   );
 }
 
-function AgentsTab({
-  agents,
-}: {
-  agents?: ReturnType<typeof Array<import("../../hooks/queries").Agent>>;
-}) {
+function AgentsTab({ agents }: { agents?: Agent[] }) {
   if (!agents?.length) {
     return (
       <p className="text-sm text-fg-3 py-8 text-center">
@@ -253,7 +250,7 @@ function AgentsTab({
   );
 }
 
-function VersionsTab({ versions }: { versions?: import("../../hooks/queries").ConfigVersion[] }) {
+function VersionsTab({ versions }: { versions?: ConfigVersion[] }) {
   if (!versions?.length) {
     return <p className="text-sm text-fg-3 py-8 text-center">No versions uploaded yet.</p>;
   }

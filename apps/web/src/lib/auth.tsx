@@ -1,3 +1,4 @@
+/* eslint-disable react-refresh/only-export-components */
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { api, ApiError } from "./api";

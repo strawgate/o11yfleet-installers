@@ -6,12 +6,12 @@ OpAMP (Open Agent Management Protocol) fleet management built on Cloudflare Work
 
 ## Documentation Routing
 
-| File | Purpose |
-|------|---------|
-| `README.md` | User-facing overview, quick start |
-| `DEVELOPING.md` | Architecture, design decisions, build/test commands |
-| `docs/architecture.md` | Technical architecture details |
-| `justfile` | All developer commands |
+| File                   | Purpose                                             |
+| ---------------------- | --------------------------------------------------- |
+| `README.md`            | User-facing overview, quick start                   |
+| `DEVELOPING.md`        | Architecture, design decisions, build/test commands |
+| `docs/architecture.md` | Technical architecture details                      |
+| `justfile`             | All developer commands                              |
 
 ## Key Commands
 
@@ -29,14 +29,14 @@ just bench       # Run benchmarks
 
 ## Package Structure
 
-| Package | Role |
-|---------|------|
-| `packages/core/` | OpAMP codec, state machine, auth (pure TS, no CF) |
-| `packages/db/` | D1 migrations and schema |
-| `packages/test-utils/` | Shared test utilities |
-| `apps/worker/` | Cloudflare Worker (API + OpAMP + DO) |
-| `apps/web/` | React management UI |
-| `apps/site/` | Static marketing site |
+| Package                | Role                                              |
+| ---------------------- | ------------------------------------------------- |
+| `packages/core/`       | OpAMP codec, state machine, auth (pure TS, no CF) |
+| `packages/db/`         | D1 migrations and schema                          |
+| `packages/test-utils/` | Shared test utilities                             |
+| `apps/worker/`         | Cloudflare Worker (API + OpAMP + DO)              |
+| `apps/web/`            | React management UI                               |
+| `apps/site/`           | Static marketing site                             |
 
 ## Project-Specific Rules
 
@@ -49,6 +49,7 @@ just bench       # Run benchmarks
 ## CI Pipeline
 
 See `.github/workflows/ci.yml`:
+
 - lint-format, typecheck, test-core, test-worker run in parallel
 - bundle-size checks worker bundle (3MB compressed budget)
 - terraform validates IaC

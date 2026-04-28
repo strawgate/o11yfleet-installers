@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -31,15 +31,16 @@ function renderWithProviders(ui: React.ReactElement) {
 describe("OverviewPage", () => {
   it("renders stat cards with data", () => {
     renderWithProviders(<OverviewPage />);
-    expect(screen.getByText("3")).toBeInTheDocument();
-    expect(screen.getByText("12")).toBeInTheDocument();
-    expect(screen.getByText("8")).toBeInTheDocument();
-    expect(screen.getByText("5")).toBeInTheDocument();
+    // getByText throws if not found, serving as assertion
+    screen.getByText("3");
+    screen.getByText("12");
+    screen.getByText("8");
+    screen.getByText("5");
   });
 
   it("renders navigation cards", () => {
     renderWithProviders(<OverviewPage />);
-    expect(screen.getByText("🚀 Get Started")).toBeInTheDocument();
-    expect(screen.getByText("☰ Configurations")).toBeInTheDocument();
+    screen.getByText("🚀 Get Started");
+    screen.getByText("☰ Configurations");
   });
 });

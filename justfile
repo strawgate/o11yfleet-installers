@@ -153,3 +153,51 @@ tf-validate:
 # Deploy to staging
 deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
+# ─── Full CI Pipeline ────────────────────────────────────────────────
+
+# Run the full CI pipeline locally (lint + typecheck + unit tests)
+ci-full: lint typecheck test
+    @echo "✓ CI pipeline passed"
+
+# ─── CLI ─────────────────────────────────────────────────────────────
+
+# Login to o11yfleet
+cli-login email="demo@o11yfleet.com" password="demo-password":
+    pnpm --filter @o11yfleet/cli dev login --email {{email}} --password {{password}}
+
+# Show current user
+cli-me:
+    pnpm --filter @o11yfleet/cli dev me
+
+# List configurations
+cli-configs:
+    pnpm --filter @o11yfleet/cli dev config:list
+
+# Create a configuration
+cli-config-create name="test-config":
+    pnpm --filter @o11yfleet/cli dev config:create --name {{name}}
+
+# Upload config and rollout
+cli-push config-id="CHANGE_ME" file="configs/basic-otlp.yaml":
+    pnpm --filter @o11yfleet/cli dev config:upload --config-id {{config-id}} --file {{file}}
+    pnpm --filter @o11yfleet/cli dev config:rollout --config-id {{config-id}}
+
+# List agents
+cli-agents config-id="CHANGE_ME":
+    pnpm --filter @o11yfleet/cli dev agents:list --config-id {{config-id}}
+
+# Agent stats
+cli-stats config-id="CHANGE_ME":
+    pnpm --filter @o11yfleet/cli dev agents:list --config-id {{config-id}} --stats
+
+# Benchmark provisioning
+cli-bench-provisioning api-key="CHANGE_ME":
+    pnpm --filter @o11yfleet/cli dev bench:provisioning --api-key {{api-key}}
+
+# Benchmark config push
+cli-bench-push config-id="CHANGE_ME":
+    pnpm --filter @o11yfleet/cli dev bench:config-push --config-id {{config-id}}
+
+# Benchmark enrollment
+cli-bench-enrollment config-id="CHANGE_ME" collectors="10":
+    pnpm --filter @o11yfleet/cli dev bench:enrollment --config-id {{config-id}} --collectors {{collectors}}

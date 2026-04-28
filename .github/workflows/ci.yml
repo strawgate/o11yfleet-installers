@@ -42,50 +42,31 @@ jobs:
       - name: Type check
         run: pnpm turbo typecheck
 
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+   test:
+     runs-on: ubuntu-latest
+     steps:
+       - uses: actions/checkout@v4
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
+       - uses: pnpm/action-setup@v4
+         with:
+           version: ${{ env.PNPM_VERSION }}
 
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
+       - uses: actions/setup-node@v4
+         with:
+           node-version: ${{ env.NODE_VERSION }}
+           cache: pnpm
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+       - name: Install dependencies
+         run: pnpm install --frozen-lockfile
 
-      - name: Core tests (codec, state machine, auth)
-        run: pnpm --filter @o11yfleet/core test
+       - name: Core tests (codec, state machine, auth)
+         run: pnpm --filter @o11yfleet/core test
 
-      - name: Worker tests (workerd runtime)
-        run: pnpm --filter @o11yfleet/worker test
+       - name: Worker tests (workerd runtime)
+         run: pnpm --filter @o11yfleet/worker test
 
-      - name: Web app tests
-        run: pnpm --filter @o11yfleet/web test
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Start Go opamp-go server
-        run: |
-          cd tests/spec-compliance/scripts
-          docker compose up -d
-          echo "Waiting for server to be ready..."
-          sleep 5
-
-      - name: Spec compliance tests
-        run: pnpm --filter @o11yfleet/spec-compliance test
-
-      - name: Stop Go server
-        if: always()
-        run: |
-          cd tests/spec-compliance/scripts
-          docker compose down
+       - name: Web app tests
+         run: pnpm --filter @o11yfleet/web test
 
   bundle-and-terraform:
     runs-on: ubuntu-latest

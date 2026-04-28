@@ -40,15 +40,15 @@ just test-e2e      # E2E tests (requires just dev running)
 
 ## Key Technologies
 
-| Component | Technology |
-|-----------|------------|
-| Runtime | Cloudflare Workers |
-| Agent State | Durable Objects (SQLite) |
-| Relational Data | Cloudflare D1 |
-| Config Storage | Cloudflare R2 |
-| Event Queue | Cloudflare Queues |
-| UI | React 19 + Vite |
-| CI/CD | GitHub Actions |
+| Component       | Technology               |
+| --------------- | ------------------------ |
+| Runtime         | Cloudflare Workers       |
+| Agent State     | Durable Objects (SQLite) |
+| Relational Data | Cloudflare D1            |
+| Config Storage  | Cloudflare R2            |
+| Event Queue     | Cloudflare Queues        |
+| UI              | React 19 + Vite          |
+| CI/CD           | GitHub Actions           |
 
 ## Architecture
 
@@ -62,20 +62,20 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `just dev` | Start worker locally |
-| `just ui` | Start web UI |
-| `just setup` | Full local setup (migrate + seed + fleet) |
-| `just lint` | Lint all packages |
-| `just typecheck` | Type check all packages |
-| `just test` | Run all tests |
-| `just bench` | Run benchmarks |
-| `just load-test-smoke` | Quick load test (10 agents, 15s) |
-| `just load-test` | Load test (configurable agents/duration) |
-| `just bundle-size` | Check worker bundle size |
-| `just deploy-staging` | Deploy to staging |
-| `just tf-validate` | Validate Terraform |
+| Command                | Description                               |
+| ---------------------- | ----------------------------------------- |
+| `just dev`             | Start worker locally                      |
+| `just ui`              | Start web UI                              |
+| `just setup`           | Full local setup (migrate + seed + fleet) |
+| `just lint`            | Lint all packages                         |
+| `just typecheck`       | Type check all packages                   |
+| `just test`            | Run all tests                             |
+| `just bench`           | Run benchmarks                            |
+| `just load-test-smoke` | Quick load test (10 agents, 15s)          |
+| `just load-test`       | Load test (configurable agents/duration)  |
+| `just bundle-size`     | Check worker bundle size                  |
+| `just deploy-staging`  | Deploy to staging                         |
+| `just tf-validate`     | Validate Terraform                        |
 
 ## CI Pipeline
 
@@ -94,6 +94,7 @@ See [.github/workflows/ci.yml](.github/workflows/ci.yml) for full pipeline.
 See `apps/worker/wrangler.jsonc` for local development variables.
 
 Required secrets for production:
+
 - `CLOUDFLARE_API_TOKEN` — Cloudflare API token
 - `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID
 

@@ -1,0 +1,128 @@
+name: CLI CI
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "apps/cli/**"
+  pull_request:
+    paths:
+      - "apps/cli/**"
+  release:
+    types: [published]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - run: pnpm install --no-frozen-lockfile
+        working-directory: apps/cli
+
+      - run: pnpm run lint
+        working-directory: apps/cli
+
+  typecheck:
+    name: Typecheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - run: pnpm install --no-frozen-lockfile
+        working-directory: apps/cli
+
+      - run: pnpm run typecheck
+        working-directory: apps/cli
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - run: pnpm install --no-frozen-lockfile
+        working-directory: apps/cli
+
+      - run: pnpm test
+        working-directory: apps/cli
+
+  build:
+    name: Build
+    runs-on: ubuntu-latest
+    needs: [lint, typecheck, test]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          cache: "pnpm"
+
+      - run: pnpm install --no-frozen-lockfile
+        working-directory: apps/cli
+
+      - run: pnpm run build
+        working-directory: apps/cli
+
+      - name: Verify build output
+        run: |
+          ls -la dist/
+          test -f dist/index.js || exit 1
+          test -f dist/index.d.ts || exit 1
+        working-directory: apps/cli
+
+  publish:
+    name: Publish
+    runs-on: ubuntu-latest
+    needs: [build]
+    if: github.event_name == 'release' && github.event.action == 'published'
+    environment: npm-publish
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - run: pnpm install --no-frozen-lockfile
+        working-directory: apps/cli
+
+      - run: pnpm run build
+        working-directory: apps/cli
+
+      - run: pnpm publish --access public
+        working-directory: apps/cli
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
