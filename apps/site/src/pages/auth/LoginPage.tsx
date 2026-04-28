@@ -104,7 +104,7 @@ export default function LoginPage() {
         </form>
 
         <p className="foot">
-          Don&rsquo;t have a workspace? <Link to="/signup">Sign up</Link>
+          Don&rsquo;t have a workspace? <Link to="/signup">Request access</Link>
         </p>
       </div>
     </div>

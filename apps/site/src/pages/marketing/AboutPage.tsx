@@ -81,8 +81,8 @@ export default function AboutPage() {
                 desc: "Start with visibility. Take over config management only when you're ready.",
               },
               {
-                title: "Git-backed workflows",
-                desc: "Configs live in your repo. PR review, branch protection, and audit trail come free.",
+                title: "Git-ready workflows",
+                desc: "The current MVP stores uploaded YAML versions; Git-backed sync is planned.",
               },
               {
                 title: "Transparent pricing",
@@ -90,7 +90,7 @@ export default function AboutPage() {
               },
               {
                 title: "Safe rollouts over magical automation",
-                desc: "Label-targeted, canary-first, with automatic rollback on failure.",
+                desc: "Rollouts are explicit and immediate today; progressive rollout controls are planned.",
               },
             ].map((v) => (
               <div
@@ -119,7 +119,7 @@ export default function AboutPage() {
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Start free →
+                Request access →
               </Link>
             </div>
           </div>

@@ -1,10 +1,10 @@
 # O11yFleet Collector Installer for Windows
 #
 # Usage (download then run — required for param() to work):
-#   irm https://o11yfleet-site.pages.dev/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_enroll_..."
+#   irm https://o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_enroll_..."
 #
 # One-liner via scriptblock wrapper:
-#   & ([scriptblock]::Create((irm https://o11yfleet-site.pages.dev/install.ps1))) -Token "fp_enroll_..."
+#   & ([scriptblock]::Create((irm https://o11yfleet.com/install.ps1))) -Token "fp_enroll_..."
 #
 # Uninstall:
 #   .\install.ps1 -Uninstall
@@ -54,7 +54,7 @@ if ($Uninstall) {
 if ([string]::IsNullOrWhiteSpace($Token)) {
     Write-Fail ("Token is required for installation.`n" +
         "  Usage: .\install.ps1 -Token `"fp_enroll_...`"`n" +
-        "  Or:    & ([scriptblock]::Create((irm https://o11yfleet-site.pages.dev/install.ps1))) -Token `"fp_enroll_...`"")
+        "  Or:    & ([scriptblock]::Create((irm https://o11yfleet.com/install.ps1))) -Token `"fp_enroll_...`"")
 }
 if (-not $Token.StartsWith("fp_enroll_")) {
     Write-Warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?"

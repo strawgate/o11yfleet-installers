@@ -168,6 +168,14 @@ export function App() {
                   <Route path="about" element={<AboutPage />} />
                   <Route path="pricing" element={<PricingPage />} />
                   <Route path="enterprise" element={<EnterprisePage />} />
+                  <Route
+                    path="product"
+                    element={<Navigate to="/product/configuration-management" replace />}
+                  />
+                  <Route
+                    path="product/config"
+                    element={<Navigate to="/product/configuration-management" replace />}
+                  />
                   <Route path="product/configuration-management" element={<ProductConfigPage />} />
                   <Route path="solutions/gitops" element={<GitOpsPage />} />
                   <Route path="login" element={<LoginPage />} />

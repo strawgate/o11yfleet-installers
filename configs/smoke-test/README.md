@@ -36,25 +36,16 @@ Config: [`supervisor.yaml`](supervisor.yaml)
 
 ## Setup
 
-Both approaches need an enrollment token. Create one via the o11yfleet API:
+Both approaches need an enrollment token. For local smoke testing, start the local worker and seed
+state first:
 
 ```bash
-# Create a tenant
-TENANT=$(curl -s -X POST https://api.o11yfleet.com/api/tenants \
-  -H 'Content-Type: application/json' \
-  -d '{"name":"smoke-test"}' | jq -r .id)
+just dev
 
-# Create a config
-CONFIG=$(curl -s -X POST https://api.o11yfleet.com/api/configurations \
-  -H 'Content-Type: application/json' \
-  -d "{\"tenant_id\":\"$TENANT\",\"name\":\"smoke-config\"}" | jq -r .id)
-
-# Create an enrollment token
-TOKEN=$(curl -s -X POST "https://api.o11yfleet.com/api/configurations/$CONFIG/enrollment-token" \
-  -H 'Content-Type: application/json' \
-  -d '{"label":"smoke-test"}' | jq -r .token)
-
-echo "Token: $TOKEN"
+# In another terminal:
+just setup
 ```
 
-Then paste the token into the `Authorization` header in either YAML file.
+`just setup` prints the demo configuration ID and enrollment token. Paste that token into the
+`Authorization` header in either YAML file. For hosted access, create the token in the portal or
+with `ofleet token:create --config-id <config-id> --label smoke-test`.

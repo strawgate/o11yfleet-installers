@@ -1,5 +1,10 @@
 # O11yFleet Full Site Audit Report
 
+> Historical snapshot: this audit describes the site before the request-access,
+> canonical installer URL, and footer-link cleanup in the follow-up site docs
+> pass. Treat route coverage as useful context, but do not use the marketing copy
+> and placeholder-link notes as current site truth.
+
 **Date:** 2026-04-28
 **Audited URL:** https://o11yfleet-site.pages.dev
 **Method:** Playwright-driven + HTTP verification
@@ -16,26 +21,26 @@
 
 ## Marketing Pages
 
-| Page                                     | HTTP         | Title                                         | Issues                                              |
-| ---------------------------------------- | ------------ | --------------------------------------------- | --------------------------------------------------- |
-| `/`                                      | 200 (49.5KB) | O11yFleet — The hosted OpAMP control plane... | 11 `href="#"` links (demo UI + footer placeholders) |
-| `/about.html`                            | 200 (7.8KB)  | About — O11yFleet                             | None                                                |
-| `/enterprise.html`                       | 200 (13.1KB) | Enterprise — O11yFleet                        | None                                                |
-| `/pricing.html`                          | 200 (16.9KB) | Pricing — O11yFleet                           | None                                                |
-| `/product-configuration-management.html` | 200 (19.3KB) | Configuration Management — O11yFleet          | None                                                |
-| `/solutions-gitops.html`                 | 200 (17.6KB) | GitOps Solutions — O11yFleet                  | None                                                |
+| Page                                     | HTTP         | Title                                         | Issues                                                        |
+| ---------------------------------------- | ------------ | --------------------------------------------- | ------------------------------------------------------------- |
+| `/`                                      | 200 (49.5KB) | O11yFleet — The hosted OpAMP control plane... | Superseded: follow-up pass removed public footer placeholders |
+| `/about.html`                            | 200 (7.8KB)  | About — O11yFleet                             | None                                                          |
+| `/enterprise.html`                       | 200 (13.1KB) | Enterprise — O11yFleet                        | None                                                          |
+| `/pricing.html`                          | 200 (16.9KB) | Pricing — O11yFleet                           | None                                                          |
+| `/product-configuration-management.html` | 200 (19.3KB) | Configuration Management — O11yFleet          | None                                                          |
+| `/solutions-gitops.html`                 | 200 (17.6KB) | GitOps Solutions — O11yFleet                  | None                                                          |
 
 ### Fixed Links
 
 - ✅ "Sign in" → `/login.html`
-- ✅ "Start free" → `/signup.html`
+- ✅ Primary access CTA → `/signup.html`
 - ✅ "Talk to sales" → `mailto:sales@o11yfleet.com`
 - ✅ "Read the docs" → `github.com/strawgate/o11yfleet`
 - ✅ "Read the changelog" → `github.com/strawgate/o11yfleet/releases`
 - ✅ "Read the OpAMP guide" → `github.com/strawgate/o11yfleet`
 - ✅ "Request security packet" → `mailto:security@o11yfleet.com`
 
-### Remaining `href="#"` (acceptable — future pages)
+### Superseded Placeholder Notes
 
 - Footer: Docs, OpAMP guide, Collector guide, Contact, Security, Status, Privacy, Terms
 - Demo illustration: Audit log, Revert to monitor-only, Resolve

@@ -2,20 +2,20 @@ import { Link } from "react-router-dom";
 
 const rows = [
   {
-    title: "Commit-driven rollouts",
-    desc: "Push to main, configs deploy. Branch protection and codeowners apply.",
+    title: "Planned repository sync",
+    desc: "The current MVP uses UI and CLI uploads. Git-backed config sync is on the roadmap.",
   },
   {
-    title: "PR-based review",
-    desc: "See the collector config diff in your PR. Approve with context.",
+    title: "Keep PR review in your process",
+    desc: "Until sync is built in, review collector YAML in your repo and upload the approved file.",
   },
   {
-    title: "Automatic drift remediation",
-    desc: "If a collector drifts from the repo state, it self-corrects on next sync.",
+    title: "Manual promotion today",
+    desc: "Upload known-good YAML and start an explicit rollout when you want collectors updated.",
   },
 ];
 
-const pipeline = ["Commit", "Sync", "Validate", "Deploy"];
+const pipeline = ["Commit", "Review", "Upload", "Roll out"];
 
 export default function GitOpsPage() {
   return (
@@ -30,8 +30,8 @@ export default function GitOpsPage() {
           collector configuration
         </h1>
         <p className="lede">
-          Commit to your repo, watch configs roll out. Branch protection, PR review, and audit trail
-          — the workflow you already know.
+          Keep collector YAML in your repo, then upload approved configs to O11yFleet. Native Git
+          sync is planned.
         </p>
       </section>
 
@@ -99,11 +99,11 @@ export default function GitOpsPage() {
           <div className="cta-block">
             <h2>Your repo is the source of truth.</h2>
             <p className="lede">
-              Connect your GitHub repo and let configs flow from commit to collector.
+              Use your repo for review today, and follow the roadmap toward native Git-backed sync.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Start free →
+                Request access →
               </Link>
               <Link to="/product/configuration-management" className="btn btn-secondary btn-lg">
                 Learn about config management

@@ -7,7 +7,7 @@ const NAV_LINKS = [
   { label: "Pricing", to: "/pricing" },
   { label: "Enterprise", to: "/enterprise" },
   { label: "About", to: "/about" },
-  { label: "Docs", to: "/docs/" },
+  { label: "Docs", to: "/docs/index.html" },
 ] as const;
 
 const FOOTER_PRODUCT = [
@@ -17,21 +17,20 @@ const FOOTER_PRODUCT = [
   { label: "Enterprise", to: "/enterprise" },
 ];
 const FOOTER_RESOURCES = [
-  { label: "Docs", to: "/docs/" },
-  { label: "OpAMP guide", to: "#" },
-  { label: "Collector guide", to: "#" },
+  { label: "Docs", to: "/docs/index.html" },
+  { label: "OpAMP guide", to: "/docs/concepts/opamp.html" },
+  { label: "Collector guide", to: "/docs/how-to/connect-collector.html" },
   { label: "Pricing", to: "/pricing" },
 ];
 const FOOTER_COMPANY = [
   { label: "About", to: "/about" },
-  { label: "Contact", to: "#" },
-  { label: "Security", to: "#" },
-  { label: "Status", to: "#" },
+  { label: "Contact", to: "mailto:hello@o11yfleet.com" },
+  { label: "Security", to: "mailto:security@o11yfleet.com" },
 ];
-const FOOTER_LEGAL = [
-  { label: "Privacy", to: "#" },
-  { label: "Terms", to: "#" },
-];
+
+function isDocumentLink(to: string) {
+  return to.startsWith("mailto:") || to.endsWith(".html");
+}
 
 function FooterColumn({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
@@ -40,7 +39,7 @@ function FooterColumn({ title, links }: { title: string; links: { label: string;
       <ul>
         {links.map((l) => (
           <li key={l.label}>
-            <Link to={l.to}>{l.label}</Link>
+            {isDocumentLink(l.to) ? <a href={l.to}>{l.label}</a> : <Link to={l.to}>{l.label}</Link>}
           </li>
         ))}
       </ul>
@@ -61,11 +60,17 @@ export default function MarketingLayout() {
           </Link>
 
           <nav className="nav">
-            {NAV_LINKS.filter((n) => n.label !== "Home").map((n) => (
-              <Link key={n.to} to={n.to} aria-current={pathname === n.to ? "page" : undefined}>
-                {n.label}
-              </Link>
-            ))}
+            {NAV_LINKS.filter((n) => n.label !== "Home").map((n) =>
+              isDocumentLink(n.to) ? (
+                <a key={n.to} href={n.to} aria-current={pathname === n.to ? "page" : undefined}>
+                  {n.label}
+                </a>
+              ) : (
+                <Link key={n.to} to={n.to} aria-current={pathname === n.to ? "page" : undefined}>
+                  {n.label}
+                </Link>
+              ),
+            )}
           </nav>
 
           <div className="header-right">
@@ -73,7 +78,7 @@ export default function MarketingLayout() {
               Sign in
             </Link>
             <Link to="/signup" className="btn btn-primary btn-sm">
-              Get started
+              Request access
             </Link>
           </div>
         </div>
@@ -93,11 +98,10 @@ export default function MarketingLayout() {
           <FooterColumn title="Product" links={FOOTER_PRODUCT} />
           <FooterColumn title="Resources" links={FOOTER_RESOURCES} />
           <FooterColumn title="Company" links={FOOTER_COMPANY} />
-          <FooterColumn title="Legal" links={FOOTER_LEGAL} />
         </div>
         <div className="footer-bottom">
           <span className="mono">© 2026 O11yFleet, Inc.</span>
-          <span className="mono">v0.42 · all systems healthy</span>
+          <span className="mono">Public preview</span>
         </div>
       </footer>
     </>

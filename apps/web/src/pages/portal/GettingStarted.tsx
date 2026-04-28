@@ -144,7 +144,7 @@ export function GettingStartedPage() {
             <button
               onClick={() =>
                 copyToClipboard(
-                  `FP_TOKEN="${generatedToken}" FP_ENDPOINT="${window.location.origin}" bash -c "$(curl -fsSL https://get.o11yfleet.com/install.sh)"`,
+                  `FP_TOKEN="${generatedToken}" FP_ENDPOINT="${window.location.origin}" bash -c "$(curl -fsSL https://o11yfleet.com/install.sh)"`,
                 )
               }
               className="absolute top-2 right-2 text-fg-4 hover:text-fg text-xs"
@@ -154,7 +154,7 @@ export function GettingStartedPage() {
             <pre className="whitespace-pre-wrap break-all">
               {`FP_TOKEN="${generatedToken}" \\
 FP_ENDPOINT="${window.location.origin}" \\
-bash -c "$(curl -fsSL https://get.o11yfleet.com/install.sh)"`}
+bash -c "$(curl -fsSL https://o11yfleet.com/install.sh)"`}
             </pre>
           </div>
 

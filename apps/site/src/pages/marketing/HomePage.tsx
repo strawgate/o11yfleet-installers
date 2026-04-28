@@ -15,12 +15,12 @@ export default function HomePage() {
           for OpenTelemetry Collectors
         </h1>
         <p className="lede" style={{ marginTop: 22 }}>
-          Monitor collector health, inspect effective configs, sync from GitHub, and roll out
-          changes safely — while your telemetry keeps flowing to the tools you already use.
+          Monitor collector health, inspect effective configs, upload managed configs, and trigger
+          rollouts — while your telemetry keeps flowing to the tools you already use.
         </p>
         <div className="hero-actions">
           <Link to="/signup" className="btn btn-primary btn-lg">
-            Start free →
+            Request access →
           </Link>
           <a href="#how" className="btn btn-secondary btn-lg">
             See how it works
@@ -28,8 +28,8 @@ export default function HomePage() {
         </div>
         <div className="trust-strip">
           <span>No telemetry lock-in</span>
-          <span>UI or Git, per configuration</span>
-          <span>Free monitor-only tier</span>
+          <span>UI-managed configurations today</span>
+          <span>Hosted access by request</span>
         </div>
       </section>
 
@@ -61,14 +61,14 @@ export default function HomePage() {
           <div className="cta-block">
             <h2>Stop hand-editing YAML on 200&nbsp;servers.</h2>
             <p className="lede">
-              Start monitoring your collector fleet in under five minutes. Manage configs when
-              you're ready.
+              Start locally in minutes, or request hosted access when you are ready to connect real
+              collectors.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Start free →
+                Request access →
               </Link>
-              <a href="#" className="btn btn-secondary btn-lg">
+              <a href="/docs/index.html" className="btn btn-secondary btn-lg">
                 Read the docs
               </a>
             </div>

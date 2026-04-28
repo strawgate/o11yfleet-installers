@@ -6,8 +6,13 @@ const plans = [
     price: "$0",
     period: "/month",
     desc: "For teams getting started with collector visibility.",
-    features: ["5 configurations", "50K agents", "Monitor-only included", "Community support"],
-    cta: "Start free →",
+    features: [
+      "5 configurations",
+      "50K agents per config",
+      "Core OpAMP enrollment",
+      "Community support",
+    ],
+    cta: "Request access →",
     ctaTo: "/signup",
     ctaClass: "btn btn-secondary btn-lg",
     featured: false,
@@ -17,8 +22,14 @@ const plans = [
     price: "$49",
     period: "/month",
     desc: "For teams managing configs and rollouts.",
-    features: ["50 configurations", "100K agents", "GitHub sync", "Rollouts", "Priority support"],
-    cta: "Start free →",
+    features: [
+      "50 configurations",
+      "100K agents per config",
+      "Config upload",
+      "Immediate rollouts",
+      "Priority support",
+    ],
+    cta: "Request access →",
     ctaTo: "/signup",
     ctaClass: "btn btn-primary btn-lg",
     featured: true,
@@ -95,11 +106,11 @@ export default function PricingPage() {
           <div className="cta-block">
             <h2>Not sure which plan?</h2>
             <p className="lede">
-              Start on the free tier. Upgrade when you need config management or rollouts.
+              Request hosted access, or run the local dev setup to try the control plane yourself.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Start free →
+                Request access →
               </Link>
             </div>
           </div>

@@ -3,15 +3,15 @@ import { Link } from "react-router-dom";
 const rows = [
   {
     title: "Version every change",
-    desc: "Configs are immutable snapshots. Diff any two versions, roll back instantly.",
+    desc: "Each YAML upload is stored as an immutable snapshot with a content hash.",
   },
   {
-    title: "Label-targeted rollouts",
-    desc: "Roll changes to specific label sets. Canary, then promote.",
+    title: "Immediate rollouts",
+    desc: "Push the current config to connected collectors when you are ready.",
   },
   {
-    title: "Drift detection",
-    desc: "Know when what's running doesn't match what you intended.",
+    title: "Effective config visibility",
+    desc: "Collectors can report what they are running so operators can inspect fleet state.",
   },
 ];
 
@@ -30,8 +30,8 @@ export default function ProductConfigPage() {
           that doesn't break prod
         </h1>
         <p className="lede">
-          Versioned configs, label-targeted rollouts, and automatic drift detection — so you can
-          ship changes without holding your breath.
+          Versioned configs, immediate rollouts, and effective config visibility — so you can see
+          what your collector fleet is running.
         </p>
       </section>
 
@@ -103,7 +103,7 @@ export default function ProductConfigPage() {
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Start free →
+                Request access →
               </Link>
               <Link to="/pricing" className="btn btn-secondary btn-lg">
                 See pricing

@@ -34,7 +34,7 @@
           O11yFleet
         </a>
         <nav class="nav nav-inline">
-          <a href="/product">Product</a>
+          <a href="/product/configuration-management">Product</a>
           <a href="/pricing">Pricing</a>
           <a href="/enterprise">Enterprise</a>
           <a href="/about">About</a>
@@ -68,7 +68,7 @@
               <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
             </svg>
           </button>
-          <a href="/signup" class="btn btn-primary btn-sm">Start free</a>
+          <a href="/signup" class="btn btn-primary btn-sm">Request access</a>
         </div>
       </div>
     </header>
@@ -130,29 +130,31 @@
           <h1>Install O11yFleet</h1>
 
           <p class="lede">
-            O11yFleet can be used in two ways: as a <strong>hosted SaaS service</strong> (the
-            easiest way) or <strong>self-hosted</strong> on your own Cloudflare account for full
-            control.
+            O11yFleet can be used in two ways: with <strong>hosted access</strong> when your
+            workspace has been provisioned, or <strong>self-hosted</strong> on your own Cloudflare
+            account for full control.
           </p>
 
-          <h2 id="saas">Option 1 — Hosted SaaS (recommended)</h2>
+          <h2 id="hosted">Option 1 — Hosted access</h2>
           <p>
-            The simplest way to use O11yFleet is through our hosted service at
-            <code class="mono">api.o11yfleet.com</code>. Just sign up and start connecting
-            collectors immediately.
+            The hosted control plane runs at <code class="mono">api.o11yfleet.com</code>, but
+            self-service registration is not enabled yet. Use hosted access if your workspace has
+            already been provisioned, or contact us from the signup page to request access.
           </p>
           <ol>
-            <li>Create a free account at <a href="/signup">o11yfleet.com</a></li>
+            <li>
+              Request access or sign in to an existing workspace at
+              <a href="/signup">o11yfleet.com</a>
+            </li>
             <li>
               Follow the <a href="../getting-started.html">getting started guide</a> to connect your
               first collector
             </li>
-            <li>Done — no installation or infrastructure to manage</li>
+            <li>Use hosted access when you do not want to operate the control plane yourself</li>
           </ol>
           <p>
-            <strong>Pricing:</strong> The current MVP documents core OpAMP enrollment, config
-            upload, and immediate rollouts. Public pricing and separate monitor-only/managed tiers
-            are not finalized in this docs set.
+            <strong>Pricing:</strong> Public pricing describes the current hosted access model, but
+            access is still manually provisioned while self-service registration is unavailable.
           </p>
 
           <h2 id="self-hosted">Option 2 — Self-hosted</h2>
@@ -197,21 +199,6 @@ cd o11yfleet</code></pre>
               ><code>just install</code></pre>
             </li>
             <li>
-              <strong>Run local development setup</strong>
-              <pre
-                style="
-                  background: var(--surface-2);
-                  padding: 12px 14px;
-                  border-radius: var(--radius);
-                  overflow-x: auto;
-                  font-size: 13px;
-                "
-              ><code>just setup</code></pre>
-              <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
-                This applies database migrations, seeds a demo tenant, and shows the fleet status.
-              </p>
-            </li>
-            <li>
               <strong>Start the worker</strong> (for local development)
               <pre
                 style="
@@ -224,8 +211,24 @@ cd o11yfleet</code></pre>
               ><code>just dev</code></pre>
               <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
                 This starts a local Cloudflare Worker at
-                <code class="mono">http://localhost:8787</code>. You can now connect collectors to
-                it.
+                <code class="mono">http://localhost:8787</code>.
+              </p>
+            </li>
+            <li>
+              <strong>Seed local data</strong> (in another terminal)
+              <pre
+                style="
+                  background: var(--surface-2);
+                  padding: 12px 14px;
+                  border-radius: var(--radius);
+                  overflow-x: auto;
+                  font-size: 13px;
+                "
+              ><code>just setup</code></pre>
+              <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
+                This applies database migrations, seeds a demo tenant and configuration, creates an
+                enrollment token, and shows fleet status. You can now connect collectors to the
+                local worker.
               </p>
             </li>
           </ol>

@@ -4,32 +4,32 @@ const features = [
   {
     icon: "🔐",
     title: "SSO & SAML",
-    desc: "Integrate with your identity provider. Enforce MFA and session policies.",
+    desc: "Enterprise identity integrations are planned; contact us to discuss requirements.",
   },
   {
     icon: "👥",
     title: "Role-based access",
-    desc: "Fine-grained permissions per team, project, or environment.",
+    desc: "Tenant isolation exists today; fine-grained RBAC is planned.",
   },
   {
     icon: "📋",
     title: "Audit trail",
-    desc: "Every config change, rollout, and login event is logged and exportable.",
+    desc: "Configuration versions are recorded today; broader audit export is planned.",
   },
   {
     icon: "🗄️",
     title: "Custom retention",
-    desc: "Control how long configuration history and telemetry metadata are retained.",
+    desc: "Discuss retention requirements before production deployment.",
   },
   {
     icon: "🛟",
     title: "Dedicated support",
-    desc: "Named support engineers with guaranteed response times.",
+    desc: "Dedicated support is available by arrangement for early hosted users.",
   },
   {
     icon: "📄",
     title: "SLAs",
-    desc: "Contractual uptime guarantees backed by credits.",
+    desc: "SLA terms are handled case by case while the hosted service is early.",
   },
 ];
 
@@ -93,8 +93,8 @@ export default function EnterprisePage() {
           <div className="cta-block">
             <h2>Talk to us about enterprise</h2>
             <p className="lede">
-              We'll walk you through SSO setup, compliance docs, and a deployment plan that fits
-              your organization.
+              We'll walk you through hosted access, compliance requirements, and a deployment plan
+              that fits your organization.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">

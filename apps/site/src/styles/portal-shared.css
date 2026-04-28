@@ -102,13 +102,18 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
+  width: 100%;
   padding: 7px 10px;
+  border: 0;
   border-radius: 6px;
+  background: transparent;
   color: var(--fg-2);
+  font: inherit;
   font-size: 13.5px;
   font-weight: 450;
   cursor: pointer;
   text-decoration: none;
+  text-align: left;
   white-space: nowrap;
 }
 .sidebar-link > span {

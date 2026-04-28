@@ -6,8 +6,9 @@
 #
 # Usage:
 #   1. Create an enrollment token in o11yfleet:
-#        curl -X POST https://api.o11yfleet.com/api/configurations/<CONFIG_ID>/enrollment-token \
-#          -H 'Content-Type: application/json' -d '{"label":"smoke-test"}'
+#        just setup
+#      or:
+#        ofleet token:create --config-id <CONFIG_ID> --label smoke-test
 #
 #   2. Set the token in this file (see <ENROLLMENT_TOKEN> below)
 #

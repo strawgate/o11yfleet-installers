@@ -116,16 +116,16 @@ function SidebarNav({ nav }: { nav: (NavSection | NavItem)[] }) {
         }
         if (item.placeholder) {
           return (
-            <a
+            <button
               key={item.id + i}
-              href="#"
+              type="button"
               className="sidebar-link"
               data-placeholder="true"
-              onClick={(e) => e.preventDefault()}
+              disabled
             >
               <SidebarIcon name={item.icon} />
               <span>{item.label}</span>
-            </a>
+            </button>
           );
         }
         return (

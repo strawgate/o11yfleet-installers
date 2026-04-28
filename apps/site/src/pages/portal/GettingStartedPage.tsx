@@ -11,10 +11,10 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 
 const INSTALL_SH = (token: string) =>
-  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token ${token}`;
+  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;
 
 const INSTALL_PS1 = (token: string) =>
-  `irm https://o11yfleet-site.pages.dev/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token "${token}"`;
+  `irm https://o11yfleet.com/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token "${token}"`;
 
 type Step = 1 | 2 | 3 | 4;
 
