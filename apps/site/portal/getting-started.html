@@ -53,11 +53,18 @@
               O11yFleet. The collector will receive remote configuration and report status.
             </p>
             <div class="code-block" id="cmd-test-client">
-              <button class="copy" data-copy="">copy</button># Add the OpAMP extension to your
-              collector config: extensions: opamp: server: ws: endpoint:
-              wss://api.o11yfleet.com/v1/opamp headers: Authorization: "Bearer
-              <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span>"
-              service: extensions: [opamp]
+              <button class="copy" data-copy="">copy</button>
+              <pre style="margin: 0; white-space: pre; font: inherit">
+extensions:
+  opamp:
+    server:
+      ws:
+        endpoint: wss://api.o11yfleet.com/v1/opamp
+    headers:
+      Authorization: "Bearer <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span>"
+
+service:
+  extensions: [opamp]</pre>
             </div>
           </div>
           <div data-tab-panel="supervisor" data-tabs-group="install" class="tab-panel">
@@ -75,15 +82,22 @@
               1. Create a supervisor config file <code>supervisor.yaml</code>:
             </p>
             <div class="code-block">
-              <button class="copy" data-copy="">copy</button>server: endpoint:
-              wss://api.o11yfleet.com/v1/opamp headers: Authorization: "Bearer
-              <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span>" agent:
-              executable: /usr/local/bin/otelcol-contrib
+              <button class="copy" data-copy="">copy</button>
+              <pre style="margin: 0; white-space: pre; font: inherit">
+server:
+  endpoint: wss://api.o11yfleet.com/v1/opamp
+  headers:
+    Authorization: "Bearer <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span>"
+
+agent:
+  executable: /usr/local/bin/otelcol-contrib</pre>
             </div>
             <p class="t-muted text-sm" style="margin: 8px 0">2. Run the supervisor:</p>
             <div class="code-block">
-              <button class="copy" data-copy="">copy</button>opampsupervisor --config
-              supervisor.yaml
+              <button class="copy" data-copy="">copy</button>
+              <pre style="margin: 0; white-space: pre; font: inherit">
+opampsupervisor --config supervisor.yaml</pre
+              >
             </div>
           </div>
 
