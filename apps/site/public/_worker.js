@@ -48,12 +48,39 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    // SPA fallback — serve index.html for all other paths (client-side routing)
-    // Use no-cache to prevent CDN from caching stale HTML after redeployments
-    const indexUrl = new URL("/index.html", url.origin);
-    const indexRes = await env.ASSETS.fetch(new Request(indexUrl, request));
-    const res = new Response(indexRes.body, indexRes);
-    res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
-    return res;
+    // SPA fallback — serve index.html for client-side routing.
+    //
+    // CF Pages' ASSETS binding runs its own redirect rules (.html → clean URL).
+    // Fetching "/index.html" returns a 308→"/" redirect instead of content.
+    // For non-existent paths, ASSETS returns a 308→"/" redirect (SPA behavior).
+    //
+    // To avoid redirect loops, we try the original request first. If ASSETS
+    // returns a redirect or 404, we fetch the raw asset content using a
+    // new Request to "/" that strips any problematic request properties.
+    const assetRes = await env.ASSETS.fetch(request);
+
+    if (assetRes.ok) {
+      // ASSETS returned actual content — set no-cache and return
+      const res = new Response(assetRes.body, assetRes);
+      res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
+      return res;
+    }
+
+    // For redirects/404s: build a completely fresh GET request for "/"
+    // to retrieve index.html without triggering further redirects
+    const rootReq = new Request(new URL("/", url.origin), {
+      method: "GET",
+      headers: {},
+    });
+    const rootRes = await env.ASSETS.fetch(rootReq);
+
+    if (rootRes.ok) {
+      const res = new Response(rootRes.body, rootRes);
+      res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
+      return res;
+    }
+
+    // Last resort: return whatever ASSETS gave us
+    return assetRes;
   },
 };
