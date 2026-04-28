@@ -24,3 +24,4 @@ profiles/
 # Load test output
 load-test-results/
 O11yFleet.zip
+.playwright-cli/

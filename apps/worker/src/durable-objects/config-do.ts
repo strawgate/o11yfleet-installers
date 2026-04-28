@@ -31,7 +31,7 @@ export interface ConfigDOEnv {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
   FP_EVENTS: Queue;
-  FP_ANALYTICS: AnalyticsEngineDataset;
+  FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
 }
 

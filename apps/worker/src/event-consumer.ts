@@ -5,7 +5,7 @@
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 
 export interface ConsumerEnv {
-  FP_ANALYTICS: AnalyticsEngineDataset;
+  FP_ANALYTICS?: AnalyticsEngineDataset;
 }
 
 export async function handleQueueBatch(
@@ -17,7 +17,7 @@ export async function handleQueueBatch(
 
     // Write analytics datapoint
     try {
-      env.FP_ANALYTICS.writeDataPoint({
+      env.FP_ANALYTICS?.writeDataPoint({
         blobs: [event.type, event.tenant_id, event.config_id, event.instance_uid],
         doubles: [event.timestamp],
         indexes: [event.tenant_id],

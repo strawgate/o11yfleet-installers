@@ -1,0 +1,130 @@
+name: Release Deploy
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      skip_tests:
+        description: "Skip test jobs (deploy only)"
+        required: false
+        default: "false"
+        type: boolean
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  test:
+    if: ${{ github.event.inputs.skip_tests != 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint & typecheck
+        run: pnpm turbo lint typecheck
+
+      - name: Run all tests
+        run: pnpm turbo test
+
+  deploy-worker:
+    needs: [test]
+    if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Deploy worker to production
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/worker
+          command: deploy
+
+      - name: Run D1 migrations
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          workingDirectory: apps/worker
+          command: d1 migrations apply FP_DB --remote
+
+      - name: Smoke test production
+        run: |
+          WORKER_URL="https://api.o11yfleet.com"
+          echo "=== Health check ==="
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL/healthz")
+            if [ "$STATUS" = "200" ]; then break; fi
+            echo "Attempt $i: status $STATUS, retrying..."
+            sleep 5
+          done
+          if [ "$STATUS" != "200" ]; then
+            echo "❌ Health check failed after 5 attempts: $STATUS"
+            exit 1
+          fi
+          echo "✓ Health check passed"
+
+          echo "=== API smoke: create tenant ==="
+          TENANT=$(curl -s -X POST "$WORKER_URL/api/admin/tenants" \
+            -H "Content-Type: application/json" \
+            -d '{"name":"ci-release-smoke"}')
+          TENANT_ID=$(echo "$TENANT" | jq -r '.id')
+          if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
+            echo "Failed to create tenant: $TENANT"
+            exit 1
+          fi
+          echo "✓ Created tenant: $TENANT_ID"
+          echo "✓ Production smoke tests passed"
+
+  deploy-site:
+    needs: [test]
+    if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy site to Cloudflare Pages
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          command: pages deploy apps/site --project-name o11yfleet-site --commit-dirty=true
+
+      - name: Smoke test site
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://o11yfleet.com/)
+          if [ "$STATUS" != "200" ]; then
+            echo "Site smoke test failed: $STATUS"
+            exit 1
+          fi
+          echo "✓ Site deployed and responding"

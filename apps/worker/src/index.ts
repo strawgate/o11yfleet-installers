@@ -13,7 +13,7 @@ export interface Env {
   FP_CONFIGS: R2Bucket;
   FP_EVENTS: Queue;
   CONFIG_DO: DurableObjectNamespace;
-  FP_ANALYTICS: AnalyticsEngineDataset;
+  FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
   API_SECRET?: string; // C1 fix: optional API auth key
 }
