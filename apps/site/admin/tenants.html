@@ -20,7 +20,17 @@
               <h1>Tenants</h1>
               <div class="sub">1,284 workspaces · 38,492 collectors</div>
             </div>
-            <div class="actions"><button class="btn btn-secondary btn-sm">Export CSV</button></div>
+            <div class="actions">
+              <button type="button" class="btn btn-secondary btn-sm">Export CSV</button>
+              <button
+                type="button"
+                id="create-tenant-btn"
+                class="btn btn-primary btn-sm"
+                data-open-modal="create-tenant"
+              >
+                Create tenant
+              </button>
+            </div>
           </div>
           <div class="dt-card">
             <div class="dt-toolbar">
@@ -68,6 +78,44 @@
         </div>
       </main>
     </div>
+    <div class="modal-backdrop" id="create-tenant">
+      <div class="modal">
+        <div class="modal-head">
+          <h3>Create tenant</h3>
+          <button type="button" class="modal-close" data-close-modal>×</button>
+        </div>
+        <div class="modal-body">
+          <div
+            id="ct-error"
+            style="
+              display: none;
+              color: var(--err);
+              font-size: 13px;
+              margin-bottom: 12px;
+              padding: 8px 12px;
+              background: rgba(255, 50, 50, 0.1);
+              border-radius: 6px;
+            "
+          ></div>
+          <div class="field">
+            <label for="ct-name">Tenant name</label>
+            <input id="ct-name" class="input" placeholder="e.g. Acme Platform" required />
+          </div>
+          <div class="field">
+            <label for="ct-plan">Plan</label>
+            <select id="ct-plan" class="select">
+              <option value="free">Free</option>
+              <option value="pro">Pro</option>
+              <option value="enterprise">Enterprise</option>
+            </select>
+          </div>
+        </div>
+        <div class="modal-foot">
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button>
+          <button type="button" id="ct-submit" class="btn btn-primary">Create</button>
+        </div>
+      </div>
+    </div>
     <script src="../portal-api.js"></script>
     <script src="../portal-shell.js"></script>
     <script src="../portal-shell-render.js"></script>
@@ -88,6 +136,19 @@
           return d.innerHTML;
         }
 
+        // Bind filter listeners once (outside loadTenants to avoid accumulation)
+        var filterInput = document.querySelector(".dt-toolbar .input");
+        var planSelect = document.querySelectorAll(".dt-toolbar .select")[0];
+        var currentRender = null;
+        if (filterInput)
+          filterInput.addEventListener("input", function () {
+            if (currentRender) currentRender();
+          });
+        if (planSelect)
+          planSelect.addEventListener("change", function () {
+            if (currentRender) currentRender();
+          });
+
         async function loadTenants() {
           const tbody = document.getElementById("trows");
           const countEl = document.querySelector(".page-head .sub");
@@ -97,8 +158,6 @@
             if (countEl)
               countEl.textContent =
                 tenants.length + " workspace" + (tenants.length !== 1 ? "s" : "");
-            const filterInput = document.querySelector(".dt-toolbar .input");
-            const planSelect = document.querySelectorAll(".dt-toolbar .select")[0];
 
             function render() {
               let filtered = tenants;
@@ -125,8 +184,8 @@
                     t.plan === "pro" || t.plan === "enterprise"
                       ? ' style="border-color: var(--accent-line); color: var(--accent);"'
                       : "";
-                  return `<tr class="clickable" onclick="window.location.href='tenant-detail.html?id=${t.id}'">
-          <td><div class="name">${esc(t.name)}</div><div class="meta">${FP.trunc(t.id, 12)}</div></td>
+                  return `<tr class="clickable" tabindex="0" role="link" onclick="window.location.href='tenant-detail.html?id=${t.id}'" onkeydown="if(event.key==='Enter')this.click()">
+          <td><div class="name">${esc(t.name)}</div><div class="meta">${esc(FP.trunc(t.id, 12))}</div></td>
           <td><span class="tag"${planStyle}>${esc(t.plan)}</span></td>
           <td class="mono-cell">${t.max_configs}</td>
           <td class="mono-cell">${(t.max_agents_per_config || 0).toLocaleString()}</td>
@@ -136,8 +195,7 @@
                 .join("");
             }
 
-            if (filterInput) filterInput.addEventListener("input", render);
-            if (planSelect) planSelect.addEventListener("change", render);
+            currentRender = render;
             render();
           } catch (e) {
             console.error("Failed to load tenants", e);
@@ -147,6 +205,34 @@
         }
 
         FP.autoRefresh(loadTenants, 15000);
+
+        // Create tenant modal
+        document.getElementById("ct-submit").addEventListener("click", async function () {
+          var btn = this;
+          var errEl = document.getElementById("ct-error");
+          var name = document.getElementById("ct-name").value.trim();
+          var plan = document.getElementById("ct-plan").value;
+          errEl.style.display = "none";
+          if (!name) {
+            errEl.textContent = "Name is required";
+            errEl.style.display = "block";
+            return;
+          }
+          btn.disabled = true;
+          btn.textContent = "Creating…";
+          try {
+            var result = await FP.post("/api/admin/tenants", { name: name, plan: plan });
+            closeModal("create-tenant");
+            document.getElementById("ct-name").value = "";
+            toast("Created", "Tenant " + name + " created");
+            loadTenants();
+          } catch (e) {
+            errEl.textContent = e.message || "Failed to create tenant";
+            errEl.style.display = "block";
+          }
+          btn.disabled = false;
+          btn.textContent = "Create";
+        });
       })();
     </script>
   </body>

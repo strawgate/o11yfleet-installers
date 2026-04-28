@@ -52,7 +52,7 @@
           <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px">
             <div class="dt-card">
               <div class="dt-toolbar">
-                <strong style="font-size: 13.5px">Tenants by collectors</strong>
+                <strong style="font-size: 13.5px">Recent tenants</strong>
                 <div class="spacer"></div>
                 <a href="tenants.html" class="btn btn-ghost btn-sm">All tenants</a>
               </div>
@@ -61,69 +61,28 @@
                   <tr>
                     <th>Tenant</th>
                     <th>Plan</th>
-                    <th>Collectors</th>
-                    <th>MRR</th>
-                    <th>Health</th>
+                    <th>Max configs</th>
+                    <th>Max agents</th>
+                    <th>Created</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr class="clickable" onclick="window.location.href = 'tenant-detail.html'">
-                    <td class="name">Globex Industries</td>
-                    <td><span class="tag">Enterprise</span></td>
-                    <td class="mono-cell">2,340</td>
-                    <td class="mono-cell">$8,400</td>
-                    <td><span class="tag tag-ok">healthy</span></td>
-                  </tr>
-                  <tr class="clickable" onclick="window.location.href = 'tenant-detail.html'">
-                    <td class="name">Initech</td>
-                    <td><span class="tag">Enterprise</span></td>
-                    <td class="mono-cell">1,884</td>
-                    <td class="mono-cell">$6,200</td>
-                    <td><span class="tag tag-ok">healthy</span></td>
-                  </tr>
-                  <tr class="clickable" onclick="window.location.href = 'tenant-detail.html'">
-                    <td class="name">Hooli</td>
-                    <td>
-                      <span
-                        class="tag"
-                        style="border-color: var(--accent-line); color: var(--accent)"
-                        >Business</span
-                      >
+                <tbody id="ov-tenant-rows">
+                  <tr>
+                    <td colspan="5" class="meta" style="text-align: center; padding: 32px">
+                      Loading…
                     </td>
-                    <td class="mono-cell">412</td>
-                    <td class="mono-cell">$249</td>
-                    <td><span class="tag tag-warn">degraded · 4</span></td>
-                  </tr>
-                  <tr class="clickable" onclick="window.location.href = 'tenant-detail.html'">
-                    <td class="name">Acme Platform</td>
-                    <td>
-                      <span
-                        class="tag"
-                        style="border-color: var(--accent-line); color: var(--accent)"
-                        >Business</span
-                      >
-                    </td>
-                    <td class="mono-cell">42</td>
-                    <td class="mono-cell">$249</td>
-                    <td><span class="tag tag-ok">healthy</span></td>
-                  </tr>
-                  <tr class="clickable" onclick="window.location.href = 'tenant-detail.html'">
-                    <td class="name">Wayne Enterprises</td>
-                    <td><span class="tag">Pro</span></td>
-                    <td class="mono-cell">38</td>
-                    <td class="mono-cell">$49</td>
-                    <td><span class="tag tag-ok">healthy</span></td>
                   </tr>
                 </tbody>
               </table>
             </div>
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Audit events — coming soon</p>
+            <div class="dt-card">
+              <div class="dt-toolbar">
+                <strong style="font-size: 13.5px">Plan distribution</strong>
+              </div>
+              <div id="ov-plan-dist" style="padding: 18px">
+                <p class="t-muted text-sm">Loading…</p>
+              </div>
             </div>
-          </div>
-
-          <div class="card card-pad mt-6" style="padding: 32px; text-align: center">
-            <p class="t-muted" style="font-size: 14px">Plan distribution — coming soon</p>
           </div>
         </div>
       </main>
@@ -193,13 +152,19 @@
           }
         } catch (e) {
           console.error("Failed to load admin overview", e);
+          var statEls = document.querySelectorAll(".stat-grid .stat");
+          for (var i = 0; i < statEls.length; i++) {
+            statEls[i].querySelector(".val").textContent = "!";
+            statEls[i].querySelector(".delta").textContent = "load failed";
+            statEls[i].querySelector(".delta").style.color = "var(--err)";
+          }
         }
 
         // Load tenant list
         try {
           var tenantData = await FP.get("/api/admin/tenants");
           var tenants = tenantData.tenants || [];
-          var tbody = document.querySelector(".dt-card table.dt tbody");
+          var tbody = document.getElementById("ov-tenant-rows");
           if (tbody && tenants.length > 0) {
             function esc(s) {
               var d = document.createElement("div");
@@ -209,14 +174,20 @@
             tbody.innerHTML = tenants
               .slice(0, 10)
               .map(function (t) {
+                var planStyle =
+                  t.plan === "pro" || t.plan === "enterprise"
+                    ? ' style="border-color: var(--accent-line); color: var(--accent);"'
+                    : "";
                 return (
-                  '<tr class="clickable" onclick="window.location.href=\'tenant-detail.html?id=' +
+                  '<tr class="clickable" tabindex="0" role="link" onclick="window.location.href=\'tenant-detail.html?id=' +
                   t.id +
-                  "'\">" +
+                  "'\" onkeydown=\"if(event.key==='Enter')this.click()\">" +
                   '<td class="name">' +
                   esc(t.name) +
                   "</td>" +
-                  '<td><span class="tag">' +
+                  '<td><span class="tag"' +
+                  planStyle +
+                  ">" +
                   esc(t.plan || "free") +
                   "</span></td>" +
                   '<td class="mono-cell">' +
@@ -225,13 +196,62 @@
                   '<td class="mono-cell">' +
                   (t.max_agents_per_config || 0).toLocaleString() +
                   "</td>" +
-                  '<td><span class="tag tag-ok">active</span></td></tr>'
+                  '<td class="meta">' +
+                  FP.relTime(t.created_at) +
+                  "</td></tr>"
                 );
               })
               .join("");
+          } else if (tbody) {
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;">No tenants yet. <a href="tenants.html">Create one</a>.</td></tr>';
           }
         } catch (e) {
           console.error("Failed to load tenants for overview", e);
+          var tbody = document.getElementById("ov-tenant-rows");
+          if (tbody)
+            tbody.innerHTML =
+              '<tr><td colspan="5" class="meta" style="color:var(--err);text-align:center;padding:32px;">Failed to load tenants</td></tr>';
+        }
+
+        // Load plan distribution
+        try {
+          var planData = await FP.get("/api/admin/plans");
+          var plans = planData.plans || [];
+          var planEl = document.getElementById("ov-plan-dist");
+          var total = plans.reduce(function (sum, p) {
+            return sum + p.tenant_count;
+          }, 0);
+          planEl.innerHTML = plans
+            .map(function (p) {
+              var pct = total > 0 ? Math.round((p.tenant_count / total) * 100) : 0;
+              var planStyle =
+                p.name === "pro" || p.name === "enterprise"
+                  ? ' style="border-color: var(--accent-line); color: var(--accent);"'
+                  : "";
+              return (
+                '<div class="flex-row" style="gap:10px;margin-bottom:12px;align-items:center;">' +
+                '<span class="tag"' +
+                planStyle +
+                ">" +
+                esc(p.name) +
+                "</span>" +
+                '<div style="flex:1;height:8px;background:var(--surface-2);border-radius:4px;overflow:hidden;">' +
+                '<div style="width:' +
+                pct +
+                '%;height:100%;background:var(--accent);border-radius:4px;"></div></div>' +
+                '<span class="t-mono text-sm">' +
+                p.tenant_count +
+                "</span></div>"
+              );
+            })
+            .join("");
+        } catch (e) {
+          console.error("Failed to load plan distribution", e);
+          var planEl = document.getElementById("ov-plan-dist");
+          if (planEl)
+            planEl.innerHTML =
+              '<p class="t-muted text-sm" style="color:var(--err);">Failed to load plan data</p>';
         }
       })();
     </script>

@@ -21,9 +21,15 @@
               <div class="sub">Gate features by plan, tenant, or percentage.</div>
             </div>
           </div>
-          <div class="card card-pad" style="padding: 32px; text-align: center">
-            <p class="t-muted" style="font-size: 14px">Feature flags — coming soon</p>
-          </div>
+
+          <div
+            id="flags-grid"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+              gap: 14px;
+            "
+          ></div>
         </div>
       </main>
     </div>
@@ -41,6 +47,90 @@
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
+
+        var flags = [
+          {
+            key: "opamp_protobuf",
+            label: "Protobuf OpAMP codec",
+            desc: "Enable protobuf encoding for OpAMP messages in addition to JSON. Reduces bandwidth by ~60%.",
+            enabled: true,
+            scope: "global",
+          },
+          {
+            key: "analytics_engine",
+            label: "CF Analytics Engine tracking",
+            desc: "Write audit events and telemetry metrics to Cloudflare Analytics Engine for queryable retention.",
+            enabled: false,
+            scope: "global",
+          },
+          {
+            key: "remote_config_push",
+            label: "Remote config push",
+            desc: "Push configuration updates to connected agents immediately via the OpAMP ServerToAgent channel.",
+            enabled: true,
+            scope: "per-tenant",
+          },
+          {
+            key: "supervisor_mode",
+            label: "OpAMP Supervisor management",
+            desc: "Allow the control plane to manage agent supervisor processes — restart, upgrade, and health check.",
+            enabled: false,
+            scope: "per-tenant",
+          },
+        ];
+
+        function esc(s) {
+          var d = document.createElement("div");
+          d.textContent = s || "";
+          return d.innerHTML;
+        }
+
+        var gridEl = document.getElementById("flags-grid");
+        var bannerHtml =
+          '<div class="banner warn mb-3" style="margin-bottom: 14px">' +
+          "<div>" +
+          '<div class="b-title">Sample data</div>' +
+          '<div class="b-body">Flag states shown below are illustrative — not connected to a live API yet.</div>' +
+          "</div></div>";
+        var html = "";
+        flags.forEach(function (f) {
+          var onOff = f.enabled;
+          var toggleBg = onOff ? "var(--accent)" : "var(--line)";
+          var togglePos = onOff ? "translateX(18px)" : "translateX(0)";
+          var statusTag = onOff
+            ? '<span class="tag tag-ok">enabled</span>'
+            : '<span class="tag" style="opacity: 0.5">disabled</span>';
+          html +=
+            '<div class="card card-pad" style="padding: 18px">' +
+            '<div class="flex-row" style="gap: 10px; margin-bottom: 10px; align-items: flex-start">' +
+            '<div style="flex: 1">' +
+            '<div style="font-size: 14px; font-weight: 500">' +
+            esc(f.label) +
+            "</div>" +
+            '<code class="t-muted" style="font-size: 11px; font-family: var(--font-mono)">' +
+            esc(f.key) +
+            "</code>" +
+            "</div>" +
+            '<div style="min-width: 46px; height: 26px; border-radius: 13px; background: ' +
+            toggleBg +
+            '; position: relative; cursor: not-allowed; opacity: 0.8">' +
+            '<div style="width: 22px; height: 22px; border-radius: 50%; background: white; position: absolute; top: 2px; left: 2px; transform: ' +
+            togglePos +
+            '; transition: transform 0.15s;"></div>' +
+            "</div>" +
+            "</div>" +
+            '<p class="t-muted" style="font-size: 13px; line-height: 1.5; margin-bottom: 10px">' +
+            esc(f.desc) +
+            "</p>" +
+            '<div class="flex-row" style="gap: 8px">' +
+            statusTag +
+            '<span class="tag">' +
+            esc(f.scope) +
+            "</span>" +
+            "</div>" +
+            "</div>";
+        });
+        gridEl.innerHTML = bannerHtml + html;
       })();
     </script>
   </body>

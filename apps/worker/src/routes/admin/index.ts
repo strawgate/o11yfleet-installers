@@ -70,8 +70,36 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
     return handleListConfigurations(env, tenantConfigsMatch[1]!);
   }
 
+  // GET /api/admin/tenants/:id/users — admin view of tenant users
+  const tenantUsersMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/users$/);
+  if (tenantUsersMatch && method === "GET") {
+    return handleListTenantUsers(env, tenantUsersMatch[1]!);
+  }
+
+  // ─── Health ─────────────────────────────────────────────────
+
+  if (path === "/api/admin/health" && method === "GET") {
+    return handleHealthCheck(env);
+  }
+
+  // ─── Plans ──────────────────────────────────────────────────
+
+  if (path === "/api/admin/plans" && method === "GET") {
+    return handleListPlans(env);
+  }
+
   return jsonError("Not found", 404);
 }
+
+// ─── Plan Limits ─────────────────────────────────────────────────────
+
+const PLAN_LIMITS: Record<string, { max_configs: number; max_agents_per_config: number }> = {
+  free: { max_configs: 5, max_agents_per_config: 50000 },
+  pro: { max_configs: 50, max_agents_per_config: 100000 },
+  enterprise: { max_configs: 1000, max_agents_per_config: 500000 },
+};
+
+const VALID_PLANS = Object.keys(PLAN_LIMITS);
 
 // ─── Tenant Handlers ────────────────────────────────────────────────
 
@@ -84,20 +112,18 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
     return jsonError("name must be 255 characters or fewer", 400);
   }
 
-  const validPlans = ["free", "pro", "enterprise"];
   const plan = body.plan ?? "free";
-  if (!validPlans.includes(plan)) {
-    return jsonError(`Invalid plan. Must be one of: ${validPlans.join(", ")}`, 400);
+  if (!VALID_PLANS.includes(plan)) {
+    return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
   }
 
-  const maxConfigs = plan === "enterprise" ? 1000 : plan === "pro" ? 50 : 5;
-  const maxAgents = plan === "enterprise" ? 500000 : plan === "pro" ? 100000 : 50000;
+  const limits = PLAN_LIMITS[plan]!;
 
   const id = crypto.randomUUID();
   await env.FP_DB.prepare(
     `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)`,
   )
-    .bind(id, body.name.trim(), plan, maxConfigs, maxAgents)
+    .bind(id, body.name.trim(), plan, limits.max_configs, limits.max_agents_per_config)
     .run();
 
   return Response.json({ id, name: body.name.trim(), plan }, { status: 201 });
@@ -131,12 +157,16 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     values.push(body.name.trim());
   }
   if (body.plan) {
-    const validPlans = ["free", "pro", "enterprise"];
-    if (!validPlans.includes(body.plan)) {
-      return jsonError(`Invalid plan. Must be one of: ${validPlans.join(", ")}`, 400);
+    if (!VALID_PLANS.includes(body.plan)) {
+      return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
     }
     updates.push("plan = ?");
     values.push(body.plan);
+    const limits = PLAN_LIMITS[body.plan]!;
+    updates.push("max_configs = ?");
+    values.push(limits.max_configs);
+    updates.push("max_agents_per_config = ?");
+    values.push(limits.max_agents_per_config);
   }
 
   if (updates.length === 0) {
@@ -187,26 +217,128 @@ async function handleListConfigurations(env: Env, tenantId: string): Promise<Res
   return Response.json({ configurations: result.results });
 }
 
+// ─── Tenant Users ───────────────────────────────────────────────────
+
+async function handleListTenantUsers(env: Env, tenantId: string): Promise<Response> {
+  const tenant = await env.FP_DB.prepare(`SELECT id FROM tenants WHERE id = ?`)
+    .bind(tenantId)
+    .first();
+  if (!tenant) return jsonError("Tenant not found", 404);
+
+  const result = await env.FP_DB.prepare(
+    `SELECT id, email, display_name, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC`,
+  )
+    .bind(tenantId)
+    .all();
+  return Response.json({ users: result.results });
+}
+
+// ─── Health Check ───────────────────────────────────────────────────
+
+async function handleHealthCheck(env: Env): Promise<Response> {
+  const checks: Record<string, { status: string; latency_ms?: number; error?: string }> = {};
+
+  // D1 health
+  const d1Start = Date.now();
+  try {
+    await env.FP_DB.prepare("SELECT 1").first();
+    checks["d1"] = { status: "healthy", latency_ms: Date.now() - d1Start };
+  } catch (e) {
+    checks["d1"] = {
+      status: "unhealthy",
+      latency_ms: Date.now() - d1Start,
+      error: e instanceof Error ? e.message : "Unknown error",
+    };
+  }
+
+  // R2 health
+  const r2Start = Date.now();
+  try {
+    await env.FP_CONFIGS.list({ limit: 1 });
+    checks["r2"] = { status: "healthy", latency_ms: Date.now() - r2Start };
+  } catch (e) {
+    checks["r2"] = {
+      status: "unhealthy",
+      latency_ms: Date.now() - r2Start,
+      error: e instanceof Error ? e.message : "Unknown error",
+    };
+  }
+
+  // Durable Objects — check namespace is bound
+  try {
+    if (env.CONFIG_DO) {
+      checks["durable_objects"] = { status: "healthy" };
+    } else {
+      checks["durable_objects"] = { status: "unhealthy", error: "Namespace not bound" };
+    }
+  } catch (e) {
+    checks["durable_objects"] = {
+      status: "unhealthy",
+      error: e instanceof Error ? e.message : "Unknown error",
+    };
+  }
+
+  // Queue — check binding exists
+  try {
+    if (env.FP_EVENTS) {
+      checks["queue"] = { status: "healthy" };
+    } else {
+      checks["queue"] = { status: "unavailable", error: "Queue not bound" };
+    }
+  } catch (e) {
+    checks["queue"] = {
+      status: "unhealthy",
+      error: e instanceof Error ? e.message : "Unknown error",
+    };
+  }
+
+  const overall = Object.values(checks).every((c) => c.status === "healthy")
+    ? "healthy"
+    : "degraded";
+  return Response.json({ status: overall, checks, timestamp: new Date().toISOString() });
+}
+
+// ─── Plans ──────────────────────────────────────────────────────────
+
+async function handleListPlans(env: Env): Promise<Response> {
+  const planDefs = Object.entries(PLAN_LIMITS).map(([name, v]) => ({ name, ...v }));
+
+  const counts = await env.FP_DB.prepare(
+    `SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan`,
+  ).all<{ plan: string; count: number }>();
+
+  const countMap: Record<string, number> = {};
+  for (const row of counts.results) {
+    countMap[row.plan] = row.count;
+  }
+
+  const plans = planDefs.map((p) => ({
+    ...p,
+    tenant_count: countMap[p.name] ?? 0,
+  }));
+
+  return Response.json({ plans });
+}
+
 // ─── Admin Overview ─────────────────────────────────────────────────
 
 async function handleAdminOverview(env: Env): Promise<Response> {
-  const tenants = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{
-    count: number;
-  }>();
-  const configs = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations").first<{
-    count: number;
-  }>();
-  const tokens = await env.FP_DB.prepare(
-    "SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL",
-  ).first<{ count: number }>();
-  const users = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM users").first<{
-    count: number;
-  }>();
+  const results = await env.FP_DB.batch([
+    env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants"),
+    env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
+    env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
+    env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
+  ]);
+
+  function getCount(idx: number): number {
+    const row = results[idx]?.results?.[0] as { count?: number } | undefined;
+    return row?.count ?? 0;
+  }
 
   return Response.json({
-    total_tenants: tenants?.count ?? 0,
-    total_configurations: configs?.count ?? 0,
-    total_active_tokens: tokens?.count ?? 0,
-    total_users: users?.count ?? 0,
+    total_tenants: getCount(0),
+    total_configurations: getCount(1),
+    total_active_tokens: getCount(2),
+    total_users: getCount(3),
   });
 }

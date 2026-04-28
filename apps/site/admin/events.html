@@ -23,8 +23,67 @@
               </div>
             </div>
           </div>
-          <div class="card card-pad" style="padding: 32px; text-align: center">
-            <p class="t-muted" style="font-size: 14px">Audit events — coming soon</p>
+
+          <div class="dt-card">
+            <div class="dt-toolbar">
+              <input
+                class="input"
+                placeholder="Filter by actor, action, tenant…"
+                style="width: 320px; height: 30px"
+                disabled
+              />
+              <select class="select" style="width: auto; height: 30px" disabled>
+                <option>All actions</option>
+              </select>
+              <select class="select" style="width: auto; height: 30px" disabled>
+                <option>Last 24 hours</option>
+                <option>Last 7 days</option>
+                <option>Last 30 days</option>
+              </select>
+              <span class="count" style="margin-left: 8px">Audit integration not yet active</span>
+            </div>
+            <table class="dt">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Actor</th>
+                  <th>Action</th>
+                  <th>Target</th>
+                  <th>Details</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td colspan="5" style="text-align: center; padding: 48px 32px">
+                    <div style="margin-bottom: 12px">
+                      <svg
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.4"
+                        style="width: 40px; height: 40px; opacity: 0.3"
+                      >
+                        <path
+                          d="M12 2L4.5 6.5V13C4.5 17.5 7.5 20 12 22C16.5 20 19.5 17.5 19.5 13V6.5L12 2Z"
+                        />
+                        <path d="M12 8v4M12 14v.01" stroke-linecap="round" />
+                      </svg>
+                    </div>
+                    <p style="font-size: 14px; font-weight: 500; margin-bottom: 4px">
+                      Audit integration not yet active
+                    </p>
+                    <p
+                      class="t-muted"
+                      style="font-size: 13px; max-width: 400px; margin: 0 auto; line-height: 1.5"
+                    >
+                      Audit events will be tracked once Cloudflare Analytics Engine integration is
+                      activated. All staff actions, tenant mutations, and security events will
+                      appear here with full attribution.
+                    </p>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
         </div>
       </main>

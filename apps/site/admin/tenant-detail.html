@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Acme Platform — O11yFleet Admin</title>
+    <title>Tenant — O11yFleet Admin</title>
     <link rel="stylesheet" href="../styles.css" />
     <link rel="stylesheet" href="../portal-shared.css" />
     <link rel="stylesheet" href="../admin.css" />
@@ -18,24 +18,21 @@
           <div class="page-head">
             <div>
               <div class="flex-row gap-sm" style="margin-bottom: 6px">
-                <span class="tag" style="border-color: var(--accent-line); color: var(--accent)"
-                  >Business</span
-                >
-                <span class="tag tag-ok">healthy</span>
-                <span class="tag t-mono" style="font-family: var(--font-mono)"
-                  >ws_acme_5f3a91d2</span
+                <span id="td-plan-tag" class="tag">—</span>
+                <span id="td-id-tag" class="tag t-mono" style="font-family: var(--font-mono)"
+                  >—</span
                 >
               </div>
-              <h1>Acme Platform</h1>
-              <div class="sub">
-                42 collectors · 6 members · created Jan 12, 2026 · owner maya@acmeplatform.com
-              </div>
+              <h1 id="td-name">Loading…</h1>
+              <div class="sub" id="td-sub">—</div>
             </div>
             <div class="actions">
-              <button class="btn btn-secondary btn-sm" data-open-modal="impersonate">
+              <button type="button" class="btn btn-secondary btn-sm" data-open-modal="impersonate">
                 Impersonate
               </button>
-              <button class="btn btn-secondary btn-sm">Open in customer portal</button>
+              <button type="button" id="td-open-portal" class="btn btn-secondary btn-sm">
+                Open in customer portal
+              </button>
             </div>
           </div>
 
@@ -54,77 +51,125 @@
           </div>
 
           <div data-tabs="t" class="tabs">
-            <button class="tab active" data-tab="summary">Summary</button>
-            <button class="tab" data-tab="usage">Usage</button>
-            <button class="tab" data-tab="billing">Billing</button>
-            <button class="tab" data-tab="members">Members</button>
-            <button class="tab" data-tab="events">Events</button>
-            <button class="tab" data-tab="actions">Actions</button>
+            <button type="button" class="tab active" data-tab="overview">Overview</button>
+            <button type="button" class="tab" data-tab="configurations">Configurations</button>
+            <button type="button" class="tab" data-tab="users">Users</button>
+            <button type="button" class="tab" data-tab="settings">Settings</button>
           </div>
 
-          <div data-tab-panel="summary" data-tabs-group="t" class="tab-panel active">
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Tenant summary — coming soon</p>
+          <div data-tab-panel="overview" data-tabs-group="t" class="tab-panel active">
+            <div
+              id="td-overview-loading"
+              class="card card-pad"
+              style="padding: 32px; text-align: center"
+            >
+              <p class="t-muted" style="font-size: 14px">Loading tenant data…</p>
             </div>
-          </div>
-
-          <div data-tab-panel="usage" data-tabs-group="t" class="tab-panel">
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Usage tracking — coming soon</p>
-            </div>
-          </div>
-
-          <div data-tab-panel="billing" data-tabs-group="t" class="tab-panel">
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Billing details — coming soon</p>
-            </div>
-          </div>
-
-          <div data-tab-panel="members" data-tabs-group="t" class="tab-panel">
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Team members — coming soon</p>
-            </div>
-          </div>
-
-          <div data-tab-panel="events" data-tabs-group="t" class="tab-panel">
-            <div class="card card-pad" style="padding: 32px; text-align: center">
-              <p class="t-muted" style="font-size: 14px">Audit events — coming soon</p>
-            </div>
-          </div>
-
-          <div data-tab-panel="actions" data-tabs-group="t" class="tab-panel">
-            <div class="card card-pad" style="padding: 22px">
-              <h3 style="font-size: 14px; font-weight: 500">Plan</h3>
-              <div class="flex-row mt-3" style="gap: 8px">
-                <select class="select" style="max-width: 240px">
-                  <option>Business</option>
-                  <option>Pro</option>
-                  <option>Scale</option>
-                  <option>Enterprise (custom)</option>
-                </select>
-                <button class="btn btn-secondary btn-sm">Change plan</button>
+            <div id="td-overview" style="display: none">
+              <div class="stat-grid mb-6">
+                <div class="stat">
+                  <div class="label">Plan</div>
+                  <div class="val" id="td-ov-plan">—</div>
+                  <div class="delta"></div>
+                </div>
+                <div class="stat">
+                  <div class="label">Configurations</div>
+                  <div class="val" id="td-ov-configs">—</div>
+                  <div class="delta"></div>
+                </div>
+                <div class="stat">
+                  <div class="label">Users</div>
+                  <div class="val" id="td-ov-users">—</div>
+                  <div class="delta"></div>
+                </div>
+                <div class="stat">
+                  <div class="label">Created</div>
+                  <div class="val" id="td-ov-created">—</div>
+                  <div class="delta"></div>
+                </div>
               </div>
-              <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px">Limit overrides</h3>
+              <div class="card card-pad" style="padding: 18px">
+                <h3 style="font-size: 14px; font-weight: 500; margin-bottom: 12px">
+                  Tenant details
+                </h3>
+                <table style="width: 100%; font-size: 13px">
+                  <tbody id="td-ov-details"></tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <div data-tab-panel="configurations" data-tabs-group="t" class="tab-panel">
+            <div id="td-configs-content">
+              <div class="card card-pad" style="padding: 32px; text-align: center">
+                <p class="t-muted" style="font-size: 14px">Loading configurations…</p>
+              </div>
+            </div>
+          </div>
+
+          <div data-tab-panel="users" data-tabs-group="t" class="tab-panel">
+            <div id="td-users-content">
+              <div class="card card-pad" style="padding: 32px; text-align: center">
+                <p class="t-muted" style="font-size: 14px">Loading users…</p>
+              </div>
+            </div>
+          </div>
+
+          <div data-tab-panel="settings" data-tabs-group="t" class="tab-panel">
+            <div class="card card-pad" style="padding: 22px">
+              <h3 style="font-size: 14px; font-weight: 500">Tenant name</h3>
               <div class="flex-row mt-3" style="gap: 8px">
-                <input class="input mono" style="max-width: 200px" placeholder="managed_configs" />
-                <input class="input mono" style="max-width: 100px" placeholder="50" />
-                <button class="btn btn-secondary btn-sm">Apply</button>
+                <label for="td-edit-name" class="sr-only">Tenant name</label>
+                <input
+                  id="td-edit-name"
+                  class="input"
+                  style="max-width: 300px"
+                  placeholder="Tenant name"
+                />
+                <button type="button" id="td-save-name" class="btn btn-secondary btn-sm">
+                  Save name
+                </button>
+              </div>
+              <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px">Plan</h3>
+              <div class="flex-row mt-3" style="gap: 8px">
+                <label for="td-edit-plan" class="sr-only">Plan</label>
+                <select id="td-edit-plan" class="select" style="max-width: 240px">
+                  <option value="free">Free</option>
+                  <option value="pro">Pro</option>
+                  <option value="enterprise">Enterprise</option>
+                </select>
+                <button type="button" id="td-save-plan" class="btn btn-secondary btn-sm">
+                  Change plan
+                </button>
               </div>
               <h3 style="font-size: 14px; font-weight: 500; margin-top: 24px; color: var(--err)">
-                Suspension
+                Danger zone
               </h3>
               <p class="t-muted text-sm mt-2">
-                Suspending blocks API + UI. Collectors keep last effective config and continue
-                working.
+                Deleting a tenant is permanent. All configurations must be removed first.
               </p>
+              <div
+                id="td-delete-error"
+                style="
+                  display: none;
+                  color: var(--err);
+                  font-size: 13px;
+                  margin-top: 8px;
+                  padding: 8px 12px;
+                  background: rgba(255, 50, 50, 0.1);
+                  border-radius: 6px;
+                "
+              ></div>
               <button
+                type="button"
+                id="td-delete-btn"
                 class="btn btn-secondary btn-sm mt-3"
                 style="
                   border-color: color-mix(in oklab, var(--err) 30%, var(--line));
                   color: var(--err);
                 "
               >
-                Suspend tenant
+                Delete tenant
               </button>
             </div>
           </div>
@@ -134,7 +179,7 @@
     <div class="modal-backdrop" id="impersonate">
       <div class="modal danger">
         <div class="modal-head">
-          <h3>Impersonate Acme Platform?</h3>
+          <h3>Impersonate this tenant?</h3>
           <button class="modal-close" data-close-modal>×</button>
         </div>
         <div class="modal-body">
@@ -143,23 +188,24 @@
             your staff identity.
           </p>
           <div class="field">
-            <label>Reason (required)</label
+            <label for="imp-reason">Reason (required)</label
             ><input
+              id="imp-reason"
               class="input"
               placeholder="e.g. Support ticket #4821 — config not propagating"
             />
           </div>
           <div class="field">
-            <label>Scope</label
-            ><select class="select">
+            <label for="imp-scope">Scope</label
+            ><select id="imp-scope" class="select">
               <option>Read-only — see what they see</option>
               <option>Edit — change settings on their behalf</option>
             </select>
           </div>
         </div>
         <div class="modal-foot">
-          <button class="btn btn-ghost" data-close-modal>Cancel</button
-          ><button class="btn btn-primary" data-close-modal>Start session</button>
+          <button type="button" class="btn btn-ghost" data-close-modal>Cancel</button
+          ><button type="button" class="btn btn-primary" data-close-modal>Start session</button>
         </div>
       </div>
     </div>
@@ -170,61 +216,290 @@
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
-        const tenantId = new URLSearchParams(window.location.search).get("id");
+        var tenantId = new URLSearchParams(window.location.search).get("id");
         FB.shell({
           role: "admin",
           current: "tenants",
           crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: "Loading…" }],
         });
 
+        if (!tenantId) {
+          document.getElementById("td-name").textContent = "No tenant ID";
+          return;
+        }
+
         function esc(s) {
-          const d = document.createElement("div");
-          d.textContent = s;
+          var d = document.createElement("div");
+          d.textContent = s || "";
           return d.innerHTML;
         }
 
+        function fmtDate(iso) {
+          if (!iso) return "—";
+          var d = new Date(iso);
+          var months = [
+            "Jan",
+            "Feb",
+            "Mar",
+            "Apr",
+            "May",
+            "Jun",
+            "Jul",
+            "Aug",
+            "Sep",
+            "Oct",
+            "Nov",
+            "Dec",
+          ];
+          return months[d.getUTCMonth()] + " " + d.getUTCDate() + ", " + d.getUTCFullYear();
+        }
+
+        var tenant = null;
+
+        // Load tenant header
         async function loadTenant() {
-          if (!tenantId) return;
           try {
-            const t = await FP.get("/api/admin/tenants/" + tenantId);
-            // Update header
-            document.querySelector(".page-head h1").textContent = t.name;
-            document.title = t.name + " — O11yFleet Admin";
-            document.querySelector(".page-head .sub").textContent =
-              "ID: " + t.id + " · plan: " + t.plan + " · created " + FP.relTime(t.created_at);
-            // Plan badge
-            const planTag = document.querySelector(".page-head .flex-row .tag");
-            if (planTag) planTag.textContent = t.plan;
-            // Tenant ID badge
-            const idTag = document.querySelector(".page-head .flex-row .tag.t-mono");
-            if (idTag) idTag.textContent = FP.trunc(t.id, 16);
-            // Update breadcrumbs
+            tenant = await FP.get("/api/admin/tenants/" + tenantId);
+            document.getElementById("td-name").textContent = tenant.name;
+            document.title = tenant.name + " — O11yFleet Admin";
+            document.getElementById("td-sub").textContent =
+              "ID: " +
+              tenant.id +
+              " · plan: " +
+              tenant.plan +
+              " · created " +
+              FP.relTime(tenant.created_at);
+            var planTag = document.getElementById("td-plan-tag");
+            if (tenant.plan === "pro" || tenant.plan === "enterprise") {
+              planTag.style.borderColor = "var(--accent-line)";
+              planTag.style.color = "var(--accent)";
+            }
+            planTag.textContent = tenant.plan;
+            document.getElementById("td-id-tag").textContent = FP.trunc(tenant.id, 16);
             FB.shell({
               role: "admin",
               current: "tenants",
-              crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: t.name }],
+              crumbs: [{ label: "Tenants", href: "tenants.html" }, { label: tenant.name }],
             });
-            // Update stat cards (removed — summary tab now shows coming-soon state)
-
-            // "Open in customer portal" button
-            const openBtn = document.querySelector(".actions .btn-secondary:last-child");
-            if (openBtn) {
-              openBtn.onclick = () => {
-                window.open(
-                  "../portal/overview.html?tenant=" +
-                    tenantId +
-                    "&api=" +
-                    encodeURIComponent(FP.apiBase),
-                  "_blank",
-                );
-              };
-            }
+            // Populate settings form
+            document.getElementById("td-edit-name").value = tenant.name;
+            document.getElementById("td-edit-plan").value = tenant.plan || "free";
+            // Open in customer portal
+            document.getElementById("td-open-portal").onclick = function () {
+              window.open(
+                "../portal/overview.html?tenant=" +
+                  tenantId +
+                  "&api=" +
+                  encodeURIComponent(FP.apiBase),
+                "_blank",
+              );
+            };
           } catch (e) {
             console.error("Failed to load tenant", e);
+            document.getElementById("td-name").textContent = "Error loading tenant";
+            document.getElementById("td-sub").textContent = e.message || "Unknown error";
           }
         }
 
-        loadTenant();
+        // Load overview tab
+        async function loadOverview() {
+          try {
+            var configs = await FP.get("/api/admin/tenants/" + tenantId + "/configurations");
+            var users = await FP.get("/api/admin/tenants/" + tenantId + "/users");
+            var configCount = (configs.configurations || []).length;
+            var userCount = (users.users || []).length;
+
+            document.getElementById("td-ov-plan").textContent = tenant ? tenant.plan : "—";
+            document.getElementById("td-ov-configs").textContent = configCount;
+            document.getElementById("td-ov-users").textContent = userCount;
+            document.getElementById("td-ov-created").textContent = tenant
+              ? fmtDate(tenant.created_at)
+              : "—";
+
+            var detailRows = "";
+            if (tenant) {
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0;width:160px">Tenant ID</td><td style="padding:6px 0;font-family:var(--font-mono);font-size:12px">' +
+                esc(tenant.id) +
+                "</td></tr>";
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Name</td><td style="padding:6px 0">' +
+                esc(tenant.name) +
+                "</td></tr>";
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Plan</td><td style="padding:6px 0"><span class="tag">' +
+                esc(tenant.plan) +
+                "</span></td></tr>";
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Max configs</td><td style="padding:6px 0">' +
+                (tenant.max_configs || 0) +
+                "</td></tr>";
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Max agents/config</td><td style="padding:6px 0">' +
+                (tenant.max_agents_per_config || 0).toLocaleString() +
+                "</td></tr>";
+              detailRows +=
+                '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Created</td><td style="padding:6px 0">' +
+                fmtDate(tenant.created_at) +
+                "</td></tr>";
+              if (tenant.updated_at) {
+                detailRows +=
+                  '<tr><td class="t-muted" style="padding:6px 12px 6px 0">Updated</td><td style="padding:6px 0">' +
+                  fmtDate(tenant.updated_at) +
+                  "</td></tr>";
+              }
+            }
+            document.getElementById("td-ov-details").innerHTML = detailRows;
+            document.getElementById("td-overview-loading").style.display = "none";
+            document.getElementById("td-overview").style.display = "block";
+          } catch (e) {
+            document.getElementById("td-overview-loading").innerHTML =
+              '<p style="color:var(--err);font-size:14px">Failed to load overview: ' +
+              esc(e.message) +
+              "</p>";
+          }
+        }
+
+        // Load configurations tab
+        async function loadConfigurations() {
+          var el = document.getElementById("td-configs-content");
+          try {
+            var data = await FP.get("/api/admin/tenants/" + tenantId + "/configurations");
+            var configs = data.configurations || [];
+            if (configs.length === 0) {
+              el.innerHTML =
+                '<div class="card card-pad" style="padding: 32px; text-align: center"><p class="t-muted" style="font-size: 14px">No configurations yet.</p></div>';
+              return;
+            }
+            el.innerHTML =
+              '<div class="dt-card"><table class="dt"><thead><tr><th>Name</th><th>ID</th><th>Created</th></tr></thead><tbody>' +
+              configs
+                .map(function (c) {
+                  return (
+                    '<tr><td class="name">' +
+                    esc(c.name) +
+                    "</td>" +
+                    '<td class="meta" style="font-family:var(--font-mono);font-size:12px">' +
+                    FP.trunc(c.id, 16) +
+                    "</td>" +
+                    '<td class="meta">' +
+                    FP.relTime(c.created_at) +
+                    "</td></tr>"
+                  );
+                })
+                .join("") +
+              "</tbody></table></div>";
+          } catch (e) {
+            el.innerHTML =
+              '<div class="card card-pad" style="padding:32px;text-align:center"><p style="color:var(--err);font-size:14px">Failed to load configurations</p></div>';
+          }
+        }
+
+        // Load users tab
+        async function loadUsers() {
+          var el = document.getElementById("td-users-content");
+          try {
+            var data = await FP.get("/api/admin/tenants/" + tenantId + "/users");
+            var users = data.users || [];
+            if (users.length === 0) {
+              el.innerHTML =
+                '<div class="card card-pad" style="padding: 32px; text-align: center"><p class="t-muted" style="font-size: 14px">No users yet.</p></div>';
+              return;
+            }
+            el.innerHTML =
+              '<div class="dt-card"><table class="dt"><thead><tr><th>Email</th><th>Name</th><th>Role</th><th>Joined</th></tr></thead><tbody>' +
+              users
+                .map(function (u) {
+                  return (
+                    '<tr><td class="name">' +
+                    esc(u.email) +
+                    "</td>" +
+                    "<td>" +
+                    esc(u.display_name || "—") +
+                    "</td>" +
+                    '<td><span class="tag">' +
+                    esc(u.role || "member") +
+                    "</span></td>" +
+                    '<td class="meta">' +
+                    FP.relTime(u.created_at) +
+                    "</td></tr>"
+                  );
+                })
+                .join("") +
+              "</tbody></table></div>";
+          } catch (e) {
+            el.innerHTML =
+              '<div class="card card-pad" style="padding:32px;text-align:center"><p style="color:var(--err);font-size:14px">Failed to load users</p></div>';
+          }
+        }
+
+        // Settings: save name
+        document.getElementById("td-save-name").addEventListener("click", async function () {
+          var btn = this;
+          var name = document.getElementById("td-edit-name").value.trim();
+          if (!name) return;
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          try {
+            await FP.put("/api/admin/tenants/" + tenantId, { name: name });
+            toast("Saved", "Tenant name updated");
+            await loadTenant();
+            loadOverview();
+          } catch (e) {
+            toast("Error", e.message || "Failed to save", "err");
+          }
+          btn.disabled = false;
+          btn.textContent = "Save name";
+        });
+
+        // Settings: change plan
+        document.getElementById("td-save-plan").addEventListener("click", async function () {
+          var btn = this;
+          var plan = document.getElementById("td-edit-plan").value;
+          btn.disabled = true;
+          btn.textContent = "Saving…";
+          try {
+            await FP.put("/api/admin/tenants/" + tenantId, { plan: plan });
+            toast("Saved", "Plan changed to " + plan);
+            await loadTenant();
+            loadOverview();
+          } catch (e) {
+            toast("Error", e.message || "Failed to change plan", "err");
+          }
+          btn.disabled = false;
+          btn.textContent = "Change plan";
+        });
+
+        // Settings: delete tenant
+        document.getElementById("td-delete-btn").addEventListener("click", async function () {
+          var btn = this;
+          var errEl = document.getElementById("td-delete-error");
+          errEl.style.display = "none";
+          if (!confirm("Are you sure you want to delete this tenant? This cannot be undone."))
+            return;
+          btn.disabled = true;
+          btn.textContent = "Deleting…";
+          try {
+            await FP.del("/api/admin/tenants/" + tenantId);
+            toast("Deleted", "Tenant deleted");
+            window.location.href = "tenants.html";
+          } catch (e) {
+            errEl.textContent = e.message || "Failed to delete tenant";
+            errEl.style.display = "block";
+            btn.disabled = false;
+            btn.textContent = "Delete tenant";
+          }
+        });
+
+        // Load everything
+        try {
+          await loadTenant();
+          loadOverview();
+          loadConfigurations();
+          loadUsers();
+        } catch (e) {
+          console.error("Failed to load tenant — skipping tab data", e);
+        }
       })();
     </script>
   </body>

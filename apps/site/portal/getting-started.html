@@ -38,22 +38,44 @@
             3. Install &amp; connect a collector
           </h3>
           <p class="t-muted text-sm" style="margin-bottom: 12px">
-            Use our test client to verify the connection, or run an OpenTelemetry Collector with
-            OpAMP supervisor.
+            Run our install script to download and configure a collector automatically, or set it up
+            manually.
           </p>
 
           <div data-tabs="install" class="tabs">
-            <button class="tab active" data-tab="test-client">OpAMP Extension</button>
-            <button class="tab" data-tab="supervisor">OpAMP Supervisor</button>
+            <button type="button" class="tab active" data-tab="quick-install">Quick install</button>
+            <button type="button" class="tab" data-tab="manual-extension">
+              Manual (extension)
+            </button>
+            <button type="button" class="tab" data-tab="manual-supervisor">
+              Manual (supervisor)
+            </button>
           </div>
 
-          <div data-tab-panel="test-client" data-tabs-group="install" class="tab-panel active">
+          <div data-tab-panel="quick-install" data-tabs-group="install" class="tab-panel active">
+            <p class="t-muted text-sm" style="margin-bottom: 8px">
+              Run this single command to install the OpenTelemetry Collector and connect it to
+              O11yFleet. Supports Linux and macOS (amd64/arm64).
+            </p>
+            <div class="code-block" id="cmd-quick-install">
+              <button type="button" class="copy" data-copy="">copy</button>
+              <pre
+                style="margin: 0; white-space: pre; font: inherit"
+              >curl -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span></pre>
+            </div>
+            <p class="t-muted text-sm" style="margin-top: 8px; opacity: 0.7">
+              The script detects your OS and architecture, downloads otelcol-contrib, writes the
+              OpAMP config, and starts a systemd/launchd service.
+            </p>
+          </div>
+
+          <div data-tab-panel="manual-extension" data-tabs-group="install" class="tab-panel">
             <p class="t-muted text-sm" style="margin-bottom: 8px">
               Add the OpAMP extension to your existing collector configuration to connect it to
               O11yFleet. The collector will receive remote configuration and report status.
             </p>
             <div class="code-block" id="cmd-test-client">
-              <button class="copy" data-copy="">copy</button>
+              <button type="button" class="copy" data-copy="">copy</button>
               <pre style="margin: 0; white-space: pre; font: inherit">extensions:
   opamp:
     server:
@@ -66,7 +88,7 @@ service:
   extensions: [opamp]</pre>
             </div>
           </div>
-          <div data-tab-panel="supervisor" data-tabs-group="install" class="tab-panel">
+          <div data-tab-panel="manual-supervisor" data-tabs-group="install" class="tab-panel">
             <p class="t-muted text-sm" style="margin-bottom: 8px">
               The
               <a
@@ -81,7 +103,7 @@ service:
               1. Create a supervisor config file <code>supervisor.yaml</code>:
             </p>
             <div class="code-block">
-              <button class="copy" data-copy="">copy</button>
+              <button type="button" class="copy" data-copy="">copy</button>
               <pre style="margin: 0; white-space: pre; font: inherit">server:
   endpoint: wss://api.o11yfleet.com/v1/opamp
   headers:
@@ -92,7 +114,7 @@ agent:
             </div>
             <p class="t-muted text-sm" style="margin: 8px 0">2. Run the supervisor:</p>
             <div class="code-block">
-              <button class="copy" data-copy="">copy</button>
+              <button type="button" class="copy" data-copy="">copy</button>
               <pre style="margin: 0; white-space: pre; font: inherit">
 opampsupervisor --config supervisor.yaml</pre
               >
@@ -149,6 +171,7 @@ opampsupervisor --config supervisor.yaml</pre
         if (!authed) return;
 
         var selectedConfigId = null;
+        var tokenCache = {}; // Cache tokens per config to avoid orphaned tokens
         var pickerEl = document.getElementById("config-picker");
         var tokenEl = document.getElementById("token-display");
 
@@ -156,6 +179,9 @@ opampsupervisor --config supervisor.yaml</pre
           var d = document.createElement("div");
           d.textContent = s || "";
           return d.innerHTML;
+        }
+        function escAttr(s) {
+          return esc(s).replace(/"/g, "&quot;").replace(/'/g, "&#39;");
         }
 
         function updateCommands(token) {
@@ -199,55 +225,61 @@ opampsupervisor --config supervisor.yaml</pre
           pickerEl.innerHTML = '<p style="color: var(--err);">Failed to load configurations</p>';
         }
 
+        async function generateToken(configId) {
+          var newToken = await FP.post("/api/v1/configurations/" + configId + "/enrollment-token", {
+            label: "getting-started",
+          });
+          var raw = newToken.token || newToken.raw_token;
+          if (!raw) throw new Error("No token returned from API");
+          return raw;
+        }
+
+        function showToken(raw) {
+          document.getElementById("token-value").innerHTML =
+            '<div class="code-block" style="margin:0;"><button type="button" class="copy" data-copy="' +
+            escAttr(raw) +
+            '">copy</button><span class="t-mono" style="word-break:break-all;">' +
+            esc(raw) +
+            "</span></div>" +
+            '<p class="t-muted text-sm" style="margin-top:6px;">This token won\'t be shown again after you leave this page.</p>';
+          updateCommands(raw);
+        }
+
         async function loadToken(configId) {
           selectedConfigId = configId;
-          tokenEl.innerHTML = '<p class="t-muted text-sm">Loading tokens…</p>';
+          // Return cached token if we already generated one for this config
+          if (tokenCache[configId]) {
+            showToken(tokenCache[configId]);
+            updateCommands(tokenCache[configId]);
+            return;
+          }
+          tokenEl.innerHTML = '<p class="t-muted text-sm">Generating enrollment token…</p>';
           try {
-            var data = await FP.get("/api/v1/configurations/" + configId + "/enrollment-tokens");
-            var tokens = data.tokens || [];
-            var active = tokens.filter(function (t) {
-              return !t.revoked_at;
-            });
-
+            var raw = await generateToken(configId);
+            tokenCache[configId] = raw;
             tokenEl.innerHTML =
-              '<div style="display:flex;flex-direction:column;gap:8px;">' +
-              (active.length > 0
-                ? '<p class="t-muted text-sm">' +
-                  active.length +
-                  " active token" +
-                  (active.length !== 1 ? "s" : "") +
-                  ". Generate a new one or use an existing token from when it was created.</p>"
-                : '<p class="t-muted text-sm">No tokens found for this configuration.</p>') +
-              '<button class="btn btn-secondary btn-sm" id="create-token-btn" style="align-self:flex-start;">Generate new enrollment token</button>' +
-              '<div id="new-token-display"></div></div>';
+              '<div style="display:flex;flex-direction:column;gap:10px;">' +
+              '<div id="token-value"></div>' +
+              '<button type="button" class="btn btn-ghost btn-sm" id="regen-token-btn" style="align-self:flex-start;font-size:12px;">Generate another token</button>' +
+              "</div>";
+            showToken(raw);
 
-            document
-              .getElementById("create-token-btn")
-              .addEventListener("click", async function () {
-                try {
-                  var newToken = await FP.post(
-                    "/api/v1/configurations/" + configId + "/enrollment-token",
-                    { label: "getting-started" },
-                  );
-                  var raw = newToken.raw_token;
-                  document.getElementById("new-token-display").innerHTML =
-                    '<div class="code-block" style="margin-top:4px;"><button class="copy" data-copy="' +
-                    esc(raw) +
-                    '">copy</button>' +
-                    esc(raw) +
-                    "</div>" +
-                    '<p class="t-muted text-sm" style="margin-top:4px;">Copy this token now — it won\'t be shown again.</p>';
-                  updateCommands(raw);
-                } catch (e) {
-                  document.getElementById("new-token-display").innerHTML =
-                    '<p style="color:var(--err);">Failed: ' + esc(e.message) + "</p>";
-                }
-              });
-
-            updateCommands(active.length > 0 ? "YOUR_ENROLLMENT_TOKEN" : "GENERATE_TOKEN_ABOVE");
+            document.getElementById("regen-token-btn").addEventListener("click", async function () {
+              this.disabled = true;
+              this.textContent = "Generating…";
+              try {
+                var newRaw = await generateToken(configId);
+                showToken(newRaw);
+              } catch (e) {
+                document.getElementById("token-value").innerHTML =
+                  '<p style="color:var(--err);">Failed: ' + esc(e.message) + "</p>";
+              }
+              this.disabled = false;
+              this.textContent = "Generate another token";
+            });
           } catch (e) {
             tokenEl.innerHTML =
-              '<p style="color:var(--err);">Failed to load tokens: ' + esc(e.message) + "</p>";
+              '<p style="color:var(--err);">Failed to generate token: ' + esc(e.message) + "</p>";
           }
         }
 

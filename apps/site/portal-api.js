@@ -56,10 +56,21 @@ window.FP = window.FP || {};
     return res;
   }
 
+  /** Extract error message from a non-ok response */
+  async function extractError(method, path, res) {
+    try {
+      const body = await res.json();
+      if (body && body.error) return body.error;
+    } catch (_) {
+      /* no JSON body */
+    }
+    return method + " " + path + ": " + res.status;
+  }
+
   /** GET JSON from the API */
   FP.get = async function (path) {
     const res = await apiFetch(path);
-    if (!res.ok) throw new Error("GET " + path + ": " + res.status);
+    if (!res.ok) throw new Error(await extractError("GET", path, res));
     return res.json();
   };
 
@@ -70,7 +81,7 @@ window.FP = window.FP || {};
       headers: { "Content-Type": "application/json" },
       body: typeof body === "string" ? body : JSON.stringify(body),
     });
-    if (!res.ok) throw new Error("POST " + path + ": " + res.status);
+    if (!res.ok) throw new Error(await extractError("POST", path, res));
     return res.json();
   };
 
@@ -81,7 +92,7 @@ window.FP = window.FP || {};
       headers: { "Content-Type": "text/plain" },
       body: text,
     });
-    if (!res.ok) throw new Error("POST " + path + ": " + res.status);
+    if (!res.ok) throw new Error(await extractError("POST", path, res));
     return res.json();
   };
 
@@ -92,14 +103,14 @@ window.FP = window.FP || {};
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error("PUT " + path + ": " + res.status);
+    if (!res.ok) throw new Error(await extractError("PUT", path, res));
     return res.json();
   };
 
   /** DELETE */
   FP.del = async function (path) {
     const res = await apiFetch(path, { method: "DELETE" });
-    if (!res.ok) throw new Error("DELETE " + path + ": " + res.status);
+    if (!res.ok) throw new Error(await extractError("DELETE", path, res));
     if (res.status === 204) return {};
     return res.json();
   };

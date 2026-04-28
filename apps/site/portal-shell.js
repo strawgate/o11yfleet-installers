@@ -133,6 +133,11 @@
     }
     return t;
   }
+  function escHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s || "";
+    return d.innerHTML;
+  }
   window.toast = function (title, body, kind) {
     const t = ensureToaster();
     const el = document.createElement("div");
@@ -143,7 +148,7 @@
         : '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>';
     el.innerHTML =
       icon +
-      `<div><div class="t-title">${title}</div>${body ? `<div class="t-body">${body}</div>` : ""}</div>`;
+      `<div><div class="t-title">${escHtml(title)}</div>${body ? `<div class="t-body">${escHtml(body)}</div>` : ""}</div>`;
     t.appendChild(el);
     setTimeout(() => {
       el.style.opacity = "0";

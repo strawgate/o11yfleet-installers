@@ -18,12 +18,34 @@
           <div class="page-head">
             <div>
               <h1>System health</h1>
-              <div class="sub">Live state of OpAMP gateways, control plane, and dependencies.</div>
+              <div class="sub" id="health-sub">
+                Live state of OpAMP gateways, control plane, and dependencies.
+              </div>
+            </div>
+            <div class="actions">
+              <button id="health-refresh" class="btn btn-secondary btn-sm">Refresh</button>
             </div>
           </div>
 
-          <div class="card card-pad" style="padding: 32px; text-align: center">
-            <p class="t-muted" style="font-size: 14px">System health dashboard — coming soon</p>
+          <div id="health-status" class="stat-grid mb-6">
+            <div class="stat">
+              <div class="label">Overall</div>
+              <div class="val" id="health-overall">—</div>
+              <div class="delta" id="health-ts"></div>
+            </div>
+          </div>
+
+          <div
+            id="health-cards"
+            style="
+              display: grid;
+              grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+              gap: 14px;
+            "
+          >
+            <div class="card card-pad" style="padding: 32px; text-align: center">
+              <p class="t-muted" style="font-size: 14px">Loading health checks…</p>
+            </div>
           </div>
         </div>
       </main>
@@ -42,6 +64,96 @@
       (async function () {
         var authed = await FP.checkAuth();
         if (!authed) return;
+
+        var serviceLabels = {
+          d1: {
+            name: "D1 Database",
+            icon: "💾",
+            desc: "Primary data store for tenants, configs, and users",
+          },
+          r2: {
+            name: "R2 Storage",
+            icon: "📦",
+            desc: "Object storage for configuration artifacts",
+          },
+          durable_objects: {
+            name: "Durable Objects",
+            icon: "🔗",
+            desc: "Real-time OpAMP connection state",
+          },
+          queue: { name: "Queue", icon: "📨", desc: "Async event processing pipeline" },
+        };
+
+        function esc(s) {
+          var d = document.createElement("div");
+          d.textContent = s || "";
+          return d.innerHTML;
+        }
+
+        async function loadHealth() {
+          var cardsEl = document.getElementById("health-cards");
+          var overallEl = document.getElementById("health-overall");
+          var tsEl = document.getElementById("health-ts");
+          try {
+            var data = await FP.get("/api/admin/health");
+            overallEl.textContent = data.status === "healthy" ? "✓ Healthy" : "⚠ Degraded";
+            overallEl.style.color =
+              data.status === "healthy" ? "var(--green, #4ade80)" : "var(--amber, #fbbf24)";
+            tsEl.textContent = "checked " + new Date(data.timestamp).toLocaleTimeString();
+
+            var html = "";
+            for (var key in data.checks) {
+              var check = data.checks[key];
+              var info = serviceLabels[key] || { name: key, icon: "⚙️", desc: "" };
+              var isOk = check.status === "healthy";
+              var tagClass = isOk ? "tag-ok" : "tag-warn";
+              html +=
+                '<div class="card card-pad" style="padding: 18px">' +
+                '<div class="flex-row" style="gap: 10px; margin-bottom: 10px">' +
+                '<span style="font-size: 20px">' +
+                info.icon +
+                "</span>" +
+                '<div style="flex: 1">' +
+                '<div style="font-size: 14px; font-weight: 500">' +
+                esc(info.name) +
+                "</div>" +
+                '<div class="t-muted" style="font-size: 12px">' +
+                esc(info.desc) +
+                "</div>" +
+                "</div>" +
+                '<span class="tag ' +
+                tagClass +
+                '">' +
+                esc(check.status) +
+                "</span>" +
+                "</div>";
+              if (check.latency_ms !== undefined) {
+                html +=
+                  '<div class="t-muted" style="font-size: 12px">Latency: ' +
+                  check.latency_ms +
+                  "ms</div>";
+              }
+              if (check.error) {
+                html +=
+                  '<div style="font-size: 12px; color: var(--err); margin-top: 4px">' +
+                  esc(check.error) +
+                  "</div>";
+              }
+              html += "</div>";
+            }
+            cardsEl.innerHTML = html;
+          } catch (e) {
+            overallEl.textContent = "Error";
+            overallEl.style.color = "var(--err)";
+            cardsEl.innerHTML =
+              '<div class="card card-pad" style="padding: 32px; text-align: center"><p style="color: var(--err); font-size: 14px">Failed to load health: ' +
+              esc(e.message) +
+              "</p></div>";
+          }
+        }
+
+        document.getElementById("health-refresh").addEventListener("click", loadHealth);
+        FP.autoRefresh(loadHealth, 30000);
       })();
     </script>
   </body>
