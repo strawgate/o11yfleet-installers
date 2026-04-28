@@ -166,10 +166,10 @@
               <div style="padding: 14px; font-size: 13px">
                 <ol style="margin: 0; padding-left: 18px">
                   <li>Connect via WebSocket with enrollment token</li>
-                  <li>Receive signed claim (JWT-like)</li>
+                  <li>Receive a signed assignment claim</li>
                   <li>Report effective config</li>
-                  <li>Poll for new config assignments</li>
-                  <li>Fetch config if changed</li>
+                  <li>Wait for pushed config assignments</li>
+                  <li>Receive config content when changed</li>
                   <li>Apply and restart</li>
                   <li>Report new effective config</li>
                 </ol>
@@ -188,7 +188,7 @@
                   <li>Store connection in DO</li>
                   <li>Push config when the rollout endpoint is called</li>
                   <li>Track health, version, errors</li>
-                  <li>Close connection on auth expiry</li>
+                  <li>Verify signed claims on reconnect</li>
                 </ol>
               </div>
             </div>

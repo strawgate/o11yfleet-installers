@@ -146,7 +146,7 @@
             <li>Click <strong>Upload YAML</strong> to create a new version</li>
             <li>
               Click <strong>Start rollout</strong> or run
-              <code class="mono">o11yfleet config:rollout --config-id &lt;id&gt;</code>
+              <code class="mono">o11y config:rollout --config-id &lt;id&gt;</code>
               to push the current version to all connected collectors immediately
             </li>
           </ol>
@@ -167,8 +167,9 @@
           <h2 id="verify">Verify rollout</h2>
           <p>
             You can verify that collectors have applied the new version by checking the
-            <strong>Agents</strong> list. The "Effective Config" column shows the hash of the
-            currently running configuration.
+            <strong>Agents</strong> list and collector logs. O11yFleet records the current config
+            hash and can receive effective-config reports from collectors, but detailed per-agent
+            rollout progress is not exposed yet.
           </p>
 
           <h2 id="rollback">Reverting to a previous version</h2>
@@ -178,7 +179,7 @@
           </p>
           <p>
             <strong>Note:</strong> There is currently no one-click rollback; you must manually
-            upload the old config. Instant rollback is coming soon.
+            upload the old config. One-click rollback is planned.
           </p>
 
           <h2 id="limitations">Current limitations</h2>

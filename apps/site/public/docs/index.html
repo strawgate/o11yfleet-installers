@@ -131,7 +131,8 @@
 
           <p class="lede">
             O11yFleet is a hosted OpAMP control plane for managing OpenTelemetry Collectors at
-            scale. Monitor health, version configurations, and roll out changes safely.
+            scale. Monitor health, keep configuration history, and push config changes when you are
+            ready.
           </p>
 
           <h2 id="overview">Overview</h2>
@@ -144,11 +145,12 @@
           <ul>
             <li><strong>See collector health</strong> — heartbeats, version, connection status</li>
             <li>
-              <strong>Version configurations</strong> — store configs as immutable versions, instant
-              rollback
+              <strong>Version configurations</strong> — store configs as immutable snapshots so you
+              can return to known-good YAML
             </li>
             <li>
-              <strong>Upload configs via UI or CLI</strong> — push new configurations to your fleet
+              <strong>Upload configs via UI or CLI</strong> — review YAML before pushing it to your
+              fleet
             </li>
             <li>
               <strong>Roll out to all agents</strong> — immediate delivery to connected collectors
@@ -165,7 +167,7 @@
           <p>
             O11yFleet implements the
             <strong>OpAMP (Open Agent Management Protocol)</strong> specification — a
-            WebSocket-based protocol for agent management. Collectors with the OpAMP receiver
+            WebSocket-based protocol for agent management. Collectors with the OpAMP extension
             connect to O11yFleet, authenticate, and receive signed configuration assignments.
           </p>
 
@@ -173,9 +175,8 @@
             <div class="card card-pad">
               <h3 style="margin-top: 0">1. Connect</h3>
               <p style="font-size: 14px; margin: 0">
-                Run the OpenTelemetry Collector with <code class="mono">--config=opamp:</code> or
-                set <code class="mono">OPAMP_SERVER_URL</code>. The collector establishes a
-                persistent WebSocket connection.
+                Run the OpenTelemetry Collector with the OpAMP extension enabled. The collector
+                establishes a persistent WebSocket connection to O11yFleet.
               </p>
             </div>
             <div class="card card-pad">
@@ -221,8 +222,9 @@
 
           <h3 id="concept-enrollment">Enrollment token</h3>
           <p>
-            A short-lived token (typically 24h) used during collector enrollment. Once presented,
-            the collector receives a signed claim that authenticates all future connections.
+            A bootstrap token used during collector enrollment. Tokens are stored hashed, can be
+            given an optional expiry, and can be revoked after use. Once enrolled, the collector
+            receives a 24-hour signed claim for reconnects.
           </p>
 
           <h3 id="concept-rollout">Rollout</h3>

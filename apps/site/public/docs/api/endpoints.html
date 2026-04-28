@@ -128,7 +128,8 @@
 
           <p class="lede">
             The O11yFleet API provides REST endpoints for managing configurations, agents, and
-            enrollment tokens. Base URL: <code class="mono">https://api.o11yfleet.com/v1</code>
+            enrollment tokens. Base URL:
+            <code class="mono">https://api.o11yfleet.com/api/v1</code>
           </p>
 
           <h2 id="base-url">Base URL</h2>
@@ -140,11 +141,12 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>https://api.o11yfleet.com/v1</code></pre>
+          ><code>https://api.o11yfleet.com/api/v1</code></pre>
 
           <h2 id="authentication">Authentication</h2>
           <p>
-            All API requests require a Bearer token in the
+            Programmatic API requests currently use the deployment-level
+            <code class="mono">API_SECRET</code> in the
             <code class="mono">Authorization</code> header:
           </p>
           <pre
@@ -155,7 +157,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>Authorization: Bearer &lt;your-api-key&gt;</code></pre>
+          ><code>Authorization: Bearer &lt;API_SECRET&gt;</code></pre>
 
           <h2 id="tenancy">Tenant scoping</h2>
           <p>Include your tenant ID in the <code class="mono">X-Tenant-Id</code> header:</p>
@@ -190,7 +192,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>[{ "id": "cfg_xxx", "name": "prod-ingress", "current_version": 14, "updated_at": "2026-04-28T12:00:00Z" }]</code></pre>
+          ><code>{ "configurations": [{ "id": "cfg_xxx", "name": "prod-ingress", "current_config_hash": "abc123...", "updated_at": "2026-04-28T12:00:00Z" }] }</code></pre>
 
           <h3>Get configuration</h3>
           <pre
@@ -246,6 +248,10 @@ receivers:
               font-size: 13px;
             "
           ><code>GET /configurations/:id/versions</code></pre>
+          <p>
+            Returns <code class="mono">versions</code> plus the configuration's
+            <code class="mono">current_config_hash</code>.
+          </p>
 
           <h3>Get current YAML</h3>
           <pre

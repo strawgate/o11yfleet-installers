@@ -140,8 +140,8 @@
               <code class="mono">wss://api.o11yfleet.com:443</code> are allowed
             </li>
             <li>
-              <strong>Verify enrollment token</strong> — Tokens expire after 24h by default;
-              generate a new one
+              <strong>Verify enrollment token</strong> — Expired or revoked tokens are rejected;
+              generate a new one if needed
             </li>
             <li>
               <strong>Review collector logs</strong> — Look for OpAMP errors or connection failures
@@ -154,17 +154,17 @@
 
           <h3>"enrollment token invalid" error</h3>
           <ul>
-            <li>Tokens are single-use for the initial enrollment</li>
-            <li>If reused, generate a fresh token</li>
+            <li>Tokens can be reused until they are revoked or expire</li>
+            <li>If a token may have leaked, revoke it and generate a fresh token</li>
             <li>Check for extra whitespace when copying</li>
-            <li>Token may have expired (default TTL is 24h)</li>
+            <li>Token may have expired if it was created with an expiry</li>
           </ul>
 
           <h3>WebSocket connection refused</h3>
           <ul>
             <li>
-              Verify <code class="mono">server_url</code> uses <code class="mono">wss://</code> (not
-              <code class="mono">ws://</code>)
+              Verify the OpAMP endpoint uses <code class="mono">wss://</code> for SaaS or
+              <code class="mono">ws://</code> for local development
             </li>
             <li>Check firewall/proxy allows outbound WebSocket</li>
             <li>
@@ -202,16 +202,16 @@
 
           <h3>Drift detected</h3>
           <p>
-            O11yFleet flags drift when a collector's effective config differs from the intended
-            version. This usually means someone edited the collector's local config file directly.
-            The next rollout will automatically correct it.
+            Drift detection is not exposed in the MVP UI yet. If a collector reports an effective
+            config that does not match the current version, start a rollout again or inspect the
+            collector logs for configuration-apply failures.
           </p>
 
           <h2 id="portal-issues">Portal issues</h2>
 
           <h3>Can't see any agents</h3>
           <ul>
-            <li>Confirm you're in the correct tenant (org switcher in bottom left)</li>
+            <li>Confirm you're signed into the expected tenant</li>
             <li>Check that agents are actually connected (view worker logs)</li>
             <li>Verify session auth or bearer auth plus X-Tenant-Id is correct</li>
           </ul>

@@ -161,27 +161,32 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code> receivers:
+          ><code>receivers:
   otlp:
     protocols:
       grpc:
       http:
 
- processors:
-   batch:
-     timeout: 5s
-     send_batch_size: 4096
+processors:
+  batch:
+    timeout: 5s
+    send_batch_size: 4096
 
- exporters:
-   otlp:
-     endpoint: "api.honeycomb.io:4317"
-     headers:
-       "x-api-key": "${HONEYCOMB_API_KEY}"
+exporters:
+  otlp:
+    endpoint: "api.honeycomb.io:4317"
+    headers:
+      "x-api-key": "${HONEYCOMB_API_KEY}"
 
- service:
-   telemetry:
-     logs:
-       level: "info"</code></pre>
+service:
+  telemetry:
+    logs:
+      level: "info"
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [otlp]</code></pre>
 
           <p>
             Click <strong>Save</strong>. This creates <strong>version 1</strong> of the
@@ -200,7 +205,7 @@
           <h2 id="versions">Configuration versions</h2>
           <p>
             Every change to a configuration creates a new version. Versions are immutable and
-            identified by a version number (v1, v2, v3…) and a content hash.
+            identified by an ID and a content hash.
           </p>
           <p><strong>Version lifecycle:</strong></p>
           <ul>
@@ -208,11 +213,14 @@
               <strong>Uploaded</strong> — Stored as the current version, not pushed until rollout
               starts
             </li>
-            <li><strong>Rolling out</strong> — Currently being delivered to collectors</li>
+            <li><strong>Rolled out</strong> — Delivered immediately to connected collectors</li>
             <li>
-              <strong>Applied</strong> — Reported by collectors after they apply the pushed config
+              <strong>Reported</strong> — Collectors can report the effective config they are
+              running
             </li>
-            <li><strong>Rolled back</strong> — Reverted; a newer version is active</li>
+            <li>
+              <strong>Reverted</strong> — Old YAML is uploaded again and rolled out as a new version
+            </li>
           </ul>
 
           <h2 id="next">Next steps</h2>
@@ -223,7 +231,7 @@
             </li>
             <li>
               <a href="../concepts/configurations.html">Configuration concepts</a> — deep dive into
-              versioning, labels, and targeting
+              versioning and storage
             </li>
           </ul>
 

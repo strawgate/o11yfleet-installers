@@ -161,8 +161,11 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>o11yfleet login --email user@example.com --password &lt;password&gt;</code></pre>
-          <p>Or set the <code class="mono">O11YFLEET_API_KEY</code> environment variable:</p>
+          ><code>o11y login --email user@example.com --password &lt;password&gt;</code></pre>
+          <p>
+            Or set <code class="mono">O11YFLEET_API_KEY</code> to the deployment bearer secret used
+            for API automation:
+          </p>
           <pre
             style="
               background: var(--surface-2);
@@ -171,7 +174,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>export O11YFLEET_API_KEY="your-api-key"</code></pre>
+          ><code>export O11YFLEET_API_KEY="&lt;API_SECRET&gt;"</code></pre>
 
           <h2 id="commands">Commands</h2>
 
@@ -197,32 +200,32 @@
             </thead>
             <tbody>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px"><code class="mono">o11yfleet config:list</code></td>
+                <td style="padding: 10px 14px"><code class="mono">o11y config:list</code></td>
                 <td style="padding: 10px 14px">List all configurations</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet config:create --name &lt;name&gt;</code>
+                  <code class="mono">o11y config:create --name &lt;name&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Create a new configuration</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet config:show --config-id &lt;id&gt;</code>
+                  <code class="mono">o11y config:show --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Get configuration details</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
                   <code class="mono"
-                    >o11yfleet config:upload --config-id &lt;id&gt; --file &lt;path&gt;</code
+                    >o11y config:upload --config-id &lt;id&gt; --file &lt;path&gt;</code
                   >
                 </td>
                 <td style="padding: 10px 14px">Upload YAML and create a new version</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet config:rollout --config-id &lt;id&gt;</code>
+                  <code class="mono">o11y config:rollout --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Push current version to connected agents</td>
               </tr>
@@ -252,13 +255,13 @@
             <tbody>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet agents:list --config-id &lt;id&gt;</code>
+                  <code class="mono">o11y agents:list --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">List all agents</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet agents:list --config-id &lt;id&gt; --stats</code>
+                  <code class="mono">o11y agents:list --config-id &lt;id&gt; --stats</code>
                 </td>
                 <td style="padding: 10px 14px">List agents with aggregate stats</td>
               </tr>
@@ -289,14 +292,14 @@
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
                   <code class="mono"
-                    >o11yfleet token:create --config-id &lt;id&gt; --label &lt;label&gt;</code
+                    >o11y token:create --config-id &lt;id&gt; --label &lt;label&gt;</code
                   >
                 </td>
                 <td style="padding: 10px 14px">Create an enrollment token</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11yfleet token:list --config-id &lt;id&gt;</code>
+                  <code class="mono">o11y token:list --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">List enrollment tokens</td>
               </tr>
@@ -315,13 +318,13 @@
               font-size: 13px;
             "
           ><code># Create config
-o11yfleet config:create --name "prod-ingress"
+o11y config:create --name "prod-ingress"
 
 # Upload YAML
-o11yfleet config:upload --config-id cfg_xxx --file prod-ingress.yaml
+o11y config:upload --config-id cfg_xxx --file prod-ingress.yaml
 
 # Start rollout
-o11yfleet config:rollout --config-id cfg_xxx</code></pre>
+o11y config:rollout --config-id cfg_xxx</code></pre>
 
           <h3>List agents</h3>
           <pre
@@ -332,7 +335,7 @@ o11yfleet config:rollout --config-id cfg_xxx</code></pre>
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>o11yfleet agents:list --config-id cfg_xxx</code></pre>
+          ><code>o11y agents:list --config-id cfg_xxx</code></pre>
 
           <div class="coming-soon-banner">
             <strong>🚧 CLI extensions:</strong> Additional flags (filtering, status selection) and

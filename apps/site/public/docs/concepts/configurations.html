@@ -140,23 +140,23 @@
           <h2 id="immutable-versions">Immutable versions</h2>
           <p>
             Configurations in O11yFleet are immutable. When you edit a config (either in the portal
-            or via Git), a <strong>new version</strong> is created. The old version remains stored
-            forever, allowing instant rollback.
+            or CLI), a <strong>new version</strong> is created. Previous versions remain available
+            in the configuration history while the configuration exists.
           </p>
           <p>This means there's no "edit" — only "create new version". This is intentional:</p>
           <ul>
             <li><strong>Audit trail</strong> — full history of who changed what and when</li>
             <li>
-              <strong>Manual rollback</strong> — redeploy an old version by uploading it again and
-              starting a rollout
+              <strong>Manual rollback</strong> — redeploy known-good YAML by uploading it again and
+              starting a new rollout
             </li>
             <li>
               <strong>Deduplication</strong> — identical configs share the same R2 object (by
               SHA-256 hash)
             </li>
             <li>
-              <strong>Drift detection</strong> — O11yFleet compares intended vs effective config;
-              drift flag coming soon
+              <strong>Effective-config visibility</strong> — collectors can report what they are
+              actually running; drift flags are planned
             </li>
           </ul>
 
@@ -197,26 +197,28 @@
             </thead>
             <tbody>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px">Pending</td>
+                <td style="padding: 10px 14px">Uploaded</td>
                 <td style="padding: 10px 14px">
-                  Uploaded and current in D1, but not pushed until rollout starts
+                  Stored in R2, recorded in D1, and selected as the current version
                 </td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px">Rolling out</td>
+                <td style="padding: 10px 14px">Rolled out</td>
                 <td style="padding: 10px 14px">
-                  Currently being delivered to all connected collectors
+                  Pushed immediately to connected collectors after you start a rollout
                 </td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px">Applied</td>
+                <td style="padding: 10px 14px">Reported</td>
                 <td style="padding: 10px 14px">
-                  Reported by collectors after they apply the pushed config
+                  Collector effective-config data can confirm what each collector is running
                 </td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px">Rolled back</td>
-                <td style="padding: 10px 14px">A newer version replaced this one</td>
+                <td style="padding: 10px 14px">Reverted</td>
+                <td style="padding: 10px 14px">
+                  A previous YAML file was uploaded again and rolled out as a new version
+                </td>
               </tr>
             </tbody>
           </table>

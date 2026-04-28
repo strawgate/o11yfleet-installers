@@ -143,13 +143,12 @@
           <h2 id="versioning">Immutable versioning</h2>
           <p>
             Every configuration change creates a new <strong>version</strong>. Versions are
-            immutable and identified by a version number (v1, v2, v3...) and a SHA-256 content hash.
+            immutable and identified by an ID plus a SHA-256 content hash.
           </p>
           <p>
             This means you can never alter a version — you can only create a new one. This design
             enables rollback: to revert to a previous version, upload that old configuration YAML
-            again (which creates a new version with the old content). Instant one-click rollback is
-            coming soon.
+            again (which creates a new version with the old content). One-click rollback is planned.
           </p>
 
           <h2 id="current-behavior">Current rollout behavior</h2>
@@ -163,11 +162,11 @@
           <ol>
             <li>
               <strong>Create version</strong> — upload YAML in the portal or use
-              <code class="mono">o11yfleet config:upload</code>
+              <code class="mono">o11y config:upload</code>
             </li>
             <li>
               <strong>Start rollout</strong> — click <strong>Start rollout</strong> or run
-              <code class="mono">o11yfleet config:rollout --config-id &lt;id&gt;</code> to push over
+              <code class="mono">o11y config:rollout --config-id &lt;id&gt;</code> to push over
               WebSocket
             </li>
             <li>
@@ -175,8 +174,8 @@
               (may restart)
             </li>
             <li>
-              <strong>Effective config updates</strong> — collector reports new config hash; UI
-              shows latest effective config
+              <strong>Effective config updates</strong> — collectors can report the config hash they
+              are running; detailed per-agent progress is planned
             </li>
           </ol>
 
@@ -186,8 +185,8 @@
             YAML as a new version. This creates a new version that reverts the changes.
           </p>
           <p>
-            Example: if v3 is problematic, upload the v2 YAML → creates v4 (identical to v2) → all
-            collectors apply v4.
+            Example: if the latest YAML is problematic, upload the previous known-good YAML again,
+            then start a rollout so connected collectors receive that content.
           </p>
 
           <h2 id="whats-missing">What's not implemented yet</h2>

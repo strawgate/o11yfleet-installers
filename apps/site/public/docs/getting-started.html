@@ -130,8 +130,8 @@
           <h1>Get up and running with O11yFleet</h1>
 
           <p class="lede">
-            Connect your first OpenTelemetry Collector, view health metrics, and roll out your first
-            configuration — all in about 10 minutes.
+            Start the control plane, create a collector configuration, connect one OpenTelemetry
+            Collector, and verify that O11yFleet can see it.
           </p>
 
           <div
@@ -159,8 +159,10 @@
               </svg>
               <div>
                 <strong>Quick option:</strong> If you just want to try O11yFleet locally, run
-                <code class="mono">just setup</code> in the repo to spin up a local worker, migrate
-                the DB, seed a demo tenant, and launch a fake collector. No account needed.
+                <code class="mono">just dev</code> in one terminal and
+                <code class="mono">just setup</code> in another. That starts the local Worker,
+                migrates local D1, seeds a demo tenant, uploads a sample config, and creates an
+                enrollment token. No hosted account needed.
               </div>
             </div>
           </div>
@@ -181,8 +183,11 @@
             "
           ><code>git clone https://github.com/strawgate/o11yfleet.git
 cd o11yfleet
-just setup
-just dev</code></pre>
+just install
+just dev
+
+# In a second terminal:
+just setup</code></pre>
           <p>
             This starts O11yFleet at <code class="mono">http://localhost:8787</code> and seeds a
             demo tenant with sample data.
@@ -190,12 +195,13 @@ just dev</code></pre>
 
           <h2 id="step-2-enroll">Step 2 — Create an enrollment token</h2>
           <p>
-            Enrollment tokens are used once by a collector to authenticate with O11yFleet. After the
-            initial connection, the collector receives a signed claim that lasts for 30 days.
+            Enrollment tokens bootstrap collector authentication with O11yFleet. After the initial
+            connection, the collector receives a signed claim that lasts for 24 hours and can be
+            used for reconnects.
           </p>
           <p>
-            <strong>Note:</strong> The UI does not yet have an enrollment token creation page. Use
-            the CLI:
+            In the portal, open <strong>Enrollment tokens</strong> and create a token for your
+            configuration. For local or scripted setup, use the CLI:
           </p>
           <pre
             style="
@@ -207,8 +213,11 @@ just dev</code></pre>
             "
           ><code># If you ran `just setup`, a demo tenant already exists
 # Create an enrollment token for a configuration
-o11yfleet token:create --config-id &lt;config-id&gt; --label "prod-ingress"</code></pre>
-          <p>Copy the token — you'll use it in the next step.</p>
+o11y token:create --config-id &lt;config-id&gt; --label "prod-ingress" --expires-in 24</code></pre>
+          <p>
+            Copy the token while it is visible. Tokens are stored hashed, so O11yFleet cannot show
+            the raw value later.
+          </p>
 
           <h2 id="step-3-connect">Step 3 — Connect a collector</h2>
           <p>
@@ -267,8 +276,11 @@ service:
 
 extensions:
   opamp:
-    server_url: "http://localhost:8787/v1/opamp"   # or wss://api.o11yfleet.com/v1/opamp for SaaS
-    enrollment_token: "YOUR_TOKEN_HERE"</code></pre>
+    server:
+      ws:
+        endpoint: "ws://localhost:8787/v1/opamp"   # or wss://api.o11yfleet.com/v1/opamp for SaaS
+    headers:
+      Authorization: "Bearer YOUR_TOKEN_HERE"</code></pre>
             </li>
             <li>
               Run the collector:
@@ -302,7 +314,7 @@ extensions:
           <p>If the collector shows as <em>offline</em> or <em>degraded</em>, check:</p>
           <ul>
             <li>WebSocket connection in the collector logs</li>
-            <li>Enrollment token validity (tokens expire after 24h)</li>
+            <li>Enrollment token validity (expired or revoked tokens are rejected)</li>
             <li>
               Network/firewall rules allowing outbound WebSocket to
               <code class="mono">api.o11yfleet.com:443</code> (SaaS) or
@@ -330,7 +342,7 @@ extensions:
             <div class="card card-pad" style="border-color: var(--accent-line)">
               <h3 style="margin-top: 0">Next: Core concepts</h3>
               <p style="font-size: 14px; margin: 0 0 12px 0">
-                Understand tenants, collectors, configurations, enrollment tokens, and modes.
+                Understand tenants, collectors, configurations, enrollment tokens, and rollouts.
               </p>
               <a href="index.html#key-concepts" class="btn btn-secondary btn-sm">Learn concepts</a>
             </div>

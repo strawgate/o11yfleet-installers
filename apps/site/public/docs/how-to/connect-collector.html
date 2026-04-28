@@ -144,7 +144,7 @@
               An OpenTelemetry Collector binary (contrib or core distribution) version 0.89.0 or
               later
             </li>
-            <li>An enrollment token from the O11yFleet portal</li>
+            <li>An enrollment token from the O11yFleet portal or CLI</li>
           </ul>
 
           <h2 id="supported-collectors">Supported collectors</h2>
@@ -174,11 +174,15 @@
             "
           ><code>extensions:
   opamp:
-    server_url: "wss://api.o11yfleet.com/v1/opamp"
-    enrollment_token: "YOUR_TOKEN_HERE"
-    # Optional: additional settings
-    # heartbeat: 30s
-    # timeout: 10s
+    server:
+      ws:
+        endpoint: "wss://api.o11yfleet.com/v1/opamp"
+    headers:
+      Authorization: "Bearer YOUR_TOKEN_HERE"
+    capabilities:
+      reports_effective_config: true
+      reports_health: true
+      accepts_remote_config: true
 
 receivers:
   otlp:
@@ -200,8 +204,8 @@ service:
       receivers: [otlp]
       exporters: [otlp]</code></pre>
 
-          <h3 id="via-environment">Via environment variables</h3>
-          <p>Alternatively, set environment variables:</p>
+          <h3 id="via-environment">Via the install script</h3>
+          <p>The install script writes the same OpAMP extension configuration for you:</p>
           <pre
             style="
               background: var(--surface-2);
@@ -210,8 +214,7 @@ service:
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>export OPAMP_SERVER_URL="wss://api.o11yfleet.com/v1/opamp"
-export OPAMP_ENROLLMENT_TOKEN="YOUR_TOKEN_HERE"</code></pre>
+          ><code>curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token YOUR_TOKEN_HERE</code></pre>
 
           <h2 id="kubernetes">Running on Kubernetes</h2>
           <p>Here's a minimal Kubernetes manifest to run a collector with OpAMP:</p>
@@ -231,8 +234,15 @@ data:
   config.yaml: |
     extensions:
       opamp:
-        server_url: "wss://api.o11yfleet.com/v1/opamp"
-        enrollment_token: "${OPAMP_TOKEN}"
+        server:
+          ws:
+            endpoint: "wss://api.o11yfleet.com/v1/opamp"
+        headers:
+          Authorization: "Bearer ${OPAMP_TOKEN}"
+        capabilities:
+          reports_effective_config: true
+          reports_health: true
+          accepts_remote_config: true
     receivers:
       otlp:
         protocols:
@@ -315,8 +325,7 @@ INFO    extensions/opamp.go:178  enrolled successfully, received claim</code></p
           <h3>Collector shows as "offline"</h3>
           <ul>
             <li>
-              Check that <code class="mono">server_url</code> is correct and uses
-              <code class="mono">wss://</code> (secure WebSocket)
+              Check that the OpAMP endpoint is correct and uses <code class="mono">wss://</code>
             </li>
             <li>Verify enrollment token hasn't expired</li>
             <li>Ensure outbound WebSocket connections to port 443 are allowed</li>
@@ -334,8 +343,8 @@ INFO    extensions/opamp.go:178  enrolled successfully, received claim</code></p
 
           <h3>"enrollment token invalid" error</h3>
           <ul>
-            <li>Tokens are single-use for enrollment. If you reuse a token, generate a new one</li>
-            <li>Tokens expire after the configured duration (default 24h)</li>
+            <li>Tokens remain valid until revoked or until their configured expiry passes</li>
+            <li>If a token may have leaked, revoke it and generate a fresh one</li>
             <li>Make sure the token was copied correctly (no extra spaces)</li>
           </ul>
 
