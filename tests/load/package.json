@@ -1,0 +1,19 @@
+{
+  "name": "@o11yfleet/load-test",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "load": "tsx src/load-test.ts",
+    "smoke": "tsx src/smoke-test.ts"
+  },
+  "dependencies": {
+    "@o11yfleet/core": "workspace:*",
+    "@o11yfleet/test-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^25.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.8.0"
+  }
+}

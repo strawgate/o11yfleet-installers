@@ -1,10 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
-import { decodeAgentToServer, encodeServerToAgent } from "@o11yfleet/core/codec";
+import { decodeAgentToServer, encodeServerToAgent, detectCodecFormat } from "@o11yfleet/core/codec";
+import type { CodecFormat } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { hexToUint8Array } from "@o11yfleet/core/hex";
+import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { FleetEventType } from "@o11yfleet/core/events";
 import {
   startWsMessageSpan,
@@ -41,6 +42,7 @@ interface WSAttachment {
   instance_uid: string;
   connected_at: number;
   is_enrollment?: boolean;
+  codec_format?: CodecFormat;
 }
 
 /** Runtime validation for WS attachment deserialized from hibernation storage. */
@@ -61,6 +63,10 @@ function parseAttachment(raw: unknown): WSAttachment | null {
     instance_uid: obj["instance_uid"],
     connected_at: obj["connected_at"],
     is_enrollment: typeof obj["is_enrollment"] === "boolean" ? obj["is_enrollment"] : undefined,
+    codec_format:
+      obj["codec_format"] === "protobuf" || obj["codec_format"] === "json"
+        ? obj["codec_format"]
+        : undefined,
   };
 }
 
@@ -147,6 +153,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     this.ctx.acceptWebSocket(server);
 
+    // Per OpAMP spec, client sends first. Defer enrollment to webSocketMessage()
+    // so we can auto-detect the codec from the first binary frame.
     const attachment: WSAttachment = {
       tenant_id: tenantId,
       config_id: configId,
@@ -155,55 +163,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       is_enrollment: isEnrollment,
     };
     server.serializeAttachment(attachment);
-
-    if (isEnrollment) {
-      const claim: AssignmentClaim = {
-        v: 1,
-        tenant_id: tenantId,
-        config_id: configId,
-        instance_uid: instanceUid,
-        generation: 1,
-        iat: Math.floor(Date.now() / 1000),
-        exp: Math.floor(Date.now() / 1000) + 86400 * 30,
-      };
-
-      try {
-        const signedClaim = await signClaim(claim, this.env.CLAIM_SECRET);
-
-        server.send(
-          JSON.stringify({
-            type: "enrollment_complete",
-            assignment_claim: signedClaim,
-            instance_uid: instanceUid,
-          }),
-        );
-
-        server.send(
-          encodeServerToAgent({
-            instance_uid: hexToUint8Array(instanceUid),
-            flags: 0,
-            capabilities: 0x00000003,
-            agent_identification: {
-              new_instance_uid: hexToUint8Array(instanceUid),
-            },
-          }),
-        );
-
-        await this.emitEvents([
-          {
-            type: FleetEventType.AGENT_ENROLLED,
-            tenant_id: tenantId,
-            config_id: configId,
-            instance_uid: instanceUid,
-            timestamp: Date.now(),
-            generation: 1,
-          },
-        ]);
-      } catch {
-        server.close(4500, "Enrollment failed");
-        return new Response(null, { status: 101, webSocket: client });
-      }
-    }
 
     // Start stale sweep alarm when agents connect
     await this.ensureAlarm();
@@ -225,6 +184,71 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
+    // Detect codec format on first message and persist in attachment
+    if (!attachment.codec_format) {
+      attachment.codec_format = detectCodecFormat(message);
+
+      // Complete enrollment on first message (OpAMP spec: client sends first)
+      if (attachment.is_enrollment) {
+        try {
+          const codec = attachment.codec_format;
+
+          // For protobuf clients, use the agent's own instance_uid from the message
+          if (codec === "protobuf") {
+            const agentMsg = decodeAgentToServer(message, codec);
+            if (agentMsg.instance_uid && agentMsg.instance_uid.byteLength > 0) {
+              attachment.instance_uid = uint8ToHex(agentMsg.instance_uid);
+            }
+          }
+
+          // Generate signed assignment claim for reconnection
+          const claim: AssignmentClaim = {
+            v: 1,
+            tenant_id: attachment.tenant_id,
+            config_id: attachment.config_id,
+            instance_uid: attachment.instance_uid,
+            generation: 1,
+            iat: Math.floor(Date.now() / 1000),
+            exp: Math.floor(Date.now() / 1000) + 86400, // 24h
+          };
+          const assignmentToken = await signClaim(claim, this.env.CLAIM_SECRET);
+
+          // Send enrollment_complete text frame with assignment claim.
+          // Both JSON and protobuf clients receive this so they can reconnect.
+          // (Standard OpAMP has no enrollment concept — this is our extension.)
+          ws.send(
+            JSON.stringify({
+              type: "enrollment_complete",
+              instance_uid: attachment.instance_uid,
+              assignment_claim: assignmentToken,
+            }),
+          );
+
+          // Emit enrollment event
+          await this.emitEvents([
+            {
+              type: FleetEventType.AGENT_ENROLLED,
+              tenant_id: attachment.tenant_id,
+              config_id: attachment.config_id,
+              instance_uid: attachment.instance_uid,
+              timestamp: Date.now(),
+              generation: 1,
+            },
+          ]);
+
+          attachment.is_enrollment = false;
+          ws.serializeAttachment(attachment);
+        } catch (_err) {
+          ws.close(4500, "Enrollment failed");
+          return;
+        }
+        // Fall through to process this first message normally
+      } else {
+        ws.serializeAttachment(attachment);
+      }
+    }
+    const codec = attachment.codec_format!;
+
     // Rate limit — atomic check-and-increment in SQLite
     if (checkRateLimit(this.ctx.storage.sql, attachment.instance_uid, MAX_MESSAGES_PER_MINUTE)) {
       ws.close(4029, "Rate limit exceeded");
@@ -241,8 +265,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       attachment.config_id,
     );
     try {
-      const agentMsg = decodeAgentToServer(message);
+      const agentMsg = decodeAgentToServer(message, codec);
       span.setAttribute("opamp.sequence_num", agentMsg.sequence_num);
+      span.setAttribute("opamp.codec", codec);
 
       const state = loadAgentState(
         this.ctx.storage.sql,
@@ -264,7 +289,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       }
 
       if (result.response) {
-        ws.send(encodeServerToAgent(result.response));
+        ws.send(encodeServerToAgent(result.response, codec));
         if (result.response.remote_config) {
           span.setAttribute("opamp.config_offered", true);
         }
@@ -384,16 +409,23 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (!attachment) continue;
 
       try {
+        // Skip enrollment sockets that haven't negotiated a codec yet
+        const socketCodec =
+          attachment.codec_format ?? (attachment.is_enrollment ? undefined : "json");
+        if (!socketCodec) continue;
         ws.send(
-          encodeServerToAgent({
-            instance_uid: hexToUint8Array(attachment.instance_uid),
-            flags: 0,
-            capabilities: 0x00000003,
-            remote_config: {
-              config: { config_map: configMap },
-              config_hash: desiredHashBytes,
+          encodeServerToAgent(
+            {
+              instance_uid: hexToUint8Array(attachment.instance_uid),
+              flags: 0,
+              capabilities: 0x00000003,
+              remote_config: {
+                config: { config_map: configMap },
+                config_hash: desiredHashBytes,
+              },
             },
-          }),
+            socketCodec,
+          ),
         );
         pushed++;
       } catch {

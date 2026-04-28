@@ -1,0 +1,73 @@
+# Real OTel Collector Smoke Test — opampextension
+#
+# This config is for otelcol-contrib with the built-in opamp extension.
+# The collector connects to the FleetPlane OpAMP server via WebSocket,
+# reports its status, and accepts remote configuration.
+#
+# Usage:
+#   1. Create an enrollment token in FleetPlane:
+#        curl -X POST https://api.o11yfleet.com/api/configurations/<CONFIG_ID>/enrollment-token \
+#          -H 'Content-Type: application/json' -d '{"label":"smoke-test"}'
+#
+#   2. Set the token in this file (see <ENROLLMENT_TOKEN> below)
+#
+#   3. Run the collector:
+#        otelcol-contrib --config configs/smoke-test/otelcol-opampext.yaml
+#
+# Install otelcol-contrib:
+#   brew install open-telemetry/opentelemetry-collector/opentelemetry-collector-contrib
+
+extensions:
+  opamp:
+    server:
+      ws:
+        # Replace with your FleetPlane endpoint
+        endpoint: wss://api.o11yfleet.com/v1/opamp
+        headers:
+          Authorization: "Bearer <ENROLLMENT_TOKEN>"
+        tls:
+          insecure: false
+    instance_uid: "" # auto-generated UUIDv7 if empty
+    capabilities:
+      reports_effective_config: true
+      reports_health: true
+      reports_own_metrics: false
+      reports_remote_config: true
+      accepts_remote_config: true
+      accepts_restart_command: false
+      accepts_opamp_connection_settings: false
+      accepts_other_connection_settings: false
+      accepts_packages: false
+
+# Minimal collector config — FleetPlane can push a different one via OpAMP
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+
+processors:
+  batch:
+    timeout: 5s
+
+exporters:
+  debug:
+    verbosity: detailed
+
+service:
+  extensions: [opamp]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    metrics:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]
+    logs:
+      receivers: [otlp]
+      processors: [batch]
+      exporters: [debug]

@@ -225,6 +225,9 @@ export async function getAgentSummaries(
 /**
  * Connect a WebSocket using an enrollment token. Returns the accepted WS +
  * the enrollment response (assignment_claim, instance_uid).
+ *
+ * Per OpAMP spec, client sends first. We send an initial hello to trigger
+ * the deferred enrollment flow in the DO.
  */
 export async function connectWithEnrollment(token: string): Promise<{
   ws: WebSocket;
@@ -237,12 +240,35 @@ export async function connectWithEnrollment(token: string): Promise<{
   const ws = wsRes.webSocket!;
   ws.accept();
 
-  // Receive enrollment_complete text message
+  // Per OpAMP spec: client sends first. Send hello to trigger enrollment.
+  const hello: AgentToServer = {
+    instance_uid: new Uint8Array(16),
+    sequence_num: 0,
+    capabilities:
+      AgentCapabilities.ReportsStatus |
+      AgentCapabilities.AcceptsRemoteConfig |
+      AgentCapabilities.ReportsHealth |
+      AgentCapabilities.ReportsRemoteConfig,
+    flags: 0,
+    health: {
+      healthy: true,
+      start_time_unix_nano: 0n,
+      last_error: "",
+      status: "running",
+    },
+    agent_description: {
+      identifying_attributes: [{ key: "service.name", value: { string_value: "test-agent" } }],
+      non_identifying_attributes: [],
+    },
+  };
+  ws.send(encodeFrame(hello));
+
+  // Receive enrollment_complete text message (response to our hello)
   const enrollEvent = await waitForMsg(ws);
   const enrollment = JSON.parse(enrollEvent.data as string);
   expect(enrollment.type).toBe("enrollment_complete");
 
-  // Receive initial OpAMP binary response — consume it
+  // Receive OpAMP binary response (from state machine processing our hello)
   await waitForMsg(ws);
 
   return { ws, enrollment };

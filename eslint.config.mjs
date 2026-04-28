@@ -10,6 +10,7 @@ export default tseslint.config(
       "**/node_modules/**",
       "**/.wrangler/**",
       "**/generated/**",
+      "**/gen/**",
       "**/experiments/**",
     ],
   },
@@ -17,7 +18,7 @@ export default tseslint.config(
     rules: {
       "@typescript-eslint/no-unused-vars": [
         "error",
-        { argsIgnorePattern: "^_", varsIgnorePattern: "^_" },
+        { argsIgnorePattern: "^_", varsIgnorePattern: "^_", caughtErrorsIgnorePattern: "^_" },
       ],
       "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/consistent-type-imports": [

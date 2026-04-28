@@ -2,9 +2,9 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { decodeFrame } from "@o11yfleet/core/codec";
+import { decodeFrame, encodeFrame } from "@o11yfleet/core/codec";
 import { apiFetch } from "./helpers.js";
-import type { ServerToAgent } from "@o11yfleet/core/codec";
+import type { ServerToAgent, AgentToServer } from "@o11yfleet/core/codec";
 import { AgentCapabilities, ServerToAgentFlags } from "@o11yfleet/core/codec";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
@@ -97,7 +97,16 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     const ws = wsRes.webSocket!;
     ws.accept();
 
-    // 6. Receive enrollment_complete text message
+    // 5b. Per OpAMP spec: client sends first. Send hello to trigger enrollment.
+    const hello: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+    };
+    ws.send(encodeFrame(hello));
+
+    // 6. Receive enrollment_complete text message (triggered by our hello)
     const enrollEvent = await waitForMsg(ws);
     const enrollMsg = JSON.parse(enrollEvent.data as string);
     expect(enrollMsg.type).toBe("enrollment_complete");
@@ -149,6 +158,15 @@ describe("E2E Scenario #1: New enrollment", () => {
     expect(wsRes.status).toBe(101);
     const ws = wsRes.webSocket!;
     ws.accept();
+
+    // Per OpAMP spec: client sends first
+    const hello: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    ws.send(encodeFrame(hello));
 
     const enrollEvent = await waitForMsg(ws);
     const enrollMsg = JSON.parse(enrollEvent.data as string);

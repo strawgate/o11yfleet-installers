@@ -1,5 +1,7 @@
-export { decodeAgentToServer, encodeServerToAgent } from "./decoder.js";
+export { decodeAgentToServer, encodeServerToAgent, detectCodecFormat } from "./decoder.js";
+export type { CodecFormat } from "./decoder.js";
 export { encodeFrame, decodeFrame } from "./framing.js";
+export { decodeAgentToServerProto, encodeServerToAgentProto, isProtobufFrame } from "./protobuf.js";
 export type { AgentToServer, ServerToAgent } from "./types.js";
 export {
   AgentCapabilities,

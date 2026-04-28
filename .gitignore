@@ -23,6 +23,7 @@ profiles/
 
 # Load test output
 load-test-results/
+tmp/
 O11yFleet.zip
 .playwright-cli/
 O11yFleet-update.zip

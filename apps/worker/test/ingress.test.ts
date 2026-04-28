@@ -2,6 +2,9 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
+import { encodeFrame } from "@o11yfleet/core/codec";
+import type { AgentToServer } from "@o11yfleet/core/codec";
+import { AgentCapabilities } from "@o11yfleet/core/codec";
 import { apiFetch } from "./helpers.js";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
@@ -170,9 +173,18 @@ describe("Ingress Router", () => {
     expect(wsRes.status).toBe(101);
     expect(wsRes.webSocket).toBeDefined();
 
-    // The DO should have sent enrollment messages
+    // The DO waits for client-first message per OpAMP spec
     const ws = wsRes.webSocket!;
     ws.accept();
+
+    // Send hello to trigger enrollment
+    const hello: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    ws.send(encodeFrame(hello));
 
     // Read enrollment message
     const enrollmentMsg = await new Promise<string>((resolve, reject) => {

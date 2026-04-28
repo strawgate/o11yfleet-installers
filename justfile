@@ -83,22 +83,6 @@ healthz:
 # Full local dev setup: migrate, seed, show status
 setup: db-migrate seed fleet
 
-# Load test (default: 50 agents, 60s)
-load-test agents="50" duration="60":
-    pnpm tsx scripts/load-test.ts --agents {{agents}} --duration {{duration}}
-
-# Quick smoke load test (10 agents, 15s)
-load-test-smoke:
-    pnpm tsx scripts/load-test.ts --agents 10 --duration 15 --ramp 10
-
-# Heavy load test (200 agents, 120s)
-load-test-heavy:
-    ulimit -n 4096 && pnpm tsx scripts/load-test.ts --agents 200 --duration 120 --ramp 20
-
-# Scale load test (500 agents, 180s)
-load-test-scale:
-    ulimit -n 8192 && pnpm tsx scripts/load-test.ts --agents 500 --duration 180 --ramp 25
-
 # Run benchmark suite
 bench:
     pnpm tsx experiments/src/benchmark.ts
@@ -130,13 +114,21 @@ test-core:
 test-worker:
     pnpm --filter @o11yfleet/worker test
 
+# Smoke test (single agent lifecycle, requires `just dev` running)
+smoke-test:
+    pnpm --filter @o11yfleet/load-test smoke
+
+# Load test (default: 50 agents, requires `just dev` running)
+load-test agents="50" ramp="10" steady="30":
+    pnpm --filter @o11yfleet/load-test load -- --agents={{agents}} --ramp={{ramp}} --steady={{steady}}
+
 # CI load test with pass/fail criteria (25 agents, 30s)
 load-test-ci:
-    pnpm tsx scripts/load-test.ts --agents 25 --duration 30 --ramp 10 --ci
+    pnpm --filter @o11yfleet/load-test load -- --agents=25 --ramp=10 --steady=30
 
 # CPU profile load test (200 agents, 60s, generates .cpuprofile)
 load-test-profile:
-    ulimit -n 4096 && node --cpu-prof --cpu-prof-dir=./profiles --import tsx/esm scripts/load-test.ts --agents 200 --duration 60 --ramp 20
+    ulimit -n 4096 && node --cpu-prof --cpu-prof-dir=./profiles --import tsx/esm tests/load/src/load-test.ts --agents=200 --ramp=20 --steady=60
 
 # ─── E2E & UI Testing ───────────────────────────────────────────────
 
@@ -161,9 +153,3 @@ tf-validate:
 # Deploy to staging
 deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
-
-# ─── Full CI Pipeline ────────────────────────────────────────────────
-
-# Run the full CI pipeline locally (lint + typecheck + unit tests)
-ci-full: lint typecheck test
-    @echo "✓ CI pipeline passed"

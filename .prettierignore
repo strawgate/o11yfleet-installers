@@ -11,3 +11,4 @@ coverage/
 apps/worker/worker-configuration.d.ts
 *.tsbuildinfo
 tmp/
+**/gen/**

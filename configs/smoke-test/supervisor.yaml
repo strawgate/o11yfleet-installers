@@ -1,0 +1,61 @@
+# Real OTel Collector Smoke Test — OpAMP Supervisor
+#
+# The OpAMP Supervisor is a separate binary that manages the collector process.
+# It connects to the FleetPlane OpAMP server, receives configuration, and
+# (re)starts the collector with the pushed config.
+#
+# Usage:
+#   1. Build the supervisor from source:
+#        git clone https://github.com/open-telemetry/opentelemetry-collector-contrib.git
+#        cd opentelemetry-collector-contrib/cmd/opampsupervisor
+#        go build -o opampsupervisor .
+#
+#   2. Create an enrollment token in FleetPlane (see otelcol-opampext.yaml)
+#
+#   3. Run the supervisor:
+#        ./opampsupervisor --config configs/smoke-test/supervisor.yaml
+
+server:
+  endpoint: wss://api.o11yfleet.com/v1/opamp
+  headers:
+    Authorization: "Bearer <ENROLLMENT_TOKEN>"
+  tls:
+    insecure: false
+
+capabilities:
+  reports_effective_config: true
+  reports_own_metrics: false
+  reports_health: true
+  reports_remote_config: true
+  accepts_remote_config: true
+  accepts_restart_command: true
+  accepts_opamp_connection_settings: false
+
+agent:
+  # Path to the otelcol-contrib binary
+  executable: otelcol-contrib
+  # Or an absolute path:
+  # executable: /usr/local/bin/otelcol-contrib
+
+storage:
+  # Directory where the supervisor stores agent state and received configs
+  directory: /tmp/opamp-supervisor
+
+# The bootstrap collector config (used before a remote config is pushed).
+# Once FleetPlane pushes a config, this is replaced.
+agent_config:
+  receivers:
+    otlp:
+      protocols:
+        grpc:
+          endpoint: "0.0.0.0:4317"
+
+  exporters:
+    debug:
+      verbosity: basic
+
+  service:
+    pipelines:
+      traces:
+        receivers: [otlp]
+        exporters: [debug]

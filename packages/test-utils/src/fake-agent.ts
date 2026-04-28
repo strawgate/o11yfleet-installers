@@ -113,12 +113,16 @@ export class FakeOpampAgent {
 
   /**
    * Connect and complete enrollment in one call.
-   * Returns the enrollment result (assignment_claim + instance_uid).
+   * Per OpAMP spec, client sends first — we connect, send hello,
+   * then receive the enrollment_complete text + initial binary response.
    */
   async connectAndEnroll(): Promise<EnrollmentResult> {
     await this.connect();
 
-    // Wait for enrollment_complete text message
+    // Per OpAMP spec: client sends first to trigger enrollment
+    await this.sendHello();
+
+    // Receive enrollment_complete text message (server responds to our hello)
     const text = await this.waitForTextMessage(10_000);
     const enrollment = JSON.parse(text) as EnrollmentResult;
     if (enrollment.type !== "enrollment_complete") {

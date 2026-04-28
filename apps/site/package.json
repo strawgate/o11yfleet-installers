@@ -5,6 +5,9 @@
   "description": "O11yFleet public marketing site",
   "scripts": {
     "dev": "npx serve . -l 4000",
-    "build": "echo 'Static site — no build step'"
+    "build": "echo 'Static site — no build step'",
+    "lint": "echo 'static site — no lint'",
+    "typecheck": "echo 'static site — no typecheck'",
+    "test": "echo 'static site — no tests'"
   }
 }

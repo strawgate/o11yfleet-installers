@@ -5,6 +5,12 @@ export default defineConfig({
   plugins: [
     cloudflareTest({
       wrangler: { configPath: "./wrangler.jsonc" },
+      miniflare: {
+        bindings: {
+          API_SECRET: "test-api-secret-for-dev-only-32chars",
+          CLAIM_SECRET: "dev-secret-key-for-testing-only-32ch",
+        },
+      },
     }),
   ],
   test: {

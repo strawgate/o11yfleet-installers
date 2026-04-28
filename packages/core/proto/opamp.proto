@@ -1,0 +1,116 @@
+// Copyright 2021, OpenTelemetry Authors
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Subset of https://github.com/open-telemetry/opamp-spec/blob/main/proto/opamp.proto
+// Only messages used by our server are included. Field numbers match the full spec
+// so real OpAMP clients (otelcol-contrib, opampsupervisor) are wire-compatible.
+
+syntax = "proto3";
+
+package opamp.proto;
+
+import "anyvalue.proto";
+
+message AgentToServer {
+  bytes instance_uid = 1;
+  uint64 sequence_num = 2;
+  AgentDescription agent_description = 3;
+  uint64 capabilities = 4;
+  ComponentHealth health = 5;
+  EffectiveConfig effective_config = 6;
+  RemoteConfigStatus remote_config_status = 7;
+  // field 8: PackageStatuses (not implemented)
+  AgentDisconnect agent_disconnect = 9;
+  uint64 flags = 10;
+  // fields 11-15: Development features (not implemented)
+}
+
+message ServerToAgent {
+  bytes instance_uid = 1;
+  ServerErrorResponse error_response = 2;
+  AgentRemoteConfig remote_config = 3;
+  // field 4: ConnectionSettingsOffers (not implemented)
+  // field 5: PackagesAvailable (not implemented)
+  uint64 flags = 6;
+  uint64 capabilities = 7;
+  AgentIdentification agent_identification = 8;
+  // fields 9-11: Beta/Development features (not implemented)
+}
+
+message AgentDescription {
+  repeated KeyValue identifying_attributes = 1;
+  repeated KeyValue non_identifying_attributes = 2;
+}
+
+message ComponentHealth {
+  bool healthy = 1;
+  fixed64 start_time_unix_nano = 2;
+  string last_error = 3;
+  string status = 4;
+  fixed64 status_time_unix_nano = 5;
+  map<string, ComponentHealth> component_health_map = 6;
+}
+
+message EffectiveConfig {
+  AgentConfigMap config_map = 1;
+}
+
+message AgentConfigMap {
+  map<string, AgentConfigFile> config_map = 1;
+}
+
+message AgentConfigFile {
+  bytes body = 1;
+  string content_type = 2;
+}
+
+message RemoteConfigStatus {
+  bytes last_remote_config_hash = 1;
+  RemoteConfigStatuses status = 2;
+  string error_message = 3;
+}
+
+enum RemoteConfigStatuses {
+  RemoteConfigStatuses_UNSET = 0;
+  RemoteConfigStatuses_APPLIED = 1;
+  RemoteConfigStatuses_APPLYING = 2;
+  RemoteConfigStatuses_FAILED = 3;
+}
+
+message AgentRemoteConfig {
+  AgentConfigMap config = 1;
+  bytes config_hash = 2;
+}
+
+message ServerErrorResponse {
+  ServerErrorResponseType type = 1;
+  string error_message = 2;
+  RetryInfo retry_info = 3;
+}
+
+enum ServerErrorResponseType {
+  ServerErrorResponseType_Unknown = 0;
+  ServerErrorResponseType_BadRequest = 1;
+  ServerErrorResponseType_Unavailable = 2;
+}
+
+message RetryInfo {
+  uint64 retry_after_nanoseconds = 1;
+}
+
+message AgentIdentification {
+  bytes new_instance_uid = 1;
+}
+
+message AgentDisconnect {}

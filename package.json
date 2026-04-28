@@ -10,6 +10,8 @@
     "fmt:check": "prettier --check ."
   },
   "devDependencies": {
+    "@bufbuild/buf": "^1",
+    "@bufbuild/protoc-gen-es": "^2",
     "eslint": "^9.20.0",
     "prettier": "^3.5.0",
     "tsx": "^4.19.0",

@@ -55,6 +55,7 @@ const INTERNAL_HEADERS = [
   "x-fp-config-id",
   "x-fp-instance-uid",
   "x-fp-enrollment",
+  "x-fp-codec",
 ];
 
 function addCorsHeaders(resp: Response, request: Request): Response {
