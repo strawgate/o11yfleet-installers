@@ -34,7 +34,7 @@
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>
-FB.shell({ role:'admin', current:'events', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Operations'},{label:'Audit events'}] });
+FB.shell({ role:'admin', current:'events', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Operations'},{label:'Audit events'}], prototype: 'Audit events are hardcoded. Real audit logging requires backend support (issue #18).' });
 const events = [
   ['09:14','sam@o11y','feature_flag','flag.enable','tail_sampling_v2 / plan>=business','10.0.4.21'],
   ['09:02','system','alerting','alert.fire','region=eu-west-1 p99>250ms','—'],

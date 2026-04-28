@@ -34,7 +34,7 @@
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
 <script>
-FB.shell({ current: 'agents', crumbs: [{label:'Agents'}] });
+FB.shell({ current: 'agents', crumbs: [{label:'Agents'}], prototype: 'This page shows sample collector data. Real agent data requires the Agents API (issue #12).' });
 const rows = [];
 const regions = ['iad','sfo','fra','sin'];
 const roles = [['edge','prod-ingress','v14'],['gateway','prod-gateway','v9'],['k8s','k8s-daemon','v22']];

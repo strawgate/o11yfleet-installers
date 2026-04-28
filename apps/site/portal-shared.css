@@ -754,3 +754,65 @@ body.auth { overflow: auto; }
 .mb-2 { margin-bottom: 8px; } .mb-4 { margin-bottom: 16px; } .mb-6 { margin-bottom: 24px; }
 .w-full { width: 100%; }
 .text-sm { font-size: 12.5px; }
+
+/* ---------- Prototype / placeholder indicators ---------- */
+.prototype-banner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  margin: 16px 20px 0;
+  border-radius: 8px;
+  background: repeating-linear-gradient(
+    -45deg,
+    rgba(255, 170, 0, 0.08),
+    rgba(255, 170, 0, 0.08) 10px,
+    rgba(255, 170, 0, 0.04) 10px,
+    rgba(255, 170, 0, 0.04) 20px
+  );
+  border: 1.5px dashed rgba(255, 170, 0, 0.5);
+  color: #ffaa00;
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+}
+.prototype-banner svg { flex-shrink: 0; width: 18px; height: 18px; }
+.prototype-banner .pb-title { font-weight: 600; }
+.prototype-banner .pb-sub { opacity: 0.8; font-weight: 400; }
+
+/* Placeholder badge for nav items that link to unbuilt pages */
+.sidebar-link[data-placeholder]::after {
+  content: 'SOON';
+  margin-left: auto;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 1px 5px;
+  border-radius: 3px;
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+  border: 1px solid rgba(255, 170, 0, 0.25);
+}
+
+/* Dim placeholder sections within a page */
+.placeholder-section {
+  position: relative;
+  opacity: 0.55;
+  pointer-events: none;
+}
+.placeholder-section::before {
+  content: 'PLACEHOLDER — NOT YET IMPLEMENTED';
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255, 170, 0, 0.15);
+  color: #ffaa00;
+  border: 1px dashed rgba(255, 170, 0, 0.4);
+  z-index: 10;
+  pointer-events: none;
+}

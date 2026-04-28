@@ -1,5 +1,22 @@
 // Shared portal sidebar partial. portal/* pages call FB.shell({...}).
 window.FB = window.FB || {};
+
+// Pages with mock data declare: FB.shell({ ..., prototype: 'This page shows sample data.' })
+// This renders a prominent striped banner at the top of the main content area.
+FB.prototypeBanner = function (msg) {
+  const main = document.querySelector('.main-content') || document.querySelector('main');
+  if (!main) return;
+  const banner = document.createElement('div');
+  banner.className = 'prototype-banner';
+  banner.innerHTML = `
+    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+    <div>
+      <span class="pb-title">Prototype</span>
+      <span class="pb-sub"> — ${msg}</span>
+    </div>`;
+  main.prepend(banner);
+};
+
 FB.shell = function (opts) {
   const cur = opts.current || '';
   const role = opts.role || 'user';
@@ -16,12 +33,12 @@ FB.shell = function (opts) {
     { id: 'overview', label: 'Overview', href: 'overview.html', icon: 'home' },
     { id: 'agents', label: 'Agents', href: 'agents.html', icon: 'cpu', badge: '42' },
     { id: 'configurations', label: 'Configurations', href: 'configurations.html', icon: 'file', badge: '7' },
-    { id: 'rollouts', label: 'Rollouts', href: 'rollouts.html', icon: 'rocket' },
-    { id: 'flow', label: 'Flow & metrics', href: 'flow.html', icon: 'activity' },
-    { id: 'audit', label: 'Audit log', href: 'audit.html', icon: 'list' },
+    { id: 'rollouts', label: 'Rollouts', href: 'rollouts.html', icon: 'rocket', placeholder: true },
+    { id: 'flow', label: 'Flow & metrics', href: 'flow.html', icon: 'activity', placeholder: true },
+    { id: 'audit', label: 'Audit log', href: 'audit.html', icon: 'list', placeholder: true },
     { sec: 'Setup' },
     { id: 'getting-started', label: 'Getting started', href: 'getting-started.html', icon: 'play' },
-    { id: 'integrations', label: 'Integrations', href: 'integrations.html', icon: 'link' },
+    { id: 'integrations', label: 'Integrations', href: 'integrations.html', icon: 'link', placeholder: true },
     { id: 'tokens', label: 'API tokens', href: 'tokens.html', icon: 'key' },
     { sec: 'Settings' },
     { id: 'team', label: 'Team', href: 'team.html', icon: 'users' },
@@ -32,15 +49,15 @@ FB.shell = function (opts) {
     { sec: 'Operations' },
     { id: 'overview', label: 'Overview', href: 'overview.html', icon: 'home' },
     { id: 'tenants', label: 'Tenants', href: 'tenants.html', icon: 'building' },
-    { id: 'users', label: 'Users', href: 'users.html', icon: 'users' },
+    { id: 'users', label: 'Users', href: 'users.html', icon: 'users', placeholder: true },
     { id: 'health', label: 'System health', href: 'health.html', icon: 'activity' },
     { id: 'events', label: 'Audit events', href: 'events.html', icon: 'list' },
     { sec: 'Plans' },
     { id: 'plans', label: 'Plans & pricing', href: 'plans.html', icon: 'card' },
     { id: 'flags', label: 'Feature flags', href: 'flags.html', icon: 'flag' },
     { sec: 'Platform' },
-    { id: 'releases', label: 'Releases', href: 'releases.html', icon: 'tag' },
-    { id: 'settings', label: 'Settings', href: 'settings.html', icon: 'settings' },
+    { id: 'releases', label: 'Releases', href: 'releases.html', icon: 'tag', placeholder: true },
+    { id: 'settings', label: 'Settings', href: 'settings.html', icon: 'settings', placeholder: true },
   ];
   const nav = isAdmin ? adminNav : userNav;
 
@@ -68,7 +85,9 @@ FB.shell = function (opts) {
       const active = item.id === cur ? 'aria-current="page"' : '';
       const icon = `<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">${ICONS[item.icon] || ''}</svg>`;
       const badge = item.badge ? `<span class="badge">${item.badge}</span>` : '';
-      return `<a class="sidebar-link" href="${item.href}" ${active}>${icon}<span>${item.label}</span>${badge}</a>`;
+      const phAttr = item.placeholder ? ' data-placeholder="true"' : '';
+      const href = item.placeholder ? '#' : item.href;
+      return `<a class="sidebar-link" href="${href}" ${active}${phAttr}>${icon}<span>${item.label}</span>${badge}</a>`;
     }).join('');
   }
 
@@ -149,4 +168,9 @@ FB.shell = function (opts) {
 
   document.getElementById('shell-sidebar').innerHTML = sidebar;
   document.getElementById('shell-topbar').innerHTML = topbar;
+
+  // Show prototype banner if the page declared one
+  if (opts.prototype) {
+    FB.prototypeBanner(opts.prototype);
+  }
 };

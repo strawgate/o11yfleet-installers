@@ -140,7 +140,7 @@
 <script>
 (function () {
   const tenantId = new URLSearchParams(window.location.search).get('id');
-  FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label:'Loading…'}] });
+  FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label:'Loading…'}], prototype: 'Tenant detail stats and activity are hardcoded. Only name and plan are loaded from API.' });
   FP.showConnectBarIfNeeded();
 
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -160,7 +160,7 @@
       const idTag = document.querySelector('.page-head .flex-row .tag.t-mono');
       if (idTag) idTag.textContent = FP.trunc(t.id, 16);
       // Update breadcrumbs
-      FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label: t.name}] });
+      FB.shell({ role:'admin', current:'tenants', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Tenants', href:'tenants.html'},{label: t.name}], prototype: 'Tenant detail stats and activity are hardcoded. Only name and plan are loaded from API.' });
       // Update stat cards
       const stats = document.querySelectorAll('.stat-grid .stat .val');
       if (stats[0]) stats[0].textContent = t.plan;

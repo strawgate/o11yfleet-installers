@@ -1,16 +1,34 @@
 // portal-api.js — Thin API wrapper for user + admin portals.
 // Pages include this script and use FP.api to make calls.
-// Auth is via URL params (?tenant=UUID&api=URL) or localStorage, matching
-// the existing app.html pattern. Admin pages use X-Admin: true.
+// In production, API base is auto-detected from the domain:
+//   app.o11yfleet.com  → api.o11yfleet.com
+//   admin.o11yfleet.com → api.o11yfleet.com
+// For local dev, use ?api=http://localhost:8787 or localStorage.
 
 window.FP = window.FP || {};
 
 (function () {
   const params = new URLSearchParams(window.location.search);
 
+  // Auto-detect API base from domain (production) or fall back to params/localStorage
+  function detectApiBase() {
+    const explicit = params.get('api') || localStorage.getItem('fp-api-base');
+    if (explicit) return explicit;
+    const host = window.location.hostname;
+    // Production: app.o11yfleet.com or admin.o11yfleet.com → api.o11yfleet.com
+    if (host.endsWith('.o11yfleet.com') || host === 'o11yfleet.com') {
+      return 'https://api.o11yfleet.com';
+    }
+    // Cloudflare Pages preview: *.o11yfleet-site.pages.dev
+    if (host.endsWith('.pages.dev')) {
+      return 'https://o11yfleet-worker.o11yfleet.workers.dev';
+    }
+    return '';
+  }
+
   // Read config from URL params or localStorage
   const tenantId = params.get('tenant') || localStorage.getItem('fp-tenant-id') || '';
-  const apiBase = params.get('api') || localStorage.getItem('fp-api-base') || '';
+  const apiBase = detectApiBase();
 
   // Persist for subsequent page navigations
   if (tenantId) localStorage.setItem('fp-tenant-id', tenantId);

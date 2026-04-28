@@ -198,7 +198,7 @@
 <script src="../portal-shell-render.js"></script>
 <script src="../portal-pipeline.js"></script>
 <script>
-FB.shell({ current: 'configurations', crumbs: [{label:'Configurations', href:'configurations.html'}, {label:'prod-ingress', href:'configuration-detail.html'}, {label:'Builder'}] });
+FB.shell({ current: 'configurations', crumbs: [{label:'Configurations', href:'configurations.html'}, {label:'prod-ingress', href:'configuration-detail.html'}, {label:'Builder'}], prototype: 'Pipeline builder uses sample data. Visual builder requires the Pipeline API (issue #13).' });
 
 // ---- Start from edge-gateway example as the working draft ----
 const model = JSON.parse(JSON.stringify(OPipeline.EXAMPLES['edge-gateway']));
