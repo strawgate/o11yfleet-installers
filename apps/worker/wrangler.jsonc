@@ -7,7 +7,7 @@
 	],
 	"routes": [
 		{
-			"pattern": "api.o11yfleet.com",
+			"pattern": "api.o11yfleet.com/*",
 			"zone_name": "o11yfleet.com"
 		}
 	],
