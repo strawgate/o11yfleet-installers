@@ -4,6 +4,7 @@
   "description": "CLI for o11yfleet",
   "type": "module",
   "bin": {
+    "ofleet": "./dist/index.js",
     "o11y": "./dist/index.js"
   },
   "main": "./dist/index.js",

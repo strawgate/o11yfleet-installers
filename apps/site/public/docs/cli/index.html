@@ -128,7 +128,9 @@
 
           <p class="lede">
             The O11yFleet CLI lets you manage configurations, agents, and rollouts from the command
-            line. Install with <code class="mono">npm install -g @o11yfleet/cli</code>.
+            line. Install with <code class="mono">npm install -g @o11yfleet/cli</code>. The primary
+            command is <code class="mono">ofleet</code>; <code class="mono">o11y</code> remains
+            available as a compatibility alias.
           </p>
 
           <h2 id="installation">Installation</h2>
@@ -161,7 +163,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>o11y login --email user@example.com --password &lt;password&gt;</code></pre>
+          ><code>ofleet login --email user@example.com --password &lt;password&gt;</code></pre>
           <p>
             Or set <code class="mono">O11YFLEET_API_KEY</code> to the deployment bearer secret used
             for API automation:
@@ -200,32 +202,32 @@
             </thead>
             <tbody>
               <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px"><code class="mono">o11y config:list</code></td>
+                <td style="padding: 10px 14px"><code class="mono">ofleet config:list</code></td>
                 <td style="padding: 10px 14px">List all configurations</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y config:create --name &lt;name&gt;</code>
+                  <code class="mono">ofleet config:create --name &lt;name&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Create a new configuration</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y config:show --config-id &lt;id&gt;</code>
+                  <code class="mono">ofleet config:show --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Get configuration details</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
                   <code class="mono"
-                    >o11y config:upload --config-id &lt;id&gt; --file &lt;path&gt;</code
+                    >ofleet config:upload --config-id &lt;id&gt; --file &lt;path&gt;</code
                   >
                 </td>
                 <td style="padding: 10px 14px">Upload YAML and create a new version</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y config:rollout --config-id &lt;id&gt;</code>
+                  <code class="mono">ofleet config:rollout --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">Push current version to connected agents</td>
               </tr>
@@ -255,13 +257,13 @@
             <tbody>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y agents:list --config-id &lt;id&gt;</code>
+                  <code class="mono">ofleet agents:list --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">List all agents</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y agents:list --config-id &lt;id&gt; --stats</code>
+                  <code class="mono">ofleet agents:list --config-id &lt;id&gt; --stats</code>
                 </td>
                 <td style="padding: 10px 14px">List agents with aggregate stats</td>
               </tr>
@@ -292,14 +294,14 @@
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
                   <code class="mono"
-                    >o11y token:create --config-id &lt;id&gt; --label &lt;label&gt;</code
+                    >ofleet token:create --config-id &lt;id&gt; --label &lt;label&gt;</code
                   >
                 </td>
                 <td style="padding: 10px 14px">Create an enrollment token</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">
-                  <code class="mono">o11y token:list --config-id &lt;id&gt;</code>
+                  <code class="mono">ofleet token:list --config-id &lt;id&gt;</code>
                 </td>
                 <td style="padding: 10px 14px">List enrollment tokens</td>
               </tr>
@@ -318,13 +320,13 @@
               font-size: 13px;
             "
           ><code># Create config
-o11y config:create --name "prod-ingress"
+ofleet config:create --name "prod-ingress"
 
 # Upload YAML
-o11y config:upload --config-id cfg_xxx --file prod-ingress.yaml
+ofleet config:upload --config-id cfg_xxx --file prod-ingress.yaml
 
 # Start rollout
-o11y config:rollout --config-id cfg_xxx</code></pre>
+ofleet config:rollout --config-id cfg_xxx</code></pre>
 
           <h3>List agents</h3>
           <pre
@@ -335,7 +337,7 @@ o11y config:rollout --config-id cfg_xxx</code></pre>
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>o11y agents:list --config-id cfg_xxx</code></pre>
+          ><code>ofleet agents:list --config-id cfg_xxx</code></pre>
 
           <div class="coming-soon-banner">
             <strong>🚧 CLI extensions:</strong> Additional flags (filtering, status selection) and

@@ -4,6 +4,7 @@
 
 import yargs from "yargs";
 import { output } from "../../utils/output.js";
+import { LEGACY_COMMAND, PRIMARY_COMMAND } from "../../utils/command-name.js";
 
 const COMMANDS = [
   "login",
@@ -47,9 +48,9 @@ const OPTIONS = [
 
 function generateBashCompletion(): string {
   return `#!/bin/bash
-# bash completion for o11y
+# bash completion for ${PRIMARY_COMMAND}
 
-_o11y() {
+_${PRIMARY_COMMAND}() {
   local cur prev words cword
   _init_completion || return
 
@@ -96,15 +97,15 @@ _o11y() {
   fi
 }
 
-complete -F _o11y o11y
+complete -F _${PRIMARY_COMMAND} ${PRIMARY_COMMAND} ${LEGACY_COMMAND}
 `;
 }
 
 function generateZshCompletion(): string {
   return `#!/usr/bin/env zsh
-# zsh completion for o11y
+# zsh completion for ${PRIMARY_COMMAND}
 
-_o11y() {
+_${PRIMARY_COMMAND}() {
   local -a commands
   commands=(
 ${COMMANDS.map((c) => `    "${c}"`).join("\n")}
@@ -157,40 +158,63 @@ ${OPTIONS.map((o) => `    "${o}"`).join("\n")}
   esac
 }
 
-compdef _o11y o11y
+compdef _${PRIMARY_COMMAND} ${PRIMARY_COMMAND} ${LEGACY_COMMAND}
 `;
 }
 
 function generateFishCompletion(): string {
-  return `# fish completion for o11y
+  return `# fish completion for ${PRIMARY_COMMAND}
 
-complete -c o11y -f
+complete -c ${PRIMARY_COMMAND} -f
+complete -c ${LEGACY_COMMAND} -f
 
 # Commands
-complete -c o11y -a 'login' -d 'Login to o11yfleet'
-complete -c o11y -a 'logout' -d 'Logout from o11yfleet'
-complete -c o11y -a 'me' -d 'Show current user'
-complete -c o11y -a 'tenant:create' -d 'Create a new tenant'
-complete -c o11y -a 'config:create' -d 'Create a new configuration'
-complete -c o11y -a 'config:list' -d 'List configurations'
-complete -c o11y -a 'config:show' -d 'Show configuration details'
-complete -c o11y -a 'config:upload' -d 'Upload a config version'
-complete -c o11y -a 'config:rollout' -d 'Rollout config to agents'
-complete -c o11y -a 'config' -d 'Show configuration details'
-complete -c o11y -a 'token:create' -d 'Create an enrollment token'
-complete -c o11y -a 'token:list' -d 'List enrollment tokens'
-complete -c o11y -a 'agents:list' -d 'List agents'
-complete -c o11y -a 'agents' -d 'List agents'
-complete -c o11y -a 'bench:enrollment' -d 'Run enrollment benchmark'
-complete -c o11y -a 'bench:config-push' -d 'Run config push benchmark'
-complete -c o11y -a 'bench:provisioning' -d 'Run provisioning benchmark'
-complete -c o11y -a 'completion' -d 'Generate shell completion'
+complete -c ${PRIMARY_COMMAND} -a 'login' -d 'Login to o11yfleet'
+complete -c ${PRIMARY_COMMAND} -a 'logout' -d 'Logout from o11yfleet'
+complete -c ${PRIMARY_COMMAND} -a 'me' -d 'Show current user'
+complete -c ${PRIMARY_COMMAND} -a 'tenant:create' -d 'Create a new tenant'
+complete -c ${PRIMARY_COMMAND} -a 'config:create' -d 'Create a new configuration'
+complete -c ${PRIMARY_COMMAND} -a 'config:list' -d 'List configurations'
+complete -c ${PRIMARY_COMMAND} -a 'config:show' -d 'Show configuration details'
+complete -c ${PRIMARY_COMMAND} -a 'config:upload' -d 'Upload a config version'
+complete -c ${PRIMARY_COMMAND} -a 'config:rollout' -d 'Rollout config to agents'
+complete -c ${PRIMARY_COMMAND} -a 'config' -d 'Show configuration details'
+complete -c ${PRIMARY_COMMAND} -a 'token:create' -d 'Create an enrollment token'
+complete -c ${PRIMARY_COMMAND} -a 'token:list' -d 'List enrollment tokens'
+complete -c ${PRIMARY_COMMAND} -a 'agents:list' -d 'List agents'
+complete -c ${PRIMARY_COMMAND} -a 'agents' -d 'List agents'
+complete -c ${PRIMARY_COMMAND} -a 'bench:enrollment' -d 'Run enrollment benchmark'
+complete -c ${PRIMARY_COMMAND} -a 'bench:config-push' -d 'Run config push benchmark'
+complete -c ${PRIMARY_COMMAND} -a 'bench:provisioning' -d 'Run provisioning benchmark'
+complete -c ${PRIMARY_COMMAND} -a 'completion' -d 'Generate shell completion'
+complete -c ${LEGACY_COMMAND} -a 'login' -d 'Login to o11yfleet'
+complete -c ${LEGACY_COMMAND} -a 'logout' -d 'Logout from o11yfleet'
+complete -c ${LEGACY_COMMAND} -a 'me' -d 'Show current user'
+complete -c ${LEGACY_COMMAND} -a 'tenant:create' -d 'Create a new tenant'
+complete -c ${LEGACY_COMMAND} -a 'config:create' -d 'Create a new configuration'
+complete -c ${LEGACY_COMMAND} -a 'config:list' -d 'List configurations'
+complete -c ${LEGACY_COMMAND} -a 'config:show' -d 'Show configuration details'
+complete -c ${LEGACY_COMMAND} -a 'config:upload' -d 'Upload a config version'
+complete -c ${LEGACY_COMMAND} -a 'config:rollout' -d 'Rollout config to agents'
+complete -c ${LEGACY_COMMAND} -a 'config' -d 'Show configuration details'
+complete -c ${LEGACY_COMMAND} -a 'token:create' -d 'Create an enrollment token'
+complete -c ${LEGACY_COMMAND} -a 'token:list' -d 'List enrollment tokens'
+complete -c ${LEGACY_COMMAND} -a 'agents:list' -d 'List agents'
+complete -c ${LEGACY_COMMAND} -a 'agents' -d 'List agents'
+complete -c ${LEGACY_COMMAND} -a 'bench:enrollment' -d 'Run enrollment benchmark'
+complete -c ${LEGACY_COMMAND} -a 'bench:config-push' -d 'Run config push benchmark'
+complete -c ${LEGACY_COMMAND} -a 'bench:provisioning' -d 'Run provisioning benchmark'
+complete -c ${LEGACY_COMMAND} -a 'completion' -d 'Generate shell completion'
 
 # Global options
-complete -c o11y -l 'api-url' -d 'o11yfleet API URL'
-complete -c o11y -l 'json' -d 'Output JSON'
-complete -c o11y -l 'help' -d 'Show help'
-complete -c o11y -l 'version' -d 'Show version'
+complete -c ${PRIMARY_COMMAND} -l 'api-url' -d 'o11yfleet API URL'
+complete -c ${PRIMARY_COMMAND} -l 'json' -d 'Output JSON'
+complete -c ${PRIMARY_COMMAND} -l 'help' -d 'Show help'
+complete -c ${PRIMARY_COMMAND} -l 'version' -d 'Show version'
+complete -c ${LEGACY_COMMAND} -l 'api-url' -d 'o11yfleet API URL'
+complete -c ${LEGACY_COMMAND} -l 'json' -d 'Output JSON'
+complete -c ${LEGACY_COMMAND} -l 'help' -d 'Show help'
+complete -c ${LEGACY_COMMAND} -l 'version' -d 'Show version'
 `;
 }
 

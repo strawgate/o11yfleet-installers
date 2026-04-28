@@ -6,6 +6,7 @@
 import { output } from "../../utils/output.js";
 import { loadAuth, saveAuth } from "../../utils/config.js";
 import { canPrompt } from "../../utils/terminal.js";
+import { getCommandName } from "../../utils/command-name.js";
 import inquirer from "inquirer";
 
 interface LoginOptions {
@@ -38,7 +39,7 @@ export async function login(opts: LoginOptions): Promise<void> {
   if (!opts.email || !opts.password) {
     if (!canPrompt()) {
       output.error("Email and password required in non-interactive mode");
-      output.log("Or use: o11y login --token <api-token>");
+      output.log(`Or use: ${getCommandName()} login --token <api-token>`);
       process.exit(1);
     }
 

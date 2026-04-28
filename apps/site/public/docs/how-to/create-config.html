@@ -189,8 +189,8 @@ service:
       exporters: [otlp]</code></pre>
 
           <p>
-            Click <strong>Save</strong>. This creates <strong>version 1</strong> of the
-            configuration.
+            Click <strong>Upload & deploy</strong>. This stores the YAML as the current version and
+            starts an immediate rollout to connected collectors.
           </p>
 
           <div class="coming-soon-banner">
@@ -209,11 +209,11 @@ service:
           </p>
           <p><strong>Version lifecycle:</strong></p>
           <ul>
+            <li><strong>Uploaded</strong> — Stored as the current version</li>
             <li>
-              <strong>Uploaded</strong> — Stored as the current version, not pushed until rollout
-              starts
+              <strong>Rolled out</strong> — Delivered to connected collectors when the rollout
+              endpoint runs
             </li>
-            <li><strong>Rolled out</strong> — Delivered immediately to connected collectors</li>
             <li>
               <strong>Reported</strong> — Collectors can report the effective config they are
               running

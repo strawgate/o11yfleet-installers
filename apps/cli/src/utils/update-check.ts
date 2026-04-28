@@ -1,10 +1,11 @@
 /**
- * Update checker for o11y CLI
+ * Update checker for ofleet CLI
  * Checks npm registry for new versions and warns if outdated
  */
 
 import { VERSION } from "./version.js";
 import { output } from "./output.js";
+import { PRIMARY_COMMAND } from "./command-name.js";
 import { canPrompt } from "./terminal.js";
 import chalk from "chalk";
 
@@ -56,7 +57,7 @@ export async function checkForUpdates(): Promise<void> {
     if (isNewer(VERSION, latestVersion)) {
       output.log("");
       output.warn(
-        `A new version of o11y is available: ${chalk.green(latestVersion)} (current: ${VERSION})`,
+        `A new version of ${PRIMARY_COMMAND} is available: ${chalk.green(latestVersion)} (current: ${VERSION})`,
       );
       output.log(`To update: npm install -g @o11yfleet/cli`);
     }

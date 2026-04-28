@@ -24,11 +24,11 @@ o11yfleet/
 
 ```bash
 # Install dependencies
-pnpm install
+just install
 
 # Start local development
-just setup         # Run migrations + seed + show fleet status
 just dev           # Start worker locally (wrangler dev)
+just setup         # In another terminal: migrate, seed, show fleet status
 just ui            # Start web UI locally (separate terminal)
 
 # Run tests
@@ -62,20 +62,20 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## Commands
 
-| Command                | Description                               |
-| ---------------------- | ----------------------------------------- |
-| `just dev`             | Start worker locally                      |
-| `just ui`              | Start web UI                              |
-| `just setup`           | Full local setup (migrate + seed + fleet) |
-| `just lint`            | Lint all packages                         |
-| `just typecheck`       | Type check all packages                   |
-| `just test`            | Run all tests                             |
-| `just bench`           | Run benchmarks                            |
-| `just load-test-smoke` | Quick load test (10 agents, 15s)          |
-| `just load-test`       | Load test (configurable agents/duration)  |
-| `just bundle-size`     | Check worker bundle size                  |
-| `just deploy-staging`  | Deploy to staging                         |
-| `just tf-validate`     | Validate Terraform                        |
+| Command                | Description                              |
+| ---------------------- | ---------------------------------------- |
+| `just dev`             | Start worker locally                     |
+| `just ui`              | Start web UI                             |
+| `just setup`           | Migrate, seed, and show fleet status     |
+| `just lint`            | Lint all packages                        |
+| `just typecheck`       | Type check all packages                  |
+| `just test`            | Run all tests                            |
+| `just bench`           | Run benchmarks                           |
+| `just load-test-smoke` | Quick load test (10 agents, 15s)         |
+| `just load-test`       | Load test (configurable agents/duration) |
+| `just bundle-size`     | Check worker bundle size                 |
+| `just deploy-staging`  | Deploy to staging                        |
+| `just tf-validate`     | Validate Terraform                       |
 
 ## CI Pipeline
 

@@ -160,9 +160,9 @@
               <div>
                 <strong>Quick option:</strong> If you just want to try O11yFleet locally, run
                 <code class="mono">just dev</code> in one terminal and
-                <code class="mono">just setup</code> in another. That starts the local Worker,
-                migrates local D1, seeds a demo tenant, uploads a sample config, and creates an
-                enrollment token. No hosted account needed.
+                <code class="mono">just setup</code> in another. Together, those commands start the
+                local Worker, migrate local D1, seed a demo tenant, upload a sample config, and
+                create an enrollment token. No hosted account needed.
               </div>
             </div>
           </div>
@@ -189,8 +189,8 @@ just dev
 # In a second terminal:
 just setup</code></pre>
           <p>
-            This starts O11yFleet at <code class="mono">http://localhost:8787</code> and seeds a
-            demo tenant with sample data.
+            This leaves O11yFleet running at <code class="mono">http://localhost:8787</code> and
+            seeds a demo tenant with sample data.
           </p>
 
           <h2 id="step-2-enroll">Step 2 — Create an enrollment token</h2>
@@ -213,7 +213,7 @@ just setup</code></pre>
             "
           ><code># If you ran `just setup`, a demo tenant already exists
 # Create an enrollment token for a configuration
-o11y token:create --config-id &lt;config-id&gt; --label "prod-ingress" --expires-in 24</code></pre>
+ofleet token:create --config-id &lt;config-id&gt; --label "prod-ingress" --expires-in 24</code></pre>
           <p>
             Copy the token while it is visible. Tokens are stored hashed, so O11yFleet cannot show
             the raw value later.

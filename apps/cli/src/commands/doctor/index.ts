@@ -1,5 +1,5 @@
 /**
- * doctor command - Diagnose o11y CLI issues
+ * doctor command - Diagnose ofleet CLI issues
  */
 
 import { loadAuth, loadConfig } from "../../utils/config.js";
@@ -7,6 +7,7 @@ import { getApiUrl } from "../../utils/config.js";
 import { VERSION } from "../../utils/version.js";
 import { apiRequest } from "../../utils/api.js";
 import { output } from "../../utils/output.js";
+import { getCommandName } from "../../utils/command-name.js";
 
 interface DoctorResult {
   name: string;
@@ -58,7 +59,7 @@ async function checkAuth(): Promise<DoctorResult> {
       name: "Auth",
       status: "warn",
       message: "Session exists but no tenant ID",
-      details: "Try running 'o11y login' again",
+      details: `Try running '${getCommandName()} login' again`,
     };
   }
 
@@ -66,7 +67,7 @@ async function checkAuth(): Promise<DoctorResult> {
     name: "Auth",
     status: "warn",
     message: "Not logged in",
-    details: "Run 'o11y login' or set O11YFLEET_API_KEY env var",
+    details: `Run '${getCommandName()} login' or set O11YFLEET_API_KEY env var`,
   };
 }
 
@@ -114,7 +115,7 @@ async function checkApiAuth(): Promise<DoctorResult> {
         name: "API Auth",
         status: "fail",
         message: "Session expired or invalid",
-        details: "Run 'o11y login' again",
+        details: `Run '${getCommandName()} login' again`,
       };
     }
     if (resp.status === 0) {
@@ -172,7 +173,7 @@ function printResult(result: DoctorResult): void {
 export async function doctor(): Promise<void> {
   const c = output.chalkInstance;
 
-  output.printLine(c.bold("\no11y CLI Doctor"));
+  output.printLine(c.bold(`\n${getCommandName()} CLI Doctor`));
   output.printLine(c.gray("─".repeat(40)));
   output.printLine(`Version: ${VERSION}`);
   output.printLine(`Node: ${process.version}`);
@@ -195,7 +196,7 @@ export async function doctor(): Promise<void> {
   output.blank();
   if (failures.length > 0) {
     output.printLine(c.red(`\n${failures.length} issue(s) found`));
-    output.printLine(c.gray("Run 'o11y --help' for usage information"));
+    output.printLine(c.gray(`Run '${getCommandName()} --help' for usage information`));
     process.exit(1);
   } else if (warnings.length > 0) {
     output.printLine(c.yellow(`\n${warnings.length} warning(s)`));

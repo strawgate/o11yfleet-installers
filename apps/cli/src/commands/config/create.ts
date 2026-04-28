@@ -6,6 +6,7 @@ import inquirer from "inquirer";
 import { output } from "../../utils/output.js";
 import { apiRequest } from "../../utils/api.js";
 import { canPrompt } from "../../utils/terminal.js";
+import { getCommandName } from "../../utils/command-name.js";
 
 interface CreateConfigOptions {
   name?: string;
@@ -21,7 +22,7 @@ export async function createConfig(opts: CreateConfigOptions): Promise<void> {
   if (!name || opts.interactive) {
     if (!canPrompt()) {
       output.error("Name is required in non-interactive mode");
-      output.log("Usage: o11y config:create --name <name>");
+      output.log(`Usage: ${getCommandName()} config:create --name <name>`);
       process.exit(1);
     }
 

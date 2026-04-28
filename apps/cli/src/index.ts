@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * o11y CLI - Command-line interface for o11yfleet
+ * ofleet CLI - Command-line interface for o11yfleet
  *
  * Built with yargs, following patterns from Vercel, Railway, and GitHub CLIs.
  */
@@ -9,6 +9,7 @@ import yargs from "yargs";
 import { hideBin } from "yargs/helpers";
 import { output } from "./utils/output.js";
 import { VERSION } from "./utils/version.js";
+import { getCommandName } from "./utils/command-name.js";
 
 // Auth commands
 import { login } from "./commands/auth/login.js";
@@ -42,8 +43,10 @@ import { completion } from "./commands/completion/index.js";
 import { doctor } from "./commands/doctor/index.js";
 
 async function main() {
+  const commandName = getCommandName();
+
   await yargs(hideBin(process.argv))
-    .scriptName("o11y")
+    .scriptName(commandName)
     .usage("$0 <command> [options]")
     .version(VERSION)
     .alias("v", "version")
@@ -313,19 +316,19 @@ async function main() {
     })
 
     // Show help if no command
-    .demandCommand(1, "Specify a command. Run 'o11y --help' for available commands.")
+    .demandCommand(1, `Specify a command. Run '${commandName} --help' for available commands.`)
 
     .epilog(
       `
 Examples:
-  o11y login --email demo@o11yfleet.com --password secret
-  o11y config:list
-  o11y config:upload --config-id <id> --file config.yaml
-  o11y config:rollout --config-id <id>
-  o11y agents:list --config-id <id>
-  o11y bench:provisioning --api-key <key>
+  ${commandName} login --email demo@o11yfleet.com --password secret
+  ${commandName} config:list
+  ${commandName} config:upload --config-id <id> --file config.yaml
+  ${commandName} config:rollout --config-id <id>
+  ${commandName} agents:list --config-id <id>
+  ${commandName} bench:provisioning --api-key <key>
 
-For more info, see https://github.com/o11yfleet/o11yfleet`,
+For more info, see https://github.com/strawgate/o11yfleet`,
     )
 
     .parse();

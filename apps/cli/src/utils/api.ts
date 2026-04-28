@@ -4,6 +4,7 @@
 
 import { getApiUrl, getSession, getTenantId } from "./config.js";
 import { output } from "./output.js";
+import { getCommandName } from "./command-name.js";
 
 export interface ApiResponse<T> {
   data?: T;
@@ -99,7 +100,7 @@ export async function apiRequest<T = unknown>(
 export async function requireAuth(): Promise<void> {
   const session = await getSession();
   if (!session.cookie && !session.token && !process.env.O11YFLEET_API_KEY) {
-    output.error("Not logged in. Run 'o11y login' first.");
+    output.error(`Not logged in. Run '${getCommandName()} login' first.`);
     output.log("Or set O11YFLEET_API_KEY environment variable for CI.");
     process.exit(1);
   }
