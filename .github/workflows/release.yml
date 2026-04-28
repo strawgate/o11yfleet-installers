@@ -62,7 +62,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/worker
-          command: deploy --env production
+          command: deploy
 
       - name: Run D1 migrations
         uses: cloudflare/wrangler-action@v3
@@ -70,7 +70,7 @@ jobs:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           workingDirectory: apps/worker
-          command: d1 migrations apply FP_DB --env production --remote
+          command: d1 migrations apply FP_DB --remote
 
       - name: Smoke test production
         run: |
