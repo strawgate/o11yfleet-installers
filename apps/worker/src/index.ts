@@ -30,6 +30,7 @@ const ALLOWED_ORIGINS = [
   "https://admin.o11yfleet.com",
   "https://o11yfleet.com",
   "https://www.o11yfleet.com",
+  "https://o11yfleet-site.pages.dev",
   "http://localhost:3000",
   "http://localhost:8788",
   "http://127.0.0.1:3000",
@@ -38,7 +39,7 @@ const ALLOWED_ORIGINS = [
 
 function getCorsHeaders(request: Request): Record<string, string> {
   const origin = request.headers.get("Origin") || "";
-  // Allow *.o11yfleet-site.pages.dev for Cloudflare Pages previews
+  // Allow exact matches + *.o11yfleet-site.pages.dev for Cloudflare Pages previews
   const allowed = ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".o11yfleet-site.pages.dev");
   return {
     "Access-Control-Allow-Origin": allowed ? origin : (ALLOWED_ORIGINS[0] ?? ""),

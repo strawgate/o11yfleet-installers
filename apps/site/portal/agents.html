@@ -70,6 +70,7 @@
 
       (async function () {
         var authed = await FP.checkAuth();
+        if (!authed) return;
 
         var tbody = document.getElementById("agent-rows");
         var countEl = document.querySelector(".dt-toolbar .count");
@@ -87,86 +88,6 @@
           if (agent.health === "healthy")
             return '<span class="tag tag-ok"><span class="dot dot-ok"></span>healthy</span>';
           return '<span class="tag tag-warn"><span class="dot dot-warn"></span>degraded</span>';
-        }
-
-        // Demo fallback when API is not available
-        if (!authed) {
-          var demoAgents = [
-            {
-              hostname: "otel-gateway-01.iad",
-              labels: "env=production,role=ingress",
-              version: "0.102.1",
-              config: "prod-ingress",
-              lastSeen: new Date(Date.now() - 45000).toISOString(),
-              connected: true,
-              health: "healthy",
-            },
-            {
-              hostname: "otel-gateway-02.iad",
-              labels: "env=production,role=ingress",
-              version: "0.102.1",
-              config: "prod-ingress",
-              lastSeen: new Date(Date.now() - 30000).toISOString(),
-              connected: true,
-              health: "healthy",
-            },
-            {
-              hostname: "otel-edge-staging-01",
-              labels: "env=staging,role=gateway",
-              version: "0.101.0",
-              config: "staging-gateway",
-              lastSeen: new Date(Date.now() - 120000).toISOString(),
-              connected: true,
-              health: "healthy",
-            },
-            {
-              hostname: "otel-edge-staging-02",
-              labels: "env=staging,role=gateway",
-              version: "0.101.0",
-              config: "staging-gateway",
-              lastSeen: new Date(Date.now() - 600000).toISOString(),
-              connected: true,
-              health: "degraded",
-            },
-            {
-              hostname: "dev-collector-local",
-              labels: "env=dev,role=local",
-              version: "0.102.1",
-              config: "dev-local",
-              lastSeen: new Date(Date.now() - 3600000).toISOString(),
-              connected: false,
-              health: "offline",
-            },
-          ];
-          countEl.textContent = demoAgents.length + " collectors";
-          subEl.textContent =
-            demoAgents.length + " collectors phoning home. Filter, group, take action.";
-          tbody.innerHTML = demoAgents
-            .map(function (a) {
-              return (
-                "<tr>" +
-                '<td class="name">' +
-                esc(a.hostname) +
-                "</td>" +
-                '<td class="meta">' +
-                esc(a.labels) +
-                "</td>" +
-                '<td class="mono-cell">' +
-                esc(a.version) +
-                "</td>" +
-                '<td class="mono-cell" style="color:var(--accent)">' +
-                esc(a.config) +
-                "</td>" +
-                '<td class="meta">' +
-                FP.relTime(a.lastSeen) +
-                "</td>" +
-                "<td>" +
-                statusTag(a) +
-                "</td></tr>"
-              );
-            })
-            .join("");
-          return;
         }
 
         async function loadAgents() {

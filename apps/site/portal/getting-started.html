@@ -43,7 +43,7 @@
           </p>
 
           <div data-tabs="install" class="tabs">
-            <button class="tab active" data-tab="test-client">Test client</button>
+            <button class="tab active" data-tab="test-client">OpAMP Extension</button>
             <button class="tab" data-tab="supervisor">OpAMP Supervisor</button>
           </div>
 
@@ -146,6 +146,7 @@ opampsupervisor --config supervisor.yaml</pre
 
       (async function () {
         var authed = await FP.checkAuth();
+        if (!authed) return;
 
         var selectedConfigId = null;
         var pickerEl = document.getElementById("config-picker");
@@ -167,48 +168,7 @@ opampsupervisor --config supervisor.yaml</pre
           });
         }
 
-        // Demo fallback when API is not available
-        if (!authed) {
-          var demoConfigs = [
-            { id: "demo-1", name: "prod-ingress" },
-            { id: "demo-2", name: "staging-gateway" },
-            { id: "demo-3", name: "dev-local" },
-          ];
-          pickerEl.innerHTML =
-            '<select id="config-select" class="select" style="width: 100%;">' +
-            '<option value="">— Select a configuration —</option>' +
-            demoConfigs
-              .map(function (c) {
-                return '<option value="' + esc(c.id) + '">' + esc(c.name) + "</option>";
-              })
-              .join("") +
-            "</select>";
-
-          var demoSelect = document.getElementById("config-select");
-          demoSelect.addEventListener("change", function () {
-            if (!this.value) return;
-            tokenEl.innerHTML =
-              '<div style="display:flex;flex-direction:column;gap:8px;">' +
-              '<p class="t-muted text-sm">1 active token. Generate a new one or use an existing token from when it was created.</p>' +
-              '<button class="btn btn-secondary btn-sm" id="demo-token-btn" style="align-self:flex-start;">Generate new enrollment token</button>' +
-              '<div id="new-token-display"></div></div>';
-            document.getElementById("demo-token-btn").addEventListener("click", function () {
-              var demoToken = "etok_demo_abc123def456ghi789jkl012mno345";
-              document.getElementById("new-token-display").innerHTML =
-                '<div class="code-block" style="margin-top:4px;"><button class="copy" data-copy="' +
-                esc(demoToken) +
-                '">copy</button>' +
-                esc(demoToken) +
-                "</div>" +
-                '<p class="t-muted text-sm" style="margin-top:4px;">Copy this token now — it won\'t be shown again.</p>';
-              updateCommands(demoToken);
-            });
-            updateCommands("YOUR_ENROLLMENT_TOKEN");
-          });
-          return;
-        }
-
-        // Load configurations from real API
+        // Load configurations
         try {
           var configData = await FP.get("/api/v1/configurations");
           var configs = configData.configurations || [];
