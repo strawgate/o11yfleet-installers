@@ -49,14 +49,15 @@
 
           <div data-tab-panel="test-client" data-tabs-group="install" class="tab-panel active">
             <p class="t-muted text-sm" style="margin-bottom: 8px">
-              The test client connects via OpAMP WebSocket, enrolls with your token, and receives
-              configuration from O11yFleet. Run from the repository root:
+              Add the OpAMP extension to your existing collector configuration to connect it to
+              O11yFleet. The collector will receive remote configuration and report status.
             </p>
             <div class="code-block" id="cmd-test-client">
-              <button class="copy" data-copy="">copy</button>npx tsx scripts/fake-collector.ts \
-              --token
-              <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span> \ --name
-              my-collector-01
+              <button class="copy" data-copy="">copy</button># Add the OpAMP extension to your
+              collector config: extensions: opamp: server: ws: endpoint:
+              wss://api.o11yfleet.com/v1/opamp headers: Authorization: "Bearer
+              <span class="tok-val" style="color: var(--accent)">SELECT_CONFIG_ABOVE</span>"
+              service: extensions: [opamp]
             </div>
           </div>
           <div data-tab-panel="supervisor" data-tabs-group="install" class="tab-panel">
@@ -133,7 +134,6 @@
 
       (async function () {
         var authed = await FP.checkAuth();
-        if (!authed) return;
 
         var selectedConfigId = null;
         var pickerEl = document.getElementById("config-picker");
@@ -155,7 +155,48 @@
           });
         }
 
-        // Load configurations
+        // Demo fallback when API is not available
+        if (!authed) {
+          var demoConfigs = [
+            { id: "demo-1", name: "prod-ingress" },
+            { id: "demo-2", name: "staging-gateway" },
+            { id: "demo-3", name: "dev-local" },
+          ];
+          pickerEl.innerHTML =
+            '<select id="config-select" class="select" style="width: 100%;">' +
+            '<option value="">— Select a configuration —</option>' +
+            demoConfigs
+              .map(function (c) {
+                return '<option value="' + esc(c.id) + '">' + esc(c.name) + "</option>";
+              })
+              .join("") +
+            "</select>";
+
+          var demoSelect = document.getElementById("config-select");
+          demoSelect.addEventListener("change", function () {
+            if (!this.value) return;
+            tokenEl.innerHTML =
+              '<div style="display:flex;flex-direction:column;gap:8px;">' +
+              '<p class="t-muted text-sm">1 active token. Generate a new one or use an existing token from when it was created.</p>' +
+              '<button class="btn btn-secondary btn-sm" id="demo-token-btn" style="align-self:flex-start;">Generate new enrollment token</button>' +
+              '<div id="new-token-display"></div></div>';
+            document.getElementById("demo-token-btn").addEventListener("click", function () {
+              var demoToken = "etok_demo_abc123def456ghi789jkl012mno345";
+              document.getElementById("new-token-display").innerHTML =
+                '<div class="code-block" style="margin-top:4px;"><button class="copy" data-copy="' +
+                esc(demoToken) +
+                '">copy</button>' +
+                esc(demoToken) +
+                "</div>" +
+                '<p class="t-muted text-sm" style="margin-top:4px;">Copy this token now — it won\'t be shown again.</p>';
+              updateCommands(demoToken);
+            });
+            updateCommands("YOUR_ENROLLMENT_TOKEN");
+          });
+          return;
+        }
+
+        // Load configurations from real API
         try {
           var configData = await FP.get("/api/v1/configurations");
           var configs = configData.configurations || [];

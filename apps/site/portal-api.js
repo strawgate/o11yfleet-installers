@@ -5,6 +5,7 @@
 window.FP = window.FP || {};
 
 (function () {
+  FP.demoMode = false;
   const params = new URLSearchParams(window.location.search);
 
   // Auto-detect API base from domain (production) or fall back to params/localStorage
@@ -46,11 +47,9 @@ window.FP = window.FP || {};
     opts.credentials = "include"; // send cookies cross-origin
     const res = await fetch(FP.apiBase + path, opts);
     if (res.status === 401 || res.status === 403) {
-      // Session expired — redirect to login
+      // Session expired — enter demo mode instead of redirecting
       localStorage.removeItem("fp-user");
-      if (!window.location.pathname.includes("login")) {
-        window.location.href = FP.isAdmin ? "/admin-login.html" : "/login.html";
-      }
+      FP.demoMode = true;
       throw new Error("Session expired");
     }
     return res;
@@ -137,7 +136,10 @@ window.FP = window.FP || {};
 
   /** Check if user is logged in (from cached user or /auth/me) */
   FP.checkAuth = async function () {
-    if (!FP.apiBase) return false;
+    if (!FP.apiBase) {
+      FP.demoMode = true;
+      return false;
+    }
     try {
       const data = await FP.get("/auth/me");
       FP.user = data.user;
@@ -145,6 +147,7 @@ window.FP = window.FP || {};
       return true;
     } catch (e) {
       FP.user = null;
+      FP.demoMode = true;
       localStorage.removeItem("fp-user");
       return false;
     }

@@ -199,8 +199,10 @@ FB.shell = function (opts) {
   </div>
 </header>`;
 
-  document.getElementById("shell-sidebar").innerHTML = sidebar;
-  document.getElementById("shell-topbar").innerHTML = topbar;
+  const sidebarEl = document.getElementById("shell-sidebar");
+  const topbarEl = document.getElementById("shell-topbar");
+  if (sidebarEl) sidebarEl.innerHTML = sidebar;
+  if (topbarEl) topbarEl.innerHTML = topbar;
 
   // Show prototype banner if the page declared one
   if (opts.prototype) {

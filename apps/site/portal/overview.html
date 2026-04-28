@@ -416,7 +416,28 @@
       (async function () {
         // Check auth before loading data
         const authed = await FP.checkAuth();
-        if (!authed) return; // checkAuth redirects to login
+
+        // Demo fallback when API is not available
+        if (!authed) {
+          document.querySelector(".page-head h1").textContent = "Welcome back";
+          document.querySelector(".page-head .sub").textContent =
+            "your workspace · 5 collectors across 3 configurations";
+          var statEls = document.querySelectorAll(".stat-grid .stat");
+          if (statEls[0]) {
+            statEls[0].querySelector(".val").textContent = "3";
+          }
+          if (statEls[1]) {
+            statEls[1].querySelector(".val").textContent = "1";
+          }
+          if (statEls[2]) {
+            statEls[2].querySelector(".val").textContent = "1";
+          }
+          if (statEls[3]) {
+            statEls[3].querySelector(".val").textContent = "3";
+            statEls[3].querySelector(".delta").textContent = "1 git-backed";
+          }
+          return;
+        }
 
         async function loadOverview() {
           try {

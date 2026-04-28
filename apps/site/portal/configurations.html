@@ -126,10 +126,66 @@
     <script>
       (async function () {
         var authed = await FP.checkAuth();
-        if (!authed) return;
 
         var tbody = document.getElementById("config-rows");
         var countEl = document.querySelector(".dt-toolbar .count");
+
+        function esc(s) {
+          const d = document.createElement("div");
+          d.textContent = s;
+          return d.innerHTML;
+        }
+
+        // Demo fallback when API is not available
+        if (!authed) {
+          var demoConfigs = [
+            {
+              id: "demo-1",
+              name: "prod-ingress",
+              current_config_hash: "a91f3b2c8d4e",
+              description: "Production ingress collectors",
+              updated_at: new Date(Date.now() - 360000).toISOString(),
+            },
+            {
+              id: "demo-2",
+              name: "staging-gateway",
+              current_config_hash: "f47ac10b58cc",
+              description: "Staging gateway pipeline",
+              updated_at: new Date(Date.now() - 7200000).toISOString(),
+            },
+            {
+              id: "demo-3",
+              name: "dev-local",
+              current_config_hash: "e3b0c44298fc",
+              description: "Local development setup",
+              updated_at: new Date(Date.now() - 86400000).toISOString(),
+            },
+          ];
+          countEl.textContent = demoConfigs.length + " configurations";
+          tbody.innerHTML = demoConfigs
+            .map(function (c) {
+              return (
+                '<tr class="clickable" onclick="window.location.href=\'configuration-detail.html?id=' +
+                esc(c.id) +
+                "'\">" +
+                '<td class="name">' +
+                esc(c.name) +
+                "</td>" +
+                '<td class="mono-cell">' +
+                FP.trunc(c.current_config_hash, 12) +
+                "</td>" +
+                '<td class="meta">' +
+                esc(c.description) +
+                "</td>" +
+                '<td class="meta">' +
+                FP.relTime(c.updated_at) +
+                "</td>" +
+                '<td class="row-actions"><span class="t-muted">›</span></td></tr>'
+              );
+            })
+            .join("");
+          return;
+        }
 
         async function loadConfigs() {
           try {
@@ -160,12 +216,6 @@
             tbody.innerHTML =
               '<tr><td colspan="5" class="meta" style="text-align:center;padding:32px;color:var(--err);">Failed to load configurations</td></tr>';
           }
-        }
-
-        function esc(s) {
-          const d = document.createElement("div");
-          d.textContent = s;
-          return d.innerHTML;
         }
 
         // Create configuration
