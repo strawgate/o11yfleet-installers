@@ -172,7 +172,23 @@ export default function TokensPage() {
   return (
     <div className="main-wide">
       <div className="page-head">
-        <h1>Enrollment tokens</h1>
+        <div>
+          <h1>Enrollment tokens</h1>
+          <p className="meta">
+            Enrollment tokens are bootstrap credentials for collectors. They are separate from API
+            tokens and should not grant general control-plane write authority.
+          </p>
+        </div>
+      </div>
+
+      <div className="banner info mb-6">
+        <div>
+          <div className="b-title">Token boundary</div>
+          <div className="b-body">
+            Create enrollment tokens per configuration group, copy them once, and revoke/rotate them
+            if exposed. API automation tokens will use a separate scoped credential model.
+          </div>
+        </div>
       </div>
 
       {cfgList.length === 0 ? (

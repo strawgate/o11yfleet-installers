@@ -82,7 +82,13 @@ export default function GettingStartedPage() {
   return (
     <div className="main-narrow">
       <div className="page-head">
-        <h1>Getting started</h1>
+        <div>
+          <h1>Getting started</h1>
+          <p className="meta">
+            First success means a collector enrolls, connects, and reports state. Generating a token
+            is only the bootstrap step.
+          </p>
+        </div>
       </div>
 
       {/* Steps indicator */}
@@ -91,10 +97,10 @@ export default function GettingStartedPage() {
           <div key={s} className={`step${s < step ? " done" : ""}${s === step ? " active" : ""}`}>
             <span className="n">{s}</span>
             <span>
-              {s === 1 && "Choose config"}
+              {s === 1 && "Choose group"}
               {s === 2 && "Get token"}
               {s === 3 && "Install"}
-              {s === 4 && "Verify"}
+              {s === 4 && "First success"}
             </span>
             {s < 4 && <span className="line" />}
           </div>
@@ -104,8 +110,11 @@ export default function GettingStartedPage() {
       {/* Step 1: Choose configuration */}
       {step === 1 && (
         <div className="card card-pad">
-          <h3>Choose a configuration</h3>
-          <p className="meta mt-2">Select the configuration your collector will use.</p>
+          <h3>Choose a configuration group</h3>
+          <p className="meta mt-2">
+            A configuration group is the assignment boundary. Collectors enrolled with its token
+            should converge to the group&apos;s desired config.
+          </p>
           {cfgList.length === 0 ? (
             <p className="meta mt-6">
               No configurations found. <Link to="/portal/configurations">Create one first.</Link>
@@ -139,7 +148,10 @@ export default function GettingStartedPage() {
       {step === 2 && (
         <div className="card card-pad">
           <h3>Enrollment token</h3>
-          <p className="meta mt-2">Generate a token to authenticate your collector.</p>
+          <p className="meta mt-2">
+            Generate a bootstrap token for first enrollment. After enrollment, the collector uses a
+            scoped assignment claim for management traffic.
+          </p>
           <button
             className="btn btn-primary mt-6"
             onClick={() => void handleGenerateToken()}
@@ -155,7 +167,8 @@ export default function GettingStartedPage() {
         <div className="card card-pad">
           <h3>Install &amp; connect</h3>
           <p className="meta mt-2">
-            Run one of the commands below to install the collector on your host.
+            Run one of the commands below to install the OpenTelemetry Collector on your host and
+            point it at O11yFleet OpAMP management.
           </p>
 
           {token && (
@@ -230,12 +243,12 @@ export default function GettingStartedPage() {
       {/* Step 4: Verify connection */}
       {step === 4 && (
         <div className="card card-pad">
-          <h3>Waiting for connection</h3>
+          <h3>Confirm first successful connection</h3>
           {connected ? (
             <>
               <div className="flex-row gap-sm mt-6">
                 <span className="dot dot-ok" />
-                <span>Agent connected!</span>
+                <span>Collector connected and reporting.</span>
               </div>
               <div className="flex-row gap-sm mt-6">
                 <Link to="/portal/overview" className="btn btn-primary">
@@ -250,9 +263,18 @@ export default function GettingStartedPage() {
             <>
               <div className="flex-row gap-sm mt-6">
                 <span className="dot dot-warn dot-pulse" />
-                <span className="meta">Waiting for agent heartbeat…</span>
+                <span className="meta">Waiting for first collector heartbeat…</span>
               </div>
               <p className="meta mt-2 text-sm">This page polls automatically every 5 seconds.</p>
+              <div className="banner warn mt-6">
+                <div>
+                  <div className="b-title">No connection yet?</div>
+                  <div className="b-body">
+                    Check that the token was copied without quotes, the host can reach the OpAMP
+                    endpoint, and the collector process is running.
+                  </div>
+                </div>
+              </div>
               <Link to="/portal/overview" className="btn btn-ghost btn-sm mt-6">
                 Skip — go to overview
               </Link>

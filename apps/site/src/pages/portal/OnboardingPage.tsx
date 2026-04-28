@@ -13,8 +13,13 @@ export default function OnboardingPage() {
       <div className="card card-pad">
         <h3>Welcome to o11yfleet</h3>
         <p className="meta mt-2">
-          The onboarding wizard will guide you through setting up your workspace, choosing a
-          monitoring mode, installing your first collector, and verifying the connection.
+          The onboarding wizard will guide you through the core model: workspace, configuration
+          group, enrollment token, collector install, and first successful connection.
+        </p>
+        <p className="meta mt-2">
+          Your workspace is the isolation boundary. A configuration group is the desired state
+          target for collectors. An enrollment token is only the bootstrap secret that places a
+          collector into that group.
         </p>
         <p className="meta mt-2">
           In the meantime, you can use the{" "}

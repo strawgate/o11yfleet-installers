@@ -5,7 +5,6 @@ import {
   useConfigurationYaml,
   useConfigurationAgents,
   useConfigurationVersions,
-  useConfigurationTokens,
   useConfigurationStats,
   useDeleteConfiguration,
   useRolloutConfig,
@@ -16,6 +15,14 @@ import { CopyButton } from "../../components/common/CopyButton";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime, trunc } from "../../utils/format";
+import {
+  agentCurrentHash,
+  agentHasDrift,
+  agentIsHealthy,
+  agentLastSeen,
+  agentUid,
+  hashLabel,
+} from "../../utils/agents";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
 
@@ -28,7 +35,6 @@ export default function ConfigurationDetailPage() {
   const yaml = useConfigurationYaml(id);
   const agents = useConfigurationAgents(id);
   const versions = useConfigurationVersions(id);
-  const tokens = useConfigurationTokens(id);
   const stats = useConfigurationStats(id);
   const deleteConfig = useDeleteConfiguration();
   const rollout = useRolloutConfig(id ?? "");
@@ -46,8 +52,13 @@ export default function ConfigurationDetailPage() {
 
   const agentList = agents.data ?? [];
   const versionList = versions.data ?? [];
-  const tokenList = tokens.data ?? [];
-  const agentCount = stats.data?.agents_connected ?? agentList.length;
+  const connectedAgents = stats.data?.connected_agents ?? stats.data?.agents_connected ?? 0;
+  const totalAgents = stats.data?.total_agents ?? agentList.length;
+  const healthyAgents = stats.data?.healthy_agents ?? 0;
+  const activeWebSockets = stats.data?.active_websockets;
+  const desiredHash =
+    stats.data?.desired_config_hash ?? (c["current_config_hash"] as string | undefined) ?? null;
+  const driftedAgents = agentList.filter((a) => agentHasDrift(a, desiredHash)).length;
 
   async function handleDelete() {
     try {
@@ -85,6 +96,10 @@ export default function ConfigurationDetailPage() {
           {(c["description"] as string | undefined) && (
             <p className="meta">{c["description"] as string}</p>
           )}
+          <p className="meta">
+            Configuration group: desired config for collectors enrolled into this assignment
+            boundary.
+          </p>
         </div>
         <div className="actions">
           <span className={`tag tag-${c.status === "active" ? "ok" : "warn"}`}>
@@ -96,16 +111,28 @@ export default function ConfigurationDetailPage() {
       {/* Stat cards */}
       <div className="stat-grid">
         <div className="stat">
-          <div className="val">{agentCount}</div>
-          <div className="label">Agents</div>
+          <div className="val">{totalAgents}</div>
+          <div className="label">Total collectors</div>
         </div>
         <div className="stat">
-          <div className="val">{versionList.length}</div>
-          <div className="label">Versions</div>
+          <div className="val">{connectedAgents}</div>
+          <div className="label">Connected</div>
         </div>
         <div className="stat">
-          <div className="val">{tokenList.length}</div>
-          <div className="label">Tokens</div>
+          <div className="val">{healthyAgents}</div>
+          <div className="label">Healthy</div>
+        </div>
+        <div className="stat">
+          <div className="val">{driftedAgents}</div>
+          <div className="label">Drifted</div>
+        </div>
+        <div className="stat">
+          <div className="val">{activeWebSockets ?? "—"}</div>
+          <div className="label">Active WebSockets</div>
+        </div>
+        <div className="stat">
+          <div className="val mono-cell">{hashLabel(desiredHash)}</div>
+          <div className="label">Desired config</div>
         </div>
       </div>
 
@@ -133,42 +160,73 @@ export default function ConfigurationDetailPage() {
                 <tr>
                   <th>Instance UID</th>
                   <th>Status</th>
+                  <th>Health</th>
+                  <th>Config sync</th>
+                  <th>Current hash</th>
                   <th>Last seen</th>
                 </tr>
               </thead>
               <tbody>
                 {agentList.length === 0 ? (
                   <tr>
-                    <td colSpan={3} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                      No agents connected yet.
+                    <td colSpan={6} className="meta" style={{ textAlign: "center", padding: 32 }}>
+                      No collectors have enrolled into this configuration group yet.
                     </td>
                   </tr>
                 ) : (
-                  agentList.map((a) => (
-                    <tr key={a.id} className="clickable">
-                      <td className="mono-cell">
-                        <Link to={`/portal/agents/${id}/${a.id}`}>{a.id}</Link>
-                      </td>
-                      <td>
-                        <span
-                          className={`tag ${
-                            a.status === "connected"
-                              ? "tag-ok"
-                              : a.status === "degraded"
-                                ? "tag-warn"
-                                : "tag-err"
-                          }`}
-                        >
-                          {a.status ?? "unknown"}
-                        </span>
-                      </td>
-                      <td className="meta">{relTime(a.last_seen)}</td>
-                    </tr>
-                  ))
+                  agentList.slice(0, 100).map((a) => {
+                    const uid = agentUid(a);
+                    const healthy = agentIsHealthy(a);
+                    const drift = agentHasDrift(a, desiredHash);
+                    return (
+                      <tr key={uid} className="clickable">
+                        <td className="mono-cell">
+                          <Link to={`/portal/agents/${id}/${uid}`}>{uid}</Link>
+                        </td>
+                        <td>
+                          <span
+                            className={`tag ${
+                              a.status === "connected"
+                                ? "tag-ok"
+                                : a.status === "degraded"
+                                  ? "tag-warn"
+                                  : "tag-err"
+                            }`}
+                          >
+                            {a.status ?? "unknown"}
+                          </span>
+                        </td>
+                        <td>
+                          <span
+                            className={`tag ${healthy === false ? "tag-err" : healthy === true ? "tag-ok" : ""}`}
+                          >
+                            {healthy === false
+                              ? "unhealthy"
+                              : healthy === true
+                                ? "healthy"
+                                : "unknown"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={`tag ${drift ? "tag-warn" : ""}`}>
+                            {drift ? "drift" : agentCurrentHash(a) ? "in sync" : "not reported"}
+                          </span>
+                        </td>
+                        <td className="mono-cell">{hashLabel(agentCurrentHash(a))}</td>
+                        <td className="meta">{relTime(agentLastSeen(a))}</td>
+                      </tr>
+                    );
+                  })
                 )}
               </tbody>
             </table>
           )}
+          {agentList.length > 100 ? (
+            <div className="meta" style={{ padding: "12px 16px" }}>
+              Showing first 100 collectors. Add server-side pagination before rendering the full
+              fleet.
+            </div>
+          ) : null}
         </div>
       )}
 
@@ -218,7 +276,19 @@ export default function ConfigurationDetailPage() {
       {activeTab === "rollout" && (
         <div className="card card-pad">
           <h3>Rollout configuration</h3>
-          <p className="meta mt-2">Push the current YAML configuration to all connected agents.</p>
+          <p className="meta mt-2">
+            Rollout promotes the current version to desired config for this configuration group.
+            Collectors are in sync once their reported current hash matches desired.
+          </p>
+          <div className="banner info mt-6">
+            <div>
+              <div className="b-title">Rollout guardrails to wire next</div>
+              <div className="b-body">
+                Track actor, reason, selected version, connected target count, drift, failed apply,
+                and rollback candidate before making this a full rollout history view.
+              </div>
+            </div>
+          </div>
           <button
             className="btn btn-primary mt-6"
             onClick={() => setRolloutOpen(true)}
@@ -247,8 +317,9 @@ export default function ConfigurationDetailPage() {
             }
           >
             <p>
-              This will push the current configuration to <strong>{agentCount}</strong> connected
-              agent{agentCount !== 1 ? "s" : ""}.
+              This will set the current YAML as desired config for{" "}
+              <strong>{connectedAgents}</strong> connected collector
+              {connectedAgents !== 1 ? "s" : ""}.
             </p>
           </Modal>
         </div>
@@ -257,7 +328,13 @@ export default function ConfigurationDetailPage() {
       {activeTab === "yaml" && (
         <div className="card card-pad">
           <div className="flex-row justify-between mb-6">
-            <h3>Effective YAML</h3>
+            <div>
+              <h3>Desired YAML</h3>
+              <p className="meta mt-2">
+                Effective config is what a collector actually runs after local bootstrap and remote
+                config behavior; this page currently shows desired YAML from the control plane.
+              </p>
+            </div>
             <CopyButton value={yaml.data ?? ""} label="Copy YAML" />
           </div>
           {yaml.isLoading ? (
@@ -300,7 +377,7 @@ export default function ConfigurationDetailPage() {
               <div className="desc">
                 <strong>Delete this configuration</strong>
                 <p className="meta">
-                  This will permanently delete the configuration and disconnect all agents.
+                  This will permanently delete the configuration and disconnect all collectors.
                 </p>
               </div>
               <button className="btn btn-danger" onClick={() => setDeleteOpen(true)}>

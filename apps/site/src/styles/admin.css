@@ -24,3 +24,23 @@
   background: var(--accent);
   z-index: 1000;
 }
+
+.admin-callout {
+  border: 1px solid var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--fg);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+
+.admin-callout strong {
+  display: block;
+  font-size: 13.5px;
+}
+
+.admin-callout p {
+  margin: 6px 0 0;
+  color: var(--fg-2);
+  font-size: 13px;
+  line-height: 1.5;
+}

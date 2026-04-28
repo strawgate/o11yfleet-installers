@@ -32,7 +32,13 @@ export default function HealthPage() {
   return (
     <>
       <div className="page-head">
-        <h1>System Health</h1>
+        <div>
+          <h1>System Health</h1>
+          <p className="meta">
+            This page reports control-plane dependencies. Collector runtime health belongs in tenant
+            and configuration drilldowns.
+          </p>
+        </div>
         <div className="actions">
           <button className="btn btn-ghost btn-sm" onClick={() => void refetch()}>
             Refresh
@@ -45,6 +51,14 @@ export default function HealthPage() {
           <div className="val">{statusTag(data?.status ?? "unknown")}</div>
           <div className="label">Overall status</div>
         </div>
+      </div>
+
+      <div className="admin-callout mt-6">
+        <strong>Health plane split</strong>
+        <p>
+          D1, R2, Durable Objects, Queues, Analytics Engine, and Worker/API health can be degraded
+          independently from customer collector health. Keep paging and UI labels explicit.
+        </p>
       </div>
 
       <div

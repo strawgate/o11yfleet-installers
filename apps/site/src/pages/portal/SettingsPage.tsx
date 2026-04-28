@@ -88,6 +88,23 @@ export default function SettingsPage() {
         </button>
       </div>
 
+      <div className="card card-pad mt-6">
+        <h3>Remote config authority</h3>
+        <p className="meta mt-2">
+          This workspace can assign desired config to enrolled collectors. Enrollment tokens are
+          bootstrap-only secrets; future API tokens should be scoped separately for automation.
+        </p>
+        <div className="banner info mt-6">
+          <div>
+            <div className="b-title">Governance model to wire</div>
+            <div className="b-body">
+              Role checks, plan gates, API-token scopes, and audit events must agree with backend
+              authorization before remote-config mutation controls become broadly available.
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Danger zone */}
       <div className="danger-zone mt-6">
         <div className="dz-head">Danger zone</div>

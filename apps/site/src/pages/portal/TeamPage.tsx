@@ -24,7 +24,48 @@ export default function TeamPage() {
   return (
     <div className="main-wide">
       <div className="page-head">
-        <h1>Team</h1>
+        <div>
+          <h1>Team</h1>
+          <p className="meta">
+            Roles should separate read-only fleet visibility from remote-config mutation and
+            workspace administration.
+          </p>
+        </div>
+      </div>
+
+      <div className="card card-pad mb-6">
+        <h3>Target role model</h3>
+        <div
+          className="mt-6"
+          style={{
+            display: "grid",
+            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+            gap: 12,
+          }}
+        >
+          <div>
+            <span className="tag tag-ok">owner</span>
+            <p className="meta mt-2">
+              Own workspace deletion, billing authority, and highest-risk admin delegation.
+            </p>
+          </div>
+          <div>
+            <span className="tag">viewer</span>
+            <p className="meta mt-2">Read fleet state, versions, rollouts, and audit history.</p>
+          </div>
+          <div>
+            <span className="tag tag-warn">operator</span>
+            <p className="meta mt-2">
+              Create versions, roll out config, and manage enrollment tokens.
+            </p>
+          </div>
+          <div>
+            <span className="tag tag-warn">admin</span>
+            <p className="meta mt-2">
+              Manage team, billing, API tokens, and destructive workspace actions.
+            </p>
+          </div>
+        </div>
       </div>
 
       <div className="dt-card">

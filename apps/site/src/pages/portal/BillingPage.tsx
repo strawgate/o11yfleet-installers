@@ -75,7 +75,20 @@ export default function BillingPage() {
           </div>
         </div>
 
-        {/* Billing info placeholder */}
+        <div className="card card-pad">
+          <h3>Control mode</h3>
+          <p className="meta mt-6">
+            Plans should gate more than quotas. They also decide whether a workspace is monitor-only
+            or can manage desired config, rollouts, team roles, API tokens, audit export, and
+            approval workflows.
+          </p>
+          <div className="mt-6">
+            <span className={`tag ${plan === "free" ? "tag-warn" : "tag-ok"}`}>
+              {plan === "free" ? "monitor-only" : "managed config enabled"}
+            </span>
+          </div>
+        </div>
+
         <div className="card card-pad">
           <h3>Billing information</h3>
           <p className="meta mt-6">

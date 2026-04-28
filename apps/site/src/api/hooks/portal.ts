@@ -10,6 +10,8 @@ export interface Overview {
   configs_count?: number;
   agents?: number;
   total_agents?: number;
+  connected_agents?: number;
+  healthy_agents?: number;
   active_rollouts?: number | null;
   [key: string]: unknown;
 }
@@ -20,14 +22,28 @@ export interface Configuration {
   status?: string;
   created_at?: string;
   updated_at?: string;
+  stats?: {
+    total?: number;
+    connected?: number;
+    healthy?: number;
+  };
   [key: string]: unknown;
 }
 
 export interface Agent {
-  id: string;
+  id?: string;
+  instance_uid?: string;
   hostname?: string;
   status?: string;
   last_seen?: string;
+  healthy?: boolean | number;
+  current_config_hash?: string | null;
+  desired_config_hash?: string | null;
+  last_seen_at?: string | number;
+  connected_at?: string | number;
+  last_error?: string | null;
+  agent_description?: string;
+  capabilities?: number | string | null;
   [key: string]: unknown;
 }
 
@@ -46,7 +62,12 @@ export interface EnrollmentToken {
 }
 
 export interface ConfigStats {
+  total_agents?: number;
   agents_connected?: number;
+  connected_agents?: number;
+  healthy_agents?: number;
+  desired_config_hash?: string | null;
+  active_websockets?: number;
   [key: string]: unknown;
 }
 
@@ -106,7 +127,20 @@ export function useConfigurationYaml(id: string | undefined) {
 export function useConfigurationAgents(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "agents"],
-    queryFn: () => apiGet<Agent[]>(`/api/v1/configurations/${id}/agents`),
+    queryFn: async () => {
+      const data = await apiGet<Agent[] | { agents?: Agent[] }>(
+        `/api/v1/configurations/${id}/agents`,
+      );
+      const agents = Array.isArray(data) ? data : data.agents;
+      if (!Array.isArray(agents)) {
+        throw new ApiError("GET agents: unexpected response shape", 500);
+      }
+      const missingIdentity = agents.some((agent) => !agent.instance_uid && !agent.id);
+      if (missingIdentity) {
+        throw new ApiError("GET agents: missing agent identity", 500);
+      }
+      return agents;
+    },
     enabled: !!id,
   });
 }

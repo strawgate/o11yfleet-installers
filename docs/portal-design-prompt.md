@@ -1,5 +1,13 @@
 # O11yFleet Portal Design Prompt
 
+Authoritative product semantics live in:
+
+- `docs/product-mental-model.md`
+- `docs/governance-model.md`
+- `docs/admin-ops-model.md`
+
+Follow those documents before inventing new terms. In particular, keep `workspace`, `configuration group`, `version`, `rollout`, `desired config`, `current config`, `effective config`, `collector`, `agent`, `status`, `health`, `drift`, `enrollment token`, and `API token` consistent.
+
 You previously designed the public marketing site for O11yFleet — the hosted OpAMP control plane for OpenTelemetry Collectors. The marketing site (index.html, pricing.html, enterprise.html, product-configuration-management.html, solutions-gitops.html, about.html) uses your existing `styles.css`, `shared.js`, and `app.js` for dark/light theming with Geist fonts, oklch accent colors, scroll-reveal animations, and responsive layout.
 
 Now we need you to design the **user portal** (the logged-in product experience for customers) and the **admin portal** (the internal operator console for us). These should feel like the natural continuation of the marketing site — same design system, same Geist fonts, same CSS variable architecture, same attention to detail — but adapted to a dense, productivity-oriented app layout rather than a marketing page layout.
@@ -17,7 +25,7 @@ Reuse and extend the existing design system from `styles.css`:
 - **New layout primitive needed**: a persistent sidebar + topbar app shell (the marketing site has no sidebar). The sidebar should feel like the nav-menu but vertical and fixed.
 - **Accent distinction**: User portal uses the default green accent. Admin portal uses an amber/orange accent (`oklch(0.78 0.15 78)` or similar) with an "ADMIN" badge in the sidebar brand to make it instantly clear which portal you're in.
 
-Each portal should be a self-contained directory of HTML pages (not a SPA with hash routing). Standard `<a href>` navigation between pages. Every page includes `shared.js` for the header/footer injection pattern, `app.js` for theme toggle, plus a new `portal.js` (user) or `admin.js` (admin) for portal-specific behavior (API calls, refresh, dialogs).
+The current app implementation is the React/Vite app under `apps/site/src`. Older notes in this prompt may refer to static HTML files; preserve the information architecture and design intent, but implement against the live React pages, hooks, and shared components.
 
 ---
 
