@@ -16,22 +16,20 @@
   <main class="main">
     <div class="main-wide">
       <div class="page-head">
-        <div><h1>Operations overview</h1><div class="sub">All tenants, all collectors, all events. Tuesday, Apr 28 · 09:14 UTC.</div></div>
+        <div><h1>Operations overview</h1><div class="sub" id="admin-subtitle">All tenants, all collectors, all events.</div></div>
         <div class="actions"><a href="events.html" class="btn btn-secondary btn-sm">Audit events</a><a href="health.html" class="btn btn-primary btn-sm">System health</a></div>
       </div>
 
-      <div class="banner warn mb-6">
+      <div class="banner warn mb-6" style="position:relative;">
         <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-        <div><div class="b-title">eu-west-1 OpAMP gateway p99 elevated · 384ms</div><div class="b-body">Above 250ms threshold for 12m. 4 tenants affected.</div></div>
-        <div class="b-actions"><a href="health.html" class="btn btn-secondary btn-sm">Investigate</a></div>
+        <div><div class="b-title">Prototype — Alert banner shows sample data</div><div class="b-body">Real alerting integration is not yet implemented.</div></div>
       </div>
 
       <div class="stat-grid mb-6">
-        <div class="stat"><div class="label">Tenants</div><div class="val">1,284</div><div class="delta up">+19 this week</div></div>
-        <div class="stat"><div class="label">Collectors connected</div><div class="val">38,492</div><div class="delta">peak today 41k</div></div>
-        <div class="stat"><div class="label">MRR</div><div class="val">$184k</div><div class="delta up">+6.2% MoM</div></div>
-        <div class="stat"><div class="label">Trial → paid (30d)</div><div class="val">22%</div><div class="delta">target 25%</div></div>
-        <div class="stat"><div class="label">Open support tickets</div><div class="val">14</div><div class="delta">2 P1</div></div>
+        <div class="stat"><div class="label">Tenants</div><div class="val">—</div><div class="delta"></div></div>
+        <div class="stat"><div class="label">Configurations</div><div class="val">—</div><div class="delta"></div></div>
+        <div class="stat"><div class="label">Enrollment tokens</div><div class="val">—</div><div class="delta"></div></div>
+        <div class="stat"><div class="label">Users</div><div class="val">—</div><div class="delta"></div></div>
       </div>
 
       <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 18px;">
@@ -48,7 +46,11 @@
             </tbody>
           </table>
         </div>
-        <div class="dt-card">
+        <div class="dt-card" style="position:relative;">
+          <div class="banner warn" style="margin:0;border-radius:8px 8px 0 0;border-bottom:1px solid var(--border);font-size:12px;padding:8px 14px;">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+            <div><strong>Prototype</strong> — Events show sample data</div>
+          </div>
           <div class="dt-toolbar"><strong style="font-size: 13.5px;">Recent events</strong><div class="spacer"></div><a href="events.html" class="btn btn-ghost btn-sm">All events</a></div>
           <div style="padding: 8px 0;">
             <div style="padding: 10px 16px; border-bottom: 1px solid var(--line);"><div class="t-mono text-sm" style="color: var(--accent);">FEATURE_FLAG · 09:12</div><div class="text-sm mt-2">Enabled <span class="t-mono">tail_sampling_v2</span> for plan ≥ Business · sam@o11y</div></div>
@@ -60,7 +62,11 @@
         </div>
       </div>
 
-      <div class="dt-card mt-6">
+      <div class="dt-card mt-6" style="position:relative;">
+        <div class="banner warn" style="margin:0;border-radius:8px 8px 0 0;border-bottom:1px solid var(--border);font-size:12px;padding:8px 14px;">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6" style="width:14px;height:14px;"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><strong>Prototype</strong> — Plan distribution shows sample data</div>
+        </div>
         <div class="dt-toolbar"><strong style="font-size: 13.5px;">Plan distribution</strong></div>
         <div style="padding: 22px;">
           <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px;">
@@ -75,8 +81,53 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script>FB.shell({ role:'admin', current:'overview', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Operations'},{label:'Overview'}], prototype: 'Dashboard KPIs are hardcoded. Real admin metrics require the Admin Analytics API.' });</script>
+<script>
+FB.shell({ role:'admin', current:'overview', crumbs:[{label:'Operations'},{label:'Overview'}] });
+
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
+
+  // Dynamic subtitle with current date
+  var now = new Date();
+  var days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  document.getElementById('admin-subtitle').textContent = 'All tenants, all collectors, all events. ' +
+    days[now.getUTCDay()] + ', ' + months[now.getUTCMonth()] + ' ' + now.getUTCDate() + ' · ' +
+    String(now.getUTCHours()).padStart(2,'0') + ':' + String(now.getUTCMinutes()).padStart(2,'0') + ' UTC.';
+
+  try {
+    var data = await FP.get('/api/admin/overview');
+    var statEls = document.querySelectorAll('.stat-grid .stat');
+    if (statEls[0]) { statEls[0].querySelector('.val').textContent = data.total_tenants; statEls[0].querySelector('.delta').textContent = ''; }
+    if (statEls[1]) { statEls[1].querySelector('.val').textContent = data.total_configurations; statEls[1].querySelector('.delta').textContent = 'configurations'; }
+    if (statEls[2]) { statEls[2].querySelector('.val').textContent = data.total_active_tokens; statEls[2].querySelector('.delta').textContent = 'enrollment tokens'; }
+    if (statEls[3]) { statEls[3].querySelector('.val').textContent = data.total_users; statEls[3].querySelector('.delta').textContent = 'registered users'; }
+  } catch (e) {
+    console.error('Failed to load admin overview', e);
+  }
+
+  // Load tenant list
+  try {
+    var tenantData = await FP.get('/api/admin/tenants');
+    var tenants = tenantData.tenants || [];
+    var tbody = document.querySelector('.dt-card table.dt tbody');
+    if (tbody && tenants.length > 0) {
+      function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+      tbody.innerHTML = tenants.slice(0, 10).map(function(t) {
+        return '<tr class="clickable" onclick="window.location.href=\'tenant-detail.html?id=' + t.id + '\'">' +
+          '<td class="name">' + esc(t.name) + '</td>' +
+          '<td><span class="tag">' + esc(t.plan || 'free') + '</span></td>' +
+          '<td class="mono-cell">' + (t.max_configs || 0) + '</td>' +
+          '<td class="mono-cell">' + (t.max_agents_per_config || 0).toLocaleString() + '</td>' +
+          '<td><span class="tag tag-ok">active</span></td></tr>';
+      }).join('');
+    }
+  } catch (e) { console.error('Failed to load tenants for overview', e); }
+})();
+</script>
 </body>
 </html>

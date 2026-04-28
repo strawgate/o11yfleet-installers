@@ -2,6 +2,7 @@ import { env, exports } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
+import { apiFetch } from "./helpers.js";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
@@ -16,19 +17,19 @@ beforeAll(async () => {
 
 describe("Ingress Router", () => {
   it("rejects requests without Authorization header", async () => {
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket" },
     });
     expect(response.status).toBe(401);
   });
 
   it("rejects non-WebSocket requests", async () => {
-    const response = await exports.default.fetch("http://localhost/v1/opamp");
+    const response = await apiFetch("http://localhost/v1/opamp");
     expect(response.status).toBe(426);
   });
 
   it("rejects invalid assignment claim", async () => {
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": "Bearer invalid.claim.token",
@@ -48,7 +49,7 @@ describe("Ingress Router", () => {
       exp: Math.floor(Date.now() / 1000) - 3600,
     };
     const token = await signClaim(claim, CLAIM_SECRET);
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${token}`,
@@ -70,7 +71,7 @@ describe("Ingress Router", () => {
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
     const token = await signClaim(claim, CLAIM_SECRET);
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${token}`,
@@ -84,7 +85,7 @@ describe("Ingress Router", () => {
   });
 
   it("rejects invalid enrollment token", async () => {
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": "Bearer fp_enroll_nonexistent_token_value",
@@ -106,7 +107,7 @@ describe("Ingress Router", () => {
     const token = await signClaim(claim, CLAIM_SECRET);
 
     // Try to spoof headers — ingress should strip them and use claim values
-    const response = await exports.default.fetch("http://localhost/v1/opamp", {
+    const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${token}`,
@@ -122,7 +123,7 @@ describe("Ingress Router", () => {
 
   it("enrollment flow: create tenant, config, token, then connect", async () => {
     // Create tenant
-    const tenantRes = await exports.default.fetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Enrollment Test" }),
       headers: { "Content-Type": "application/json" },
@@ -130,7 +131,7 @@ describe("Ingress Router", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     // Create config
-    const configRes = await exports.default.fetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "enroll-config" }),
       headers: { "Content-Type": "application/json" },
@@ -138,7 +139,7 @@ describe("Ingress Router", () => {
     const config = await configRes.json<{ id: string }>();
 
     // Create enrollment token
-    const tokenRes = await exports.default.fetch(
+    const tokenRes = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
@@ -150,7 +151,7 @@ describe("Ingress Router", () => {
     expect(tokenBody.token).toMatch(/^fp_enroll_/);
 
     // Connect with enrollment token
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${tokenBody.token}`,
@@ -193,7 +194,7 @@ describe("Ingress Router", () => {
     const signed = await signClaim(claim, CLAIM_SECRET);
 
     // Use query param instead of Authorization header
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/v1/opamp?token=${encodeURIComponent(signed)}`,
       { headers: { "Upgrade": "websocket" } },
     );

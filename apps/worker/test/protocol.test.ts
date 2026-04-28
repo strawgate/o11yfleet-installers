@@ -6,6 +6,7 @@ import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
+import { apiFetch } from "./helpers.js";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
@@ -46,22 +47,22 @@ async function makeSignedClaim(): Promise<{ claim: AssignmentClaim; token: strin
 // ========================
 describe("API Authentication", () => {
   it("CORS preflight returns 204 with proper headers", async () => {
-    const response = await exports.default.fetch("http://localhost/api/tenants", {
+    const response = await apiFetch("http://localhost/api/tenants", {
       method: "OPTIONS",
     });
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("GET");
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("POST");
   });
 
   it("API responses include CORS headers", async () => {
-    const response = await exports.default.fetch("http://localhost/api/tenants", {
+    const response = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "CORS Test" }),
       headers: { "Content-Type": "application/json" },
     });
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
   });
 });
 
@@ -72,7 +73,7 @@ describe("DO Protocol Enforcement", () => {
   it("text frames are rejected with close code 4000", async () => {
     const { token } = await makeSignedClaim();
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/v1/opamp?token=${encodeURIComponent(token)}`,
       { headers: { Upgrade: "websocket" } },
     );
@@ -94,7 +95,7 @@ describe("DO Protocol Enforcement", () => {
   it("binary hello message gets a valid response", async () => {
     const { claim, token } = await makeSignedClaim();
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/v1/opamp?token=${encodeURIComponent(token)}`,
       { headers: { Upgrade: "websocket" } },
     );
@@ -224,7 +225,7 @@ describe("Framing Edge Cases", () => {
   it("handles sequence gap — requests full state report", async () => {
     const { token } = await makeSignedClaim();
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/v1/opamp?token=${encodeURIComponent(token)}`,
       { headers: { Upgrade: "websocket" } },
     );

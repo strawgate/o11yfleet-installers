@@ -50,6 +50,12 @@ async function routeAdminRequest(
   const path = url.pathname;
   const method = request.method;
 
+  // ─── Overview ────────────────────────────────────────────────
+
+  if (path === "/api/admin/overview" && method === "GET") {
+    return handleAdminOverview(env);
+  }
+
   // ─── Tenants ────────────────────────────────────────────────
 
   if (path === "/api/admin/tenants" && method === "POST") {
@@ -195,4 +201,20 @@ async function handleListConfigurations(env: Env, tenantId: string): Promise<Res
     .bind(tenantId)
     .all();
   return Response.json({ configurations: result.results });
+}
+
+// ─── Admin Overview ─────────────────────────────────────────────────
+
+async function handleAdminOverview(env: Env): Promise<Response> {
+  const tenants = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{ count: number }>();
+  const configs = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations").first<{ count: number }>();
+  const tokens = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL").first<{ count: number }>();
+  const users = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM users").first<{ count: number }>();
+
+  return Response.json({
+    total_tenants: tenants?.count ?? 0,
+    total_configurations: configs?.count ?? 0,
+    total_active_tokens: tokens?.count ?? 0,
+    total_users: users?.count ?? 0,
+  });
 }

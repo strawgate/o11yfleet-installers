@@ -20,19 +20,21 @@ FB.prototypeBanner = function (msg) {
 FB.shell = function (opts) {
   const cur = opts.current || '';
   const role = opts.role || 'user';
-  const orgName = opts.orgName || 'Acme Platform';
-  const orgPlan = opts.orgPlan || 'Business';
+  // Pull real user data from FP.user (set by portal-api.js after checkAuth)
+  const fpUser = (typeof FP !== 'undefined' && FP.user) || {};
+  const orgName = opts.orgName || fpUser.tenantName || 'My Workspace';
+  const orgPlan = opts.orgPlan || fpUser.plan || '';
   const orgInitials = orgName.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
-  const userName = opts.userName || 'Maya Patel';
-  const userEmail = opts.userEmail || 'maya@acmeplatform.com';
+  const userName = opts.userName || fpUser.displayName || fpUser.display_name || fpUser.email || 'User';
+  const userEmail = opts.userEmail || fpUser.email || '';
   const userInit = userName.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
   const isAdmin = role === 'admin';
 
   const userNav = [
     { sec: 'Workspace' },
     { id: 'overview', label: 'Overview', href: 'overview.html', icon: 'home' },
-    { id: 'agents', label: 'Agents', href: 'agents.html', icon: 'cpu', badge: '42' },
-    { id: 'configurations', label: 'Configurations', href: 'configurations.html', icon: 'file', badge: '7' },
+    { id: 'agents', label: 'Agents', href: 'agents.html', icon: 'cpu' },
+    { id: 'configurations', label: 'Configurations', href: 'configurations.html', icon: 'file' },
     { id: 'rollouts', label: 'Rollouts', href: 'rollouts.html', icon: 'rocket', placeholder: true },
     { id: 'flow', label: 'Flow & metrics', href: 'flow.html', icon: 'activity', placeholder: true },
     { id: 'audit', label: 'Audit log', href: 'audit.html', icon: 'list', placeholder: true },
@@ -137,7 +139,6 @@ FB.shell = function (opts) {
     </button>
     <button class="icon-btn" aria-label="Notifications" data-dropdown="notif-menu" style="position: relative;">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 7a4 4 0 1 1 8 0v3l1 2H3l1-2V7z"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/></svg>
-      <span class="dot-indicator"></span>
     </button>
     <div class="profile-wrap">
       <button class="profile" data-dropdown="profile-menu">
@@ -154,13 +155,10 @@ FB.shell = function (opts) {
         ${ isAdmin ? '' : '<a href="team.html">Team</a><a href="billing.html">Plan & billing</a>'}
         <div class="divider"></div>
         <a href="#" onclick="event.preventDefault(); document.documentElement.setAttribute('data-theme', document.documentElement.getAttribute('data-theme')==='dark'?'light':'dark'); localStorage.setItem('fb-theme', document.documentElement.getAttribute('data-theme'));">Toggle theme</a>
-        <a href="${homeHref}">Sign out</a>
+        <a href="#" onclick="event.preventDefault(); if(typeof FP!=='undefined'&&FP.logout){FP.logout().then(function(){window.location.href='${homeHref}';})}else{window.location.href='${homeHref}';}">Sign out</a>
       </div>
       <div class="dropdown" id="notif-menu" style="min-width: 320px;">
-        <div class="meta"><div class="name">Notifications</div><div class="email">3 new</div></div>
-        <a href="#"><div><div style="font-size: 13px;">Rollout v14 finished — 42/42 collectors</div><div class="email" style="margin-top: 2px;">2m ago</div></div></a>
-        <a href="#"><div><div style="font-size: 13px;">otel-gateway-02 offline · 14m</div><div class="email" style="margin-top: 2px;">14m ago</div></div></a>
-        <a href="#"><div><div style="font-size: 13px;">3 collectors drifted from intended config</div><div class="email" style="margin-top: 2px;">1h ago</div></div></a>
+        <div class="meta"><div class="name">Notifications</div><div class="email">No new notifications</div></div>
       </div>
     </div>
   </div>

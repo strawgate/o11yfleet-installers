@@ -1,9 +1,6 @@
 // portal-api.js — Thin API wrapper for user + admin portals.
-// Pages include this script and use FP.api to make calls.
-// In production, API base is auto-detected from the domain:
-//   app.o11yfleet.com  → api.o11yfleet.com
-//   admin.o11yfleet.com → api.o11yfleet.com
-// For local dev, use ?api=http://localhost:8787 or localStorage.
+// Uses cookie-based auth (fp_session cookie set by /auth/login).
+// In production, API base is auto-detected from the domain.
 
 window.FP = window.FP || {};
 
@@ -23,97 +20,141 @@ window.FP = window.FP || {};
     if (host.endsWith('.pages.dev')) {
       return 'https://o11yfleet-worker.o11yfleet.workers.dev';
     }
+    // Local dev
+    if (host === 'localhost' || host === '127.0.0.1') {
+      return 'http://localhost:8787';
+    }
     return '';
   }
 
-  // Read config from URL params or localStorage
-  const tenantId = params.get('tenant') || localStorage.getItem('fp-tenant-id') || '';
   const apiBase = detectApiBase();
-
-  // Persist for subsequent page navigations
-  if (tenantId) localStorage.setItem('fp-tenant-id', tenantId);
   if (apiBase) localStorage.setItem('fp-api-base', apiBase);
 
-  FP.tenantId = tenantId;
   FP.apiBase = apiBase;
 
   // Detect admin mode from admin.css or admin-specific attributes
   FP.isAdmin = document.querySelector('link[href*="admin.css"]') !== null ||
     document.querySelector('.admin-stripe') !== null;
 
-  /** Build headers for API requests */
-  function headers(extra) {
-    const h = { 'Content-Type': 'application/json' };
-    if (FP.isAdmin) {
-      h['X-Admin'] = 'true';
-    } else if (FP.tenantId) {
-      h['X-Tenant-Id'] = FP.tenantId;
+  // User info (populated after /auth/me check)
+  FP.user = JSON.parse(localStorage.getItem('fp-user') || 'null');
+
+  /** Fetch wrapper with credentials (sends cookies) */
+  async function apiFetch(path, opts) {
+    opts = opts || {};
+    opts.credentials = 'include'; // send cookies cross-origin
+    const res = await fetch(FP.apiBase + path, opts);
+    if (res.status === 401 || res.status === 403) {
+      // Session expired — redirect to login
+      localStorage.removeItem('fp-user');
+      if (!window.location.pathname.includes('login')) {
+        window.location.href = FP.isAdmin ? '/admin-login.html' : '/login.html';
+      }
+      throw new Error('Session expired');
     }
-    return Object.assign(h, extra || {});
+    return res;
   }
 
   /** GET JSON from the API */
   FP.get = async function (path) {
-    const res = await fetch(FP.apiBase + path, { headers: headers() });
-    if (!res.ok) throw new Error(`GET ${path}: ${res.status}`);
+    const res = await apiFetch(path);
+    if (!res.ok) throw new Error('GET ' + path + ': ' + res.status);
     return res.json();
   };
 
   /** POST JSON to the API */
   FP.post = async function (path, body) {
-    const res = await fetch(FP.apiBase + path, {
+    const res = await apiFetch(path, {
       method: 'POST',
-      headers: headers(),
+      headers: { 'Content-Type': 'application/json' },
       body: typeof body === 'string' ? body : JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`POST ${path}: ${res.status}`);
+    if (!res.ok) throw new Error('POST ' + path + ': ' + res.status);
     return res.json();
   };
 
   /** POST raw text (YAML upload) */
   FP.postText = async function (path, text) {
-    const h = {};
-    if (FP.isAdmin) h['X-Admin'] = 'true';
-    else if (FP.tenantId) h['X-Tenant-Id'] = FP.tenantId;
-    h['Content-Type'] = 'text/plain';
-    const res = await fetch(FP.apiBase + path, {
-      method: 'POST', headers: h, body: text,
+    const res = await apiFetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain' },
+      body: text,
     });
-    if (!res.ok) throw new Error(`POST ${path}: ${res.status}`);
+    if (!res.ok) throw new Error('POST ' + path + ': ' + res.status);
     return res.json();
   };
 
   /** PUT JSON */
   FP.put = async function (path, body) {
-    const res = await fetch(FP.apiBase + path, {
+    const res = await apiFetch(path, {
       method: 'PUT',
-      headers: headers(),
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) throw new Error(`PUT ${path}: ${res.status}`);
+    if (!res.ok) throw new Error('PUT ' + path + ': ' + res.status);
     return res.json();
   };
 
   /** DELETE */
   FP.del = async function (path) {
-    const res = await fetch(FP.apiBase + path, {
-      method: 'DELETE', headers: headers(),
-    });
-    if (!res.ok) throw new Error(`DELETE ${path}: ${res.status}`);
+    const res = await apiFetch(path, { method: 'DELETE' });
+    if (!res.ok) throw new Error('DELETE ' + path + ': ' + res.status);
     if (res.status === 204) return {};
     return res.json();
   };
 
-  /** Check if API is configured. If not, show a connect bar. */
+  /** Login — POST /auth/login, stores user info */
+  FP.login = async function (email, password) {
+    const res = await fetch(FP.apiBase + '/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+      body: JSON.stringify({ email, password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(function() { return { error: 'Login failed' }; });
+      throw new Error(err.error || 'Login failed');
+    }
+    const data = await res.json();
+    FP.user = data.user;
+    localStorage.setItem('fp-user', JSON.stringify(data.user));
+    return data;
+  };
+
+  /** Logout — POST /auth/logout */
+  FP.logout = async function () {
+    try {
+      await fetch(FP.apiBase + '/auth/logout', { method: 'POST', credentials: 'include' });
+    } catch (e) { /* ignore */ }
+    FP.user = null;
+    localStorage.removeItem('fp-user');
+  };
+
+  /** Check if user is logged in (from cached user or /auth/me) */
+  FP.checkAuth = async function () {
+    if (!FP.apiBase) return false;
+    try {
+      const data = await FP.get('/auth/me');
+      FP.user = data.user;
+      localStorage.setItem('fp-user', JSON.stringify(data.user));
+      return true;
+    } catch (e) {
+      FP.user = null;
+      localStorage.removeItem('fp-user');
+      return false;
+    }
+  };
+
+  /** Check if API is configured and user is logged in */
   FP.ready = function () {
-    return !!(FP.tenantId && FP.apiBase);
+    return !!(FP.apiBase && FP.user);
   };
 
   /** Relative time helper */
   FP.relTime = function (iso) {
     if (!iso) return '—';
-    const d = new Date(iso);
-    const diff = Date.now() - d.getTime();
+    var d = new Date(iso);
+    var diff = Date.now() - d.getTime();
     if (diff < 60000) return Math.max(1, Math.floor(diff / 1000)) + 's ago';
     if (diff < 3600000) return Math.floor(diff / 60000) + 'm ago';
     if (diff < 86400000) return Math.floor(diff / 3600000) + 'h ago';
@@ -126,26 +167,25 @@ window.FP = window.FP || {};
     return s.length > n ? s.slice(0, n) + '…' : s;
   };
 
-  /** Show a connect banner if API is not configured */
+  /** Show a connect banner if not logged in */
   FP.showConnectBarIfNeeded = function () {
     if (FP.ready()) return;
-    const bar = document.createElement('div');
+    var bar = document.createElement('div');
     bar.className = 'banner warn mb-6';
     bar.style.margin = '18px';
-    bar.innerHTML = `
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
-      <div>
-        <div class="b-title">Not connected to API</div>
-        <div class="b-body">Add <code>?tenant=UUID&api=http://localhost:8787</code> to connect.</div>
-      </div>`;
-    const main = document.querySelector('.main .main-wide');
+    if (!FP.apiBase) {
+      bar.innerHTML = '<div><div class="b-title">API not configured</div><div class="b-body">Add <code>?api=http://localhost:8787</code> to connect.</div></div>';
+    } else {
+      bar.innerHTML = '<div><div class="b-title">Not logged in</div><div class="b-body"><a href="/login.html">Sign in</a> to see your data.</div></div>';
+    }
+    var main = document.querySelector('.main .main-wide');
     if (main) main.prepend(bar);
   };
 
   /** Auto-refresh: call fn every intervalMs, returns stop function */
   FP.autoRefresh = function (fn, intervalMs) {
     fn(); // initial call
-    const id = setInterval(fn, intervalMs || 10000);
+    var id = setInterval(fn, intervalMs || 10000);
     return function stop() { clearInterval(id); };
   };
 })();

@@ -59,6 +59,12 @@
     </div>
   </div>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
+<script src="../portal-shell-render.js"></script>
+<script>
+FB.shell({ current: 'getting-started', crumbs: [{label:'Setup'},{label:'Onboarding'}], prototype: 'Onboarding wizard shows sample data. Use Getting Started page for real setup.' });
+(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();
+</script>
 </body>
 </html>

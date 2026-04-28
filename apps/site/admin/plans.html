@@ -31,8 +31,10 @@
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script>FB.shell({ role:'admin', current:'plans', userName:'Sam Okafor', userEmail:'sam@o11yfleet.com', crumbs:[{label:'Plans'},{label:'Plans & pricing'}], prototype: 'Plan data is hardcoded. Plan management requires billing integration.' });</script>
+<script>FB.shell({ role:'admin', current:'plans', crumbs:[{label:'Plans'},{label:'Plans & pricing'}], prototype: 'Plan data is hardcoded. Plan management requires billing integration.' });</script>
+<script>(async function(){ var authed = await FP.checkAuth(); if (!authed) return; })();</script>
 </body>
 </html>

@@ -3,6 +3,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { decodeFrame } from "@o11yfleet/core/codec";
+import { apiFetch } from "./helpers.js";
 import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { AgentCapabilities, ServerToAgentFlags } from "@o11yfleet/core/codec";
 import { runInDurableObject } from "cloudflare:test";
@@ -36,7 +37,7 @@ beforeAll(setupD1);
 describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
   it("complete lifecycle: enrollment → claim → initial OpAMP response", async () => {
     // 1. Create tenant
-    const tenantRes = await exports.default.fetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "E2E Corp" }),
       headers: { "Content-Type": "application/json" },
@@ -45,7 +46,7 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     // 2. Create config
-    const configRes = await exports.default.fetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "prod-collectors" }),
       headers: { "Content-Type": "application/json" },
@@ -55,14 +56,14 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
 
     // 3. Upload YAML v1
     const yamlV1 = "receivers:\n  otlp:\n    protocols:\n      grpc:\n";
-    const uploadRes = await exports.default.fetch(
+    const uploadRes = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: yamlV1 },
     );
     expect(uploadRes.status).toBe(201);
 
     // 4. Create enrollment token
-    const tokenRes = await exports.default.fetch(
+    const tokenRes = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
@@ -74,7 +75,7 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     const tokenBody = await tokenRes.json<{ token: string }>();
 
     // 5. Agent connects with enrollment token
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${tokenBody.token}`,
@@ -109,27 +110,27 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
 // ========================
 describe("E2E Scenario #1: New enrollment", () => {
   it("enrollment token → claim → connected", async () => {
-    const tenantRes = await exports.default.fetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Scenario 1" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await exports.default.fetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s1-config" }),
       headers: { "Content-Type": "application/json" },
     });
     const config = await configRes.json<{ id: string }>();
 
-    const tokenRes = await exports.default.fetch(
+    const tokenRes = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-token`,
       { method: "POST", body: JSON.stringify({}), headers: { "Content-Type": "application/json" } },
     );
     const { token } = await tokenRes.json<{ token: string }>();
 
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket", "Authorization": `Bearer ${token}` },
     });
     expect(wsRes.status).toBe(101);
@@ -158,7 +159,7 @@ describe("E2E Scenario #2: Reconnect with claim", () => {
     };
     const signed = await signClaim(claim, CLAIM_SECRET);
 
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket", "Authorization": `Bearer ${signed}` },
     });
     expect(wsRes.status).toBe(101);
@@ -264,7 +265,7 @@ describe("E2E Scenario #5: Disconnect tracking", () => {
     };
     const signed = await signClaim(claim, CLAIM_SECRET);
 
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket", "Authorization": `Bearer ${signed}` },
     });
     const ws = wsRes.webSocket!;
@@ -331,14 +332,14 @@ describe("E2E Scenario #7: Queue consumer idempotency", () => {
 
 describe("E2E Scenario #8: R2 dedup", () => {
   it("same YAML → deduplicated on second upload", async () => {
-    const tenantRes = await exports.default.fetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "S8 Corp" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await exports.default.fetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s8-config" }),
       headers: { "Content-Type": "application/json" },
@@ -347,13 +348,13 @@ describe("E2E Scenario #8: R2 dedup", () => {
 
     const yaml = "processors:\n  batch:\n    timeout: 10s\n";
 
-    const r1 = await exports.default.fetch(
+    const r1 = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: yaml },
     );
     const b1 = await r1.json<{ hash: string; deduplicated: boolean }>();
 
-    const r2 = await exports.default.fetch(
+    const r2 = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: yaml },
     );
@@ -367,7 +368,7 @@ describe("E2E Scenario #8: R2 dedup", () => {
 
 describe("E2E Scenario #9: Free-tier config limits", () => {
   it("6th config rejected on free tier", async () => {
-    const tenantRes = await exports.default.fetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "S9 Limited" }),
       headers: { "Content-Type": "application/json" },
@@ -375,7 +376,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     for (let i = 0; i < 5; i++) {
-      const r = await exports.default.fetch("http://localhost/api/configurations", {
+      const r = await apiFetch("http://localhost/api/configurations", {
         method: "POST",
         body: JSON.stringify({ tenant_id: tenant.id, name: `s9-cfg-${i}` }),
         headers: { "Content-Type": "application/json" },
@@ -383,7 +384,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
       expect(r.status).toBe(201);
     }
 
-    const res = await exports.default.fetch("http://localhost/api/configurations", {
+    const res = await apiFetch("http://localhost/api/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s9-overflow" }),
       headers: { "Content-Type": "application/json" },
@@ -396,7 +397,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
 
 describe("E2E Scenario #10: Auth failures", () => {
   it("invalid claim returns 401", async () => {
-    const res = await exports.default.fetch("http://localhost/v1/opamp", {
+    const res = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket", "Authorization": "Bearer invalid.claim" },
     });
     expect(res.status).toBe(401);
@@ -414,7 +415,7 @@ describe("E2E Scenario #10: Auth failures", () => {
     };
     const signed = await signClaim(claim, CLAIM_SECRET);
 
-    const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
+    const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         "Upgrade": "websocket",
         "Authorization": `Bearer ${signed}`,
@@ -427,7 +428,7 @@ describe("E2E Scenario #10: Auth failures", () => {
   });
 
   it("missing authorization returns 401", async () => {
-    const res = await exports.default.fetch("http://localhost/v1/opamp", {
+    const res = await apiFetch("http://localhost/v1/opamp", {
       headers: { "Upgrade": "websocket" },
     });
     expect(res.status).toBe(401);

@@ -1,5 +1,6 @@
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
+import { apiFetch } from "./helpers.js";
 
 // Apply D1 migrations before tests
 beforeAll(async () => {
@@ -12,7 +13,7 @@ beforeAll(async () => {
 
 // Helper to create a tenant
 async function createTenant(name = "Test Corp") {
-  const res = await exports.default.fetch("http://localhost/api/tenants", {
+  const res = await apiFetch("http://localhost/api/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
     headers: { "Content-Type": "application/json" },
@@ -22,7 +23,7 @@ async function createTenant(name = "Test Corp") {
 
 // Helper to create a config
 async function createConfig(tenantId: string, name = "test-config") {
-  const res = await exports.default.fetch("http://localhost/api/configurations", {
+  const res = await apiFetch("http://localhost/api/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, name }),
     headers: { "Content-Type": "application/json" },
@@ -32,7 +33,7 @@ async function createConfig(tenantId: string, name = "test-config") {
 
 // Helper to create enrollment token
 async function createToken(configId: string) {
-  const res = await exports.default.fetch(
+  const res = await apiFetch(
     `http://localhost/api/configurations/${configId}/enrollment-token`,
     {
       method: "POST",
@@ -50,7 +51,7 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-test");
     const config = await createConfig(tenant.id);
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       {
         method: "POST",
@@ -67,7 +68,7 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-scalar");
     const config = await createConfig(tenant.id);
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       {
         method: "POST",
@@ -84,7 +85,7 @@ describe("YAML validation", () => {
     const tenant = await createTenant("yaml-valid");
     const config = await createConfig(tenant.id);
 
-    const response = await exports.default.fetch(
+    const response = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       {
         method: "POST",
@@ -103,7 +104,7 @@ describe("Tenant CRUD", () => {
     await createTenant("list-test-1");
     await createTenant("list-test-2");
 
-    const res = await exports.default.fetch("http://localhost/api/tenants");
+    const res = await apiFetch("http://localhost/api/tenants");
     expect(res.status).toBe(200);
     const body = await res.json<{ tenants: Array<{ name: string }> }>();
     expect(body.tenants.length).toBeGreaterThanOrEqual(2);
@@ -111,7 +112,7 @@ describe("Tenant CRUD", () => {
 
   it("GET /api/tenants/:id returns a specific tenant", async () => {
     const tenant = await createTenant("get-test");
-    const res = await exports.default.fetch(`http://localhost/api/tenants/${tenant.id}`);
+    const res = await apiFetch(`http://localhost/api/tenants/${tenant.id}`);
     expect(res.status).toBe(200);
     const body = await res.json<{ id: string; name: string }>();
     expect(body.id).toBe(tenant.id);
@@ -119,13 +120,13 @@ describe("Tenant CRUD", () => {
   });
 
   it("GET /api/tenants/nonexistent returns 404", async () => {
-    const res = await exports.default.fetch("http://localhost/api/tenants/does-not-exist");
+    const res = await apiFetch("http://localhost/api/tenants/does-not-exist");
     expect(res.status).toBe(404);
   });
 
   it("PUT /api/tenants/:id updates name", async () => {
     const tenant = await createTenant("before-update");
-    const res = await exports.default.fetch(`http://localhost/api/tenants/${tenant.id}`, {
+    const res = await apiFetch(`http://localhost/api/tenants/${tenant.id}`, {
       method: "PUT",
       body: JSON.stringify({ name: "after-update" }),
       headers: { "Content-Type": "application/json" },
@@ -137,13 +138,13 @@ describe("Tenant CRUD", () => {
 
   it("DELETE /api/tenants/:id deletes an empty tenant", async () => {
     const tenant = await createTenant("delete-me");
-    const res = await exports.default.fetch(`http://localhost/api/tenants/${tenant.id}`, {
+    const res = await apiFetch(`http://localhost/api/tenants/${tenant.id}`, {
       method: "DELETE",
     });
     expect(res.status).toBe(204);
 
     // Verify it's gone
-    const check = await exports.default.fetch(`http://localhost/api/tenants/${tenant.id}`);
+    const check = await apiFetch(`http://localhost/api/tenants/${tenant.id}`);
     expect(check.status).toBe(404);
   });
 
@@ -151,7 +152,7 @@ describe("Tenant CRUD", () => {
     const tenant = await createTenant("has-configs");
     await createConfig(tenant.id, "blocking-config");
 
-    const res = await exports.default.fetch(`http://localhost/api/tenants/${tenant.id}`, {
+    const res = await apiFetch(`http://localhost/api/tenants/${tenant.id}`, {
       method: "DELETE",
     });
     expect(res.status).toBe(409);
@@ -167,7 +168,7 @@ describe("Configuration CRUD", () => {
     const tenant = await createTenant("config-update");
     const config = await createConfig(tenant.id, "old-name");
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}`,
       {
         method: "PUT",
@@ -185,11 +186,11 @@ describe("Configuration CRUD", () => {
     const config = await createConfig(tenant.id, "to-delete");
 
     // Upload a version + create a token so there's stuff to cascade
-    await exports.default.fetch(
+    await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: "key: value\n", headers: { "Content-Type": "text/yaml" } },
     );
-    await exports.default.fetch(
+    await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
@@ -198,14 +199,14 @@ describe("Configuration CRUD", () => {
       },
     );
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}`,
       { method: "DELETE" },
     );
     expect(res.status).toBe(204);
 
     // Verify it's gone
-    const check = await exports.default.fetch(
+    const check = await apiFetch(
       `http://localhost/api/configurations/${config.id}`,
     );
     expect(check.status).toBe(404);
@@ -220,16 +221,16 @@ describe("Config Versions", () => {
     const config = await createConfig(tenant.id, "with-versions");
 
     // Upload 2 versions
-    await exports.default.fetch(
+    await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: "version: one\n", headers: { "Content-Type": "text/yaml" } },
     );
-    await exports.default.fetch(
+    await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
       { method: "POST", body: "version: two\n", headers: { "Content-Type": "text/yaml" } },
     );
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}/versions`,
     );
     expect(res.status).toBe(200);
@@ -253,7 +254,7 @@ describe("Token revocation", () => {
     await createToken(config.id);
     await createToken(config.id);
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens`,
     );
     expect(res.status).toBe(200);
@@ -266,7 +267,7 @@ describe("Token revocation", () => {
     const config = await createConfig(tenant.id, "revoke-test");
     const token = await createToken(config.id);
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens/${token.id}`,
       { method: "DELETE" },
     );
@@ -275,7 +276,7 @@ describe("Token revocation", () => {
     expect(body.revoked).toBe(true);
 
     // Verify it shows as revoked in the list
-    const listRes = await exports.default.fetch(
+    const listRes = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens`,
     );
     const list = await listRes.json<{ tokens: Array<{ id: string; revoked_at: string | null }> }>();
@@ -289,13 +290,13 @@ describe("Token revocation", () => {
     const token = await createToken(config.id);
 
     // First revoke
-    await exports.default.fetch(
+    await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens/${token.id}`,
       { method: "DELETE" },
     );
 
     // Second revoke
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens/${token.id}`,
       { method: "DELETE" },
     );
@@ -306,7 +307,7 @@ describe("Token revocation", () => {
     const tenant = await createTenant("token-404");
     const config = await createConfig(tenant.id, "missing-token");
 
-    const res = await exports.default.fetch(
+    const res = await apiFetch(
       `http://localhost/api/configurations/${config.id}/enrollment-tokens/does-not-exist`,
       { method: "DELETE" },
     );
@@ -318,7 +319,7 @@ describe("Token revocation", () => {
 
 describe("Consistent error contract", () => {
   it("returns { error } for invalid JSON body", async () => {
-    const res = await exports.default.fetch("http://localhost/api/tenants", {
+    const res = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: "not json at all",
       headers: { "Content-Type": "application/json" },
@@ -330,7 +331,7 @@ describe("Consistent error contract", () => {
   });
 
   it("returns { error } for missing required fields", async () => {
-    const res = await exports.default.fetch("http://localhost/api/tenants", {
+    const res = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({}),
       headers: { "Content-Type": "application/json" },
@@ -341,14 +342,14 @@ describe("Consistent error contract", () => {
   });
 
   it("returns { error } for 404 routes", async () => {
-    const res = await exports.default.fetch("http://localhost/api/nonexistent");
+    const res = await apiFetch("http://localhost/api/nonexistent");
     expect(res.status).toBe(404);
     const body = await res.json<{ error: string }>();
     expect(body.error).toBe("Not found");
   });
 
   it("returns { error } for invalid plan", async () => {
-    const res = await exports.default.fetch("http://localhost/api/tenants", {
+    const res = await apiFetch("http://localhost/api/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "test", plan: "invalid-plan" }),
       headers: { "Content-Type": "application/json" },

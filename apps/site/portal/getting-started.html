@@ -16,71 +16,170 @@
       <div class="page-head">
         <div>
           <h1>Getting started</h1>
-          <div class="sub">Connect your first collector. You'll be done in about a minute.</div>
+          <div class="sub">Connect your first collector in under a minute.</div>
         </div>
       </div>
 
-      <div class="banner info mb-6">
-        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.01" stroke-linecap="round"/></svg>
-        <div><div class="b-title">Workspace ID</div><div class="b-body t-mono">ws_acme_5f3a91d2</div></div>
-        <div class="b-actions"><button class="copy" data-copy="ws_acme_5f3a91d2">copy</button></div>
+      <h3 style="font-size: 15px; font-weight: 500; margin-bottom: 10px;">1. Choose a configuration</h3>
+      <div class="card card-pad" id="config-picker" style="padding: 14px;">
+        <p class="t-muted text-sm">Loading configurations…</p>
       </div>
 
-      <h3 style="font-size: 15px; font-weight: 500; margin-bottom: 10px;">1. Pick your platform</h3>
+      <h3 style="font-size: 15px; font-weight: 500; margin: 28px 0 10px;">2. Enrollment token</h3>
+      <div class="card card-pad" id="token-display" style="padding: 14px;">
+        <p class="t-muted text-sm">Select a configuration first.</p>
+      </div>
+
+      <h3 style="font-size: 15px; font-weight: 500; margin: 28px 0 10px;">3. Install &amp; connect a collector</h3>
+      <p class="t-muted text-sm" style="margin-bottom: 12px;">Use our test client to verify the connection, or run an OpenTelemetry Collector with OpAMP supervisor.</p>
+
       <div data-tabs="install" class="tabs">
-        <button class="tab active" data-tab="docker">Docker</button>
-        <button class="tab" data-tab="k8s">Kubernetes</button>
-        <button class="tab" data-tab="systemd">systemd</button>
-        <button class="tab" data-tab="binary">Binary</button>
+        <button class="tab active" data-tab="test-client">Test client</button>
+        <button class="tab" data-tab="supervisor">OpAMP Supervisor</button>
       </div>
 
-      <div data-tab-panel="docker" data-tabs-group="install" class="tab-panel active">
-        <div class="code-block"><button class="copy" data-copy="docker run">copy</button>docker run -d --name otel-collector \
-  -e O11Y_TOKEN=<span style="color: var(--accent);">tok_live_a91f3b2c8e</span> \
-  -e O11Y_LABELS=<span class="s">"env=staging,role=edge"</span> \
-  -p 4317:4317 -p 4318:4318 \
-  ghcr.io/o11yfleet/otelcol-managed:0.105</div>
+      <div data-tab-panel="test-client" data-tabs-group="install" class="tab-panel active">
+        <p class="t-muted text-sm" style="margin-bottom: 8px;">The test client connects via OpAMP WebSocket, enrolls with your token, and receives configuration from O11yFleet. Run from the repository root:</p>
+        <div class="code-block" id="cmd-test-client"><button class="copy" data-copy="">copy</button>npx tsx scripts/fake-collector.ts \
+  --token <span class="tok-val" style="color: var(--accent);">SELECT_CONFIG_ABOVE</span> \
+  --name my-collector-01</div>
       </div>
-      <div data-tab-panel="k8s" data-tabs-group="install" class="tab-panel">
-        <div class="code-block"><button class="copy" data-copy="kubectl">copy</button>kubectl create secret generic o11y-token \
-  --from-literal=token=<span style="color: var(--accent);">tok_live_a91f3b2c8e</span>
+      <div data-tab-panel="supervisor" data-tabs-group="install" class="tab-panel">
+        <p class="t-muted text-sm" style="margin-bottom: 8px;">The <a href="https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/cmd/opampsupervisor" style="color:var(--accent);">OpAMP Supervisor</a> manages a real OpenTelemetry Collector and connects it to O11yFleet for remote configuration.</p>
+        <p class="t-muted text-sm" style="margin-bottom: 8px;">1. Create a supervisor config file <code>supervisor.yaml</code>:</p>
+        <div class="code-block"><button class="copy" data-copy="">copy</button>server:
+  endpoint: wss://api.o11yfleet.com/v1/opamp
+  headers:
+    Authorization: "Bearer <span class="tok-val" style="color: var(--accent);">SELECT_CONFIG_ABOVE</span>"
 
-helm install otel-collector o11yfleet/otelcol-managed \
-  --set workspace=ws_acme_5f3a91d2 \
-  --set labels.env=staging</div>
-      </div>
-      <div data-tab-panel="systemd" data-tabs-group="install" class="tab-panel">
-        <div class="code-block"><button class="copy" data-copy="curl">copy</button>curl -fsSL https://get.o11yfleet.com | bash -s -- \
-  --token <span style="color: var(--accent);">tok_live_a91f3b2c8e</span> \
-  --labels env=staging,role=edge</div>
-      </div>
-      <div data-tab-panel="binary" data-tabs-group="install" class="tab-panel">
-        <div class="code-block"><button class="copy" data-copy="otelcol">copy</button>./otelcol-managed \
-  --workspace ws_acme_5f3a91d2 \
-  --token <span style="color: var(--accent);">tok_live_a91f3b2c8e</span></div>
+agent:
+  executable: /usr/local/bin/otelcol-contrib</div>
+        <p class="t-muted text-sm" style="margin: 8px 0;">2. Run the supervisor:</p>
+        <div class="code-block"><button class="copy" data-copy="">copy</button>opampsupervisor --config supervisor.yaml</div>
       </div>
 
-      <h3 style="font-size: 15px; font-weight: 500; margin: 28px 0 10px;">2. Waiting for first heartbeat…</h3>
-      <div class="card card-pad" style="padding: 18px; display: flex; align-items: center; gap: 14px;">
-        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--accent-soft); display: flex; align-items: center; justify-content: center;">
-          <span class="dot dot-ok dot-pulse"></span>
+      <h3 style="font-size: 15px; font-weight: 500; margin: 28px 0 10px;">4. Waiting for first heartbeat…</h3>
+      <div class="card card-pad" id="heartbeat-status" style="padding: 18px; display: flex; align-items: center; gap: 14px;">
+        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--surface-2); display: flex; align-items: center; justify-content: center;">
+          <span class="dot dot-warn dot-pulse"></span>
         </div>
         <div style="flex: 1;">
-          <div class="t-mono text-sm">listening for collector check-in…</div>
-          <div class="t-muted text-sm">This page will update automatically.</div>
+          <div class="t-mono text-sm">No agents connected yet</div>
+          <div class="t-muted text-sm">Run the command above, then this page updates automatically.</div>
         </div>
-        <button class="btn btn-ghost btn-sm" onclick="this.closest('.card').querySelector('.t-mono').textContent='✓ otel-edge-01.staging connected'; this.closest('.card').style.borderColor='var(--accent-line)'; toast('Collector connected', 'otel-edge-01.staging is online.');">Simulate</button>
       </div>
 
       <div class="flex-row justify-between mt-8">
         <a href="overview.html" class="btn btn-ghost">Skip</a>
-        <a href="overview.html" class="btn btn-primary">Done →</a>
+        <a href="agents.html" class="btn btn-primary">View agents →</a>
       </div>
     </div>
   </main>
 </div>
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script>FB.shell({ current: 'getting-started', crumbs: [{label:'Setup'},{label:'Getting started'}], prototype: 'This guide uses sample workspace IDs and tokens. Real onboarding requires auth integration.' });</script>
+<script>
+FB.shell({ current: 'getting-started', crumbs: [{label:'Setup'},{label:'Getting started'}] });
+
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
+
+  var selectedConfigId = null;
+  var pickerEl = document.getElementById('config-picker');
+  var tokenEl = document.getElementById('token-display');
+
+  function esc(s) { var d = document.createElement('div'); d.textContent = s || ''; return d.innerHTML; }
+
+  function updateCommands(token) {
+    var spans = document.querySelectorAll('.tok-val');
+    for (var i = 0; i < spans.length; i++) spans[i].textContent = token || 'SELECT_CONFIG_ABOVE';
+    document.querySelectorAll('.code-block').forEach(function(block) {
+      var btn = block.querySelector('.copy');
+      if (btn) btn.setAttribute('data-copy', block.textContent.replace(/^copy/, '').trim());
+    });
+  }
+
+  // Load configurations
+  try {
+    var configData = await FP.get('/api/v1/configurations');
+    var configs = configData.configurations || [];
+    if (configs.length === 0) {
+      pickerEl.innerHTML = '<p class="t-muted text-sm">No configurations yet. <a href="configurations.html">Create one</a> first.</p>';
+      return;
+    }
+    pickerEl.innerHTML = '<select id="config-select" class="select" style="width: 100%;">' +
+      '<option value="">— Select a configuration —</option>' +
+      configs.map(function(c) { return '<option value="' + esc(c.id) + '">' + esc(c.name) + '</option>'; }).join('') +
+      '</select>';
+
+    var select = document.getElementById('config-select');
+    if (configs.length === 1) {
+      select.value = configs[0].id;
+      await loadToken(configs[0].id);
+    }
+    select.addEventListener('change', async function() {
+      if (this.value) await loadToken(this.value);
+    });
+  } catch (e) {
+    pickerEl.innerHTML = '<p style="color: var(--err);">Failed to load configurations</p>';
+  }
+
+  async function loadToken(configId) {
+    selectedConfigId = configId;
+    tokenEl.innerHTML = '<p class="t-muted text-sm">Loading tokens…</p>';
+    try {
+      var data = await FP.get('/api/v1/configurations/' + configId + '/enrollment-tokens');
+      var tokens = data.tokens || [];
+      var active = tokens.filter(function(t) { return !t.revoked_at; });
+
+      tokenEl.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
+        (active.length > 0
+          ? '<p class="t-muted text-sm">' + active.length + ' active token' + (active.length !== 1 ? 's' : '') + '. Generate a new one or use an existing token from when it was created.</p>'
+          : '<p class="t-muted text-sm">No tokens found for this configuration.</p>') +
+        '<button class="btn btn-secondary btn-sm" id="create-token-btn" style="align-self:flex-start;">Generate new enrollment token</button>' +
+        '<div id="new-token-display"></div></div>';
+
+      document.getElementById('create-token-btn').addEventListener('click', async function() {
+        try {
+          var newToken = await FP.post('/api/v1/configurations/' + configId + '/enrollment-token', { label: 'getting-started' });
+          var raw = newToken.raw_token;
+          document.getElementById('new-token-display').innerHTML =
+            '<div class="code-block" style="margin-top:4px;"><button class="copy" data-copy="' + esc(raw) + '">copy</button>' + esc(raw) + '</div>' +
+            '<p class="t-muted text-sm" style="margin-top:4px;">Copy this token now — it won\'t be shown again.</p>';
+          updateCommands(raw);
+        } catch (e) {
+          document.getElementById('new-token-display').innerHTML = '<p style="color:var(--err);">Failed: ' + esc(e.message) + '</p>';
+        }
+      });
+
+      updateCommands(active.length > 0 ? 'YOUR_ENROLLMENT_TOKEN' : 'GENERATE_TOKEN_ABOVE');
+    } catch (e) {
+      tokenEl.innerHTML = '<p style="color:var(--err);">Failed to load tokens: ' + esc(e.message) + '</p>';
+    }
+  }
+
+  // Poll for connected agents
+  var heartbeatEl = document.getElementById('heartbeat-status');
+  async function checkAgents() {
+    if (!selectedConfigId) return;
+    try {
+      var data = await FP.get('/api/v1/configurations/' + selectedConfigId + '/stats');
+      var total = data.total_agents || 0;
+      var connected = data.connected_agents || 0;
+      if (total > 0) {
+        heartbeatEl.innerHTML =
+          '<div style="width:32px;height:32px;border-radius:50%;background:var(--accent-soft);display:flex;align-items:center;justify-content:center;"><span class="dot dot-ok"></span></div>' +
+          '<div style="flex:1;"><div class="t-mono text-sm" style="color:var(--accent);">✓ ' + total + ' agent' + (total !== 1 ? 's' : '') + ' enrolled' + (connected > 0 ? ' · ' + connected + ' connected now' : '') + '</div>' +
+          '<div class="t-muted text-sm">Your collector is communicating with O11yFleet.</div></div>';
+        heartbeatEl.style.borderColor = 'var(--accent-line)';
+      }
+    } catch (e) { /* ignore */ }
+  }
+  setInterval(checkAgents, 5000);
+  checkAgents();
+})();
+</script>
 </body>
 </html>

@@ -59,6 +59,15 @@ async function routeV1Request(
   if (path === "/api/v1/tenant" && method === "GET") {
     return handleGetTenant(env, tenantId);
   }
+  if (path === "/api/v1/tenant" && method === "PUT") {
+    return handleUpdateTenant(request, env, tenantId);
+  }
+
+  // ─── Overview (aggregate stats) ────────────────────────────
+
+  if (path === "/api/v1/overview" && method === "GET") {
+    return handleGetOverview(env, tenantId);
+  }
 
   // ─── Configurations ────────────────────────────────────────
 
@@ -113,6 +122,11 @@ async function routeV1Request(
   const agentsMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/agents$/);
   if (agentsMatch && method === "GET") {
     return handleListAgents(env, tenantId, agentsMatch[1]!);
+  }
+
+  const agentDetailMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)$/);
+  if (agentDetailMatch && method === "GET") {
+    return handleGetAgent(env, tenantId, agentDetailMatch[1]!, agentDetailMatch[2]!);
   }
 
   const statsMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/stats$/);
@@ -470,4 +484,73 @@ async function handleRollout(
       headers: { "Content-Type": "application/json" },
     }),
   );
+}
+
+// ─── Overview (aggregate stats) ─────────────────────────────────────
+
+async function handleGetOverview(env: Env, tenantId: string): Promise<Response> {
+  const tenant = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?").bind(tenantId).first();
+  if (!tenant) return jsonError("Tenant not found", 404);
+
+  const configs = await env.FP_DB.prepare(
+    "SELECT id, name, current_config_hash, created_at, updated_at FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC",
+  ).bind(tenantId).all();
+
+  let totalAgents = 0;
+  let connectedAgents = 0;
+  let healthyAgents = 0;
+
+  const configStats: Array<Record<string, unknown>> = [];
+  for (const config of configs.results) {
+    try {
+      const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, config['id'] as string));
+      const stub = env.CONFIG_DO.get(doId);
+      const statsResp = await stub.fetch(new Request("http://internal/stats"));
+      const stats = await statsResp.json() as Record<string, number>;
+      totalAgents += stats['total'] ?? 0;
+      connectedAgents += stats['connected'] ?? 0;
+      healthyAgents += stats['healthy'] ?? 0;
+      configStats.push({ ...config, stats });
+    } catch {
+      configStats.push({ ...config, stats: { total: 0, connected: 0, healthy: 0 } });
+    }
+  }
+
+  return Response.json({
+    tenant,
+    total_agents: totalAgents,
+    connected_agents: connectedAgents,
+    healthy_agents: healthyAgents,
+    configs_count: configs.results.length,
+    configurations: configStats,
+  });
+}
+
+// ─── Update Tenant ──────────────────────────────────────────────────
+
+async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
+  const tenant = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?").bind(tenantId).first();
+  if (!tenant) return jsonError("Tenant not found", 404);
+  const body = await parseJsonBody<{ name?: string }>(request);
+  if (body.name && typeof body.name === "string" && body.name.trim().length > 0) {
+    await env.FP_DB.prepare("UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?")
+      .bind(body.name.trim(), tenantId).run();
+  }
+  const updated = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?").bind(tenantId).first();
+  return Response.json(updated);
+}
+
+// ─── Agent Detail ───────────────────────────────────────────────────
+
+async function handleGetAgent(env: Env, tenantId: string, configId: string, agentUid: string): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  const agentsResp = await stub.fetch(new Request("http://internal/agents"));
+  const data = await agentsResp.json() as { agents: Array<Record<string, unknown>> };
+  const agent = data.agents.find((a) => a['instance_uid'] === agentUid);
+  if (!agent) return jsonError("Agent not found", 404);
+  return Response.json(agent);
 }

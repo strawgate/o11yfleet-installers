@@ -15,9 +15,7 @@
     <div class="main-wide">
       <div class="page-head">
         <div>
-          <div class="flex-row gap-sm" style="margin-bottom: 6px;">
-            <span class="tag" style="border-color: var(--accent-line); color: var(--accent);">Git · otel-configs/main</span>
-            <span class="tag tag-ok"><span class="dot dot-ok"></span>12/12 in sync</span>
+          <div class="flex-row gap-sm" style="margin-bottom: 6px;" id="config-tags">
           </div>
           <h1><span contenteditable class="inline-edit">prod-ingress</span></h1>
           <div class="sub">Latest <span class="t-mono">v14</span> · 12 collectors targeted by <span class="t-mono">env=production,role=ingress</span></div>
@@ -65,6 +63,10 @@
       </div>
 
       <div data-tab-panel="rollouts" data-tabs-group="cfg" class="tab-panel">
+        <div class="banner warn mb-4">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><div class="b-title">Prototype</div><div class="b-body">Rollouts are not yet implemented. The data below is sample data.</div></div>
+        </div>
         <div class="dt-card">
           <div class="dt-toolbar"><span class="count">23 rollouts</span></div>
           <table class="dt">
@@ -79,6 +81,10 @@
       </div>
 
       <div data-tab-panel="yaml" data-tabs-group="cfg" class="tab-panel">
+        <div class="banner warn mb-4">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><div class="b-title">Prototype</div><div class="b-body">YAML preview shows sample data. Actual configuration content will be displayed here when YAML storage is implemented.</div></div>
+        </div>
         <div class="code-block"><button class="copy" data-copy="receivers...">copy</button><span class="c"># prod-ingress.yaml · v14</span>
 <span class="k">receivers</span>:
   <span class="k">otlp</span>:
@@ -111,6 +117,10 @@
       </div>
 
       <div data-tab-panel="settings" data-tabs-group="cfg" class="tab-panel">
+        <div class="banner warn mb-4">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M8 2L1.5 13.5h13z"/><path d="M8 6.5v3M8 11.5v.01" stroke-linecap="round"/></svg>
+          <div><div class="b-title">Prototype</div><div class="b-body">Configuration settings (source, rollout strategy) are not yet functional.</div></div>
+        </div>
         <div class="card card-pad" style="padding: 24px; max-width: 720px;">
           <h3 style="font-size: 16px; font-weight: 500;">Source</h3>
           <p class="t-muted text-sm mt-2">This configuration is backed by GitHub. Changes flow through pull requests in <span class="t-mono">otel-configs/main</span>.</p>
@@ -141,7 +151,7 @@
       <div class="field"><label>Targets</label><div class="banner info"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 8.5l3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg><div><div class="b-title">12 collectors will receive v14</div><div class="b-body t-muted">env=production,role=ingress</div></div></div></div>
       <div class="field"><label>Notify</label><label class="flex-row gap-sm text-sm"><input type="checkbox" checked /> #platform-otel on Slack</label></div>
     </div>
-    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" data-close-modal onclick="toast('Rollout started', 'v14 → 12 collectors. Canary at 10%.');">Start rollout</button></div>
+    <div class="modal-foot"><button class="btn btn-ghost" data-close-modal>Cancel</button><button class="btn btn-primary" id="rollout-submit">Start rollout</button></div>
   </div>
 </div>
 
@@ -156,19 +166,20 @@
   </div>
 </div>
 
+<script src="../portal-api.js"></script>
 <script src="../portal-shell.js"></script>
 <script src="../portal-shell-render.js"></script>
-<script src="../portal-api.js"></script>
 <script>
-(function () {
+(async function () {
+  var authed = await FP.checkAuth();
+  if (!authed) return;
   const configId = new URLSearchParams(window.location.search).get('id');
-  FP.showConnectBarIfNeeded();
 
   function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 
   // Load config metadata
   async function loadConfig() {
-    if (!FP.ready() || !configId) return;
+    if (!configId) return;
     try {
       const c = await FP.get('/api/v1/configurations/' + configId);
       document.querySelector('.inline-edit').textContent = c.name || configId;
@@ -182,7 +193,7 @@
 
   // Load agents tab
   async function loadAgents() {
-    if (!FP.ready() || !configId) return;
+    if (!configId) return;
     const tbody = document.getElementById('agents-rows');
     const countEl = document.querySelector('[data-tab="agents"] .count');
     try {
@@ -216,7 +227,7 @@
 
   // Load versions tab
   async function loadVersions() {
-    if (!FP.ready() || !configId) return;
+    if (!configId) return;
     const tbody = document.getElementById('versions-rows');
     const countEl = document.querySelector('[data-tab="versions"] .count');
     try {
@@ -246,7 +257,7 @@
 
   // Rollout button
   document.querySelector('#rollout-modal .btn-primary').addEventListener('click', async () => {
-    if (!FP.ready() || !configId) return;
+    if (!configId) return;
     try {
       const result = await FP.post('/api/v1/configurations/' + configId + '/rollout', {});
       closeModal('rollout-modal');
@@ -259,7 +270,7 @@
 
   // Delete button
   document.querySelector('#del-cfg .btn-danger').addEventListener('click', async () => {
-    if (!FP.ready() || !configId) return;
+    if (!configId) return;
     try {
       await FP.del('/api/v1/configurations/' + configId);
       closeModal('del-cfg');
