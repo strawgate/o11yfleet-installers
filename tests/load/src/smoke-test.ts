@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * FleetPlane Smoke Test — proves a single agent lifecycle works end-to-end.
+ * o11yfleet Smoke Test — proves a single agent lifecycle works end-to-end.
  *
  * Exercises: enrollment → hello → config rollout → config ACK → heartbeat → disconnect
  *
@@ -29,7 +29,7 @@ async function apiJson<T>(path: string, opts?: RequestInit): Promise<T> {
 }
 
 async function run() {
-  console.log(`\n🧪 FleetPlane Smoke Test — ${BASE_URL}\n`);
+  console.log(`\n🧪 o11yfleet Smoke Test — ${BASE_URL}\n`);
   const steps: string[] = [];
   const pass = (msg: string) => {
     steps.push(`  ✅ ${msg}`);

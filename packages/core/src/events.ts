@@ -1,4 +1,4 @@
-// FleetPlane event types — used by Config DO → Queue → Consumer
+// o11yfleet event types — used by Config DO → Queue → Consumer
 
 export interface FleetEvent {
   type: FleetEventType;

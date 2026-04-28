@@ -1,11 +1,11 @@
 # Real OTel Collector Smoke Test — opampextension
 #
 # This config is for otelcol-contrib with the built-in opamp extension.
-# The collector connects to the FleetPlane OpAMP server via WebSocket,
+# The collector connects to the o11yfleet OpAMP server via WebSocket,
 # reports its status, and accepts remote configuration.
 #
 # Usage:
-#   1. Create an enrollment token in FleetPlane:
+#   1. Create an enrollment token in o11yfleet:
 #        curl -X POST https://api.o11yfleet.com/api/configurations/<CONFIG_ID>/enrollment-token \
 #          -H 'Content-Type: application/json' -d '{"label":"smoke-test"}'
 #
@@ -21,7 +21,7 @@ extensions:
   opamp:
     server:
       ws:
-        # Replace with your FleetPlane endpoint
+        # Replace with your o11yfleet endpoint
         endpoint: wss://api.o11yfleet.com/v1/opamp
         headers:
           Authorization: "Bearer <ENROLLMENT_TOKEN>"
@@ -39,7 +39,7 @@ extensions:
       accepts_other_connection_settings: false
       accepts_packages: false
 
-# Minimal collector config — FleetPlane can push a different one via OpAMP
+# Minimal collector config — o11yfleet can push a different one via OpAMP
 receivers:
   otlp:
     protocols:

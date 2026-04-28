@@ -1,5 +1,5 @@
 /**
- * Playwright UI smoke tests for the FleetPlane dashboard.
+ * Playwright UI smoke tests for the o11yfleet dashboard.
  *
  * Prerequisites:
  *   just dev   →  localhost:8787  (API/Worker)
@@ -13,7 +13,7 @@ import { test, expect } from "@playwright/test";
 const API_URL = process.env.FP_URL ?? "http://localhost:8787";
 const UI_URL = process.env.UI_URL ?? "http://localhost:3000";
 
-// Helper to call the FleetPlane API
+// Helper to call the o11yfleet API
 async function api<T = any>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${API_URL}${path}`, {
     ...opts,
@@ -30,12 +30,12 @@ async function api<T = any>(path: string, opts?: RequestInit): Promise<T> {
 test.describe("Dashboard Smoke Tests", () => {
   test("page loads with correct title", async ({ page }) => {
     await page.goto(UI_URL);
-    await expect(page).toHaveTitle(/FleetPlane/);
+    await expect(page).toHaveTitle(/o11yfleet/);
   });
 
-  test("header displays FleetPlane branding", async ({ page }) => {
+  test("header displays o11yfleet branding", async ({ page }) => {
     await page.goto(UI_URL);
-    await expect(page.locator("header h1")).toContainText("FleetPlane");
+    await expect(page.locator("header h1")).toContainText("o11yfleet");
   });
 
   test("API URL input is visible and pre-filled", async ({ page }) => {
@@ -173,6 +173,6 @@ test.describe("Error Handling", () => {
     const toast = page.locator(".toast.error");
     // Toast may or may not appear depending on implementation
     // But the page shouldn't crash
-    await expect(page.locator("header h1")).toContainText("FleetPlane");
+    await expect(page.locator("header h1")).toContainText("o11yfleet");
   });
 });

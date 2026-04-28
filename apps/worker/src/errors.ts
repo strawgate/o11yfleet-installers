@@ -1,4 +1,4 @@
-// Typed error classes for FleetPlane
+// Typed error classes for o11yfleet
 
 export class AppError extends Error {
   constructor(

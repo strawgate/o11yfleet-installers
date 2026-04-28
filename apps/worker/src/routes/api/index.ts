@@ -1,4 +1,4 @@
-// Legacy API route handlers for FleetPlane — DEPRECATED, prefer /api/v1/* routes.
+// Legacy API route handlers for o11yfleet — DEPRECATED, prefer /api/v1/* routes.
 // These routes pre-date tenant-scoped auth. Config-by-ID endpoints now validate
 // tenant ownership when a tenantId is available (session auth). Bearer-only callers
 // (API_SECRET) bypass tenant checks — treat as admin-level access.

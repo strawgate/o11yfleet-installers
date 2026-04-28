@@ -54,7 +54,7 @@ export const log = {
   dim: (msg: string) => console.log(`\x1b[2m[${ts()}] ${msg}\x1b[0m`),
 };
 
-/** Fetch JSON from the FleetPlane API */
+/** Fetch JSON from the o11yfleet API */
 export async function api<T = unknown>(
   path: string,
   opts?: RequestInit,

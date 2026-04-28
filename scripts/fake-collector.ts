@@ -2,7 +2,7 @@
 /**
  * fake-collector.ts — Interactive fake OTel Collector
  *
- * Simulates an OTel Collector connecting via OpAMP to FleetPlane.
+ * Simulates an OTel Collector connecting via OpAMP to o11yfleet.
  * Handles enrollment, config delivery, health reporting, and reconnection.
  *
  * Usage:
@@ -439,7 +439,7 @@ const { token, name } = parseArgs();
 
 console.log(`
 ╔═══════════════════════════════════════════════╗
-║  FleetPlane Fake OTel Collector               ║
+║  o11yfleet Fake OTel Collector               ║
 ║                                               ║
 ║  Name:      ${name.padEnd(33)}║
 ║  Server:    ${BASE_URL.padEnd(33)}║

@@ -1,4 +1,4 @@
-// OpenTelemetry tracing for FleetPlane Worker
+// OpenTelemetry tracing for o11yfleet Worker
 //
 // Production instrumentation is applied in the separate instrumented entry point
 // (src/instrumented.ts) which wraps the handler and DO with @microlabs/otel-cf-workers.

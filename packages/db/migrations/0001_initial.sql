@@ -1,4 +1,4 @@
--- FleetPlane D1 Schema — v001
+-- o11yfleet D1 Schema — v001
 -- Tenants, configurations, config versions, enrollment tokens, agent summaries
 
 CREATE TABLE IF NOT EXISTS tenants (

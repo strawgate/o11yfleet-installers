@@ -18,7 +18,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 async function main() {
   const reset = process.argv.includes("--reset");
 
-  log.info(`FleetPlane Local Seed — targeting ${BASE_URL}`);
+  log.info(`o11yfleet Local Seed — targeting ${BASE_URL}`);
 
   // Check health first
   try {

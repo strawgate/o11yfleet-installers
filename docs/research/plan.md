@@ -1,4 +1,4 @@
-# FleetPlane v1: Agent-Executable Development Plan
+# o11yfleet v1: Agent-Executable Development Plan
 
 ## Where Models Agree
 

@@ -92,7 +92,7 @@ export function printReport(report: LoadTestReport): void {
 
   console.log(`
 ╔══════════════════════════════════════════════════════════╗
-║           FleetPlane WebSocket Load Test Results         ║
+║           o11yfleet WebSocket Load Test Results         ║
 ╚══════════════════════════════════════════════════════════╝
 
   Target:     ${report.target}

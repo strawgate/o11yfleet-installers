@@ -1,0 +1,68 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+# Fast pre-commit checks: format, lint, typecheck, and core tests only.
+# Designed to be fast for local development. CI runs full suite.
+
+echo "🚀 Running pre-commit checks..."
+
+# 1. Format check (will fail if files are not formatted)
+echo "📝 Checking formatting..."
+if ! pnpm prettier --check .; then
+  echo "❌ Format check failed. Run 'pnpm fmt' to fix."
+  exit 1
+fi
+
+# 2. Determine which packages need linting/typechecking/testing based on changed files
+# Get list of changed files in the commit
+CHANGED_FILES=$(git diff --cached --name-only --diff-filter=ACMR)
+
+# Filter to affected workspace directories (apps/*, packages/*)
+# Convert paths like "apps/site/src/App.tsx" -> "./apps/site"
+AFFECTED_DIRS=$(echo "$CHANGED_FILES" | grep -E '^(apps|packages)/' | cut -d'/' -f1-2 | sort -u)
+
+if [ -z "$AFFECTED_DIRS" ]; then
+  echo "ℹ️  No source files changed — skipping lint/typecheck/tests"
+else
+  # Build pnpm --filter arguments (e.g. "./apps/site ./apps/worker")
+  FILTER_ARGS=$(echo "$AFFECTED_DIRS" | awk '{print "./"$0}' | tr '\n' ' ' | sed 's/ *$//')
+
+  echo "🔍 Linting affected packages: $FILTER_ARGS"
+  pnpm --filter "$FILTER_ARGS" lint || {
+    echo "❌ Lint failed."
+    exit 1
+  }
+
+  echo "🔎 Type checking affected packages: $FILTER_ARGS"
+  pnpm --filter "$FILTER_ARGS" typecheck || {
+    echo "❌ Type check failed."
+    exit 1
+  }
+
+  # Run tests only for lightweight packages
+  echo "✅ Running tests for affected packages..."
+  for dir in $AFFECTED_DIRS; do
+    case "$dir" in
+      apps/site|packages/site)
+        # Site has no tests yet
+        echo "ℹ️  $dir has no tests to run."
+        ;;
+      packages/core)
+        echo "🧪 Running core tests..."
+        pnpm --filter "@o11yfleet/core" test || {
+          echo "❌ Core tests failed."
+          exit 1
+        }
+        ;;
+      apps/worker|packages/worker)
+        # Worker tests require workerd runtime — skip in pre-commit, CI runs them
+        echo "ℹ️  Worker tests skip in pre-commit (run in CI)"
+        ;;
+      *)
+        echo "ℹ️  $dir — skipping tests in pre-commit"
+        ;;
+    esac
+  done
+fi
+
+echo "✨ All pre-commit checks passed!"

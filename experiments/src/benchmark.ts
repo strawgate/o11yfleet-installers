@@ -91,7 +91,7 @@ const baseState: AgentState = {
   agent_description: null,
 };
 
-console.log("FleetPlane Performance Benchmark");
+console.log("o11yfleet Performance Benchmark");
 console.log("================================\n");
 
 const results: BenchResult[] = [];

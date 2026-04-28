@@ -1,5 +1,5 @@
 /**
- * E2E test helpers — wraps the FleetPlane HTTP API for full-stack tests.
+ * E2E test helpers — wraps the o11yfleet HTTP API for full-stack tests.
  *
  * These run against a live wrangler dev server (localhost:8787).
  */
@@ -7,7 +7,7 @@
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 
-/** Fetch JSON from the FleetPlane API */
+/** Fetch JSON from the o11yfleet API */
 export async function api<T = unknown>(
   path: string,
   opts?: RequestInit,

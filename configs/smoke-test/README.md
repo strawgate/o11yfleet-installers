@@ -1,7 +1,7 @@
 # Smoke Test Configs for Real OTel Collectors
 
 These configs connect real OpenTelemetry Collector Contrib instances to the
-FleetPlane OpAMP server. Two approaches are provided:
+o11yfleet OpAMP server. Two approaches are provided:
 
 ## 1. opampextension (built-in)
 
@@ -36,7 +36,7 @@ Config: [`supervisor.yaml`](supervisor.yaml)
 
 ## Setup
 
-Both approaches need an enrollment token. Create one via the FleetPlane API:
+Both approaches need an enrollment token. Create one via the o11yfleet API:
 
 ```bash
 # Create a tenant

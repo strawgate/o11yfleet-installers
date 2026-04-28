@@ -1,4 +1,4 @@
-// FleetPlane Worker — main entry point
+// o11yfleet Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
 import { handleApiRequest } from "./routes/api/index.js";

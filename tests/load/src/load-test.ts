@@ -1,6 +1,6 @@
 #!/usr/bin/env npx tsx
 /**
- * FleetPlane Load Test — simulates N OpAMP agents connecting to the platform.
+ * o11yfleet Load Test — simulates N OpAMP agents connecting to the platform.
  *
  * Usage:
  *   pnpm --filter @o11yfleet/load-test load
@@ -203,7 +203,7 @@ async function sendHeartbeat(
 async function run() {
   const cfg = parseConfig();
   console.log(`
-🔥 FleetPlane Load Test
+🔥 o11yfleet Load Test
    Target:    ${cfg.baseUrl}
    Agents:    ${cfg.agents}
    Ramp:      ${cfg.rampSeconds}s
