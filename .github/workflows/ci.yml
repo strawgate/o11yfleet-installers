@@ -16,7 +16,7 @@ env:
   NODE_VERSION: "22"
 
 jobs:
-  lint-format:
+  lint-and-typecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -39,27 +39,10 @@ jobs:
       - name: Format check
         run: pnpm prettier --check .
 
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Type check
         run: pnpm turbo typecheck
 
-  test-core:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -79,47 +62,32 @@ jobs:
       - name: Core tests (codec, state machine, auth)
         run: pnpm --filter @o11yfleet/core test
 
-  test-worker:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Worker tests (workerd runtime)
         run: pnpm --filter @o11yfleet/worker test
-
-  test-web:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: pnpm/action-setup@v4
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
 
       - name: Web app tests
         run: pnpm --filter @o11yfleet/web test
 
-  bundle-size:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Start Go opamp-go server
+        run: |
+          cd tests/spec-compliance/scripts
+          docker compose up -d
+          echo "Waiting for server to be ready..."
+          sleep 5
+
+      - name: Spec compliance tests
+        run: pnpm --filter @o11yfleet/spec-compliance test
+
+      - name: Stop Go server
+        if: always()
+        run: |
+          cd tests/spec-compliance/scripts
+          docker compose down
+
+  bundle-and-terraform:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -160,6 +128,17 @@ jobs:
           fi
           echo "✓ Bundle size OK"
 
+      - name: Terraform validate
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Validate Terraform
+        run: |
+          cd infra/terraform
+          terraform init -backend=false
+          terraform validate
+
   benchmark:
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
@@ -188,24 +167,8 @@ jobs:
           path: benchmark-results.txt
           retention-days: 30
 
-  terraform:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Terraform validate
-        uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: "1.9"
-
-      - name: Validate Terraform
-        run: |
-          cd infra/terraform
-          terraform init -backend=false
-          terraform validate
-
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-worker, test-web, bundle-size, terraform]
+    needs: [lint-and-typecheck, test, bundle-and-terraform]
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
     environment: staging
