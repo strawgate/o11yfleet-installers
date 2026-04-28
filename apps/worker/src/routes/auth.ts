@@ -62,11 +62,12 @@ function getCookie(request: Request, name: string): string | null {
 }
 
 function sessionCookie(sessionId: string, maxAge: number): string {
-  return `fp_session=${sessionId}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`;
+  // SameSite=None required for cross-origin requests (pages.dev → workers.dev)
+  return `fp_session=${sessionId}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`;
 }
 
 function clearSessionCookie(): string {
-  return "fp_session=; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=0";
+  return "fp_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0";
 }
 
 // ─── Auth context (used by middleware) ──────────────────────────────

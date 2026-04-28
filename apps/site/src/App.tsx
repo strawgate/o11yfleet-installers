@@ -11,10 +11,21 @@ import MarketingLayout from "./layouts/MarketingLayout";
 
 function handleGlobalError(error: Error) {
   if (error instanceof AuthError) {
-    // Session expired — clear cached auth and redirect to login
     queryClient.setQueryData(["auth", "me"], null);
-    const isAdmin = window.location.pathname.startsWith("/admin");
-    window.location.href = isAdmin ? "/admin-login" : "/login";
+
+    // Don't redirect if already on an auth page — the login/signup pages
+    // expect 401 from /auth/me and handle it locally.
+    const path = window.location.pathname;
+    if (path === "/login" || path === "/signup" || path === "/forgot" || path === "/admin-login") {
+      return;
+    }
+
+    // Session expired — redirect to login.
+    // Use replaceState + popstate so React Router handles it client-side
+    // instead of a full page navigation (which would hit CDN cache).
+    const dest = path.startsWith("/admin") ? "/admin-login" : "/login";
+    window.history.replaceState({}, "", dest);
+    window.dispatchEvent(new PopStateEvent("popstate"));
   }
 }
 
@@ -125,6 +136,12 @@ const PlansPage = lazyPage(() => import("./pages/admin/PlansPage"), "Plans");
 const FlagsPage = lazyPage(() => import("./pages/admin/FlagsPage"), "Flags");
 
 /* ------------------------------------------------------------------ */
+/*  404 page                                                           */
+/* ------------------------------------------------------------------ */
+
+import NotFoundPage from "./pages/NotFoundPage";
+
+/* ------------------------------------------------------------------ */
 /*  Loading fallback                                                   */
 /* ------------------------------------------------------------------ */
 
@@ -185,6 +202,9 @@ export function App() {
                 <Route path="plans" element={<PlansPage />} />
                 <Route path="flags" element={<FlagsPage />} />
               </Route>
+
+              {/* 404 catch-all */}
+              <Route path="*" element={<NotFoundPage />} />
             </Routes>
           </Suspense>
         </BrowserRouter>

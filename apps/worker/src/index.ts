@@ -68,6 +68,29 @@ function addCorsHeaders(resp: Response, request: Request): Response {
   return corsResp;
 }
 
+// CSRF protection: validate Origin header on state-changing requests with cookie auth.
+// Browsers always send Origin on cross-origin requests; if missing, check Referer.
+const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
+
+function isTrustedOrigin(request: Request): boolean {
+  const origin = request.headers.get("Origin");
+  if (origin) {
+    return ALLOWED_ORIGINS.includes(origin) || origin.endsWith(".o11yfleet-site.pages.dev");
+  }
+  // Fallback: same-origin requests may omit Origin; check Referer
+  const referer = request.headers.get("Referer");
+  if (referer) {
+    try {
+      const refOrigin = new URL(referer).origin;
+      return ALLOWED_ORIGINS.includes(refOrigin) || refOrigin.endsWith(".o11yfleet-site.pages.dev");
+    } catch {
+      return false;
+    }
+  }
+  // No Origin or Referer — reject (browsers always send one on cross-origin)
+  return false;
+}
+
 export default {
   async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
     try {
@@ -101,6 +124,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
   // CORS preflight
   if (request.method === "OPTIONS") {
     return new Response(null, { status: 204, headers: getCorsHeaders(request) });
+  }
+
+  // CSRF protection — reject state-changing cookie-authenticated requests from untrusted origins.
+  // Only applies when a session cookie is present; Bearer-token M2M clients are exempt.
+  // This is required because we use SameSite=None cookies for cross-origin auth.
+  const hasCookie = /(?:^|;\s*)fp_session=/.test(request.headers.get("Cookie") ?? "");
+  if (!CSRF_SAFE_METHODS.has(request.method) && hasCookie && !isTrustedOrigin(request)) {
+    return addCorsHeaders(
+      Response.json({ error: "Forbidden — origin not allowed" }, { status: 403 }),
+      request,
+    );
   }
 
   // Auth routes — no auth required (they handle their own)
