@@ -5,6 +5,11 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
+jobs:
+
 jobs:
 
   # ─── Build binaries for all platforms ───────────────────────────────────
