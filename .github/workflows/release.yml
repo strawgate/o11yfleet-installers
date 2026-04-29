@@ -1,0 +1,137 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+
+  # ─── Build binaries for all platforms ───────────────────────────────────
+  build-darwin-arm64:
+    name: Build darwin-arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Build
+        run: bun run build
+      - name: Rename
+        run: mv bin/o11yfleet-install bin/o11yfleet-install-darwin-arm64
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-darwin-arm64
+          path: bin/o11yfleet-install-darwin-arm64
+          compression-level: 0
+
+  build-darwin-x64:
+    name: Build darwin-x64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Build
+        run: bun run build
+      - name: Rename
+        run: mv bin/o11yfleet-install bin/o11yfleet-install-darwin-x64
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-darwin-x64
+          path: bin/o11yfleet-install-darwin-x64
+          compression-level: 0
+
+  build-linux-amd64:
+    name: Build linux-amd64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Build
+        run: bun run build
+      - name: Rename
+        run: mv bin/o11yfleet-install bin/o11yfleet-install-linux-amd64
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-linux-amd64
+          path: bin/o11yfleet-install-linux-amd64
+          compression-level: 0
+
+  build-linux-arm64:
+    name: Build linux-arm64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Build
+        run: bun run build
+      - name: Rename
+        run: mv bin/o11yfleet-install bin/o11yfleet-install-linux-arm64
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-linux-arm64
+          path: bin/o11yfleet-install-linux-arm64
+          compression-level: 0
+
+  build-windows-amd64:
+    name: Build windows-amd64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+      - name: Build
+        run: bun run build
+      - name: Rename
+        run: mv bin/o11yfleet-install.exe bin/o11yfleet-install-windows-amd64.exe
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-windows-amd64
+          path: bin/o11yfleet-install-windows-amd64.exe
+          compression-level: 0
+
+  # ─── Create release ──────────────────────────────────────────────────────
+  create-release:
+    name: Create Release
+    needs: [build-darwin-arm64, build-darwin-x64, build-linux-amd64, build-linux-arm64, build-windows-amd64]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_ENV
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: releases
+
+      - name: List artifacts
+        run: ls -la releases/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          draft: true
+          prerelease: ${{ contains(env.VERSION, 'alpha') || contains(env.VERSION, 'beta') || contains(env.VERSION, 'rc') }}
+          generate_release_notes: true
+          files: |
+            releases/**/o11yfleet-install-*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
