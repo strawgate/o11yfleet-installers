@@ -25,7 +25,7 @@ o11yfleet/
 - **Node.js 22+**
 - **pnpm 9+**
 - [**just** command runner](https://github.com/casey/just) (`brew install just` on macOS)
-- **Cloudflare Wrangler** (`pnpm add -g wrangler`)
+- **Cloudflare Wrangler** (via `npx wrangler` or a global install)
 
 ## Quick Start
 

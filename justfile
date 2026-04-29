@@ -11,7 +11,7 @@ install:
     # Check environment readiness
 doctor:
     #!/usr/bin/env bash
-    set -uo pipefail
+    set -euo pipefail
     FAIL=0
 
     echo "=== o11yFleet Environment Check ==="
