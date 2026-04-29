@@ -25,8 +25,12 @@ export default function TenantsPage() {
 
   const tenantList = tenants ?? [];
   const filtered = filter
-    ? tenantList.filter((t) => t.name.toLowerCase().includes(filter.toLowerCase()))
+    ? tenantList.filter((t) =>
+        `${t.name} ${t.id} ${t.plan ?? ""}`.toLowerCase().includes(filter.toLowerCase()),
+      )
     : tenantList;
+  const totalConfigs = tenantList.reduce((sum, tenant) => sum + (tenant.config_count ?? 0), 0);
+  const totalAgents = tenantList.reduce((sum, tenant) => sum + (tenant.agent_count ?? 0), 0);
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -45,7 +49,10 @@ export default function TenantsPage() {
   return (
     <>
       <div className="page-head">
-        <h1>Tenants</h1>
+        <div>
+          <h1>Tenants</h1>
+          <p className="meta">Workspaces, plan limits, and direct troubleshooting entry points.</p>
+        </div>
         <div className="actions">
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
             Create tenant
@@ -53,69 +60,92 @@ export default function TenantsPage() {
         </div>
       </div>
 
+      <div className="tenant-summary-grid">
+        <div className="stat">
+          <div className="val">{tenantList.length}</div>
+          <div className="label">Tenants</div>
+        </div>
+        <div className="stat">
+          <div className="val">{totalConfigs}</div>
+          <div className="label">Configurations</div>
+        </div>
+        <div className="stat">
+          <div className="val">{totalAgents}</div>
+          <div className="label">Collectors</div>
+        </div>
+      </div>
+
       <div className="dt-card">
         <div className="dt-toolbar">
           <input
             className="input"
-            aria-label="Filter tenants by name"
-            placeholder="Filter by name…"
+            aria-label="Filter tenants by name, ID, or plan"
+            placeholder="Filter by name, ID, or plan…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             style={{ maxWidth: 280 }}
           />
         </div>
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Plan</th>
-              <th>Config limit</th>
-              <th>Agent limit / config</th>
-              <th>Created</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 ? (
-              <tr>
-                <td colSpan={6}>
-                  <EmptyState
-                    icon={filter ? "search" : "users"}
-                    title={filter ? "No tenants match your filter" : "No tenants yet"}
-                    description={
-                      filter
-                        ? "Try a different name or clear the filter to see all tenants."
-                        : "Create a tenant to start onboarding a workspace."
-                    }
-                  >
-                    {!filter ? (
-                      <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
-                        Create tenant
-                      </button>
-                    ) : null}
-                  </EmptyState>
-                </td>
-              </tr>
-            ) : (
-              filtered.map((t) => (
-                <tr key={t.id} className="clickable">
-                  <td className="name">
-                    <Link to={`/admin/tenants/${t.id}`}>{t.name}</Link>
-                  </td>
-                  <td>
+        {filtered.length === 0 ? (
+          <EmptyState
+            icon={filter ? "search" : "users"}
+            title={filter ? "No tenants match your filter" : "No tenants yet"}
+            description={
+              filter
+                ? "Try a different name, tenant ID, or plan."
+                : "Create a tenant to start onboarding a workspace."
+            }
+          >
+            {!filter ? (
+              <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
+                Create tenant
+              </button>
+            ) : null}
+          </EmptyState>
+        ) : (
+          <div className="tenant-list">
+            {filtered.map((t) => {
+              const configCount = t.config_count ?? 0;
+              const maxAgentsPerConfig = t.max_agents_per_config ?? 0;
+              const totalAgentCapacity = configCount * maxAgentsPerConfig;
+              return (
+                <article key={t.id} className="tenant-row">
+                  <div className="tenant-main">
+                    <Link to={`/admin/tenants/${t.id}`} className="tenant-name">
+                      {t.name}
+                    </Link>
+                    <span className="meta mono tenant-id">{t.id}</span>
+                  </div>
+                  <div className="tenant-plan">
                     <PlanTag plan={t.plan ?? "free"} />
-                  </td>
-                  <td>{(t["max_configs"] as number) ?? "—"}</td>
-                  <td>{(t["max_agents_per_config"] as number) ?? "—"}</td>
-                  <td className="meta">{relTime(t.created_at)}</td>
-                  <td style={{ width: 32 }}>
-                    <Link to={`/admin/tenants/${t.id}`}>→</Link>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+                  </div>
+                  <div className="tenant-stats">
+                    <span>
+                      <strong>{configCount}</strong>
+                      <span className="meta">configs / {t.max_configs ?? "—"}</span>
+                    </span>
+                    <span>
+                      <strong>{t.agent_count ?? 0}</strong>
+                      <span className="meta">
+                        {t.connected_agents ?? 0} connected / {totalAgentCapacity.toLocaleString()}{" "}
+                        capacity
+                      </span>
+                    </span>
+                    <span>
+                      <strong>{relTime(t.created_at)}</strong>
+                      <span className="meta">created</span>
+                    </span>
+                  </div>
+                  <div className="tenant-actions">
+                    <Link to={`/admin/tenants/${t.id}`} className="btn btn-secondary btn-sm">
+                      Open
+                    </Link>
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       <Modal

@@ -27,32 +27,23 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div className="auth-shell">
-      <div className="auth-card">
-        <div className="admin-stripe" />
-
+    <div className="auth-shell admin-auth-shell">
+      <div className="auth-card admin-auth-card">
         <Link to="/" className="brand">
           <Logo />
           o11yfleet
-          <span
-            style={{
-              fontFamily: "var(--font-mono)",
-              fontSize: "10px",
-              letterSpacing: "0.1em",
-              padding: "2px 6px",
-              borderRadius: "4px",
-              background: "var(--accent-soft)",
-              color: "var(--accent)",
-              border: "1px solid var(--accent-line)",
-              marginLeft: "4px",
-            }}
-          >
-            ADMIN
-          </span>
+          <span className="auth-badge">EMPLOYEE ACCESS</span>
         </Link>
 
-        <h1>Staff sign in</h1>
-        <p className="sub">Internal operations console. Access is logged.</p>
+        <h1>O11yFleet employee login</h1>
+        <p className="sub">
+          Sign in with an O11yFleet admin account to access the internal operations console.
+          Activity is logged.
+        </p>
+        <div className="auth-notice">
+          This page is for O11yFleet employees. Tenant workspace users should use the regular
+          workspace sign-in page.
+        </div>
 
         {error && (
           <div
@@ -97,12 +88,12 @@ export default function AdminLoginPage() {
           </div>
 
           <button className="btn btn-primary" type="submit" disabled={login.isPending}>
-            {login.isPending ? "Signing in\u2026" : "Sign in"}
+            {login.isPending ? "Signing in\u2026" : "Sign in to admin console"}
           </button>
         </form>
 
         <p className="foot">
-          Not a staff member? <Link to="/login">Sign in</Link>
+          Not an O11yFleet employee? <Link to="/login">Workspace login</Link>
         </p>
       </div>
     </div>

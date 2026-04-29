@@ -82,6 +82,32 @@ function parseAttachment(raw: unknown): WSAttachment | null {
   };
 }
 
+function containsSemicolonOutsideStrings(sql: string): boolean {
+  let quote: "'" | '"' | null = null;
+  for (let i = 0; i < sql.length; i += 1) {
+    const char = sql[i];
+    const next = sql[i + 1];
+    if (quote) {
+      if (char === quote) {
+        if (next === quote) {
+          i += 1;
+        } else {
+          quote = null;
+        }
+      }
+      continue;
+    }
+    if (char === "'" || char === '"') {
+      quote = char;
+    } else if (char === ";") {
+      return true;
+    }
+  }
+  return false;
+}
+
+const MAX_DEBUG_QUERY_ROWS = 500;
+const MAX_DEBUG_SQL_LENGTH = 4_000;
 const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_AGENTS_PER_CONFIG = 50_000;
 
@@ -177,7 +203,90 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return this.handleGetAgents();
     }
 
+    if (url.pathname === "/debug/tables" && request.method === "GET") {
+      return this.handleDebugTables(request);
+    }
+
+    if (url.pathname === "/debug/query" && request.method === "POST") {
+      return this.handleDebugQuery(request);
+    }
+
     return new Response("Not found", { status: 404 });
+  }
+
+  private isDebugAuthorized(request: Request): boolean {
+    return request.headers.get("x-fp-admin-debug") === "true";
+  }
+
+  private normalizeDebugParam(value: unknown): string | number | null {
+    if (value === null || typeof value === "string" || typeof value === "number") {
+      return value;
+    }
+    if (typeof value === "boolean") {
+      return value ? 1 : 0;
+    }
+    throw new Error("Query params must be strings, numbers, booleans, or null");
+  }
+
+  private readonlyDebugQuery(sql: string): string {
+    if (sql.length > MAX_DEBUG_SQL_LENGTH) {
+      throw new Error(`SQL must be ${MAX_DEBUG_SQL_LENGTH} characters or fewer`);
+    }
+    if (!/^select\b/i.test(sql) || containsSemicolonOutsideStrings(sql)) {
+      throw new Error("Only single SELECT queries are allowed");
+    }
+    return `SELECT * FROM (${sql}) LIMIT ?`;
+  }
+
+  private handleDebugTables(request: Request): Response {
+    if (!this.isDebugAuthorized(request)) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const rows = this.ctx.storage.sql
+      .exec(
+        `SELECT name
+         FROM sqlite_master
+         WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+         ORDER BY name ASC`,
+      )
+      .toArray() as Array<{ name: string }>;
+
+    return Response.json({ tables: rows.map((row) => row.name) });
+  }
+
+  private async handleDebugQuery(request: Request): Promise<Response> {
+    if (!this.isDebugAuthorized(request)) {
+      return Response.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const body = (await request.json().catch(() => null)) as {
+      sql?: unknown;
+      params?: unknown;
+    } | null;
+    const sql = typeof body?.sql === "string" ? body.sql.trim() : "";
+
+    if (!sql) {
+      return Response.json({ error: "sql is required" }, { status: 400 });
+    }
+
+    try {
+      const params = Array.isArray(body?.params)
+        ? body.params.map((param) => this.normalizeDebugParam(param))
+        : [];
+      const cursor = this.ctx.storage.sql.exec(
+        this.readonlyDebugQuery(sql),
+        ...params,
+        MAX_DEBUG_QUERY_ROWS,
+      );
+      const rows = cursor.toArray() as Array<Record<string, unknown>>;
+      return Response.json({ rows, row_count: rows.length });
+    } catch (error) {
+      return Response.json(
+        { error: error instanceof Error ? error.message : "Query failed" },
+        { status: 400 },
+      );
+    }
   }
 
   // ─── WebSocket Lifecycle ──────────────────────────────────────────

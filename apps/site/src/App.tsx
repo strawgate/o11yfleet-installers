@@ -18,14 +18,20 @@ function handleGlobalError(error: Error) {
     // Don't redirect if already on an auth page; login/signup/forgot own
     // their empty-session states.
     const path = window.location.pathname;
-    if (path === "/login" || path === "/signup" || path === "/forgot" || path === "/admin-login") {
+    if (
+      path === "/login" ||
+      path === "/signup" ||
+      path === "/forgot" ||
+      path === "/admin/login" ||
+      path === "/admin-login"
+    ) {
       return;
     }
 
     // Session expired — redirect to login.
     // Use replaceState + popstate so React Router handles it client-side
     // instead of a full page navigation (which would hit CDN cache).
-    const dest = path.startsWith("/admin") ? "/admin-login" : "/login";
+    const dest = path.startsWith("/admin") ? "/admin/login" : "/login";
     window.history.replaceState({}, "", dest);
     window.dispatchEvent(new PopStateEvent("popstate"));
   }
@@ -133,6 +139,9 @@ const AdminOverviewPage = lazyPage(() => import("./pages/admin/OverviewPage"), "
 const TenantsPage = lazyPage(() => import("./pages/admin/TenantsPage"), "Tenants");
 const TenantDetailPage = lazyPage(() => import("./pages/admin/TenantDetailPage"), "Tenant Detail");
 const HealthPage = lazyPage(() => import("./pages/admin/HealthPage"), "Health");
+const UsagePage = lazyPage(() => import("./pages/admin/UsagePage"), "Usage");
+const SupportPage = lazyPage(() => import("./pages/admin/SupportPage"), "Support");
+const DOViewerPage = lazyPage(() => import("./pages/admin/DOViewerPage"), "Durable Object Viewer");
 const PlansPage = lazyPage(() => import("./pages/admin/PlansPage"), "Plans");
 
 /* ------------------------------------------------------------------ */
@@ -162,6 +171,9 @@ export function App() {
             <ErrorBoundary>
               <Suspense fallback={<SuspenseFallback />}>
                 <Routes>
+                  <Route path="admin/login" element={<AdminLoginPage />} />
+                  <Route path="admin-login" element={<Navigate to="/admin/login" replace />} />
+
                   {/* Marketing */}
                   <Route element={<MarketingLayout />}>
                     <Route index element={<HomePage />} />
@@ -182,7 +194,6 @@ export function App() {
                     />
                     <Route path="solutions/gitops" element={<GitOpsPage />} />
                     <Route path="login" element={<LoginPage />} />
-                    <Route path="admin-login" element={<AdminLoginPage />} />
                     <Route path="signup" element={<SignupPage />} />
                     <Route path="forgot" element={<ForgotPage />} />
                   </Route>
@@ -211,6 +222,9 @@ export function App() {
                     <Route path="tenants" element={<TenantsPage />} />
                     <Route path="tenants/:id" element={<TenantDetailPage />} />
                     <Route path="health" element={<HealthPage />} />
+                    <Route path="usage" element={<UsagePage />} />
+                    <Route path="support" element={<SupportPage />} />
+                    <Route path="do-viewer" element={<DOViewerPage />} />
                     <Route path="plans" element={<PlansPage />} />
                   </Route>
 

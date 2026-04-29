@@ -316,6 +316,10 @@ This is a two-step process by design: upload is separate from rollout. This lets
 
 ## Env Vars / Secrets Summary
 
+See [DEPLOY.md](DEPLOY.md) for the current deployment credentials, Worker runtime secrets, and
+Cloudflare analytics requirements. Keep this section focused on the auth implementation notes that
+motivated the first seed-account rollout.
+
 ```jsonc
 // Already set:
 "CLAIM_SECRET": "...",

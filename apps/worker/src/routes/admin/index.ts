@@ -3,6 +3,7 @@
 
 import type { Env } from "../../index.js";
 import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
+import { buildCloudflareUsage } from "../../cloudflare-usage.js";
 import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
 import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
@@ -55,7 +56,7 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
     return handleCreateTenant(request, env);
   }
   if (path === "/api/admin/tenants" && method === "GET") {
-    return handleListTenants(env);
+    return handleListTenants(env, url);
   }
 
   const tenantIdMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)$/);
@@ -82,10 +83,23 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
     return handleImpersonateTenant(env, tenantImpersonateMatch[1]!);
   }
 
+  const configDOTablesMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/tables$/);
+  if (configDOTablesMatch && method === "GET") {
+    return handleDoTables(env, configDOTablesMatch[1]!);
+  }
+
+  const configDOQueryMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/query$/);
+  if (configDOQueryMatch && method === "POST") {
+    return handleDoQuery(request, env, configDOQueryMatch[1]!);
+  }
+
   // ─── Health ─────────────────────────────────────────────────
 
   if (path === "/api/admin/health" && method === "GET") {
     return handleHealthCheck(env);
+  }
+  if (path === "/api/admin/usage" && method === "GET") {
+    return Response.json(await buildCloudflareUsage(env));
   }
 
   // ─── Plans ──────────────────────────────────────────────────
@@ -125,9 +139,51 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
   return Response.json({ id, name: body.name.trim(), plan }, { status: 201 });
 }
 
-async function handleListTenants(env: Env): Promise<Response> {
-  const result = await env.FP_DB.prepare(`SELECT * FROM tenants ORDER BY created_at DESC`).all();
-  return Response.json({ tenants: result.results });
+function boundedPositiveInt(value: string | null, fallback: number, max: number): number {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed <= 0) return fallback;
+  return Math.min(Math.floor(parsed), max);
+}
+
+async function handleListTenants(env: Env, url: URL): Promise<Response> {
+  const limit = boundedPositiveInt(url.searchParams.get("limit"), 100, 500);
+  const page = boundedPositiveInt(url.searchParams.get("page"), 1, 10_000);
+  const offset = (page - 1) * limit;
+  const totalRow = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{
+    count: number;
+  }>();
+  const result = await env.FP_DB.prepare(
+    `SELECT
+      t.*,
+      COALESCE(c.config_count, 0) as config_count,
+      COALESCE(a.agent_count, 0) as agent_count,
+      COALESCE(a.connected_agents, 0) as connected_agents,
+      COALESCE(a.healthy_agents, 0) as healthy_agents
+     FROM tenants t
+     LEFT JOIN (
+       SELECT tenant_id, COUNT(*) as config_count
+       FROM configurations
+       GROUP BY tenant_id
+     ) c ON c.tenant_id = t.id
+     LEFT JOIN (
+       SELECT
+         tenant_id,
+         COUNT(*) as agent_count,
+         COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
+         COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents
+       FROM agent_summaries
+       GROUP BY tenant_id
+     ) a ON a.tenant_id = t.id
+     ORDER BY t.created_at DESC
+     LIMIT ? OFFSET ?`,
+  )
+    .bind(limit, offset)
+    .all();
+  const total = totalRow?.count ?? 0;
+  return Response.json({
+    tenants: result.results,
+    pagination: { page, limit, total, has_more: offset + result.results.length < total },
+  });
 }
 
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
@@ -229,18 +285,201 @@ async function handleListTenantUsers(env: Env, tenantId: string): Promise<Respon
   return Response.json({ users: result.results });
 }
 
+async function getConfigDoStub(env: Env, configId: string): Promise<DurableObjectStub> {
+  const config = await env.FP_DB.prepare("SELECT id, tenant_id FROM configurations WHERE id = ?")
+    .bind(configId)
+    .first<{ id: string; tenant_id: string }>();
+  if (!config) throw new ApiError("Configuration not found", 404);
+
+  return env.CONFIG_DO.get(env.CONFIG_DO.idFromName(`${config.tenant_id}:${config.id}`));
+}
+
+async function handleDoTables(env: Env, configId: string): Promise<Response> {
+  const stub = await getConfigDoStub(env, configId);
+  return stub.fetch(
+    new Request("http://internal/debug/tables", {
+      method: "GET",
+      headers: { "x-fp-admin-debug": "true" },
+    }),
+  );
+}
+
+async function handleDoQuery(request: Request, env: Env, configId: string): Promise<Response> {
+  const stub = await getConfigDoStub(env, configId);
+  return stub.fetch(
+    new Request("http://internal/debug/query", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-fp-admin-debug": "true",
+      },
+      body: await request.text(),
+    }),
+  );
+}
+
 // ─── Health Check ───────────────────────────────────────────────────
 
-async function handleHealthCheck(env: Env): Promise<Response> {
-  const checks: Record<string, { status: string; latency_ms?: number; error?: string }> = {};
+interface HealthCheck {
+  status: string;
+  latency_ms?: number;
+  error?: string;
+  detail?: string;
+}
 
-  checks["worker"] = { status: "healthy" };
+interface HealthMetrics {
+  total_tenants: number;
+  total_configurations: number;
+  tenants_without_configurations: number;
+  configurations_without_agents: number;
+  total_users: number;
+  active_sessions: number;
+  impersonation_sessions: number;
+  active_tokens: number;
+  total_agents: number;
+  connected_agents: number;
+  disconnected_agents: number;
+  unknown_agents: number;
+  healthy_agents: number;
+  unhealthy_agents: number;
+  stale_agents: number;
+  last_agent_seen_at: string | null;
+  latest_configuration_updated_at: string | null;
+  plan_counts: Record<string, number>;
+}
+
+interface HealthDataSource {
+  status: string;
+  detail: string;
+}
+
+const EMPTY_HEALTH_METRICS: HealthMetrics = {
+  total_tenants: 0,
+  total_configurations: 0,
+  tenants_without_configurations: 0,
+  configurations_without_agents: 0,
+  total_users: 0,
+  active_sessions: 0,
+  impersonation_sessions: 0,
+  active_tokens: 0,
+  total_agents: 0,
+  connected_agents: 0,
+  disconnected_agents: 0,
+  unknown_agents: 0,
+  healthy_agents: 0,
+  unhealthy_agents: 0,
+  stale_agents: 0,
+  last_agent_seen_at: null,
+  latest_configuration_updated_at: null,
+  plan_counts: {},
+};
+
+function emptyHealthMetrics(): HealthMetrics {
+  return { ...EMPTY_HEALTH_METRICS, plan_counts: {} };
+}
+
+async function handleHealthCheck(env: Env): Promise<Response> {
+  const checks: Record<string, HealthCheck> = {};
+  let metrics: HealthMetrics = emptyHealthMetrics();
+
+  checks["worker"] = { status: "healthy", detail: "Worker request handler is responding" };
 
   // D1 health
   const d1Start = Date.now();
   try {
-    await env.FP_DB.prepare("SELECT 1").first();
-    checks["d1"] = { status: "healthy", latency_ms: Date.now() - d1Start };
+    const nowIso = new Date().toISOString();
+    const staleAgentCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const results = await env.FP_DB.batch([
+      env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants"),
+      env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
+      env.FP_DB.prepare(
+        `SELECT COUNT(*) as count
+         FROM tenants t
+         LEFT JOIN configurations c ON c.tenant_id = t.id
+         WHERE c.id IS NULL`,
+      ),
+      env.FP_DB.prepare(
+        `SELECT COUNT(*) as count
+         FROM configurations c
+         LEFT JOIN agent_summaries a ON a.config_id = c.id
+         WHERE a.instance_uid IS NULL`,
+      ),
+      env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
+      env.FP_DB.prepare("SELECT COUNT(*) as count FROM sessions WHERE expires_at > ?").bind(nowIso),
+      env.FP_DB.prepare(
+        "SELECT COUNT(*) as count FROM sessions WHERE is_impersonation = 1 AND expires_at > ?",
+      ).bind(nowIso),
+      env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
+      env.FP_DB.prepare(
+        `SELECT
+          COUNT(*) as total_agents,
+          COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
+          COALESCE(SUM(CASE WHEN status = 'disconnected' THEN 1 ELSE 0 END), 0) as disconnected_agents,
+          COALESCE(SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END), 0) as unknown_agents,
+          COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents,
+          COALESCE(SUM(CASE WHEN healthy = 0 THEN 1 ELSE 0 END), 0) as unhealthy_agents,
+          COALESCE(SUM(CASE WHEN last_seen_at IS NOT NULL AND last_seen_at < ? THEN 1 ELSE 0 END), 0) as stale_agents,
+          MAX(last_seen_at) as last_agent_seen_at
+         FROM agent_summaries`,
+      ).bind(staleAgentCutoff),
+      env.FP_DB.prepare(
+        "SELECT MAX(updated_at) as latest_configuration_updated_at FROM configurations",
+      ),
+      env.FP_DB.prepare("SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan"),
+    ]);
+
+    function countAt(index: number): number {
+      const row = results[index]?.results?.[0] as { count?: number } | undefined;
+      return row?.count ?? 0;
+    }
+
+    const agentRow = results[8]?.results?.[0] as
+      | {
+          total_agents?: number;
+          connected_agents?: number;
+          disconnected_agents?: number;
+          unknown_agents?: number;
+          healthy_agents?: number;
+          unhealthy_agents?: number;
+          stale_agents?: number;
+          last_agent_seen_at?: string | null;
+        }
+      | undefined;
+    const latestConfigRow = results[9]?.results?.[0] as
+      | { latest_configuration_updated_at?: string | null }
+      | undefined;
+    const planRows = (results[10]?.results ?? []) as Array<{ plan?: string; count?: number }>;
+    const planCounts: Record<string, number> = {};
+    for (const row of planRows) {
+      if (row.plan) planCounts[row.plan] = row.count ?? 0;
+    }
+
+    metrics = {
+      total_tenants: countAt(0),
+      total_configurations: countAt(1),
+      tenants_without_configurations: countAt(2),
+      configurations_without_agents: countAt(3),
+      total_users: countAt(4),
+      active_sessions: countAt(5),
+      impersonation_sessions: countAt(6),
+      active_tokens: countAt(7),
+      total_agents: agentRow?.total_agents ?? 0,
+      connected_agents: agentRow?.connected_agents ?? 0,
+      disconnected_agents: agentRow?.disconnected_agents ?? 0,
+      unknown_agents: agentRow?.unknown_agents ?? 0,
+      healthy_agents: agentRow?.healthy_agents ?? 0,
+      unhealthy_agents: agentRow?.unhealthy_agents ?? 0,
+      stale_agents: agentRow?.stale_agents ?? 0,
+      last_agent_seen_at: agentRow?.last_agent_seen_at ?? null,
+      latest_configuration_updated_at: latestConfigRow?.latest_configuration_updated_at ?? null,
+      plan_counts: planCounts,
+    };
+
+    checks["d1"] = {
+      status: "healthy",
+      latency_ms: Date.now() - d1Start,
+      detail: "Core admin tables and fleet counters are queryable",
+    };
   } catch (e) {
     checks["d1"] = {
       status: "unhealthy",
@@ -252,8 +491,15 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   // R2 health
   const r2Start = Date.now();
   try {
-    await env.FP_CONFIGS.list({ limit: 1 });
-    checks["r2"] = { status: "healthy", latency_ms: Date.now() - r2Start };
+    const listed = await env.FP_CONFIGS.list({ limit: 1 });
+    checks["r2"] = {
+      status: "healthy",
+      latency_ms: Date.now() - r2Start,
+      detail:
+        listed.objects.length > 0
+          ? "Configuration object listing returned at least one object"
+          : "Configuration object listing is reachable; no objects sampled",
+    };
   } catch (e) {
     checks["r2"] = {
       status: "unhealthy",
@@ -265,7 +511,10 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   // Durable Objects — check namespace is bound
   try {
     if (env.CONFIG_DO) {
-      checks["durable_objects"] = { status: "healthy" };
+      checks["durable_objects"] = {
+        status: "healthy",
+        detail: "Config Durable Object namespace is bound",
+      };
     } else {
       checks["durable_objects"] = { status: "unhealthy", error: "Namespace not bound" };
     }
@@ -279,7 +528,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   // Queue — check binding exists
   try {
     if (env.FP_EVENTS) {
-      checks["queue"] = { status: "healthy" };
+      checks["queue"] = { status: "healthy", detail: "Event queue binding is present" };
     } else {
       checks["queue"] = { status: "unavailable", error: "Queue not bound" };
     }
@@ -293,7 +542,54 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   const overall = Object.values(checks).every((c) => c.status === "healthy")
     ? "healthy"
     : "degraded";
-  return Response.json({ status: overall, checks, timestamp: new Date().toISOString() });
+  const bindingProbeEntries = Object.entries(checks).filter(([key]) =>
+    ["d1", "r2", "durable_objects", "queue"].includes(key),
+  );
+  const degradedBindings = bindingProbeEntries.filter(
+    ([, check]) => check.status !== "healthy" && check.status !== "ok",
+  );
+  const bindingProbeStatus =
+    degradedBindings.length === 0
+      ? "connected"
+      : degradedBindings.some(([, check]) => check.status === "unavailable")
+        ? "unavailable"
+        : "degraded";
+  const bindingProbeDetail =
+    degradedBindings.length === 0
+      ? "Live Worker binding probes for D1, R2, Durable Objects, and Queues"
+      : `Needs attention: ${degradedBindings.map(([key]) => key).join(", ")}`;
+  const cloudflareAccountMetricsConfigured = Boolean(
+    env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY,
+  );
+  const sources: Record<string, HealthDataSource> = {
+    app_database: {
+      status: checks["d1"]?.status === "healthy" ? "connected" : "unavailable",
+      detail:
+        "O11yFleet D1 tables: tenants, configurations, users, sessions, tokens, and agent summaries",
+    },
+    binding_probes: {
+      status: bindingProbeStatus,
+      detail: bindingProbeDetail,
+    },
+    analytics_engine: {
+      status: env.FP_ANALYTICS ? "write_only" : "not_bound",
+      detail:
+        "Queue events can write datapoints when the binding exists; this health endpoint does not query Analytics Engine yet",
+    },
+    cloudflare_account_metrics: {
+      status: cloudflareAccountMetricsConfigured ? "configured" : "not_configured",
+      detail: cloudflareAccountMetricsConfigured
+        ? "Cloudflare account analytics credentials are configured for usage estimation"
+        : "No Cloudflare account analytics or billing API credentials are configured for this endpoint",
+    },
+  };
+  return Response.json({
+    status: overall,
+    checks,
+    metrics,
+    sources,
+    timestamp: new Date().toISOString(),
+  });
 }
 
 // ─── Plans ──────────────────────────────────────────────────────────

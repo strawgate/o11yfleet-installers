@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPut, apiDel } from "../client";
+import type { AdminHealthPayload } from "../../pages/admin/support-model";
 
 /* ------------------------------------------------------------------ */
 /*  Response types                                                    */
@@ -23,6 +24,12 @@ export interface AdminTenant {
   name: string;
   plan?: string;
   created_at?: string;
+  max_configs?: number;
+  max_agents_per_config?: number;
+  config_count?: number;
+  agent_count?: number;
+  connected_agents?: number;
+  healthy_agents?: number;
   [key: string]: unknown;
 }
 
@@ -45,9 +52,60 @@ export interface AdminPlan {
   [key: string]: unknown;
 }
 
-export interface AdminHealth {
-  status: string;
-  [key: string]: unknown;
+export type AdminHealth = AdminHealthPayload;
+
+export interface AdminUsageLineItem {
+  label: string;
+  quantity: number;
+  unit: string;
+  included: number;
+  billable: number;
+  unit_price_usd: number;
+  estimated_spend_usd: number;
+}
+
+export interface AdminUsageDaily {
+  date: string;
+  estimated_spend_usd: number;
+  units: Record<string, number>;
+}
+
+export interface AdminUsageService {
+  id: string;
+  name: string;
+  status: "ready" | "not_configured" | "error";
+  source: string;
+  daily: AdminUsageDaily[];
+  line_items: AdminUsageLineItem[];
+  month_to_date_estimated_spend_usd: number;
+  projected_month_estimated_spend_usd: number;
+  notes: string[];
+  error?: string;
+}
+
+export interface AdminUsage {
+  configured: boolean;
+  currency: "USD";
+  generated_at: string;
+  window: {
+    start_date: string;
+    end_date: string;
+    days_elapsed: number;
+    days_in_month: number;
+  };
+  pricing: {
+    source: string;
+    notes: string[];
+  };
+  required_env: string[];
+  services: AdminUsageService[];
+  month_to_date_estimated_spend_usd: number;
+  projected_month_estimated_spend_usd: number;
+}
+
+export interface AdminDoQueryResponse {
+  rows: Array<Record<string, unknown>>;
+  row_count: number;
 }
 
 function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
@@ -134,6 +192,27 @@ export function useAdminHealth() {
   });
 }
 
+export function useAdminUsage() {
+  return useQuery({
+    queryKey: ["admin", "usage"],
+    queryFn: () => apiGet<AdminUsage>("/api/admin/usage"),
+    refetchInterval: 300_000,
+  });
+}
+
+export function useAdminDoTables(configId: string) {
+  return useQuery({
+    queryKey: ["admin", "configurations", configId, "do", "tables"],
+    queryFn: async () => {
+      const body = await apiGet<{ tables: string[] }>(
+        `/api/admin/configurations/${configId}/do/tables`,
+      );
+      return body.tables;
+    },
+    enabled: false,
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Mutation hooks                                                    */
 /* ------------------------------------------------------------------ */
@@ -176,5 +255,12 @@ export function useDeleteAdminTenant(id: string) {
 export function useImpersonateTenant(id: string) {
   return useMutation({
     mutationFn: () => apiPost(`/api/admin/tenants/${id}/impersonate`),
+  });
+}
+
+export function useAdminDoQuery(configId: string) {
+  return useMutation({
+    mutationFn: (body: { sql: string; params: unknown[] }) =>
+      apiPost<AdminDoQueryResponse>(`/api/admin/configurations/${configId}/do/query`, body),
   });
 }

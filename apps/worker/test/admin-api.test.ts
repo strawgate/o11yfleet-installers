@@ -13,6 +13,9 @@ beforeAll(async () => {
   );
   await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
   await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
+  await env.FP_DB.exec(
+    `CREATE INDEX IF NOT EXISTS idx_sessions_impersonation_expires ON sessions(is_impersonation, expires_at)`,
+  );
 });
 
 describe("admin API routes", () => {
@@ -105,6 +108,69 @@ describe("admin API routes", () => {
       body: JSON.stringify({ tenant_id: createdTenant.id, name: "admin-config-a" }),
     });
     expect(createConfigRes.status).toBe(201);
+    const createdConfig = await createConfigRes.json<{ id: string }>();
+
+    const countedTenantsRes = await apiFetch("http://localhost/api/admin/tenants?limit=1");
+    expect(countedTenantsRes.status).toBe(200);
+    const countedTenantsBody = await countedTenantsRes.json<{
+      tenants: Array<{ id: string; config_count: number; agent_count: number }>;
+      pagination: { page: number; limit: number; total: number };
+    }>();
+    expect(countedTenantsBody.pagination.page).toBe(1);
+    expect(countedTenantsBody.pagination.limit).toBe(1);
+    expect(countedTenantsBody.pagination.total).toBeGreaterThanOrEqual(1);
+
+    const allTenantsRes = await apiFetch("http://localhost/api/admin/tenants?limit=500");
+    expect(allTenantsRes.status).toBe(200);
+    const allTenantsBody = await allTenantsRes.json<{
+      tenants: Array<{ id: string; config_count: number; agent_count: number }>;
+    }>();
+    const countedTenant = allTenantsBody.tenants.find((t) => t.id === createdTenant.id);
+    expect(countedTenant?.config_count).toBe(1);
+    expect(countedTenant?.agent_count).toBe(0);
+
+    const doTablesRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/tables`,
+    );
+    expect(doTablesRes.status).toBe(200);
+    const doTablesBody = await doTablesRes.json<{ tables: string[] }>();
+    expect(doTablesBody.tables).toContain("agents");
+
+    const doQueryRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sql: "SELECT instance_uid, status FROM agents LIMIT ?",
+          params: [5],
+        }),
+      },
+    );
+    expect(doQueryRes.status).toBe(200);
+    const doQueryBody = await doQueryRes.json<{ row_count: number; rows: unknown[] }>();
+    expect(doQueryBody.row_count).toBeTypeOf("number");
+    expect(Array.isArray(doQueryBody.rows)).toBe(true);
+
+    const unsafeDoQueryRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "SELECT 1; DELETE FROM agents", params: [] }),
+      },
+    );
+    expect(unsafeDoQueryRes.status).toBe(400);
+
+    const pragmaDoQueryRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "PRAGMA table_list", params: [] }),
+      },
+    );
+    expect(pragmaDoQueryRes.status).toBe(400);
 
     const tenantConfigsRes = await apiFetch(
       `http://localhost/api/admin/tenants/${createdTenant.id}/configurations`,
@@ -179,7 +245,7 @@ describe("admin API routes", () => {
     expect(deleteRes.status).toBe(204);
   });
 
-  it("covers /api/admin/overview, /api/admin/health, and /api/admin/plans", async () => {
+  it("covers /api/admin/overview, /api/admin/health, /api/admin/usage, and /api/admin/plans", async () => {
     const overviewRes = await apiFetch("http://localhost/api/admin/overview");
     expect(overviewRes.status).toBe(200);
     const overviewBody = await overviewRes.json<{
@@ -199,7 +265,28 @@ describe("admin API routes", () => {
     expect(healthRes.status).toBe(200);
     const healthBody = await healthRes.json<{
       status: string;
-      checks: Record<string, { status: string; latency_ms?: number }>;
+      checks: Record<string, { status: string; latency_ms?: number; detail?: string }>;
+      metrics: {
+        total_tenants: number;
+        total_configurations: number;
+        tenants_without_configurations: number;
+        configurations_without_agents: number;
+        total_users: number;
+        active_sessions: number;
+        impersonation_sessions: number;
+        active_tokens: number;
+        total_agents: number;
+        connected_agents: number;
+        disconnected_agents: number;
+        unknown_agents: number;
+        healthy_agents: number;
+        unhealthy_agents: number;
+        stale_agents: number;
+        last_agent_seen_at: string | null;
+        latest_configuration_updated_at: string | null;
+        plan_counts: Record<string, number>;
+      };
+      sources: Record<string, { status: string; detail: string }>;
       timestamp: string;
     }>();
     expect(healthBody.status === "healthy" || healthBody.status === "degraded").toBe(true);
@@ -208,6 +295,58 @@ describe("admin API routes", () => {
     expect(healthBody.checks.r2?.status).toBe("healthy");
     expect(healthBody.checks.durable_objects?.status).toBe("healthy");
     expect(["healthy", "unavailable"].includes(healthBody.checks.queue?.status ?? "")).toBe(true);
+    expect(healthBody.checks.d1?.detail).toContain("fleet counters");
+    expect(healthBody.metrics.total_tenants).toBeTypeOf("number");
+    expect(healthBody.metrics.total_configurations).toBeTypeOf("number");
+    expect(healthBody.metrics.total_users).toBeTypeOf("number");
+    expect(healthBody.metrics.active_sessions).toBeTypeOf("number");
+    expect(healthBody.metrics.impersonation_sessions).toBeTypeOf("number");
+    expect(healthBody.metrics.active_tokens).toBeTypeOf("number");
+    expect(healthBody.metrics.total_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.connected_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.healthy_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.disconnected_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.unknown_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.unhealthy_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.stale_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.tenants_without_configurations).toBeTypeOf("number");
+    expect(healthBody.metrics.configurations_without_agents).toBeTypeOf("number");
+    expect(healthBody.metrics.plan_counts).toBeTypeOf("object");
+    expect(healthBody.sources.app_database?.status).toBe("connected");
+    expect(["connected", "degraded", "unavailable"]).toContain(
+      healthBody.sources.binding_probes?.status,
+    );
+    expect(healthBody.sources.cloudflare_account_metrics?.status).toBe("not_configured");
+    expect(healthBody.sources.cloudflare_account_metrics?.detail).toContain("No Cloudflare");
+
+    const usageRes = await apiFetch("http://localhost/api/admin/usage");
+    expect(usageRes.status).toBe(200);
+    const usageBody = await usageRes.json<{
+      configured: boolean;
+      required_env: string[];
+      services: Array<{
+        id: string;
+        status: string;
+        month_to_date_estimated_spend_usd: number;
+        projected_month_estimated_spend_usd: number;
+      }>;
+      month_to_date_estimated_spend_usd: number;
+      projected_month_estimated_spend_usd: number;
+    }>();
+    expect(usageBody.configured).toBe(false);
+    expect(usageBody.required_env).toContain("CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY");
+    expect(usageBody.required_env).toContain("CLOUDFLARE_ACCOUNT_ID");
+    expect(usageBody.required_env).not.toContain("CLOUDFLARE_API_TOKEN");
+    expect(usageBody.services.map((service) => service.id)).toEqual([
+      "workers",
+      "durable_objects",
+      "d1",
+      "r2",
+      "queues",
+    ]);
+    expect(usageBody.services.every((service) => service.status === "not_configured")).toBe(true);
+    expect(usageBody.month_to_date_estimated_spend_usd).toBe(0);
+    expect(usageBody.projected_month_estimated_spend_usd).toBe(0);
 
     const plansRes = await apiFetch("http://localhost/api/admin/plans");
     expect(plansRes.status).toBe(200);

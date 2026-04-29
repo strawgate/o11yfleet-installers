@@ -116,15 +116,12 @@ See the GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/
 
 ## Environment Variables
 
-See `apps/worker/wrangler.jsonc` for local development variables.
-
-Required secrets for production:
-
-- `CLOUDFLARE_API_TOKEN` — Cloudflare API token
-- `CLOUDFLARE_ACCOUNT_ID` — Cloudflare account ID
+See [DEPLOY.md](DEPLOY.md) for deployment credentials, Worker runtime secrets, and the
+Cloudflare analytics variables that power the admin usage page.
 
 ## Resources
 
 - [Architecture](docs/architecture.md)
+- [Deployment](DEPLOY.md)
 - [Cloudflare Setup](infra/CLOUDFLARE_SETUP.md)
 - [Portal Design](docs/portal-design-prompt.md)

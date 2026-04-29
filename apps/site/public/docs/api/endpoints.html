@@ -429,6 +429,24 @@
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">GET</td>
                 <td style="padding: 10px 14px">
+                  <code class="mono">/api/admin/configurations/:id/do/tables</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  List Durable Object SQLite tables for one configuration
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/admin/configurations/:id/do/query</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Run a bounded read-only Durable Object SQLite SELECT query for troubleshooting
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
                   <code class="mono">/api/admin/tenants/:id/users</code>
                 </td>
                 <td style="padding: 10px 14px">List users for one tenant</td>
@@ -446,6 +464,13 @@
                 <td style="padding: 10px 14px">GET</td>
                 <td style="padding: 10px 14px"><code class="mono">/api/admin/health</code></td>
                 <td style="padding: 10px 14px">Check D1, R2, queue, and Durable Object health</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/usage</code></td>
+                <td style="padding: 10px 14px">
+                  Estimate Cloudflare daily usage, month-to-date spend, and monthly projection
+                </td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">GET</td>

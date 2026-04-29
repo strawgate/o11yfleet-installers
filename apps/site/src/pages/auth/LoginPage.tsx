@@ -107,6 +107,10 @@ export default function LoginPage() {
         <p className="foot">
           Don&rsquo;t have a workspace? <Link to="/signup">Request access</Link>
         </p>
+        <div className="auth-switch">
+          <span>O11yFleet employee?</span>
+          <Link to="/admin/login">Employee login</Link>
+        </div>
       </div>
     </div>
   );

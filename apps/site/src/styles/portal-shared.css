@@ -1337,6 +1337,15 @@ body::before {
     radial-gradient(900px 400px at 50% -10%, var(--accent-soft), transparent 60%), var(--bg);
   overflow: auto;
 }
+.auth-shell.admin-auth-shell {
+  background:
+    radial-gradient(
+      900px 420px at 50% -10%,
+      color-mix(in oklab, var(--fg) 8%, transparent),
+      transparent 62%
+    ),
+    var(--bg);
+}
 body.auth {
   overflow: auto;
 }
@@ -1347,6 +1356,9 @@ body.auth {
   border-radius: var(--radius-lg);
   padding: 32px;
   box-shadow: var(--shadow);
+}
+.auth-card.admin-auth-card {
+  border-color: var(--line-strong);
 }
 .auth-card .brand {
   display: inline-flex;
@@ -1362,6 +1374,20 @@ body.auth {
   height: 22px;
   color: var(--accent);
 }
+.auth-card.admin-auth-card .brand svg {
+  color: var(--fg);
+}
+.auth-card .auth-badge {
+  margin-left: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 4px;
+  padding: 2px 6px;
+  color: var(--fg-2);
+  background: var(--bg-elev);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+}
 .auth-card h1 {
   font-size: 22px;
   font-weight: 500;
@@ -1371,6 +1397,16 @@ body.auth {
   color: var(--fg-3);
   font-size: 13.5px;
   margin-top: 6px;
+}
+.auth-card .auth-notice {
+  margin-top: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--bg-elev);
+  color: var(--fg-2);
+  padding: 12px;
+  font-size: 13px;
+  line-height: 1.5;
 }
 .auth-card form {
   margin-top: 22px;
@@ -1423,6 +1459,21 @@ body.auth {
 }
 .auth-card .foot a {
   color: var(--accent);
+}
+.auth-card .auth-switch {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 18px;
+  border-top: 1px solid var(--line);
+  padding-top: 16px;
+  color: var(--fg-3);
+  font-size: 13px;
+}
+.auth-card .auth-switch a {
+  color: var(--fg);
+  font-weight: 600;
 }
 
 /* ---------- Slide-out panel ---------- */

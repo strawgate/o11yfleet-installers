@@ -26,6 +26,12 @@ export interface Env {
   SEED_TENANT_USER_PASSWORD?: string;
   SEED_ADMIN_EMAIL?: string;
   SEED_ADMIN_PASSWORD?: string;
+  CLOUDFLARE_ACCOUNT_ID?: string;
+  CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY?: string;
+  CLOUDFLARE_WORKER_SCRIPT_NAME?: string;
+  CLOUDFLARE_D1_DATABASE_ID?: string;
+  CLOUDFLARE_R2_BUCKET_NAME?: string;
+  CLOUDFLARE_ANALYTICS_DATASET?: string;
 }
 
 // Production CORS origins (always allowed)

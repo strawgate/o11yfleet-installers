@@ -9,6 +9,12 @@ export default defineConfig({
         bindings: {
           API_SECRET: "test-api-secret-for-dev-only-32chars",
           CLAIM_SECRET: "dev-secret-key-for-testing-only-32ch",
+          CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY: "",
+          CLOUDFLARE_ACCOUNT_ID: "",
+          CLOUDFLARE_WORKER_SCRIPT_NAME: "",
+          CLOUDFLARE_D1_DATABASE_ID: "",
+          CLOUDFLARE_R2_BUCKET_NAME: "",
+          CLOUDFLARE_ANALYTICS_DATASET: "",
         },
       },
     }),
