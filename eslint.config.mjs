@@ -28,6 +28,7 @@ export default tseslint.config(
       "no-console": ["warn", { allow: ["warn", "error"] }],
       eqeqeq: ["error", "always"],
       "no-throw-literal": "error",
+      "no-promise-executor-return": "error",
       "no-self-compare": "error",
       "no-template-curly-in-string": "error",
       "no-useless-return": "error",
@@ -44,6 +45,13 @@ export default tseslint.config(
   // Relax rules for scripts
   {
     files: ["**/scripts/**"],
+    rules: {
+      "no-console": "off",
+    },
+  },
+  // Load tests are command-line tools and report progress to stdout.
+  {
+    files: ["tests/load/src/**/*.ts"],
     rules: {
       "no-console": "off",
     },

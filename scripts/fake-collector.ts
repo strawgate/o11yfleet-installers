@@ -415,7 +415,9 @@ function sendHeartbeat(ws: WebSocket, state: CollectorState, name: string): void
 // Utilities
 // ──────────────────────────────────────────────
 function sleep(ms: number): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((r) => {
+    setTimeout(r, ms);
+  });
 }
 
 function printStats(name: string, state: CollectorState): void {

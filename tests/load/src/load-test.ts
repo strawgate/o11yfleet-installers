@@ -253,7 +253,9 @@ async function run() {
     }
 
     if (delayPerAgent > 0 && i < cfg.agents - 1) {
-      await new Promise((r) => setTimeout(r, delayPerAgent));
+      await new Promise((r) => {
+        setTimeout(r, delayPerAgent);
+      });
     }
   }
   console.log(`\n   ✅ Ramp-up complete: ${managed.length} agents connected`);
@@ -291,7 +293,9 @@ async function run() {
     managed.push(...alive);
 
     if (remaining > 0 && Date.now() < steadyDeadline) {
-      await new Promise((r) => setTimeout(r, Math.min(remaining, steadyDeadline - Date.now())));
+      await new Promise((r) => {
+        setTimeout(r, Math.min(remaining, steadyDeadline - Date.now()));
+      });
     }
   }
 

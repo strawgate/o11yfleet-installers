@@ -306,7 +306,9 @@ describe("E2E Scenario #5: Disconnect tracking", () => {
     ws.accept();
     ws.close();
 
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => {
+      setTimeout(r, 200);
+    });
 
     // Verify via DO — just check it didn't crash
     const doId = env.CONFIG_DO.idFromName("s5-tenant:s5-config");

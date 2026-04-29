@@ -109,7 +109,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   // ─── HTTP Dispatch ────────────────────────────────────────────────
 
-  async fetch(request: Request): Promise<Response> {
+  override async fetch(request: Request): Promise<Response> {
     this.ensureInit();
     const url = new URL(request.url);
 
@@ -171,7 +171,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+  override async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
     this.ensureInit();
 
     if (typeof message === "string") {
@@ -303,7 +303,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  async webSocketClose(ws: WebSocket, _code: number, _reason: string): Promise<void> {
+  override async webSocketClose(ws: WebSocket, _code: number, _reason: string): Promise<void> {
     this.ensureInit();
     const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) return;
@@ -337,7 +337,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+  override async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
     this.ensureInit();
     const attachment = parseAttachment(ws.deserializeAttachment());
 
@@ -369,7 +369,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   // ─── Stale Agent Alarm ────────────────────────────────────────────
 
-  async alarm(): Promise<void> {
+  override async alarm(): Promise<void> {
     this.ensureInit();
 
     const staleUids = sweepStaleAgents(this.ctx.storage.sql, STALE_AGENT_THRESHOLD_MS);

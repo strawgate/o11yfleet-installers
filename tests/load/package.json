@@ -4,6 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "lint": "eslint src/ --ext .ts",
+    "typecheck": "tsc --noEmit",
     "load": "tsx src/load-test.ts",
     "smoke": "tsx src/smoke-test.ts"
   },

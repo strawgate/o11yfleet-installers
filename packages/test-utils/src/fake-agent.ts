@@ -73,7 +73,10 @@ export class FakeOpampAgent {
     this.ws = new WebSocket(url);
 
     return new Promise((resolve, reject) => {
-      if (!this.ws) return reject(new Error("No WebSocket"));
+      if (!this.ws) {
+        reject(new Error("No WebSocket"));
+        return;
+      }
       this.ws.binaryType = "arraybuffer";
 
       this.ws.onopen = () => resolve();
