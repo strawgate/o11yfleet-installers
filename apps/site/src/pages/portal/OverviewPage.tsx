@@ -8,6 +8,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
+import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
@@ -31,8 +32,38 @@ export default function OverviewPage() {
   const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
   const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
   const insightSurface = insightSurfaces.portalOverview;
-  const guidanceRequest: AiGuidanceRequest | null =
+  const pageContext =
     overview.data && configs.data
+      ? buildBrowserPageContext({
+          title: "Fleet overview",
+          visible_text: [
+            "Collector status, health, and drift are separate signals.",
+            "A collector can be connected and still report unhealthy runtime state.",
+          ],
+          metrics: [
+            pageMetric("configs_count", "Configurations", totalConfigs),
+            pageMetric("total_agents", "Total collectors", totalAgents),
+            pageMetric("connected_agents", "Connected collectors", connectedAgents),
+            pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
+            pageMetric("active_rollouts", "Active rollouts", activeRollouts),
+          ],
+          tables: [
+            pageTable(
+              "recent_configurations",
+              "Recent configurations",
+              cfgList.slice(0, 8).map((config) => ({
+                id: config.id,
+                name: config.name,
+                status: config.status ?? null,
+                updated_at: config.updated_at ?? null,
+              })),
+              { totalRows: cfgList.length },
+            ),
+          ],
+        })
+      : null;
+  const guidanceRequest: AiGuidanceRequest | null =
+    overview.data && configs.data && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -56,6 +87,7 @@ export default function OverviewPage() {
               updated_at: config.updated_at ?? null,
             })),
           },
+          { intent: "triage_state", pageContext },
         )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);

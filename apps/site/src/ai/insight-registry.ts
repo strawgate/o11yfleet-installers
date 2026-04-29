@@ -1,8 +1,10 @@
 import type {
+  AiGuidanceIntent,
   AiGuidanceRequest,
   AiGuidanceSurface,
   AiGuidanceTarget,
   AiGuidanceTargetKind,
+  AiPageContext,
 } from "@o11yfleet/core/ai";
 
 type InsightContext = Record<string, unknown>;
@@ -158,10 +160,18 @@ export function buildInsightRequest(
   surfaceDefinition: InsightSurfaceDefinition,
   targets: AiGuidanceTarget[],
   context: InsightContext,
+  options: {
+    intent?: AiGuidanceIntent;
+    pageContext?: AiPageContext;
+    userPrompt?: string;
+  } = {},
 ): AiGuidanceRequest {
   return {
     surface: surfaceDefinition.surface,
+    intent: options.intent ?? "suggest_next_action",
     targets,
     context,
+    ...(options.pageContext ? { page_context: options.pageContext } : {}),
+    ...(options.userPrompt ? { user_prompt: options.userPrompt } : {}),
   };
 }

@@ -23,6 +23,7 @@ import { relTime, trunc } from "../../utils/format";
 import {
   agentCurrentHash,
   agentHasDrift,
+  agentHost,
   agentIsHealthy,
   agentLastSeen,
   agentUid,
@@ -34,6 +35,13 @@ import {
   insightTarget,
   tabInsightTarget,
 } from "../../ai/insight-registry";
+import {
+  buildBrowserPageContext,
+  pageDetail,
+  pageMetric,
+  pageTable,
+  pageYaml,
+} from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
@@ -83,8 +91,64 @@ export default function ConfigurationDetailPage() {
     stats.isFetched &&
     yaml.isFetched;
   const insightSurface = insightSurfaces.portalConfiguration;
-  const guidanceRequest: AiGuidanceRequest | null =
+  const pageContext =
     guidanceReady && c
+      ? buildBrowserPageContext({
+          title: `Configuration: ${c.name}`,
+          active_tab: activeTab,
+          visible_text: [
+            "Configuration detail shows rollout state, collector health, version history, enrollment tokens, and YAML.",
+          ],
+          metrics: [
+            pageMetric("total_agents", "Total collectors", totalAgents),
+            pageMetric("connected_agents", "Connected collectors", connectedCount),
+            pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
+            pageMetric("drifted_agents", "Drifted collectors", driftedAgents),
+            pageMetric("versions", "Versions", versionList.length),
+            pageMetric("total_active_tokens", "Active enrollment tokens", tokenList.length),
+          ],
+          details: [
+            pageDetail("configuration_id", "Configuration ID", c.id),
+            pageDetail("configuration_name", "Configuration name", c.name),
+            pageDetail("status", "Status", c.status ?? null),
+            pageDetail("desired_config_hash", "Desired config hash", desiredHash),
+            pageDetail(
+              "latest_version_created_at",
+              "Latest version",
+              versionList[0]?.created_at ?? null,
+            ),
+          ],
+          tables: [
+            pageTable(
+              "agents",
+              "Collectors",
+              agentList.slice(0, 20).map((agent) => ({
+                id: agentUid(agent),
+                hostname: agentHost(agent),
+                status: agent.status ?? null,
+                health: agentIsHealthy(agent),
+                drift: agentHasDrift(agent, desiredHash),
+                last_seen: agentLastSeen(agent) ?? null,
+              })),
+              { totalRows: agentList.length },
+            ),
+            pageTable(
+              "versions",
+              "Versions",
+              versionList.slice(0, 10).map((version) => ({
+                id: version.id,
+                hash: (version["config_hash"] as string | undefined) ?? null,
+                created_at: version.created_at,
+                size_bytes: (version["size_bytes"] as number | undefined) ?? null,
+              })),
+              { totalRows: versionList.length },
+            ),
+          ],
+          yaml: yaml.data ? pageYaml("Current configuration YAML", yaml.data) : undefined,
+        })
+      : null;
+  const guidanceRequest: AiGuidanceRequest | null =
+    guidanceReady && c && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -117,6 +181,13 @@ export default function ConfigurationDetailPage() {
             total_active_tokens: tokenList.length,
             latest_version_created_at: versionList[0]?.created_at ?? null,
             yaml_available: Boolean(yaml.data),
+          },
+          {
+            intent:
+              activeTab === "yaml" || activeTab === "rollout" || activeTab === "versions"
+                ? "draft_config_change"
+                : "triage_state",
+            pageContext,
           },
         )
       : null;

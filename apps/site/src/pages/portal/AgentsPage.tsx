@@ -22,6 +22,7 @@ import {
   hashLabel,
 } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
+import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 function AgentSection({ config }: { config: Configuration }) {
@@ -41,8 +42,46 @@ function AgentSection({ config }: { config: Configuration }) {
   const healthyCount = (agents ?? []).filter((agent) => agentIsHealthy(agent) === true).length;
   const degradedCount = (agents ?? []).filter((agent) => agent.status === "degraded").length;
   const insightSurface = insightSurfaces.portalAgent;
-  const guidanceRequest: AiGuidanceRequest | null =
+  const pageContext =
     agents && !isLoading
+      ? buildBrowserPageContext({
+          title: `${config.name} collectors`,
+          filters: filter ? { search: filter } : undefined,
+          visible_text: [
+            "Status is connectivity; health is collector runtime state; drift is config hash mismatch.",
+          ],
+          metrics: [
+            pageMetric("total_agents", "Total collectors", agents.length),
+            pageMetric("visible_agents", "Visible collectors", list.length),
+            pageMetric("connected_agents", "Connected collectors", connectedCount),
+            pageMetric("healthy_agents", "Healthy collectors", healthyCount),
+            pageMetric("degraded_agents", "Degraded collectors", degradedCount),
+          ],
+          details: [
+            pageDetail("configuration_id", "Configuration ID", config.id),
+            pageDetail("configuration_name", "Configuration name", config.name),
+            pageDetail("desired_config_hash", "Desired config hash", desiredHash ?? null),
+          ],
+          tables: [
+            pageTable(
+              "agents",
+              "Visible collectors",
+              visible.map((agent) => ({
+                id: agentUid(agent),
+                hostname: agentHost(agent),
+                status: agent.status ?? null,
+                health: agentIsHealthy(agent),
+                drift: agentHasDrift(agent, desiredHash),
+                current_hash: agentCurrentHash(agent),
+                last_seen: agentLastSeen(agent) ?? null,
+              })),
+              { totalRows: list.length, maxRows: 20 },
+            ),
+          ],
+        })
+      : null;
+  const guidanceRequest: AiGuidanceRequest | null =
+    agents && !isLoading && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -71,6 +110,7 @@ function AgentSection({ config }: { config: Configuration }) {
               last_seen: agentLastSeen(agent) ?? null,
             })),
           },
+          { intent: "triage_state", pageContext },
         )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);

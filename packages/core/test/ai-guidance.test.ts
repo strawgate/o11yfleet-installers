@@ -5,6 +5,7 @@ describe("ai guidance contracts", () => {
   it("accepts a valid page guidance request", () => {
     const parsed = aiGuidanceRequestSchema.parse({
       surface: "portal.overview",
+      intent: "triage_state",
       targets: [
         {
           key: "overview.health",
@@ -18,10 +19,51 @@ describe("ai guidance contracts", () => {
         connected_agents: 8,
         healthy_agents: 7,
       },
+      page_context: {
+        route: "/portal/overview",
+        title: "Fleet overview",
+        metrics: [
+          { key: "total_agents", label: "Total collectors", value: 10 },
+          { key: "connected_agents", label: "Connected collectors", value: 8 },
+        ],
+        tables: [
+          {
+            key: "recent_configurations",
+            label: "Recent configurations",
+            columns: ["name", "status"],
+            rows: [{ name: "prod", status: "active" }],
+            total_rows: 1,
+          },
+        ],
+      },
     });
 
     expect(parsed.surface).toBe("portal.overview");
+    expect(parsed.intent).toBe("triage_state");
+    expect(parsed.page_context?.metrics[0]?.key).toBe("total_agents");
     expect(parsed.targets[0]?.key).toBe("overview.health");
+  });
+
+  it("defaults intent and page context collection fields", () => {
+    const parsed = aiGuidanceRequestSchema.parse({
+      surface: "portal.overview",
+      targets: [
+        {
+          key: "overview.health",
+          label: "Fleet health summary",
+          surface: "portal.overview",
+          kind: "metric",
+        },
+      ],
+      page_context: {
+        route: "/portal/overview",
+      },
+    });
+
+    expect(parsed.intent).toBe("suggest_next_action");
+    expect(parsed.page_context?.metrics).toEqual([]);
+    expect(parsed.page_context?.tables).toEqual([]);
+    expect(parsed.page_context?.light_fetches).toEqual([]);
   });
 
   it("rejects unknown surfaces", () => {

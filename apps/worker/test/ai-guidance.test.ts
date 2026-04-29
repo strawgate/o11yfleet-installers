@@ -27,6 +27,25 @@ const overviewRequest = {
     healthy_agents: 6,
     configs_count: 2,
   },
+  page_context: {
+    route: "/portal/overview",
+    title: "Fleet overview",
+    metrics: [
+      { key: "total_agents", label: "Total collectors", value: 10 },
+      { key: "connected_agents", label: "Connected collectors", value: 7 },
+      { key: "healthy_agents", label: "Healthy collectors", value: 6 },
+      { key: "configs_count", label: "Configurations", value: 2 },
+    ],
+    tables: [
+      {
+        key: "recent_configurations",
+        label: "Recent configurations",
+        columns: ["name", "status"],
+        rows: [{ name: "prod", status: "active" }],
+        total_rows: 1,
+      },
+    ],
+  },
 };
 
 describe("AI guidance routes", () => {
@@ -44,6 +63,53 @@ describe("AI guidance routes", () => {
     expect(body.summary).toContain("portal.overview");
     expect(body.items.length).toBeGreaterThan(0);
     expect(body.items[0]?.target_key).toBe("overview.fleet-health");
+  });
+
+  it("can derive deterministic guidance from browser page context metrics", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "portal.overview",
+        targets: overviewRequest.targets,
+        context: {},
+        page_context: overviewRequest.page_context,
+      },
+      {
+        env: {},
+        scopeLabel: "tenant:tenant-ai-test",
+      },
+    );
+
+    expect(response.items.length).toBeGreaterThan(0);
+    expect(response.items[0]?.headline).toContain("offline");
+    expect(response.items[0]?.evidence.some((item) => item.value === "10")).toBe(true);
+  });
+
+  it("prefers browser page context over generic context for deterministic guidance", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "portal.overview",
+        targets: overviewRequest.targets,
+        context: {
+          total_agents: 100,
+          connected_agents: 100,
+          healthy_agents: 100,
+          configs_count: 1,
+        },
+        page_context: overviewRequest.page_context,
+      },
+      {
+        env: {},
+        scopeLabel: "tenant:tenant-ai-test",
+      },
+    );
+
+    expect(response.items[0]?.headline).toContain("offline");
+    expect(response.items[0]?.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Total collectors", value: "10" }),
+        expect.objectContaining({ label: "Connected collectors", value: "7" }),
+      ]),
+    );
   });
 
   it("rejects admin surfaces on the tenant route", async () => {

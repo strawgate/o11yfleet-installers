@@ -80,13 +80,18 @@ function buildGuidancePrompt(input: AiGuidanceRequest, scopeLabel: string): stri
       task: "Generate up to 6 high-signal guidance items for this app surface. Prefer actionable fleet operations insights over generic observations.",
       scope: scopeLabel,
       surface: input.surface,
+      intent: input.intent,
       user_prompt: input.user_prompt ?? null,
       constraints: [
+        "Treat page_context as the primary source of truth because it is what the user can currently see in the browser.",
+        "The generic context object is supplemental compatibility data.",
+        "Light fetches are explicit +1/+2 browser API calls requested by the UI; use them when present but do not ask for more data.",
         "Use only target_key values from the supplied targets.",
         "Severity must reflect operational urgency: notice, warning, or critical.",
         "Confidence should be conservative when context is sparse.",
-        "Evidence values must come from the supplied context or target context.",
+        "Evidence values must come from page_context, generic context, or target context.",
         "Actions are optional; use kind none when no safe app action is obvious.",
+        "If there is no non-obvious useful insight, return an empty items array.",
         "Return only a JSON object with keys summary and items. Do not wrap it in Markdown.",
       ],
       schema: {
@@ -95,6 +100,7 @@ function buildGuidancePrompt(input: AiGuidanceRequest, scopeLabel: string): stri
           "array of up to 12 objects: { target_key, headline, detail, severity, confidence, evidence?, action? }",
       },
       targets: input.targets,
+      page_context: input.page_context ?? null,
       context: input.context,
     },
     null,
@@ -147,14 +153,13 @@ function buildDeterministicGuidance(
   const metricTarget = targetFor(input, "metric") ?? pageTarget;
   const sectionTarget = targetFor(input, "section") ?? pageTarget;
 
-  const totalAgents = numberFromContext(input.context, "total_agents");
-  const connectedAgents = numberFromContext(input.context, "connected_agents");
-  const healthyAgents = numberFromContext(input.context, "healthy_agents");
+  const totalAgents = numberFromRequest(input, "total_agents");
+  const connectedAgents = numberFromRequest(input, "connected_agents");
+  const healthyAgents = numberFromRequest(input, "healthy_agents");
   const configCount =
-    numberFromContext(input.context, "configs_count") ??
-    numberFromContext(input.context, "total_configurations");
-  const activeTokens = numberFromContext(input.context, "total_active_tokens");
-  const tenantCount = numberFromContext(input.context, "total_tenants");
+    numberFromRequest(input, "configs_count") ?? numberFromRequest(input, "total_configurations");
+  const activeTokens = numberFromRequest(input, "total_active_tokens");
+  const tenantCount = numberFromRequest(input, "total_tenants");
   const reviewAgentsAction =
     opts.scopeLabel === "admin"
       ? undefined
@@ -280,7 +285,22 @@ function isAppRelativeHref(href: string): boolean {
   return href.startsWith("/") && !href.startsWith("//");
 }
 
+function numberFromRequest(input: AiGuidanceRequest, key: string): number | null {
+  return numberFromPageContext(input, key) ?? numberFromContext(input.context, key);
+}
+
 function numberFromContext(context: Record<string, unknown>, key: string): number | null {
   const value = context[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function numberFromPageContext(input: AiGuidanceRequest, key: string): number | null {
+  const metric = input.page_context?.metrics.find((candidate) => candidate.key === key);
+  if (!metric) return null;
+  if (typeof metric.value === "number" && Number.isFinite(metric.value)) return metric.value;
+  if (typeof metric.value === "string" && metric.value.trim() !== "") {
+    const parsed = Number(metric.value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
