@@ -199,6 +199,25 @@ cd o11yfleet</code></pre>
               ><code>just install</code></pre>
             </li>
             <li>
+              <strong>Create local dev secrets</strong>
+              <pre
+                style="
+                  background: var(--surface-2);
+                  padding: 12px 14px;
+                  border-radius: var(--radius);
+                  overflow-x: auto;
+                  font-size: 13px;
+                "
+              ><code>printf "API_SECRET=dev-local-api-secret-1234567890x\nCLAIM_SECRET=dev-local-claim-secret-12345678x\n" > apps/worker/.dev.vars
+export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x</code></pre>
+              <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
+                The Worker reads <code class="mono">API_SECRET</code> from
+                <code class="mono">apps/worker/.dev.vars</code>. The local scripts use the matching
+                <code class="mono">O11YFLEET_API_KEY</code> value for admin and tenant-scoped API
+                calls.
+              </p>
+            </li>
+            <li>
               <strong>Start the worker</strong> (for local development)
               <pre
                 style="
@@ -224,7 +243,8 @@ cd o11yfleet</code></pre>
                   overflow-x: auto;
                   font-size: 13px;
                 "
-              ><code>just setup</code></pre>
+              ><code>export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
+just setup</code></pre>
               <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
                 This applies database migrations, seeds a demo tenant and configuration, creates an
                 enrollment token, and shows fleet status. You can now connect collectors to the

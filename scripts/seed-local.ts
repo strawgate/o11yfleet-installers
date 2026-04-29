@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { api, log, saveState, loadState, stateFilePath, BASE_URL } from "./lib.js";
+import { api, log, saveState, loadState, stateFilePath, BASE_URL, requireApiKey } from "./lib.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -45,10 +45,12 @@ async function main() {
     return;
   }
 
+  requireApiKey();
+
   // 1. Create tenant
   log.info("Creating tenant...");
   const { status: ts, data: tenant } = await api<{ id: string; name: string; plan: string }>(
-    "/api/tenants",
+    "/api/admin/tenants",
     { method: "POST", body: JSON.stringify({ name: "Local Dev", plan: "free" }) },
   );
   if (ts !== 201) {
@@ -60,15 +62,15 @@ async function main() {
   // 2. Create configuration
   log.info("Creating configuration...");
   const { status: cs, data: config } = await api<{ id: string; name: string }>(
-    "/api/configurations",
+    "/api/v1/configurations",
     {
       method: "POST",
       body: JSON.stringify({
-        tenant_id: tenant.id,
         name: "dev-collectors",
         description: "Local development OTel collector config",
       }),
     },
+    tenant.id,
   );
   if (cs !== 201) {
     log.error(`Failed to create configuration: ${JSON.stringify(config)}`);
@@ -84,11 +86,15 @@ async function main() {
     hash: string;
     sizeBytes: number;
     deduplicated: boolean;
-  }>(`/api/configurations/${config.id}/versions`, {
-    method: "POST",
-    body: yaml,
-    headers: { "Content-Type": "text/yaml" },
-  });
+  }>(
+    `/api/v1/configurations/${config.id}/versions`,
+    {
+      method: "POST",
+      body: yaml,
+      headers: { "Content-Type": "text/yaml" },
+    },
+    tenant.id,
+  );
   if (us !== 201) {
     log.error(`Failed to upload config: ${JSON.stringify(upload)}`);
     process.exit(1);
@@ -101,10 +107,14 @@ async function main() {
     id: string;
     token: string;
     config_id: string;
-  }>(`/api/configurations/${config.id}/enrollment-token`, {
-    method: "POST",
-    body: JSON.stringify({ label: "local-dev" }),
-  });
+  }>(
+    `/api/v1/configurations/${config.id}/enrollment-token`,
+    {
+      method: "POST",
+      body: JSON.stringify({ label: "local-dev" }),
+    },
+    tenant.id,
+  );
   if (ets !== 201) {
     log.error(`Failed to create enrollment token: ${JSON.stringify(enrollData)}`);
     process.exit(1);
@@ -114,8 +124,9 @@ async function main() {
   // 5. Rollout the config
   log.info("Rolling out config to connected agents (none yet)...");
   const { status: rs, data: rollout } = await api<{ pushed: number }>(
-    `/api/configurations/${config.id}/rollout`,
+    `/api/v1/configurations/${config.id}/rollout`,
     { method: "POST" },
+    tenant.id,
   );
   if (rs === 200) {
     log.ok(`Rollout complete — pushed to ${(rollout as { pushed: number }).pushed} agents`);

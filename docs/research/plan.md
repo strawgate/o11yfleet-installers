@@ -207,22 +207,51 @@ The central stateful actor:
 
 ## 2D — API Route Handlers
 
-**Owns:** `apps/worker/src/routes/api/`
+**Owns:** `apps/worker/src/routes/v1/`, `apps/worker/src/routes/admin/`, `apps/worker/src/routes/auth.ts`
 
 **Inputs:** D1 schema (1B), config store (can mock), enrollment tokens (1D)
 
-CRUD routes:
+Current route families:
 
 ```text
-POST   /api/tenants
-GET    /api/tenants/:id/configurations
-POST   /api/configurations
-GET    /api/configurations/:id
-POST   /api/configurations/:id/versions        → calls 2A
-POST   /api/configurations/:id/enrollment-token → calls 1D
-GET    /api/configurations/:id/agents           → reads D1
-GET    /api/configurations/:id/stats            → calls DO
-POST   /api/configurations/:id/rollout          → calls DO
+POST   /auth/login
+GET    /auth/me
+POST   /auth/logout
+POST   /auth/seed
+
+GET    /api/v1/tenant
+PUT    /api/v1/tenant
+DELETE /api/v1/tenant
+GET    /api/v1/team
+GET    /api/v1/overview
+
+GET    /api/v1/configurations
+POST   /api/v1/configurations
+GET    /api/v1/configurations/:id
+PUT    /api/v1/configurations/:id
+DELETE /api/v1/configurations/:id
+POST   /api/v1/configurations/:id/versions        → calls 2A
+GET    /api/v1/configurations/:id/versions
+GET    /api/v1/configurations/:id/yaml
+POST   /api/v1/configurations/:id/enrollment-token → calls 1D
+GET    /api/v1/configurations/:id/enrollment-tokens
+DELETE /api/v1/configurations/:id/enrollment-tokens/:token_id
+GET    /api/v1/configurations/:id/agents           → reads DO state
+GET    /api/v1/configurations/:id/agents/:instance_uid
+GET    /api/v1/configurations/:id/stats            → calls DO
+POST   /api/v1/configurations/:id/rollout          → calls DO
+
+GET    /api/admin/overview
+POST   /api/admin/ai/guidance
+GET    /api/admin/tenants
+POST   /api/admin/tenants
+GET    /api/admin/tenants/:id
+PUT    /api/admin/tenants/:id
+DELETE /api/admin/tenants/:id
+GET    /api/admin/tenants/:id/configurations
+GET    /api/admin/tenants/:id/users
+GET    /api/admin/health
+GET    /api/admin/plans
 ```
 
 **Exit:** Each endpoint has handler tests against local D1/R2 bindings. Nonexistent resource returns 404.

@@ -33,9 +33,10 @@ The current app implementation is the React/Vite app under `apps/site/src`. Olde
 
 **Backend API** (already built):
 
-- User routes: `POST|GET /api/v1/configurations`, `GET|PUT|DELETE /api/v1/configurations/:id`, versions, enrollment-tokens, agents, stats, rollout — all scoped by `X-Tenant-Id` header
-- Admin routes: `POST|GET /api/admin/tenants`, `GET|PUT|DELETE /api/admin/tenants/:id`, `GET /api/admin/tenants/:id/configurations`
-- Auth: Currently header-based stubs (`X-Tenant-Id`, `X-Admin`). Future: real SSO with JWT. Design the UI as if real auth exists (login page, session, profile dropdown) — we'll wire it up.
+- Auth routes: `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`, and API-secret-gated `POST /auth/seed`
+- User routes: `GET|PUT|DELETE /api/v1/tenant`, `GET /api/v1/team`, `GET /api/v1/overview`, `POST|GET /api/v1/configurations`, `GET|PUT|DELETE /api/v1/configurations/:id`, versions, enrollment tokens, agents, stats, rollout, and YAML download
+- Admin routes: `POST|GET /api/admin/tenants`, `GET|PUT|DELETE /api/admin/tenants/:id`, `GET /api/admin/tenants/:id/configurations`, `GET /api/admin/tenants/:id/users`, `GET /api/admin/health`, and `GET /api/admin/plans`
+- Auth model: browser sessions come from `/auth/login` and `/auth/me`; programmatic tenant-scoped calls use `Authorization: Bearer <API_SECRET>` plus `X-Tenant-Id`; admin calls use an admin session or the same bearer secret.
 
 **Data model**:
 

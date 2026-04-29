@@ -22,7 +22,7 @@ supports.
 - Softened marketing claims that were ahead of the MVP, including automatic
   rollback, label-targeted rollout, hosted Git sync, and UI drift detection.
 - Updated smoke-test guidance to use local setup or explicit hosted tokens
-  instead of legacy unauthenticated API examples.
+  instead of unauthenticated API examples.
 - Removed public footer dead links and replaced static status text with neutral
   preview copy.
 - Fixed product navigation so `/product`, the header link, footer link, docs

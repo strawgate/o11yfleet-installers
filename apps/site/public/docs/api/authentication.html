@@ -127,16 +127,48 @@
           <h1>API authentication</h1>
 
           <p class="lede">
-            O11yFleet provides a REST API for programmatic access. All API requests require
-            authentication via the deployment bearer secret or a portal session cookie.
+            O11yFleet has three current authentication paths: portal session cookies, the deployment
+            bearer secret for automation, and collector enrollment/assignment tokens for OpAMP
+            WebSocket connections.
           </p>
 
-          <h2 id="api-access">API access</h2>
+          <h2 id="portal-session-auth">Portal session auth</h2>
           <p>
-            Programmatic API access currently uses one deployment-level bearer secret (<code
-              class="mono"
-              >API_SECRET</code
-            >). Tenant-scoped requests to <code class="mono">/api/v1/*</code> must also include
+            The management UI signs users in with <code class="mono">POST /auth/login</code>. A
+            successful login sets the secure <code class="mono">fp_session</code> cookie. Browser
+            requests then use that cookie automatically.
+          </p>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Route</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px"><code class="mono">POST /auth/login</code></td>
+                <td style="padding: 10px 14px">Validate email/password and set session cookie</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px"><code class="mono">GET /auth/me</code></td>
+                <td style="padding: 10px 14px">Return the current signed-in user</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px"><code class="mono">POST /auth/logout</code></td>
+                <td style="padding: 10px 14px">Delete the server session and clear the cookie</td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="bearer-api-access">Bearer API access</h2>
+          <p>
+            Programmatic API access currently uses one deployment-level bearer secret,
+            <code class="mono">API_SECRET</code>. Tenant-scoped requests to
+            <code class="mono">/api/v1/*</code> must also include
             <code class="mono">X-Tenant-Id</code>. Fine-grained tenant API keys and per-key
             read/write/admin permissions are not implemented yet.
           </p>
@@ -153,11 +185,17 @@
           ><code>curl -H "Authorization: Bearer &lt;API_SECRET&gt;" \
      -H "X-Tenant-Id: &lt;tenant-id&gt;" \
      https://api.o11yfleet.com/api/v1/configurations</code></pre>
-
-          <h2 id="session-auth">Session authentication</h2>
           <p>
-            The management UI uses session-based authentication via secure HTTP-only cookies. This
-            is handled automatically by the portal — no action needed on your part.
+            Admin automation uses the same bearer secret against
+            <code class="mono">/api/admin/*</code> routes. Do not expose this secret to collectors,
+            browsers, or untrusted automation.
+          </p>
+
+          <h2 id="seed-auth">Seed route</h2>
+          <p>
+            <code class="mono">POST /auth/seed</code> creates configured demo users and is guarded
+            by <code class="mono">Authorization: Bearer &lt;API_SECRET&gt;</code>. It is intended
+            for local setup and controlled deployment bootstrap, not public signup.
           </p>
 
           <h2 id="tenant-isolation">Tenant isolation</h2>
@@ -172,6 +210,15 @@
             The current backend distinguishes admin session access, tenant session access, and
             bearer-secret access. Bearer-secret callers are treated as admin-level automation;
             scoped API-key permissions are planned but not available today.
+          </p>
+
+          <h2 id="collector-auth">Collector auth</h2>
+          <p>
+            Collectors connect to <code class="mono">/v1/opamp</code> over WebSocket. First-time
+            enrollment uses an <code class="mono">fp_enroll_...</code> token. After enrollment, the
+            server returns a signed assignment claim and the collector can reconnect with that
+            claim. The worker strips external <code class="mono">x-fp-*</code> headers before
+            routing the socket internally.
           </p>
 
           <div class="docs-page-nav">

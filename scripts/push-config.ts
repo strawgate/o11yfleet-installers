@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { api, log, loadState, saveState, BASE_URL } from "./lib.js";
+import { api, log, loadState, saveState, BASE_URL, requireApiKey } from "./lib.js";
 
 async function main() {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));
@@ -22,6 +22,8 @@ async function main() {
     console.log("  configs/full-pipeline.yaml   — Multi-source with sampling");
     process.exit(1);
   }
+
+  requireApiKey();
 
   const state = loadState();
   if (!state) {
@@ -47,11 +49,15 @@ async function main() {
     r2Key: string;
     sizeBytes: number;
     deduplicated: boolean;
-  }>(`/api/configurations/${state.config_id}/versions`, {
-    method: "POST",
-    body: yaml,
-    headers: { "Content-Type": "text/yaml" },
-  });
+  }>(
+    `/api/v1/configurations/${state.config_id}/versions`,
+    {
+      method: "POST",
+      body: yaml,
+      headers: { "Content-Type": "text/yaml" },
+    },
+    state.tenant_id,
+  );
 
   if (status !== 201) {
     log.error(`Upload failed (${status}): ${JSON.stringify(data)}`);
@@ -74,8 +80,9 @@ async function main() {
   // Rollout
   log.info("Rolling out to connected agents...");
   const { status: rs, data: rollout } = await api<{ pushed: number; config_hash: string }>(
-    `/api/configurations/${state.config_id}/rollout`,
+    `/api/v1/configurations/${state.config_id}/rollout`,
     { method: "POST" },
+    state.tenant_id,
   );
 
   if (rs !== 200) {

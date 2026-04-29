@@ -21,7 +21,7 @@ test:
     pnpm turbo test
 
 # Run all CI checks
-ci: lint typecheck test fmt-check
+ci: lint typecheck test docs-api-check fmt-check
 
 # Format code
 fmt:
@@ -30,6 +30,10 @@ fmt:
 # Check formatting
 fmt-check:
     pnpm prettier --check .
+
+# Check API docs against current worker routes
+docs-api-check:
+    pnpm tsx scripts/check-api-docs.ts
 
 # Dev mode — start worker locally
 dev:

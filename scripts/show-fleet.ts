@@ -7,7 +7,7 @@
  * Usage: npx tsx scripts/show-fleet.ts
  */
 
-import { api, log, loadState, BASE_URL } from "./lib.js";
+import { api, log, loadState, BASE_URL, requireApiKey } from "./lib.js";
 
 interface Agent {
   instance_uid: string;
@@ -43,6 +43,7 @@ async function main() {
     log.error("No local state found. Run 'just seed' first.");
     process.exit(1);
   }
+  requireApiKey();
 
   console.log(`\n╔═══════════════════════════════════════════════╗`);
   console.log(`║  o11yfleet Fleet Status                      ║`);
@@ -54,7 +55,11 @@ async function main() {
   console.log(`📦 Config: ${state.config_name} (${state.config_id})\n`);
 
   // Config details
-  const { data: config } = await api<Config>(`/api/configurations/${state.config_id}`);
+  const { data: config } = await api<Config>(
+    `/api/v1/configurations/${state.config_id}`,
+    undefined,
+    state.tenant_id,
+  );
   if (config) {
     console.log("─── Configuration ────────────────────────────");
     console.log(`  Current hash: ${config.current_config_hash?.slice(0, 24) ?? "none"}...`);
@@ -64,7 +69,9 @@ async function main() {
 
   // DO stats (live WebSocket state)
   const { status: ss, data: stats } = await api<Stats>(
-    `/api/configurations/${state.config_id}/stats`,
+    `/api/v1/configurations/${state.config_id}/stats`,
+    undefined,
+    state.tenant_id,
   );
   if (ss === 200 && stats) {
     console.log("─── Live Stats (Durable Object) ──────────────");
@@ -78,7 +85,9 @@ async function main() {
 
   // Agent list (from D1 read model)
   const { status: as, data: agentData } = await api<{ agents: Agent[] }>(
-    `/api/configurations/${state.config_id}/agents`,
+    `/api/v1/configurations/${state.config_id}/agents`,
+    undefined,
+    state.tenant_id,
   );
   if (as === 200 && agentData?.agents) {
     const agents = agentData.agents;
@@ -105,7 +114,9 @@ async function main() {
 
   // List configurations for tenant
   const { data: configsData } = await api<{ configurations: Config[] }>(
-    `/api/tenants/${state.tenant_id}/configurations`,
+    "/api/v1/configurations",
+    undefined,
+    state.tenant_id,
   );
   if (configsData?.configurations && configsData.configurations.length > 0) {
     console.log(

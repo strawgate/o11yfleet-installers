@@ -27,6 +27,8 @@ o11yfleet/
 just install
 
 # Start local development
+printf "API_SECRET=dev-local-api-secret-1234567890x\\nCLAIM_SECRET=dev-local-claim-secret-12345678x\\n" > apps/worker/.dev.vars
+export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
 just dev           # Start worker locally (wrangler dev)
 just setup         # In another terminal: migrate, seed, show fleet status
 just ui            # Start web UI locally (separate terminal)

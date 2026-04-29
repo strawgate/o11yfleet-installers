@@ -127,9 +127,9 @@
           <h1>API endpoints</h1>
 
           <p class="lede">
-            The O11yFleet API provides REST endpoints for managing configurations, agents, and
-            enrollment tokens. Base URL:
-            <code class="mono">https://api.o11yfleet.com/api/v1</code>
+            Current O11yFleet API routes are split into auth, tenant-scoped portal routes, admin
+            routes, and the OpAMP WebSocket endpoint. This reference lists the public surface
+            exposed by the Worker today.
           </p>
 
           <h2 id="base-url">Base URL</h2>
@@ -141,13 +141,14 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>https://api.o11yfleet.com/api/v1</code></pre>
+          ><code>https://api.o11yfleet.com</code></pre>
 
           <h2 id="authentication">Authentication</h2>
           <p>
-            Programmatic API requests currently use the deployment-level
-            <code class="mono">API_SECRET</code> in the
-            <code class="mono">Authorization</code> header:
+            Tenant portal routes accept either a portal session cookie or
+            <code class="mono">Authorization: Bearer &lt;API_SECRET&gt;</code> plus
+            <code class="mono">X-Tenant-Id</code>. Admin routes require an admin session or the
+            deployment bearer secret.
           </p>
           <pre
             style="
@@ -159,8 +160,54 @@
             "
           ><code>Authorization: Bearer &lt;API_SECRET&gt;</code></pre>
 
-          <h2 id="tenancy">Tenant scoping</h2>
-          <p>Include your tenant ID in the <code class="mono">X-Tenant-Id</code> header:</p>
+          <h2 id="system-routes">System and auth routes</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/healthz</code></td>
+                <td style="padding: 10px 14px">Worker health check</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/login</code></td>
+                <td style="padding: 10px 14px">Create a portal session cookie</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/me</code></td>
+                <td style="padding: 10px 14px">Return the current session user</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/logout</code></td>
+                <td style="padding: 10px 14px">Delete the current session</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/seed</code></td>
+                <td style="padding: 10px 14px">
+                  Seed configured demo users; requires bearer secret
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h2 id="tenant-scoped-routes">Tenant-scoped routes</h2>
+          <p>
+            These routes are scoped to one tenant. Browser requests get the tenant from the session;
+            bearer-token requests must include:
+          </p>
           <pre
             style="
               background: var(--surface-2);
@@ -170,128 +217,259 @@
               font-size: 13px;
             "
           ><code>X-Tenant-Id: &lt;your-tenant-id&gt;</code></pre>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/tenant</code></td>
+                <td style="padding: 10px 14px">Get tenant metadata</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">PUT</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/tenant</code></td>
+                <td style="padding: 10px 14px">Update tenant name</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">DELETE</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/tenant</code></td>
+                <td style="padding: 10px 14px">Delete tenant if it has no configurations</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/team</code></td>
+                <td style="padding: 10px 14px">List tenant users</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/overview</code></td>
+                <td style="padding: 10px 14px">Tenant fleet summary and per-config stats</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/ai/guidance</code></td>
+                <td style="padding: 10px 14px">Portal AI guidance helper</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <h2 id="configurations">Configurations</h2>
+          <h2 id="configuration-routes">Configuration routes</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/configurations</code></td>
+                <td style="padding: 10px 14px">List configurations for the tenant</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/v1/configurations</code></td>
+                <td style="padding: 10px 14px">Create a configuration group from JSON</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET/PUT/DELETE</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id</code>
+                </td>
+                <td style="padding: 10px 14px">Read, update, or delete one configuration</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/versions</code>
+                </td>
+                <td style="padding: 10px 14px">Upload YAML as a new content-addressed version</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/versions</code>
+                </td>
+                <td style="padding: 10px 14px">List uploaded versions for one configuration</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/yaml</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Return current YAML as <code class="mono">text/yaml</code>
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/rollout</code>
+                </td>
+                <td style="padding: 10px 14px">Push the current version to connected collectors</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <h3>List configurations</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>GET /configurations</code></pre>
-          <p>Response:</p>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>{ "configurations": [{ "id": "cfg_xxx", "name": "prod-ingress", "current_config_hash": "abc123...", "updated_at": "2026-04-28T12:00:00Z" }] }</code></pre>
+          <h2 id="agent-and-token-routes">Agent and token routes</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/agents</code>
+                </td>
+                <td style="padding: 10px 14px">List collectors connected to a configuration</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/agents/:instance_uid</code>
+                </td>
+                <td style="padding: 10px 14px">Get one collector from the in-memory fleet state</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/stats</code>
+                </td>
+                <td style="padding: 10px 14px">Return fleet counts for one configuration</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/enrollment-token</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Create an enrollment token; token value is returned once
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/enrollment-tokens</code>
+                </td>
+                <td style="padding: 10px 14px">List token metadata, not raw token values</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">DELETE</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/enrollment-tokens/:token_id</code>
+                </td>
+                <td style="padding: 10px 14px">Revoke an enrollment token</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <h3>Get configuration</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>GET /configurations/:id</code></pre>
+          <h2 id="admin-routes">Admin routes</h2>
+          <p>Admin routes require an admin session or <code class="mono">API_SECRET</code>.</p>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/overview</code></td>
+                <td style="padding: 10px 14px">Platform-level tenant/config/token counts</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/ai/guidance</code></td>
+                <td style="padding: 10px 14px">Admin AI guidance helper</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET/POST</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/tenants</code></td>
+                <td style="padding: 10px 14px">List or create tenants</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET/PUT/DELETE</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/tenants/:id</code></td>
+                <td style="padding: 10px 14px">Read, update, or delete one tenant</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/admin/tenants/:id/configurations</code>
+                </td>
+                <td style="padding: 10px 14px">List configurations for one tenant</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/admin/tenants/:id/users</code>
+                </td>
+                <td style="padding: 10px 14px">List users for one tenant</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/health</code></td>
+                <td style="padding: 10px 14px">Check D1, R2, queue, and Durable Object health</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/api/admin/plans</code></td>
+                <td style="padding: 10px 14px">List built-in plan limits</td>
+              </tr>
+            </tbody>
+          </table>
 
-          <h3>Create configuration</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>POST /configurations
-{
-  "name": "prod-ingress",
-  "description": "Ingress gateway config"
-}</code></pre>
-          <p><strong>Note:</strong> YAML config is uploaded separately as a version.</p>
+          <h2 id="opamp-route">OpAMP route</h2>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">WebSocket</td>
+                <td style="padding: 10px 14px"><code class="mono">/v1/opamp</code></td>
+                <td style="padding: 10px 14px">
+                  Collector OpAMP connection with enrollment token or assignment claim
+                </td>
+              </tr>
+            </tbody>
+          </table>
 
-          <h3>Upload configuration YAML (create version)</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>POST /configurations/:id/versions
-Content-Type: text/yaml
-
-receivers:
-  otlp:
-    protocols:
-      grpc:</code></pre>
-
-          <h3>List versions</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>GET /configurations/:id/versions</code></pre>
-          <p>
-            Returns <code class="mono">versions</code> plus the configuration's
-            <code class="mono">current_config_hash</code>.
-          </p>
-
-          <h3>Get current YAML</h3>
-          <pre
-            style="
-              background: var(--surface-2);
-              padding: 12px 14px;
-              border-radius: var(--radius);
-              overflow-x: auto;
-              font-size: 13px;
-            "
-          ><code>GET /configurations/:id/yaml</code></pre>
-          <p>Returns the raw YAML for the current version.</p>
-
-          <h2 id="agents">Agents</h2>
-          <ul>
-            <li>
-              <code class="mono">GET /configurations/:id/agents</code> — list agents for a config
-            </li>
-            <li>
-              <code class="mono">GET /configurations/:id/agents/:instance_uid</code> — get agent
-              details
-            </li>
-            <li><code class="mono">GET /configurations/:id/stats</code> — config fleet stats</li>
-          </ul>
-
-          <h2 id="enrollment-tokens">Enrollment tokens</h2>
-          <ul>
-            <li>
-              <code class="mono">POST /configurations/:id/enrollment-token</code> — create token
-            </li>
-            <li>
-              <code class="mono">DELETE /configurations/:id/enrollment-tokens/:token_id</code> —
-              revoke token
-            </li>
-            <li>
-              <code class="mono">GET /configurations/:id/enrollment-tokens</code> — list tokens
-            </li>
-          </ul>
-
-          <h2 id="rollout">Rollout</h2>
+          <h2 id="behavior-notes">Behavior notes</h2>
           <p>
             Config versions become current when uploaded. Call the rollout endpoint to push the
             current version immediately to all connected collectors. There is no strategy selection
@@ -300,8 +478,8 @@ receivers:
           <p><strong>Current behavior:</strong></p>
           <ul>
             <li>
-              <code class="mono">POST /configurations/:id/rollout</code> pushes the current version
-              to every connected agent for that config.
+              <code class="mono">POST /api/v1/configurations/:id/rollout</code> pushes the current
+              version to every connected agent for that config.
             </li>
             <li>No batching, gradual delivery, targeting, or per-agent rollout record yet.</li>
           </ul>
@@ -312,8 +490,8 @@ receivers:
           </ul>
 
           <div class="coming-soon-banner">
-            <strong>🚧 API extensions in progress:</strong> Rollout strategies, progress tracking,
-            label-based targeting, and audit logs are under development.
+            <strong>Planned API extensions:</strong> Scoped tenant API keys, rollout strategies,
+            progress tracking, label-based targeting, and audit logs are not implemented yet.
           </div>
 
           <div class="docs-page-nav">

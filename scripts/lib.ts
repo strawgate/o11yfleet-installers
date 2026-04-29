@@ -10,6 +10,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = resolve(__dirname, "..", ".local-state.json");
 
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
+export const API_KEY = process.env.O11YFLEET_API_KEY ?? process.env.API_SECRET ?? "";
 
 export interface LocalState {
   tenant_id: string;
@@ -39,6 +40,14 @@ export function stateFilePath(): string {
   return STATE_FILE;
 }
 
+export function requireApiKey(): string {
+  if (!API_KEY) {
+    log.error("Set O11YFLEET_API_KEY to the worker API_SECRET before using local API scripts.");
+    process.exit(1);
+  }
+  return API_KEY;
+}
+
 /** Pretty timestamp */
 export function ts(): string {
   return new Date().toISOString().replace("T", " ").replace("Z", "");
@@ -58,12 +67,17 @@ export const log = {
 export async function api<T = unknown>(
   path: string,
   opts?: RequestInit,
+  tenantId?: string,
 ): Promise<{ status: number; data: T }> {
   const url = `${BASE_URL}${path}`;
+  const authHeaders: Record<string, string> = {};
+  if (API_KEY) authHeaders["Authorization"] = `Bearer ${API_KEY}`;
+  if (tenantId) authHeaders["X-Tenant-Id"] = tenantId;
   const res = await fetch(url, {
     ...opts,
     headers: {
       "Content-Type": "application/json",
+      ...authHeaders,
       ...opts?.headers,
     },
   });
