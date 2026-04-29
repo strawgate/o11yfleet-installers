@@ -10,8 +10,7 @@ import { mkdirSync, chmodSync, existsSync, rmSync } from "fs";
 import { join } from "path";
 import { exit } from "bun:process";
 
-const SRC_DIR = new URL(".", import.meta.url).pathname;
-const BIN_DIR = join(SRC_DIR, "bin");
+const BIN_DIR = join(process.cwd(), "bin");
 
 function build(): void {
   const isWindows = process.platform === "win32";
