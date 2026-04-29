@@ -4,27 +4,7 @@
 import type { Env } from "../../index.js";
 import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
 import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
-
-// ─── Error helpers ──────────────────────────────────────────────────
-
-function jsonError(error: string, status: number): Response {
-  return Response.json({ error }, { status });
-}
-
-function parseJsonBody<T>(request: Request): Promise<T> {
-  return request.json<T>().catch(() => {
-    throw new AdminApiError("Invalid JSON in request body", 400);
-  });
-}
-
-class AdminApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
+import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
 
 // ─── Router ─────────────────────────────────────────────────────────
 
@@ -32,7 +12,7 @@ export async function handleAdminRequest(request: Request, env: Env, url: URL): 
   try {
     return await routeAdminRequest(request, env, url);
   } catch (err) {
-    if (err instanceof AdminApiError) {
+    if (err instanceof ApiError) {
       return jsonError(err.message, err.status);
     }
     if (err instanceof AiApiError) {

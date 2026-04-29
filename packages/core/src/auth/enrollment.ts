@@ -23,9 +23,7 @@ export async function verifyEnrollmentToken(
   storedHash: string,
 ): Promise<boolean> {
   const computedHash = await hashEnrollmentToken(rawToken);
-  // M4 fix: timing-safe comparison to prevent hash oracle attacks
   if (computedHash.length !== storedHash.length) return false;
-  const encoder = new TextEncoder();
   const a = encoder.encode(computedHash);
   const b = encoder.encode(storedHash);
   let result = 0;

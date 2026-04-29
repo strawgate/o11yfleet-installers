@@ -9,27 +9,7 @@ import {
 } from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import { AiApiError, handleTenantGuidanceRequest } from "../../ai/guidance.js";
-
-// ─── Error helpers ──────────────────────────────────────────────────
-
-function jsonError(error: string, status: number): Response {
-  return Response.json({ error }, { status });
-}
-
-function parseJsonBody<T>(request: Request): Promise<T> {
-  return request.json<T>().catch(() => {
-    throw new V1ApiError("Invalid JSON in request body", 400);
-  });
-}
-
-class V1ApiError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-  ) {
-    super(message);
-  }
-}
+import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
 
 // ─── Router ─────────────────────────────────────────────────────────
 
@@ -42,7 +22,7 @@ export async function handleV1Request(
   try {
     return await routeV1Request(request, env, url, tenantId);
   } catch (err) {
-    if (err instanceof V1ApiError) {
+    if (err instanceof ApiError) {
       return jsonError(err.message, err.status);
     }
     if (err instanceof AiApiError) {

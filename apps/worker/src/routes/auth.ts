@@ -3,12 +3,7 @@
 import type { Env } from "../index.js";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits } from "../shared/plans.js";
-
-// ─── Helpers ────────────────────────────────────────────────────────
-
-function jsonError(error: string, status: number): Response {
-  return Response.json({ error }, { status });
-}
+import { jsonError } from "../shared/errors.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
