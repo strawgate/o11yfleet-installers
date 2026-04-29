@@ -36,6 +36,9 @@ just install
 # Set up local environment (creates apps/worker/.dev.vars)
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
 
+# Replace dev-local... placeholder secrets with local random values
+$EDITOR apps/worker/.dev.vars
+
 # Check environment readiness
 just doctor
 
