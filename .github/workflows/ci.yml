@@ -8,29 +8,177 @@ on:
     paths:
       - ".github/workflows/ci.yml"
       - "installers/**"
+      - "src/**"
+      - "bin/**"
+      - "build.ts"
+      - "package.json"
   workflow_dispatch:
 
+env:
+  INSTALLER_VERSION: "1.0.0"
+
 jobs:
-  test-install-script:
+
+  # ─── Build binary on each platform ──────────────────────────────────────
+  build-darwin-arm64:
+    name: Build darwin-arm64
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Build
+        run: bun run build
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-darwin-arm64
+          path: bin/o11yfleet-install
+          compression-level: 0
+
+  build-linux-amd64:
+    name: Build linux-amd64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Build
+        run: bun run build
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-linux-amd64
+          path: bin/o11yfleet-install
+          compression-level: 0
+
+  build-linux-arm64:
+    name: Build linux-arm64
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Build
+        run: bun run build
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-linux-arm64
+          path: bin/o11yfleet-install
+          compression-level: 0
+
+  build-windows-amd64:
+    name: Build windows-amd64
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+      - uses: oven-sh/setup-bun@v2
+        with: bun-version: latest
+      - name: Build
+        run: bun run build
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yfleet-install-windows-amd64
+          path: bin/o11yfleet-install.exe
+          compression-level: 0
+
+  # ─── Test binary on all platforms ───────────────────────────────────────
+  test-binary:
     name: Test on ${{ matrix.os }}-${{ matrix.arch }}
+    needs:
+      - build-darwin-arm64
+      - build-linux-amd64
+      - build-linux-arm64
+      - build-windows-amd64
     runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Linux amd64
           - os: linux
             runner: ubuntu-24.04
             arch: amd64
-          # macOS Apple Silicon (M1-M4)
-          - os: macos
-            runner: macos-15
+            artifact: o11yfleet-install-linux-amd64
+            token: "fp_enroll_test_ci_linux"
+          - os: linux
+            runner: ubuntu-24.04
             arch: arm64
-          # macOS M3
-          - os: macos
+            artifact: o11yfleet-install-linux-arm64
+            token: "fp_enroll_test_ci_linux"
+          - os: darwin
             runner: macos-14
             arch: arm64
-          # Windows amd64
+            artifact: o11yfleet-install-darwin-arm64
+            token: "fp_enroll_test_ci_macos"
+          - os: darwin
+            runner: macos-15
+            arch: arm64
+            artifact: o11yfleet-install-darwin-arm64
+            token: "fp_enroll_test_ci_macos"
+          - os: windows
+            runner: windows-2022
+            arch: amd64
+            artifact: o11yfleet-install-windows-amd64
+            token: "fp_enroll_test_ci_windows"
+
+    steps:
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: .
+
+      - name: Make executable (Unix)
+        if: matrix.os != 'windows'
+        run: chmod +x ./o11yfleet-install
+
+      - name: Test dry-run (Unix)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: ./o11yfleet-install --dry-run --token fp_enroll_test
+
+      - name: Test dry-run (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./o11yfleet-install.exe --dry-run --token fp_enroll_test
+
+      - name: Test full install (Unix)
+        if: matrix.os != 'windows'
+        shell: bash
+        run: |
+          TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
+          ./o11yfleet-install --token ${{ matrix.token }} --dir "$TEST_DIR"
+          find /tmp -name "otelcol-contrib" -type f 2>/dev/null | head -1 | xargs -I{} test -x {} && echo "Binary is executable"
+          rm -rf "$TEST_DIR" 2>/dev/null || true
+
+      - name: Test full install (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
+          ./o11yfleet-install.exe --token ${{ matrix.token }} --dir $TEST_DIR
+          if (Test-Path "$TEST_DIR\bin\otelcol-contrib.exe") { Write-Host "Binary exists" }
+          Remove-Item -Recurse -Force $TEST_DIR -ErrorAction SilentlyContinue
+
+  # ─── Test old shell scripts ──────────────────────────────────────────────
+  test-install-script:
+    name: Test shell scripts on ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            runner: ubuntu-24.04
+            arch: amd64
+          - os: darwin
+            runner: macos-14
+            arch: arm64
+          - os: darwin
+            runner: macos-15
+            arch: arm64
           - os: windows
             runner: windows-2022
             arch: amd64
@@ -50,17 +198,17 @@ jobs:
 
       - name: Run Windows installer (dry-run mode)
         if: matrix.os == 'windows'
-        shell: pwsh
         env:
           OTELCOL_VERSION: "0.151.0"
+        shell: pwsh
         run: |
           powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$env:OTELCOL_VERSION"
 
-      - name: Verify binary download and checksum
+      - name: Verify binary download (Unix)
         if: matrix.os != 'windows'
-        shell: bash
         env:
           OTELCOL_VERSION: "0.151.0"
+        shell: bash
         run: |
           chmod +x installers/install.sh
           TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
@@ -68,11 +216,11 @@ jobs:
           find /tmp -name "otelcol-contrib" -type f 2>/dev/null | head -1 | xargs -I{} test -x {} && echo "Binary is executable"
           sudo rm -rf "$TEST_DIR" 2>/dev/null || true
 
-      - name: Verify Windows binary download and checksum
+      - name: Verify binary download (Windows)
         if: matrix.os == 'windows'
-        shell: pwsh
         env:
           OTELCOL_VERSION: "0.151.0"
+        shell: pwsh
         run: |
           $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
           powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$env:OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir $TEST_DIR
@@ -95,8 +243,8 @@ jobs:
     strategy:
       matrix:
         version:
-          - "0.116.0"  # older format with .sha256 files
-          - "0.151.0"   # newer format with checksums.txt
+          - "0.116.0"
+          - "0.151.0"
     steps:
       - uses: actions/checkout@v6
       - name: Test checksums for ${{ matrix.version }}
@@ -126,9 +274,5 @@ jobs:
           echo "Testing Windows amd64..."
           HASH=$(echo "$CHECKSUMS" | grep " otelcol-contrib_${VERSION}_windows_amd64.tar.gz$" | cut -d' ' -f1 || true)
           if [ -z "$HASH" ]; then echo "SKIP: windows/amd64"; else echo "OK: windows/amd64 ($HASH)"; fi
-
-          echo "Testing Windows arm64 (if version supports it)..."
-          HASH=$(echo "$CHECKSUMS" | grep " otelcol-contrib_${VERSION}_windows_arm64.tar.gz$" | cut -d' ' -f1 || true)
-          if [ -z "$HASH" ]; then echo "SKIP: windows/arm64"; else echo "OK: windows/arm64 ($HASH)"; fi
 
           echo "Checksum validation complete for v${VERSION}"

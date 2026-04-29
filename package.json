@@ -1,0 +1,27 @@
+{
+  "name": "o11yfleet-install",
+  "version": "1.0.0",
+  "description": "Install O11yFleet OpenTelemetry collector with OpAMP support",
+  "main": "./bin/npm-wrapper.cjs",
+  "bin": {
+    "o11yfleet-install": "./bin/npm-wrapper.cjs"
+  },
+  "files": [
+    "bin"
+  ],
+  "scripts": {
+    "build": "bun run build.ts"
+  },
+  "keywords": [
+    "otel",
+    "opentelemetry",
+    "o11yfleet",
+    "opamp",
+    "collector"
+  ],
+  "author": "O11yFleet",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  }
+}

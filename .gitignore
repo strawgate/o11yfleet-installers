@@ -1,0 +1,17 @@
+# Build outputs
+bin/o11yfleet-install
+bin/o11yfleet-install.exe
+dist/
+releases/
+
+# Node
+node_modules/
+*.lock
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/

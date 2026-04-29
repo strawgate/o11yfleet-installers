@@ -1,53 +1,135 @@
-# O11yFleet Installers
+# O11yFleet Install
 
-Official installer scripts for the O11yFleet collector agent.
+One-command installer for the O11yFleet OpenTelemetry collector.
 
-## Usage
+## Quick Start
 
 ```bash
-curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh | bash -s -- --token <ENROLLMENT_TOKEN>
+# Mac/Linux (most common)
+curl https://install.o11yfleet.com | bash -s -- --token fp_enroll_xxx
+
+# Windows (PowerShell)
+irm https://install.o11yfleet.com/install.ps1 | iex -Token "fp_enroll_xxx"
+
+# Node users
+npx o11yfleet-install --token fp_enroll_xxx
 ```
 
-## Supported Platforms
+## All Installation Methods
 
-- Linux (amd64, arm64)
-- macOS (amd64, arm64)
-- Windows (amd64, arm64)
+### curl (Mac/Linux)
+```bash
+curl https://install.o11yfleet.com | bash -s -- --token fp_enroll_xxx
+```
+
+### PowerShell (Windows)
+```powershell
+irm https://install.o11yfleet.com/install.ps1 | iex -Token "fp_enroll_xxx"
+```
+
+### npx (Node.js)
+```bash
+npx o11yfleet-install --token fp_enroll_xxx
+```
+
+### npm global install
+```bash
+npm i -g o11yfleet-install
+o11yfleet-install --token fp_enroll_xxx
+```
 
 ## Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
-| `--token` | Enrollment token (required) | - |
-| `--version` | otelcol-contrib version | 0.151.0 |
-| `--endpoint` | OpAMP server endpoint | wss://api.o11yfleet.com/v1/opamp |
-| `--dir` | Install directory | /opt/o11yfleet |
-| `--uninstall` | Remove collector and config | - |
-| `--dry-run` | Download and verify only | - |
-| `--help` | Show help | - |
+| `--token TOKEN` | Enrollment token (required) | - |
+| `--dry-run` | Download and verify only, don't install | false |
+| `--dir PATH` | Installation directory | `/opt/o11yfleet` (Mac/Linux), `%ProgramFiles%\O11yFleet` (Windows) |
+| `--version VER` | otelcol-contrib version | `0.151.0` |
+| `--endpoint URL` | OpAMP server endpoint | `wss://api.o11yfleet.com/v1/opamp` |
+| `--verbose` | Verbose output | false |
+| `--help`, `-h` | Show help | - |
 
-## Development
+## Uninstall
 
+### Mac/Linux
 ```bash
-# Test locally (dry-run mode)
-./installers/install.sh --dry-run --version 0.151.0
-
-# Test full install to temp directory
-sudo ./installers/install.sh --version 0.151.0 --token fp_enroll_test --dir /tmp/o11y-test
+curl https://install.o11yfleet.com | bash -s -- --uninstall
 ```
 
-## CI
+### Windows
+```powershell
+irm https://install.o11yfleet.com/install.ps1 | iex -Uninstall
+```
 
-CI runs on every push and PR (path-filtered to installers/ and workflow changes) to test the installer on:
-- Ubuntu 24.04 (amd64)
-- macOS 15 (Apple Silicon M4)
-- macOS 14 (Apple Silicon M3)
-- Windows 2022 (amd64)
-
-Linux ARM64 binaries are validated via checksum verification since no standard GitHub ARM64 runner is available.
+### Manual
+```bash
+sudo systemctl stop o11yfleet-collector  # Linux
+sudo launchctl bootout system/com.o11yfleet.collector  # macOS
+sudo rm -rf /opt/o11yfleet
+```
 
 ## Architecture
 
-The install script downloads the OpenTelemetry Collector Contrib binary,
-configures it with OpAMP for remote management, and sets up a systemd
-service (Linux) or launchd service (macOS).
+This installer is built from a single TypeScript codebase:
+
+```
+o11yfleet-install/
+├── src/
+│   ├── index.ts      # Core install logic (download, verify, extract, config)
+│   └── cli.ts        # CLI argument parsing
+├── installers/
+│   ├── install.sh    # Unix bootstrap (downloads + runs binary)
+│   └── install.ps1   # Windows bootstrap (downloads + runs binary)
+├── bin/
+│   └── npm-wrapper.cjs  # npx entry point
+├── build.ts          # Bun build script → native binaries
+└── package.json
+```
+
+The shell scripts and npm wrapper are **thin bootstrap layers** that download and execute a pre-built native binary. The actual install logic is shared across all entry points.
+
+## Building from Source
+
+```bash
+# Install Bun
+curl -fsSL https://bun.sh/install | bash
+
+# Build for current platform
+bun run build
+
+# Build for all platforms
+bun run build:all
+
+# Or build specific platforms
+bun run build.ts --linux
+bun run build.ts --darwin
+bun run build.ts --windows
+```
+
+## For O11yFleet Developers
+
+Releases are built automatically via CI. To manually release:
+
+1. Update version in `package.json`
+2. Run `bun run build:all`
+3. Upload binaries from `bin/` to GitHub Releases
+4. Update `install.o11yfleet.com` to point to new release
+
+## Troubleshooting
+
+### "curl: command not found"
+Use a different method: `npx o11yfleet-install` or download the binary directly from GitHub Releases.
+
+### "Download failed"
+Check your network connection and that `https://install.o11yfleet.com` is accessible.
+
+### "Checksum verification failed"
+The downloaded file may be corrupted. Try again or report an issue.
+
+### "Permission denied"
+The script needs to write to `/opt/o11yfleet`. Use `sudo` or run as administrator.
+
+## License
+
+MIT
