@@ -1,7 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
-import { useAuth } from "@/api/hooks/auth";
-import { useLogout } from "@/api/hooks/auth";
+import { useAuth, useLogout } from "@/api/hooks/auth";
 import { useTenant } from "@/api/hooks/portal";
 import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";

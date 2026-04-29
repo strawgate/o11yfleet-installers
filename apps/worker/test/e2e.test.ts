@@ -2,10 +2,14 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { decodeFrame, encodeFrame } from "@o11yfleet/core/codec";
+import {
+  AgentCapabilities,
+  decodeFrame,
+  encodeFrame,
+  ServerToAgentFlags,
+} from "@o11yfleet/core/codec";
 import { apiFetch } from "./helpers.js";
 import type { ServerToAgent, AgentToServer } from "@o11yfleet/core/codec";
-import { AgentCapabilities, ServerToAgentFlags } from "@o11yfleet/core/codec";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 

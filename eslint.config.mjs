@@ -27,6 +27,7 @@ export default tseslint.config(
       ],
       "no-console": ["warn", { allow: ["warn", "error"] }],
       eqeqeq: ["error", "always"],
+      "no-duplicate-imports": ["error", { allowSeparateTypeImports: true }],
       "no-throw-literal": "error",
       "no-promise-executor-return": "error",
       "no-self-compare": "error",

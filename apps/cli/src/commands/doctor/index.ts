@@ -2,8 +2,7 @@
  * doctor command - Diagnose ofleet CLI issues
  */
 
-import { loadAuth, loadConfig } from "../../utils/config.js";
-import { getApiUrl } from "../../utils/config.js";
+import { getApiUrl, loadAuth, loadConfig } from "../../utils/config.js";
 import { VERSION } from "../../utils/version.js";
 import { apiRequest } from "../../utils/api.js";
 import { output } from "../../utils/output.js";
