@@ -29,16 +29,28 @@ doctor:
     fi
 
     if [ -f apps/worker/.dev.vars ]; then
-        API_SECRET=$(grep "^API_SECRET=" apps/worker/.dev.vars 2>/dev/null | cut -d'=' -f2- | tr -d ' ')
+        read_dev_var() {
+            awk -F= -v key="$1" '
+                /^[[:space:]]*#/ { next }
+                $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+                    sub(/^[^=]*=/, "")
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+                    print
+                    exit
+                }
+            ' apps/worker/.dev.vars
+        }
+
+        API_SECRET=$(read_dev_var API_SECRET)
         if [ -z "$API_SECRET" ] || [ "$API_SECRET" = "dev-local" ]; then
             echo "✗ API_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
             echo "✓ API_SECRET set in .dev.vars"
         fi
-        CLAIM_SECRET=$(grep "^CLAIM_SECRET=" apps/worker/.dev.vars 2>/dev/null | cut -d'=' -f2- | tr -d ' ')
-        if [ -z "$CLAIM_SECRET" ]; then
-            echo "✗ CLAIM_SECRET missing or empty — update .dev.vars with a real value"
+        CLAIM_SECRET=$(read_dev_var CLAIM_SECRET)
+        if [ -z "$CLAIM_SECRET" ] || [ "$CLAIM_SECRET" = "dev-local" ]; then
+            echo "✗ CLAIM_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
             echo "✓ CLAIM_SECRET set in .dev.vars"
