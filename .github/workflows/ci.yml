@@ -9,36 +9,20 @@ on:
 
 jobs:
   test-install-script:
-    name: Test install.sh on ${{ matrix.os }}-${{ matrix.arch }}
-    runs-on: ${{ matrix.runner }}
+    name: Test install.sh on ubuntu-${{ matrix.arch }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - os: ubuntu
-            runner: ubuntu-24.04
-            arch: amd64
-          - os: ubuntu
-            runner: ubuntu-24.04-arm
-            arch: arm64
-          # macOS runners are expensive — enable manually or via workflow_dispatch
-          # - os: macos
-          #   runner: macos-14
-          #   arch: arm64
-          # - os: macos
-          #   runner: macos-13
-          #   arch: amd64
+        arch:
+          - amd64
+          # arm64 testing requires self-hosted runners or ARM hardware
+          # Enable when available:
+          # - arm64
 
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-
-      - name: Set up QEMU (for arm64 emulation if needed)
-        if: matrix.arch == 'arm64' && matrix.os == 'ubuntu'
-        uses: docker/setup-qemu-action@v3
-        with:
-          images: |
-            arm64v8/ubuntu:24.04
 
       - name: Run install.sh (dry-run mode)
         env:
