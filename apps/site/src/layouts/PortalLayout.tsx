@@ -1,7 +1,8 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useLogout } from "@/api/hooks/auth";
 import { useTenant } from "@/api/hooks/portal";
+import { useRegisterBrowserContext } from "@/ai/browser-context-react";
 import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Logo } from "@/components/common/Logo";
@@ -352,6 +353,28 @@ export default function PortalLayout() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  const browserContext = useMemo(
+    () => ({
+      id: "portal.layout",
+      title: "Portal workspace",
+      facts: [
+        ...(tenant.data?.name
+          ? [{ label: "Workspace", value: tenant.data.name, source: "portal layout" }]
+          : []),
+        ...(tenant.data?.plan
+          ? [{ label: "Plan", value: tenant.data.plan, source: "portal layout" }]
+          : []),
+      ],
+      context: {
+        tenant_id: user?.tenant_id ?? null,
+        workspace_name: tenant.data?.name ?? null,
+        plan: tenant.data?.plan ?? null,
+      },
+    }),
+    [tenant.data?.name, tenant.data?.plan, user?.tenant_id],
+  );
+  useRegisterBrowserContext(browserContext);
 
   if (isLoading) return <LoadingSpinner />;
   if (!user) return null;

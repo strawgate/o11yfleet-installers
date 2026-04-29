@@ -382,8 +382,10 @@ test.describe("AI guidance surfaces", () => {
     await page.locator(".sidebar-backdrop").click();
     await page.getByRole("button", { name: "Open command menu" }).click();
     await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
-    await page.getByLabel("Search collectors, configs, pages...").fill("agent");
-    await page.getByRole("button", { name: /Agents Workspace/ }).click();
+    await page
+      .getByRole("combobox", { name: "Search collectors, configs, pages..." })
+      .fill("agent");
+    await page.getByRole("option", { name: /Agents Workspace/ }).click();
     await expect(page).toHaveURL(/\/portal\/agents/);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);

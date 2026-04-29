@@ -1,6 +1,7 @@
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useLogout } from "@/api/hooks/auth";
+import { useRegisterBrowserContext } from "@/ai/browser-context-react";
 import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Logo } from "@/components/common/Logo";
@@ -329,6 +330,19 @@ export default function AdminLayout() {
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
   }, []);
+
+  const browserContext = useMemo(
+    () => ({
+      id: "admin.layout",
+      title: "Admin console",
+      facts: [{ label: "Surface", value: "Admin console", source: "admin layout" }],
+      context: {
+        admin_surface: true,
+      },
+    }),
+    [],
+  );
+  useRegisterBrowserContext(browserContext);
 
   if (isLoading) return <LoadingSpinner />;
   if (!user || !isAdmin) return null;

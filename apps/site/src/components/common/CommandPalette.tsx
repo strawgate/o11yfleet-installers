@@ -1,11 +1,19 @@
+import { useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
+import type { AiGuidanceIntent, AiGuidanceItem, AiGuidanceResponse } from "@o11yfleet/core/ai";
+import { ApiError, apiPost } from "@/api/client";
+import { buildBrowserGuidanceRequest, inferAiSurface } from "@/ai/browser-context";
+import { useBrowserContextRegistry } from "@/ai/browser-context-react";
 import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type KeyboardEvent as ReactKeyboardEvent,
-} from "react";
-import { useNavigate } from "react-router-dom";
+  CommandDialog,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem as CommandMenuItem,
+  CommandList,
+  CommandSeparator,
+} from "@/components/ui/command";
+import { GuidanceBadge } from "@/components/ai/GuidanceBadge";
 
 export interface CommandItem {
   id: string;
@@ -22,42 +30,59 @@ interface CommandPaletteProps {
   placeholder: string;
 }
 
+type AiAction = {
+  id: string;
+  label: string;
+  intent: AiGuidanceIntent;
+  prompt: string;
+};
+
+type AiCommandState =
+  | { status: "idle" }
+  | { status: "loading"; label: string }
+  | { status: "success"; label: string; guidance: AiGuidanceResponse }
+  | { status: "error"; label: string; message: string };
+
+const aiActions: AiAction[] = [
+  {
+    id: "ai-explain-page",
+    label: "Explain this page",
+    intent: "explain_page",
+    prompt:
+      "Explain what is visible on this page. Call out the most important operational details and avoid generic advice.",
+  },
+  {
+    id: "ai-next-step",
+    label: "Suggest the next step",
+    intent: "suggest_next_action",
+    prompt:
+      "Suggest the single highest-value next action from the visible page context. Be concrete and cite the visible evidence.",
+  },
+  {
+    id: "ai-find-risks",
+    label: "Find operational risks",
+    intent: "triage_state",
+    prompt:
+      "Identify non-obvious operational risks from the visible page context. Return only risks supported by visible evidence.",
+  },
+];
+
 export function CommandPalette({ open, onClose, items, placeholder }: CommandPaletteProps) {
   const navigate = useNavigate();
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [query, setQuery] = useState("");
-  const [selectedIndex, setSelectedIndex] = useState(0);
+  const location = useLocation();
+  const { capture } = useBrowserContextRegistry();
+  const [aiState, setAiState] = useState<AiCommandState>({ status: "idle" });
+  const aiRequestId = useRef(0);
+  const openRef = useRef(open);
+  const supportsAi = inferAiSurface(location.pathname) !== null;
 
   useEffect(() => {
-    if (!open) return;
-    setQuery("");
-    const frame = window.requestAnimationFrame(() => inputRef.current?.focus());
-    return () => window.cancelAnimationFrame(frame);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open) return;
-    function onKeyDown(event: KeyboardEvent) {
-      if (event.key === "Escape") {
-        event.preventDefault();
-        onClose();
-      }
+    openRef.current = open;
+    if (!open) {
+      aiRequestId.current += 1;
+      setAiState({ status: "idle" });
     }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [open, onClose]);
-
-  const visibleItems = useMemo(() => {
-    const normalized = query.trim().toLowerCase();
-    if (!normalized) return items;
-    return items.filter((item) =>
-      `${item.section ?? ""} ${item.label}`.toLowerCase().includes(normalized),
-    );
-  }, [items, query]);
-
-  useEffect(() => {
-    setSelectedIndex(firstEnabledIndex(visibleItems));
-  }, [visibleItems]);
+  }, [open]);
 
   function activate(item: CommandItem) {
     if (item.disabled) return;
@@ -65,85 +90,159 @@ export function CommandPalette({ open, onClose, items, placeholder }: CommandPal
     onClose();
   }
 
-  function onListKeyDown(event: ReactKeyboardEvent<HTMLDivElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      setSelectedIndex((index) => nextEnabledIndex(visibleItems, index, 1));
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setSelectedIndex((index) => nextEnabledIndex(visibleItems, index, -1));
-    } else if (event.key === "Enter") {
-      const item = visibleItems[selectedIndex];
-      if (item && !item.disabled) {
-        event.preventDefault();
-        activate(item);
+  async function runAiAction(action: AiAction) {
+    if (!supportsAi) {
+      setAiState({
+        status: "error",
+        label: action.label,
+        message:
+          "AI commands are available on overview, configuration, agent, builder, and tenant pages.",
+      });
+      return;
+    }
+
+    const snapshot = capture(location.pathname);
+    const request = buildBrowserGuidanceRequest(snapshot, action.prompt, action.intent);
+    if (!request) {
+      setAiState({
+        status: "error",
+        label: action.label,
+        message: "This page does not expose enough browser context for an AI request yet.",
+      });
+      return;
+    }
+
+    const path = location.pathname.startsWith("/admin")
+      ? "/api/admin/ai/guidance"
+      : "/api/v1/ai/guidance";
+
+    const requestId = (aiRequestId.current += 1);
+    setAiState({ status: "loading", label: action.label });
+    try {
+      const guidance = await apiPost<AiGuidanceResponse>(path, request);
+      if (openRef.current && aiRequestId.current === requestId) {
+        setAiState({ status: "success", label: action.label, guidance });
+      }
+    } catch (error) {
+      if (openRef.current && aiRequestId.current === requestId) {
+        setAiState({
+          status: "error",
+          label: action.label,
+          message:
+            error instanceof ApiError
+              ? error.message
+              : "AI guidance is unavailable for this page right now.",
+        });
       }
     }
   }
 
-  if (!open) return null;
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={(nextOpen) => {
+        if (!nextOpen) onClose();
+      }}
+      title="Command menu"
+      description="Search pages and run page-aware AI commands."
+    >
+      <CommandInput aria-label={placeholder} placeholder={placeholder} />
+      <CommandList>
+        <CommandEmpty>No commands found.</CommandEmpty>
+        <CommandGroup heading="AI">
+          {aiActions.map((action) => (
+            <CommandMenuItem
+              key={action.id}
+              value={`${action.label} ai ${action.prompt}`}
+              disabled={!supportsAi || aiState.status === "loading"}
+              onSelect={() => void runAiAction(action)}
+            >
+              <span className="grid min-w-0 gap-0.5">
+                <span>{action.label}</span>
+                <span className="text-xs text-muted-foreground">
+                  Uses the browser-visible page context
+                </span>
+              </span>
+              {!supportsAi ? (
+                <span className="ml-auto text-xs text-muted-foreground">Soon</span>
+              ) : null}
+            </CommandMenuItem>
+          ))}
+        </CommandGroup>
+        <CommandSeparator />
+        <CommandGroup heading="Navigate">
+          {items.map((item) => (
+            <CommandMenuItem
+              key={item.id}
+              value={`${item.section ?? ""} ${item.label}`}
+              disabled={item.disabled}
+              onSelect={() => activate(item)}
+            >
+              <span className="grid min-w-0 gap-0.5">
+                <span>{item.label}</span>
+                {item.section ? (
+                  <span className="font-mono text-xs text-muted-foreground">{item.section}</span>
+                ) : null}
+              </span>
+              {item.disabled ? (
+                <span className="ml-auto text-xs text-muted-foreground">Soon</span>
+              ) : null}
+            </CommandMenuItem>
+          ))}
+        </CommandGroup>
+      </CommandList>
+      <AiCommandResult state={aiState} />
+    </CommandDialog>
+  );
+}
+
+function AiCommandResult({ state }: { state: AiCommandState }) {
+  if (state.status === "idle") return null;
 
   return (
-    <div className="cmd-overlay" role="presentation" onClick={onClose}>
-      <div
-        className="cmd-palette"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Command menu"
-        onClick={(event) => event.stopPropagation()}
-        onKeyDown={onListKeyDown}
-      >
-        <div className="cmd-search">
-          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-            <circle cx="7" cy="7" r="4.5" />
-            <path d="M10.5 10.5l3 3" strokeLinecap="round" />
-          </svg>
-          <input
-            ref={inputRef}
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder={placeholder}
-            aria-label={placeholder}
-          />
-          <kbd>Esc</kbd>
-        </div>
-        <div className="cmd-list">
-          {visibleItems.length === 0 ? (
-            <div className="cmd-empty">No commands found.</div>
-          ) : (
-            visibleItems.map((item, index) => (
-              <button
-                key={item.id}
-                className={`cmd-item${index === selectedIndex ? " selected" : ""}`}
-                disabled={item.disabled}
-                aria-selected={index === selectedIndex}
-                onMouseEnter={() => setSelectedIndex(index)}
-                onClick={() => activate(item)}
-              >
-                <span>
-                  <strong>{item.label}</strong>
-                  {item.section ? <small>{item.section}</small> : null}
-                </span>
-                {item.disabled ? <em>Soon</em> : null}
-              </button>
-            ))
-          )}
-        </div>
+    <div className="border-t border-border bg-background/80 p-3">
+      <div className="mb-2 text-xs font-medium uppercase tracking-normal text-muted-foreground">
+        {state.label}
       </div>
+      {state.status === "loading" ? (
+        <p className="text-sm text-muted-foreground">Reading the current page context...</p>
+      ) : null}
+      {state.status === "error" ? (
+        <p className="text-sm text-destructive">{state.message}</p>
+      ) : null}
+      {state.status === "success" ? <AiGuidancePreview guidance={state.guidance} /> : null}
     </div>
   );
 }
 
-function firstEnabledIndex(items: CommandItem[]): number {
-  const index = items.findIndex((item) => !item.disabled);
-  return index >= 0 ? index : 0;
+function AiGuidancePreview({ guidance }: { guidance: AiGuidanceResponse }) {
+  const items = guidance.items.slice(0, 3);
+
+  return (
+    <div className="grid gap-2">
+      <p className="text-sm text-foreground">{guidance.summary}</p>
+      {items.length > 0 ? (
+        <div className="grid gap-2">
+          {items.map((item, index) => (
+            <AiGuidancePreviewItem
+              key={`${item.target_key}:${item.headline}:${index}`}
+              item={item}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
 }
 
-function nextEnabledIndex(items: CommandItem[], currentIndex: number, direction: 1 | -1): number {
-  if (items.length === 0) return 0;
-  for (let offset = 1; offset <= items.length; offset += 1) {
-    const index = (currentIndex + offset * direction + items.length) % items.length;
-    if (!items[index]?.disabled) return index;
-  }
-  return currentIndex;
+function AiGuidancePreviewItem({ item }: { item: AiGuidanceItem }) {
+  return (
+    <article className="rounded-md border border-border bg-card p-2.5">
+      <div className="mb-1 flex items-center gap-2 text-sm">
+        <GuidanceBadge severity={item.severity} />
+        <strong className="font-medium">{item.headline}</strong>
+      </div>
+      <p className="text-sm text-muted-foreground">{item.detail}</p>
+    </article>
+  );
 }

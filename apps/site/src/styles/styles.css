@@ -4,6 +4,7 @@
 @import "tw-animate-css";
 @import "tailwindcss/utilities.css" layer(utilities);
 
+/* stylelint-disable at-rule-no-unknown, scss/at-rule-no-unknown -- Tailwind v4 directives are expanded by @tailwindcss/vite. */
 @custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 
 @theme inline {
@@ -32,6 +33,7 @@
   --font-sans: var(--font-sans);
   --font-mono: var(--font-mono);
 }
+/* stylelint-enable at-rule-no-unknown, scss/at-rule-no-unknown */
 
 /* =========================================================
    O11yFleet — shared styles
