@@ -38,6 +38,7 @@ const EMPTY_PIPELINE_GRAPH: PipelineGraph = {
   components: [],
   wires: [],
 };
+const IMPORTED_GRAPH_LABEL = "Imported Collector YAML";
 
 function roleLabel(role: PipelineComponentRole): string {
   if (role === "receiver") return "Receivers";
@@ -64,7 +65,10 @@ export default function BuilderPage() {
     : (exampleEntries[0]?.[0] ?? EMPTY_PIPELINE_GRAPH.id);
   const exampleGraph = PIPELINE_EXAMPLES[selectedExampleId] ?? EMPTY_PIPELINE_GRAPH;
   const graph = importResult?.graph ?? exampleGraph;
-  const rawSectionEntries = importResult ? Object.entries(importResult.rawSections) : [];
+  const rawSectionEntries = useMemo(
+    () => (importResult ? Object.entries(importResult.rawSections) : []),
+    [importResult],
+  );
   const validation = useMemo(() => validatePipelineGraph(graph), [graph]);
   const yamlPreview = useMemo(() => renderCollectorYaml(graph), [graph]);
   const componentsById = useMemo(
@@ -93,7 +97,7 @@ export default function BuilderPage() {
       status: "prototype",
       draft_source: "in-memory example model",
       selected_mode: mode,
-      selected_example: importResult ? "Imported Collector YAML" : graph.label,
+      selected_example: importResult ? IMPORTED_GRAPH_LABEL : graph.label,
       import_confidence: importResult?.confidence,
       import_warning_count: importResult?.warnings.length ?? 0,
       pipeline_summary: summarizePipelineGraph(graph),
@@ -105,17 +109,47 @@ export default function BuilderPage() {
   const guidance = usePortalGuidance(guidanceRequest);
 
   function handleImportYaml() {
-    const result = parseCollectorYamlToGraph(yamlInput, {
-      id: "builder-import",
-      label: "Imported Collector YAML",
-    });
+    let result: CollectorYamlImportResult;
+    try {
+      result = parseCollectorYamlToGraph(yamlInput, {
+        id: "builder-import",
+        label: IMPORTED_GRAPH_LABEL,
+      });
+    } catch (error) {
+      result = {
+        graph: {
+          id: "builder-import",
+          label: IMPORTED_GRAPH_LABEL,
+          components: [],
+          wires: [],
+        },
+        confidence: "raw-only",
+        warnings: [
+          {
+            code: "collector_yaml_import_error",
+            message: `Collector YAML import failed: ${
+              error instanceof Error ? error.message : String(error)
+            }`,
+          },
+        ],
+        rawSections: {},
+      };
+    }
     setImportResult(result);
     setMode("split");
   }
 
   function handleExampleChange(nextExampleId: string) {
     setExampleId(nextExampleId);
+    if (importResult) {
+      setYamlInput("");
+    }
     setImportResult(null);
+  }
+
+  function handleBackToExample() {
+    setImportResult(null);
+    setYamlInput("");
   }
 
   return (
@@ -203,7 +237,7 @@ export default function BuilderPage() {
             Import YAML
           </button>
           {importResult ? (
-            <button type="button" className="btn btn-ghost" onClick={() => setImportResult(null)}>
+            <button type="button" className="btn btn-ghost" onClick={handleBackToExample}>
               Back to selected example
             </button>
           ) : null}
