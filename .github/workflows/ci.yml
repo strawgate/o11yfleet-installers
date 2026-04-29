@@ -173,8 +173,41 @@ jobs:
           terraform init -backend=false
           terraform validate
 
+  test-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright browser
+        run: pnpm --filter @o11yfleet/ui-tests exec playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: pnpm --filter @o11yfleet/ui-tests test:e2e
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-artifacts
+          path: |
+            tests/ui/playwright-report
+            tests/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-worker, bundle-size, terraform]
+    needs: [lint-format, typecheck, test-core, test-worker, test-ui, bundle-size, terraform]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

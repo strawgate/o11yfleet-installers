@@ -1,178 +1,198 @@
-/**
- * Playwright UI smoke tests for the o11yfleet dashboard.
- *
- * Prerequisites:
- *   just dev   →  localhost:8787  (API/Worker)
- *   just ui    →  localhost:3000  (Static UI)
- *
- * Run: cd tests/ui && npx playwright test
- */
+import { expect, test, type ConsoleMessage, type Page, type Route } from "@playwright/test";
 
-import { test, expect } from "@playwright/test";
+const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
+const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
 
-const API_URL = process.env.FP_URL ?? "http://localhost:8787";
-const UI_URL = process.env.UI_URL ?? "http://localhost:3000";
+const memberUser = {
+  id: "user-1",
+  email: "demo@o11yfleet.com",
+  name: "Demo User",
+  role: "member",
+  tenant_id: "tenant-1",
+};
 
-// Helper to call the o11yfleet API
-async function api<T = any>(path: string, opts?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    ...opts,
-    headers: { "Content-Type": "application/json", ...opts?.headers },
+async function mockJson(page: Page, path: string, body: unknown, status = 200) {
+  await page.route(`${API_URL}${path}`, async (route) => {
+    await route.fulfill({
+      status,
+      contentType: "application/json",
+      body: JSON.stringify(body),
+    });
   });
-  if (!res.ok) throw new Error(`API ${path} returned ${res.status}`);
-  return res.json() as T;
 }
 
-// ────────────────────────────────────────────────────────────────────
-// Smoke Tests
-// ────────────────────────────────────────────────────────────────────
-
-test.describe("Dashboard Smoke Tests", () => {
-  test("page loads with correct title", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page).toHaveTitle(/o11yfleet/);
-  });
-
-  test("header displays o11yfleet branding", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page.locator("header h1")).toContainText("o11yfleet");
-  });
-
-  test("API URL input is visible and pre-filled", async ({ page }) => {
-    await page.goto(UI_URL);
-    const input = page.locator("#api-url");
-    await expect(input).toBeVisible();
-    await expect(input).toHaveValue("http://localhost:8787");
-  });
-
-  test("Connect button is visible", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page.locator(".server-url button", { hasText: "Connect" })).toBeVisible();
-  });
-
-  test("stat cards are present", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page.locator("#stat-total")).toBeVisible();
-    await expect(page.locator("#stat-connected")).toBeVisible();
-    await expect(page.locator("#stat-healthy")).toBeVisible();
-    await expect(page.locator("#stat-ws")).toBeVisible();
-  });
-
-  test("configs table is present", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page.locator("#configs-table")).toBeVisible();
-  });
-
-  test("agents table is present", async ({ page }) => {
-    await page.goto(UI_URL);
-    await expect(page.locator("#agents-table")).toBeVisible();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────
-// Tenant + Config Workflow
-// ────────────────────────────────────────────────────────────────────
-
-test.describe("Tenant Management", () => {
-  test("can create a tenant via dialog", async ({ page }) => {
-    await page.goto(UI_URL);
-
-    // Click "+ New Config" which should open tenant dialog if no tenant is set
-    await page.locator("button", { hasText: "New Config" }).click();
-
-    // The create-tenant-dialog should appear
-    const dialog = page.locator("#create-tenant-dialog");
-    await expect(dialog).toBeVisible();
-
-    // Fill in tenant name
-    await page.fill("#tenant-name", `playwright-${Date.now()}`);
-    await page.selectOption("#tenant-plan", "pro");
-
-    // Submit
-    await page.locator("#create-tenant-dialog .btn-primary").click();
-
-    // Should transition to config dialog
-    await expect(page.locator("#create-config-dialog")).toBeVisible();
-  });
-});
-
-// ────────────────────────────────────────────────────────────────────
-// Data Display with Pre-Seeded Tenant
-// ────────────────────────────────────────────────────────────────────
-
-test.describe("Dashboard with Data", () => {
-  let tenantId: string;
-  let configId: string;
-
-  test.beforeAll(async () => {
-    // Create test data via API
-    const tenant = await api<{ id: string }>("/api/tenants", {
-      method: "POST",
-      body: JSON.stringify({ name: `pw-test-${Date.now()}` }),
+async function mockEmptyGuidance(page: Page) {
+  await page.route(`${API_URL}/api/v1/ai/guidance`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({
+        summary: "No guidance.",
+        generated_at: "2026-04-28T20:00:00.000Z",
+        model: "o11yfleet-guidance-fixture",
+        items: [],
+      }),
     });
-    tenantId = tenant.id;
+  });
+}
 
-    const config = await api<{ id: string }>("/api/configurations", {
-      method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId, name: "pw-config" }),
+async function mockPortalSession(page: Page) {
+  await mockJson(page, "/auth/me", { user: memberUser });
+  await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+}
+
+async function mockPortalOverview(page: Page) {
+  const configuration = {
+    id: "config-1",
+    name: "prod-collectors",
+    status: "active",
+    current_config_hash: "abcdef1234567890",
+    description: "Production collector group",
+    updated_at: "2026-04-28T20:00:00.000Z",
+    stats: { connected: 2, total: 4, healthy: 2 },
+  };
+
+  await mockJson(page, "/api/v1/overview", {
+    tenant: { id: "tenant-1", name: "Demo Org" },
+    configs_count: 1,
+    total_agents: 4,
+    connected_agents: 2,
+    healthy_agents: 2,
+    active_rollouts: 0,
+    configurations: [configuration],
+  });
+  await mockJson(page, "/api/v1/configurations", { configurations: [configuration] });
+  await mockEmptyGuidance(page);
+}
+
+async function mockLoginFlow(page: Page) {
+  let loggedIn = false;
+  await page.route(`${API_URL}/auth/me`, async (route) => {
+    if (!loggedIn) {
+      await route.fulfill({
+        status: 401,
+        contentType: "application/json",
+        body: JSON.stringify({ error: "Session expired" }),
+      });
+      return;
+    }
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: memberUser }),
     });
-    configId = config.id;
+  });
+  await page.route(`${API_URL}/auth/login`, async (route) => {
+    expect(route.request().postDataJSON()).toMatchObject({
+      email: "demo@o11yfleet.com",
+      password: "demo-password",
+    });
+    loggedIn = true;
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ user: memberUser }),
+    });
+  });
+}
+
+function collectRuntimeErrors(page: Page): { errors: string[]; dispose: () => void } {
+  const errors: string[] = [];
+  const pageErrorHandler = (error: Error) => errors.push(error.message);
+  const consoleHandler = (message: ConsoleMessage) => {
+    const text = message.text();
+    if (message.type() === "error" && !text.startsWith("Failed to load resource:")) {
+      errors.push(text);
+    }
+  };
+  page.on("pageerror", pageErrorHandler);
+  page.on("console", consoleHandler);
+  return {
+    errors,
+    dispose: () => {
+      page.off("pageerror", pageErrorHandler);
+      page.off("console", consoleHandler);
+    },
+  };
+}
+
+async function failUnexpectedApi(route: Route) {
+  throw new Error(`Unexpected API request: ${route.request().method()} ${route.request().url()}`);
+}
+
+test.describe("portal smoke coverage", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route(`${API_URL}/**`, failUnexpectedApi);
   });
 
-  test("loads tenant data via URL hash", async ({ page }) => {
-    await page.goto(`${UI_URL}#${tenantId}`);
+  test("login flow signs in and lands on the portal overview", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
 
-    // Wait for data to load — the configs table should populate
-    await page.waitForTimeout(2000);
+    await mockLoginFlow(page);
+    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockPortalOverview(page);
 
-    // Click Connect to trigger refresh with the tenant
-    await page.locator(".server-url button", { hasText: "Connect" }).click();
-    await page.waitForTimeout(2000);
+    await page.goto(`${UI_URL}/login?api=${encodeURIComponent(API_URL)}`);
+    await expect(page.getByRole("heading", { name: "Sign in to your workspace" })).toBeVisible();
 
-    // The page should show some data (configs or stats)
-    // At minimum, the stat cards should update from "—"
-    const lastRefresh = page.locator("#last-refresh");
-    await expect(lastRefresh).not.toBeEmpty();
+    await page.getByLabel("Email").fill("demo@o11yfleet.com");
+    await page.getByLabel("Password").fill("demo-password");
+    await page.getByRole("button", { name: "Sign in", exact: true }).click();
+
+    await expect(page).toHaveURL(/\/portal\/overview$/);
+    await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+    await expect(page.getByText("prod-collectors")).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
   });
 
-  test("displays config name in table when tenant is set", async ({ page }) => {
-    // We need the page to know about our tenant
-    // Set it via the page's JS context
-    await page.goto(UI_URL);
-    await page.evaluate(
-      ([tid]) => {
-        (window as any).tenantId = tid;
-      },
-      [tenantId],
+  test("portal overview renders fleet totals and recent configurations", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+
+    await mockPortalSession(page);
+    await mockPortalOverview(page);
+
+    await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+    await expect(page.locator(".stat", { hasText: "Configurations" }).locator(".val")).toHaveText(
+      "1",
     );
-    await page.locator(".server-url button", { hasText: "Connect" }).click();
-    await page.waitForTimeout(2000);
-
-    // If tenantId was picked up, configs should be rendered
-    const configsTable = page.locator("#configs-table");
-    const text = await configsTable.textContent();
-    // Should either show the config name or the "no configurations" message
-    expect(text).toBeTruthy();
+    await expect(page.locator(".stat", { hasText: "Total collectors" }).locator(".val")).toHaveText(
+      "4",
+    );
+    await expect(page.locator(".stat", { hasText: "Connected" }).locator(".val")).toHaveText("2");
+    await expect(page.getByText("2 / 4 connected")).toBeVisible();
+    await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
   });
-});
 
-// ────────────────────────────────────────────────────────────────────
-// Error Handling
-// ────────────────────────────────────────────────────────────────────
+  test("configuration list renders existing apps/site configuration rows", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
 
-test.describe("Error Handling", () => {
-  test("shows error toast for invalid API URL", async ({ page }) => {
-    await page.goto(UI_URL);
+    await mockPortalSession(page);
+    await mockJson(page, "/api/v1/configurations", {
+      configurations: [
+        {
+          id: "config-1",
+          name: "prod-collectors",
+          status: "active",
+          current_config_hash: "abcdef1234567890",
+          description: "Production collector group",
+          updated_at: "2026-04-28T20:00:00.000Z",
+        },
+      ],
+    });
 
-    // Change API URL to invalid
-    await page.fill("#api-url", "http://localhost:99999");
-    await page.locator(".server-url button", { hasText: "Connect" }).click();
+    await page.goto(`${UI_URL}/portal/configurations?api=${encodeURIComponent(API_URL)}`);
 
-    // Should show an error toast
-    await page.waitForTimeout(2000);
-    const toast = page.locator(".toast.error");
-    // Toast may or may not appear depending on implementation
-    // But the page shouldn't crash
-    await expect(page.locator("header h1")).toContainText("o11yfleet");
+    await expect(page.getByRole("heading", { name: "Configurations" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "New configuration" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
+    await expect(page.getByText("abcdef123456")).toBeVisible();
+    await expect(page.getByText("Production collector group")).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
   });
 });

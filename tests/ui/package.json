@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "echo 'UI tests require live servers. Run: just test-ui'",
+    "test": "echo 'UI tests require browsers. Run: just test-ui'",
     "test:e2e": "playwright test",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui"

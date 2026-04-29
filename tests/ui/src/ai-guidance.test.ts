@@ -1,7 +1,7 @@
 import { expect, test, type ConsoleMessage, type Page } from "@playwright/test";
 
-const API_URL = process.env.FP_URL ?? "http://localhost:8787";
-const UI_URL = process.env.UI_URL ?? "http://localhost:3000";
+const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
+const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
 
 async function mockJson(page: Page, path: string, body: unknown) {
   await page.route(`${API_URL}${path}`, async (route) => {

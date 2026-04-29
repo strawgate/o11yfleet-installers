@@ -140,7 +140,7 @@ load-test-profile:
 test-e2e:
     cd tests/e2e && pnpm run test:e2e
 
-# UI tests with Playwright (requires `just dev` + `just ui` running)
+# UI tests with Playwright (starts the site dev server automatically)
 test-ui:
     cd tests/ui && pnpm run test:e2e
 
