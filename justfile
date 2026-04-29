@@ -208,7 +208,7 @@ proto-gen:
 
 # Database migrations (local)
 db-migrate:
-    cd apps/worker && pnpm wrangler d1 migrations apply fp-db --local
+    cd apps/worker && CI=1 pnpm wrangler d1 migrations apply fp-db --local
 
 # Seed local dev environment (creates tenant, config, enrollment token)
 seed:

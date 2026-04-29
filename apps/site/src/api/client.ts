@@ -34,7 +34,7 @@ export function detectApiBase(): string {
     const params = new URLSearchParams(window.location.search);
     const explicit = params.get("api") || localStorage.getItem("fp-api-base");
     if (explicit) return explicit;
-    return "http://localhost:8787";
+    return `http://${host}:8787`;
   }
 
   if (host.endsWith(".o11yfleet.com") || host === "o11yfleet.com") {

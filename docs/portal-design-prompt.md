@@ -1,5 +1,10 @@
 # O11yFleet Portal Design Prompt
 
+> Historical design prompt. The live app is the React/Vite implementation under
+> `apps/site/src`. Use this document for product intent, terminology, and design
+> texture, not as an exact file manifest. When it conflicts with source code,
+> source code and the product model docs win.
+
 Authoritative product semantics live in:
 
 - `docs/product-mental-model.md`
@@ -34,8 +39,19 @@ The current app implementation is the React/Vite app under `apps/site/src`. Olde
 **Backend API** (already built):
 
 - Auth routes: `POST /auth/login`, `GET /auth/me`, `POST /auth/logout`, and API-secret-gated `POST /auth/seed`
-- User routes: `GET|PUT|DELETE /api/v1/tenant`, `GET /api/v1/team`, `GET /api/v1/overview`, `POST|GET /api/v1/configurations`, `GET|PUT|DELETE /api/v1/configurations/:id`, versions, enrollment tokens, agents, stats, rollout, and YAML download
-- Admin routes: `POST|GET /api/admin/tenants`, `GET|PUT|DELETE /api/admin/tenants/:id`, `GET /api/admin/tenants/:id/configurations`, `GET /api/admin/tenants/:id/users`, `POST /api/admin/tenants/:id/impersonate`, `GET /api/admin/health`, `GET /api/admin/usage`, and `GET /api/admin/plans`
+- User routes: `GET|PUT|DELETE /api/v1/tenant`, `GET /api/v1/team`, `GET /api/v1/overview`, `POST /api/v1/ai/guidance`, `POST|GET /api/v1/configurations`, `GET|PUT|DELETE /api/v1/configurations/:id`, versions, enrollment tokens, agents, stats, rollout, and YAML download
+- Admin routes:
+  - `POST|GET /api/admin/tenants`
+  - `GET|PUT|DELETE /api/admin/tenants/:id`
+  - `GET /api/admin/tenants/:id/configurations`
+  - `GET /api/admin/tenants/:id/users`
+  - `POST /api/admin/tenants/:id/impersonate`
+  - `GET /api/admin/configurations/:id/do/tables`
+  - `POST /api/admin/configurations/:id/do/query`
+  - `GET /api/admin/health`
+  - `GET /api/admin/usage`
+  - `GET /api/admin/plans`
+  - `POST /api/admin/ai/guidance`
 - Auth model: browser sessions come from `/auth/login` and `/auth/me`; programmatic tenant-scoped calls use `Authorization: Bearer <API_SECRET>` plus `X-Tenant-Id`; admin calls use an admin session or the same bearer secret.
 
 **Data model**:
@@ -67,13 +83,18 @@ The user portal is where customers manage their collector fleet. The layout is: 
 [Logo] O11yFleet
 ────────────────
   Overview
+  Agents
   Configurations
-  Getting Started
+  Builder
 ────────────────
-ACCOUNT
+SETUP
+  Getting Started
+  Enrollment tokens
+────────────────
+SETTINGS
   Settings
-  Team (Business+ only)
-  Billing
+  Team
+  Plan & billing
 ────────────────
 [Org switcher at bottom]
 [Profile avatar + name]
@@ -281,12 +302,16 @@ The admin portal is for O11yFleet operators (us). Same app shell layout (sidebar
 ```
 [Logo] O11yFleet [ADMIN badge]
 ────────────────
-  Dashboard
+OPERATIONS
+  Overview
   Tenants
+  System health
+  Usage & spend
+  Support
+  DO viewer
 ────────────────
-SYSTEM
-  Health
-  Events
+PLANS
+  Plans
 ────────────────
 [Admin profile at bottom]
 ```
@@ -367,7 +392,7 @@ Full admin view of a single tenant.
 - **Tenant health overview**: table of tenants with aggregate stats — connected agents, last activity timestamp
 - **Recent errors** (if we emit structured logs — can be a placeholder for now)
 
-#### 6. Events / Audit Log (`events.html`)
+#### 6. Events / Audit Log (planned)
 
 - **Filter bar**: tenant (dropdown), event type (dropdown: all, agent_connected, agent_disconnected, health_changed, config_applied, config_rejected, agent_enrolled), time range
 - **Events table**:
@@ -406,7 +431,11 @@ These appear across both portals:
 
 ## Deliverables
 
-For the **user portal**, produce these files:
+The static HTML file list below is from the original design exercise. Current
+implementation work should target React routes in `apps/site/src/App.tsx`, the
+portal/admin layouts, and API hooks under `apps/site/src/api/hooks`.
+
+For the original **user portal** prototype, the requested files were:
 
 ```
 portal/
@@ -426,7 +455,7 @@ portal/
   portal.js                 (API wrapper, auth, auto-refresh, dialogs, copy, toast, pagination)
 ```
 
-For the **admin portal**, produce these files:
+For the original **admin portal** prototype, the requested files were:
 
 ```
 admin/

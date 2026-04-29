@@ -222,8 +222,10 @@
           <ul>
             <li>Check <code class="mono">wrangler</code> version is compatible</li>
             <li>
-              Verify Cloudflare credentials (<code class="mono">CLOUDFLARE_API_TOKEN</code>,
-              <code class="mono">CLOUDFLARE_ACCOUNT_ID</code>)
+              Verify deployment credentials (<code class="mono">CLOUDFLARE_API_TOKEN</code> and
+              <code class="mono">CLOUDFLARE_ACCOUNT_ID</code>). Admin usage estimates use the
+              separate runtime secret
+              <code class="mono">CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY</code>.
             </li>
             <li>Review <code class="mono">wrangler.jsonc</code> configuration</li>
           </ul>

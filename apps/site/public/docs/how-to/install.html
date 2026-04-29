@@ -208,17 +208,15 @@ cd o11yfleet</code></pre>
                   overflow-x: auto;
                   font-size: 13px;
                 "
-              ><code>printf "API_SECRET=dev-local-api-secret-1234567890x\nCLAIM_SECRET=dev-local-claim-secret-12345678x\n" > apps/worker/.dev.vars
-export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x</code></pre>
+              ><code>cp apps/worker/.dev.vars.example apps/worker/.dev.vars</code></pre>
               <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
                 The Worker reads <code class="mono">API_SECRET</code> from
-                <code class="mono">apps/worker/.dev.vars</code>. The local scripts use the matching
-                <code class="mono">O11YFLEET_API_KEY</code> value for admin and tenant-scoped API
-                calls.
+                <code class="mono">apps/worker/.dev.vars</code>. Local helper scripts load this file
+                automatically and use the matching bearer secret for setup calls.
               </p>
             </li>
             <li>
-              <strong>Start the worker</strong> (for local development)
+              <strong>Start the local stack</strong>
               <pre
                 style="
                   background: var(--surface-2);
@@ -227,14 +225,16 @@ export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x</code></pre>
                   overflow-x: auto;
                   font-size: 13px;
                 "
-              ><code>just dev</code></pre>
+              ><code>just dev-up</code></pre>
               <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
-                This starts a local Cloudflare Worker at
-                <code class="mono">http://localhost:8787</code>.
+                This starts the local Cloudflare Worker at
+                <code class="mono">http://localhost:8787</code>, the site at
+                <code class="mono">http://127.0.0.1:3000</code>, applies local migrations, and seeds
+                demo data.
               </p>
             </li>
             <li>
-              <strong>Seed local data</strong> (in another terminal)
+              <strong>Sign in</strong>
               <pre
                 style="
                   background: var(--surface-2);
@@ -243,12 +243,15 @@ export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x</code></pre>
                   overflow-x: auto;
                   font-size: 13px;
                 "
-              ><code>export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
-just setup</code></pre>
+              ><code>Tenant: demo@o11yfleet.com / demo-password
+Admin:  admin@o11yfleet.com / admin-password</code></pre>
               <p style="font-size: 13px; color: var(--fg-3); margin-top: 8px">
-                This applies database migrations, seeds a demo tenant and configuration, creates an
-                enrollment token, and shows fleet status. You can now connect collectors to the
-                local worker.
+                Override these defaults with
+                <code class="mono">SEED_TENANT_USER_EMAIL</code>,
+                <code class="mono">SEED_TENANT_USER_PASSWORD</code>,
+                <code class="mono">SEED_ADMIN_EMAIL</code>, and
+                <code class="mono">SEED_ADMIN_PASSWORD</code> in
+                <code class="mono">apps/worker/.dev.vars</code>.
               </p>
             </li>
           </ol>

@@ -49,7 +49,8 @@ just check         # Changed-file-aware local check
 just ci-fast       # Fast pre-PR gate
 just test          # All tests
 just test-core     # Core package only (fast)
-just test-worker   # Worker tests (workerd runtime)
+just test-worker   # Worker unit tests
+just test-runtime  # Worker runtime tests (workerd runtime)
 just smoke-local   # API + OpAMP lifecycle smoke test
 just test-ui       # Browser UI tests
 ```
@@ -92,10 +93,11 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 | `just reproduce-check <name>` | Run one named GitHub check locally       |
 | `just lint`                   | Lint all packages                        |
 | `just typecheck`              | Type check all packages                  |
-| `just test`                   | Run all tests                            |
+| `just test`                   | Run fast tests                           |
+| `just test-runtime`           | Worker runtime tests                     |
 | `just smoke-local`            | Local API + OpAMP lifecycle smoke test   |
 | `just bench`                  | Run benchmarks                           |
-| `just load-test-smoke`        | Quick load test (10 agents, 15s)         |
+| `just load-test-ci`           | CI-sized load test                       |
 | `just load-test`              | Load test (configurable agents/duration) |
 | `just bundle-size`            | Check worker bundle size                 |
 | `just deploy-staging`         | Deploy to staging                        |

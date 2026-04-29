@@ -158,11 +158,12 @@
                 <path d="M12 16v-4M12 8h.01" />
               </svg>
               <div>
-                <strong>Quick option:</strong> If you just want to try O11yFleet locally, create
-                local dev secrets, run <code class="mono">just dev</code> in one terminal, and
-                <code class="mono">just setup</code> in another. Together, those commands start the
-                local Worker, migrate local D1, seed a demo tenant, upload a sample config, and
-                create an enrollment token. No hosted account needed.
+                <strong>Quick option:</strong> If you just want to try O11yFleet locally, copy
+                <code class="mono">apps/worker/.dev.vars.example</code> to
+                <code class="mono">apps/worker/.dev.vars</code> and run
+                <code class="mono">just dev-up</code>. It starts the local Worker and site, migrates
+                local D1, seeds a demo tenant, uploads a sample config, and creates an enrollment
+                token. No hosted account needed.
               </div>
             </div>
           </div>
@@ -185,16 +186,15 @@
           ><code>git clone https://github.com/strawgate/o11yfleet.git
 cd o11yfleet
 just install
-printf "API_SECRET=dev-local-api-secret-1234567890x\nCLAIM_SECRET=dev-local-claim-secret-12345678x\n" > apps/worker/.dev.vars
-export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
-just dev
-
-# In a second terminal:
-export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
-just setup</code></pre>
+cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+just dev-up</code></pre>
           <p>
-            This leaves O11yFleet running at <code class="mono">http://localhost:8787</code> and
-            seeds a demo tenant with sample data.
+            This starts the Worker at <code class="mono">http://localhost:8787</code>, the site at
+            <code class="mono">http://127.0.0.1:3000</code>, applies local migrations, and seeds
+            demo data. The default local tenant login is
+            <code class="mono">demo@o11yfleet.com</code> / <code class="mono">demo-password</code>;
+            the admin login is <code class="mono">admin@o11yfleet.com</code> /
+            <code class="mono">admin-password</code>.
           </p>
 
           <h2 id="step-2-enroll">Step 2 — Create an enrollment token</h2>

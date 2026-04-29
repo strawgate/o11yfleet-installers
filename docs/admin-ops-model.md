@@ -21,12 +21,17 @@ Staff use the admin console to:
 
 - identify unhealthy tenants or platform dependencies
 - inspect tenant metadata and support context
-- review audit and platform events
+- review available platform health, usage, and Durable Object state
 - verify plan/entitlement state
-- start auditable support sessions
+- step into a tenant-scoped portal session for troubleshooting
 - diagnose control-plane failures
 
 Admin pages should make staff authority explicit and constrained.
+
+Current admin surfaces are Overview, Tenants, System health, Usage & spend,
+Support, DO viewer, and Plans. Audit events and scoped support sessions remain
+product requirements; tenant impersonation exists today and must stay highly
+visible in the customer portal while active.
 
 ## Health Planes
 
@@ -84,10 +89,15 @@ The admin console should prefer this sequence:
 4. Require elevated support scope for mutation.
 5. Emit audit events for every scoped action.
 
+Today, the implemented support path is tenant impersonation from the admin tenant
+detail page. The impersonated portal session is tenant-scoped and should show a
+prominent banner so staff do not confuse it with their own workspace.
+
 ## UI Rules
 
 - Use the amber admin accent for staff-only surfaces.
 - Label prototype/sample event data clearly.
-- Do not present feature flags, plan changes, or impersonation as live mutation controls until RBAC and audit contracts exist.
+- Do not present feature flags or plan changes as live mutation controls until RBAC and audit contracts exist.
+- Treat impersonation as a troubleshooting entry point, not a second admin editor.
 - Show control-plane dependency failures separately from collector-runtime failures.
 - Prefer triage clarity over dashboards that imply unavailable data.

@@ -31,6 +31,18 @@ async function main() {
     process.exit(1);
   }
 
+  requireApiKey();
+
+  log.info("Seeding local login accounts...");
+  const { status: seedStatus } = await api<{ seeded: string[]; tenantId: string }>("/auth/seed", {
+    method: "POST",
+  });
+  if (seedStatus !== 200) {
+    log.error(`Failed to seed login accounts: status ${seedStatus}`);
+    process.exit(1);
+  }
+  log.ok("Login accounts ready");
+
   // Check for existing state
   const existing = loadState();
   if (existing && !reset) {
@@ -44,8 +56,6 @@ async function main() {
     log.info("Use --reset to recreate. Exiting.");
     return;
   }
-
-  requireApiKey();
 
   // 1. Create tenant
   log.info("Creating tenant...");

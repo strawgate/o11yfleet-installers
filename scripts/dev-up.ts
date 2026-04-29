@@ -126,7 +126,7 @@ async function main(): Promise<void> {
   const worker = start(
     "worker",
     "pnpm",
-    ["--dir", "apps/worker", "wrangler", "dev"],
+    ["--dir=apps/worker", "wrangler", "dev"],
     env,
     handleEarlyExit,
   );
@@ -135,7 +135,7 @@ async function main(): Promise<void> {
   const site = start(
     "site",
     "pnpm",
-    ["--dir", "apps/site", "dev", ...siteListenArgs(siteUrl)],
+    ["--dir=apps/site", "dev", ...siteListenArgs(siteUrl)],
     env,
     handleEarlyExit,
   );

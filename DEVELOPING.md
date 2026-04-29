@@ -1,29 +1,35 @@
-# O11yFleet Architecture Plan: Making It Real
+# O11yFleet Development Notes
 
 ## TL;DR
 
-The app has three planes: **Agent Control Plane** (DO-based, already works), **Management API** (Worker, partially built), and **Auth** (not built). The management API is already multi-tenant by design (`X-Tenant-Id`). The key changes are: (1) replace the header-stub auth with real JWT sessions backed by hardcoded accounts, (2) add a proper session layer so the portal pages can authenticate, (3) wire the portal UI to the real API, and (4) add the missing management endpoints. No new services needed — it all stays in one Worker + one DO class.
+The app has three planes: **Agent Control Plane** (Durable Object), **Management API**
+(Worker), and **Auth** (D1-backed sessions plus a deployment bearer secret). The
+React site is wired to the current API for the customer portal and admin console.
+Live collector state lives in the Config Durable Object; D1 owns relational data;
+R2 stores config YAML; Queues and Analytics Engine carry event/usage signals.
 
 ---
 
 ## Current State (What's Already Real)
 
-| Component                                 | Status     | Notes                                                 |
-| ----------------------------------------- | ---------- | ----------------------------------------------------- |
-| Agent enrollment (token → DO)             | ✅ Working | WebSocket enrollment with signed claims               |
-| Agent reconnect (claim → DO)              | ✅ Working | Zero-DB hot path, HMAC verified locally               |
-| Config DO (per tenant:config)             | ✅ Working | SQLite-backed, WebSocket hibernation, stale detection |
-| Config push (rollout → DO broadcast)      | ✅ Working | `set-desired-config` command, inline YAML             |
-| R2 config storage                         | ✅ Working | Content-addressed, SHA-256 dedup                      |
-| D1 schema (tenants, configs, tokens)      | ✅ Working | Migrations applied to production                      |
-| Admin API (CRUD tenants)                  | ✅ Working | `/api/admin/tenants`                                  |
-| Tenant API (CRUD configs, tokens, agents) | ✅ Working | `/api/v1/*` with `X-Tenant-Id` stub                   |
-| Queue consumer (events → analytics)       | ✅ Working | Writes to Analytics Engine                            |
-| Auth                                      | ❌ Stub    | `API_SECRET` bearer + raw `X-Tenant-Id` header        |
-| User/account model                        | ❌ Missing | No users table, no sessions                           |
-| Portal UI → real API                      | ❌ Mock    | Portal pages show hardcoded data                      |
+| Component                            | Status     | Notes                                                           |
+| ------------------------------------ | ---------- | --------------------------------------------------------------- |
+| Agent enrollment (token → DO)        | ✅ Working | WebSocket enrollment with signed claims                         |
+| Agent reconnect (claim → DO)         | ✅ Working | Zero-DB hot path, HMAC verified locally                         |
+| Config DO (per tenant:config)        | ✅ Working | SQLite-backed, WebSocket hibernation, stale detection           |
+| Config push (rollout → DO broadcast) | ✅ Working | `set-desired-config` command, inline YAML                       |
+| R2 config storage                    | ✅ Working | Content-addressed, SHA-256 dedup                                |
+| D1 schema                            | ✅ Working | Tenants, configs, versions, tokens, users, sessions             |
+| Tenant API                           | ✅ Working | `/api/v1/*`, scoped by tenant session or bearer + `X-Tenant-Id` |
+| Admin API                            | ✅ Working | `/api/admin/*`, scoped by admin session or bearer `API_SECRET`  |
+| Queue consumer (events → analytics)  | ✅ Working | Writes to Analytics Engine                                      |
+| Auth                                 | ✅ Working | Cookie sessions for UI, `API_SECRET` for bootstrap/automation   |
+| Portal UI → real API                 | ✅ Working | React portal pages use API hooks and TanStack Query             |
+| Admin UI → real API                  | ✅ Working | Overview, tenants, health, usage, support, DO viewer, plans     |
 
-**Key insight**: The management API is already multi-tenant. The gap is authentication, not architecture.
+**Key insight**: the management API and browser apps are real now. Most remaining
+work is product depth: richer rollout state, RBAC, audit events, team invites,
+billing integration, and production identity/SSO.
 
 ---
 
@@ -76,20 +82,27 @@ The app has three planes: **Agent Control Plane** (DO-based, already works), **M
 
 **Why this split is right**: DO is the authoritative source for real-time agent state. D1 is the authoritative source for everything else. The management API reads from both. No data duplication needed.
 
-### Plane 2: Management API (Worker) — Partially Built
+### Plane 2: Management API (Worker) — Built
 
-Already has all the CRUD routes. Needs:
+The Worker owns:
 
-1. Real auth middleware (see below)
-2. A few missing endpoints the portal UI needs
+- Auth routes: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/seed`
+- Tenant routes: `/api/v1/*`
+- Admin routes: `/api/admin/*`
+- OpAMP ingress: `/v1/opamp`
+- Health check: `/healthz`
 
-### Plane 3: Auth Layer — Not Built Yet
+### Plane 3: Auth Layer — Built
+
+The UI uses HTTP-only `fp_session` cookies. Programmatic setup and local scripts
+use `Authorization: Bearer <API_SECRET>`. Tenant-scoped bearer calls must also
+send `X-Tenant-Id`.
 
 ---
 
-## Auth Design
+## Auth Model
 
-### Requirements
+### Current Requirements
 
 - Hardcoded tenant user and admin user via env vars (until social auth)
 - Session-based (HTTP-only cookies) for portal/admin UI
@@ -97,7 +110,7 @@ Already has all the CRUD routes. Needs:
 - Multi-tenant: user belongs to a tenant
 - Admin: separate role, can see all tenants
 
-### New D1 Tables
+### D1 Tables
 
 ```sql
 -- Users (hardcoded for now, social auth later)
@@ -123,27 +136,29 @@ CREATE INDEX idx_sessions_user ON sessions(user_id);
 CREATE INDEX idx_sessions_expires ON sessions(expires_at);
 ```
 
-### Hardcoded Accounts (via env vars)
+### Seed Accounts (via env vars)
 
 ```jsonc
 // wrangler.jsonc vars (dev) or secrets (prod)
 {
   "SEED_TENANT_USER_EMAIL": "demo@o11yfleet.com",
   "SEED_TENANT_USER_PASSWORD": "demo-password-change-me",
-  "SEED_ADMIN_USER_EMAIL": "admin@o11yfleet.com",
-  "SEED_ADMIN_USER_PASSWORD": "admin-password-change-me",
+  "SEED_ADMIN_EMAIL": "admin@o11yfleet.com",
+  "SEED_ADMIN_PASSWORD": "admin-password-change-me",
 }
 ```
 
-A seed endpoint or startup migration creates these accounts if they don't exist. The tenant user gets associated with the "Demo Org" tenant (`a835da97-...`). The admin user gets `role: 'admin'` with no tenant (can access all).
+`POST /auth/seed` creates or updates these accounts. The tenant user is associated
+with the demo tenant. The admin user gets `role: 'admin'` with no tenant and can
+access the admin console.
 
 ### Auth Endpoints
 
-```
+```http
 POST /auth/login        { email, password } → Set-Cookie: fp_session=<id>; HttpOnly; Secure; SameSite=Lax; Path=/
 POST /auth/logout       → Clear cookie, delete session from D1
 GET  /auth/me           → { user: { id, email, display_name, role, tenant_id } }
-POST /auth/seed         → Creates hardcoded accounts from env vars (idempotent, dev only)
+POST /auth/seed         → Creates configured seed accounts, guarded by API_SECRET
 ```
 
 ### Auth Middleware
@@ -178,17 +193,17 @@ async function authenticate(request: Request, env: Env): Promise<AuthContext | n
 
 ### How Auth Flows Into Existing Routes
 
-**`/api/v1/*` routes** currently take `tenantId` from `X-Tenant-Id` header. After auth:
+**`/api/v1/*` routes** resolve tenant scope this way:
 
 - Cookie auth → `tenantId` comes from `session.user.tenant_id`
-- Bearer API_SECRET → `tenantId` still from `X-Tenant-Id` (backward compat for scripts)
+- Bearer API_SECRET → `tenantId` comes from `X-Tenant-Id`
 - No auth → 401
 
-**`/api/admin/*` routes** currently only check `API_SECRET`. After auth:
+**`/api/admin/*` routes** resolve admin scope this way:
 
 - Cookie auth → must have `role: 'admin'`
-- Bearer API_SECRET → still works (backward compat)
-- No auth → 401
+- Bearer API_SECRET → allowed for bootstrap and controlled automation
+- No auth or tenant-only session → 403
 
 **`/v1/opamp`** — unchanged. Uses enrollment tokens / assignment claims, not user sessions.
 
@@ -201,11 +216,11 @@ The portal UI needs these data flows:
 | Portal Page           | Data Source                | Endpoint                                                     |
 | --------------------- | -------------------------- | ------------------------------------------------------------ |
 | Overview (KPIs)       | DO `/stats` per config     | `GET /api/v1/configurations/:id/stats` ✅ exists             |
-| Overview (aggregate)  | D1 count + sum of DO stats | `GET /api/v1/overview` ⬜ new                                |
+| Overview (aggregate)  | D1 count + sum of DO stats | `GET /api/v1/overview` ✅ exists                             |
 | Configurations list   | D1                         | `GET /api/v1/configurations` ✅ exists                       |
 | Configuration detail  | D1 + DO stats              | `GET /api/v1/configurations/:id` ✅ exists                   |
 | Agents list           | DO `/agents`               | `GET /api/v1/configurations/:id/agents` ✅ exists            |
-| Agent detail          | DO `/agents` (filtered)    | `GET /api/v1/configurations/:id/agents/:uid` ⬜ new          |
+| Agent detail          | DO `/agents` (filtered)    | `GET /api/v1/configurations/:id/agents/:uid` ✅ exists       |
 | Config versions       | D1                         | `GET /api/v1/configurations/:id/versions` ✅ exists          |
 | Enrollment tokens     | D1                         | `GET /api/v1/configurations/:id/enrollment-tokens` ✅ exists |
 | Settings (workspace)  | D1                         | `GET /api/v1/tenant` ✅ exists                               |
@@ -265,7 +280,7 @@ This is a two-step process by design: upload is separate from rollout. This lets
 | D1 (relational data)         | Cloudflare D1           | ✅              |
 | R2 (config blobs)            | Cloudflare R2           | ✅              |
 | Queue (events)               | Cloudflare Queue        | ✅              |
-| Analytics Engine             | Cloudflare AE           | ✅ (disabled)   |
+| Analytics Engine             | Cloudflare AE           | ✅              |
 | Site (portal UI)             | Cloudflare Pages        | ✅              |
 
 **No new services.** Everything runs in one Worker with one DO class. The Worker is the management API, the auth layer, and the OpAMP ingress — all in one. This is fine because:
@@ -277,40 +292,13 @@ This is a two-step process by design: upload is separate from rollout. This lets
 
 ---
 
-## Implementation Phases
+## Current Gaps
 
-### Phase A: Auth Foundation (do first, everything depends on it)
-
-1. **D1 migration**: Add `users` and `sessions` tables
-2. **Password hashing**: Use `crypto.subtle` PBKDF2 (Argon2id not available in Workers runtime — PBKDF2 with 600k iterations is the standard Workers approach)
-3. **Auth routes**: `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/seed`
-4. **Auth middleware**: Cookie-based for portal, Bearer for API
-5. **Seed command**: Create hardcoded accounts from env vars
-6. **Wire into existing routes**: Replace `X-Tenant-Id` stub with real session-based tenant resolution
-
-### Phase B: Portal Wiring (parallel with C)
-
-1. **Update portal-api.js**: Add session cookie handling, replace `X-Tenant-Id` header with cookie-based auth
-2. **Wire login.html**: POST to `/auth/login`, store cookie, redirect to portal
-3. **Wire signup.html**: For now, redirect to login (no self-service signup yet)
-4. **Wire portal pages**: Replace mock data with real API calls
-5. **Wire admin pages**: Same, with admin auth check
-6. **Add `/api/v1/overview`** endpoint for dashboard aggregation
-
-### Phase C: Missing API Endpoints (parallel with B)
-
-1. **`GET /api/v1/overview`** — aggregate stats
-2. **`GET /api/v1/configurations/:id/agents/:uid`** — single agent detail
-3. **`PUT /api/v1/tenant`** — update workspace name
-4. **`GET /api/admin/overview`** — admin dashboard stats
-
-### Phase D: Deploy & Verify
-
-1. Run D1 migrations on production
-2. Set seed account env vars as wrangler secrets
-3. Redeploy worker
-4. Redeploy site
-5. Playwright audit of real auth flows
+- Self-service signup and password reset pages are UI placeholders; seed/bootstrap creates accounts.
+- Team invites, RBAC beyond `member`/`admin`, and per-user API keys are not implemented.
+- Audit events are a product requirement but not a complete user-facing surface yet.
+- Rollout strategies are still simple immediate pushes to connected collectors.
+- Billing is plan/limit display only; there is no payment-provider integration.
 
 ---
 
@@ -321,15 +309,15 @@ Cloudflare analytics requirements. Keep this section focused on the auth impleme
 motivated the first seed-account rollout.
 
 ```jsonc
-// Already set:
+// Core runtime:
+"API_SECRET": "...",
 "CLAIM_SECRET": "...",
 
-// New — set as wrangler secrets for prod:
+// Seed/bootstrap:
 "SEED_TENANT_USER_EMAIL": "demo@o11yfleet.com",
 "SEED_TENANT_USER_PASSWORD": "...",      // strong random password
 "SEED_ADMIN_EMAIL": "admin@o11yfleet.com",
-"SEED_ADMIN_PASSWORD": "...",            // strong random password
-"SESSION_SECRET": "..."                  // HMAC key for session cookie signing (optional, session IDs are random)
+"SEED_ADMIN_PASSWORD": "..."             // strong random password
 ```
 
 ---
