@@ -20,18 +20,33 @@ o11yfleet/
 └── justfile          # Developer commands
 ```
 
+## Prerequisites
+
+- **Node.js 22+**
+- **pnpm 9+**
+- [**just** command runner](https://github.com/casey/just) (`brew install just` on macOS)
+- **Cloudflare Wrangler** (`pnpm add -g wrangler`)
+
 ## Quick Start
 
 ```bash
 # Install dependencies
 just install
 
-# Start local development
-printf "API_SECRET=dev-local-api-secret-1234567890x\\nCLAIM_SECRET=dev-local-claim-secret-12345678x\\n" > apps/worker/.dev.vars
-export O11YFLEET_API_KEY=dev-local-api-secret-1234567890x
-just dev           # Start worker locally (wrangler dev)
-just setup         # In another terminal: migrate, seed, show fleet status
-just ui            # Start web UI locally (separate terminal)
+# Set up local environment (creates apps/worker/.dev.vars)
+cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+
+# Check environment readiness
+just doctor
+
+# Start worker locally (wrangler dev)
+just dev
+
+# In another terminal: migrate, seed, show fleet status
+just setup
+
+# Start web UI locally (separate terminal)
+just ui
 
 # Run tests
 just test          # All tests

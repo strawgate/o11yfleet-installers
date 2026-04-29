@@ -8,6 +8,56 @@ default:
 install:
     pnpm install
 
+    # Check environment readiness
+doctor:
+    #!/usr/bin/env bash
+    set -uo pipefail
+    FAIL=0
+
+    echo "=== o11yFleet Environment Check ==="
+
+    node --version | grep -qE "^v(2[2-9]|[3-9][0-9])\." && echo "✓ Node.js 22+" || { echo "✗ Node.js 22+ required"; FAIL=1; }
+    pnpm --version | grep -qE "^[89]\." && echo "✓ pnpm 9+" || { echo "✗ pnpm 9+ required"; FAIL=1; }
+    just --version | grep -qE "[0-9]+\.[0-9]+" && echo "✓ just" || { echo "✗ just required"; FAIL=1; }
+    npx wrangler --version | grep -qE "^[0-9]+\." && echo "✓ wrangler" || { echo "✗ wrangler required"; FAIL=1; }
+
+    if [ -f apps/worker/.dev.vars ]; then
+        echo "✓ .dev.vars exists"
+    else
+        echo "✗ .dev.vars missing (run: cp apps/worker/.dev.vars.example apps/worker/.dev.vars)"
+        FAIL=1
+    fi
+
+    if [ -f apps/worker/.dev.vars ]; then
+        if grep -q "API_SECRET=dev-local" apps/worker/.dev.vars 2>/dev/null; then
+            echo "✗ .dev.vars has placeholder values — update with real secrets"
+            FAIL=1
+        elif grep -q "API_SECRET=" apps/worker/.dev.vars 2>/dev/null; then
+            echo "✓ API_SECRET set in .dev.vars"
+        fi
+        if grep -q "CLAIM_SECRET=" apps/worker/.dev.vars 2>/dev/null; then
+            echo "✓ CLAIM_SECRET set in .dev.vars"
+        else
+            echo "✗ CLAIM_SECRET missing from .dev.vars"
+            FAIL=1
+        fi
+    fi
+
+    if npx wrangler whoami &>/dev/null; then
+        echo "✓ Cloudflare authenticated"
+    else
+        echo "✗ Cloudflare not authenticated (run: npx wrangler login)"
+        FAIL=1
+    fi
+
+    echo ""
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✓ Environment ready!"
+    else
+        echo "✗ Fix the issues above before continuing"
+        exit 1
+    fi
+
 # Smart changed-file check for the current branch/worktree
 check:
     pnpm tsx scripts/dev-check.ts
