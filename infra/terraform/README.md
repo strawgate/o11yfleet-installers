@@ -22,7 +22,7 @@ Wrangler still deploys Worker code and Pages assets. Terraform owns the resource
 
 Non-production defaults use prefixed hostnames such as `staging-app.o11yfleet.com` and resource names such as `o11yfleet-staging-db`.
 
-Pages projects and Pages custom domains are intentionally separate. By default, Terraform creates all three Pages projects but attaches only the `site` custom domain. Add `app` or `admin` to `pages_custom_domains_to_attach` only after the matching deployment workflow is publishing the right asset bundle to that project.
+Pages projects and Pages custom domains are intentionally separate. The production deploy workflows publish the same built SPA bundle to all three Pages projects, so production attaches the `site`, `app`, and `admin` custom domains to their split projects. For new non-production environments, add custom domains only after the matching deployment workflow is publishing the right asset bundle to that project.
 
 ## Validate
 
@@ -50,7 +50,7 @@ just tf-plan staging
 just tf-plan prod
 ```
 
-The production tfvars intentionally point D1/R2/Queue at the existing names so those data-bearing resources can be imported instead of recreated. They also attach only the existing marketing custom domain until app/admin deployment workflows are split.
+The production tfvars intentionally point D1/R2/Queue at the existing names so those data-bearing resources can be imported instead of recreated. They also attach all three Pages custom domains now that the deployment workflows publish to the split site/app/admin projects.
 
 ## GitHub Deployment
 
@@ -100,6 +100,8 @@ terraform import \
   "$CLOUDFLARE_ACCOUNT_ID/192ca9ca-bd47-4bd2-9321-fcdf62d9cf05"
 ```
 
+For Terraform 1.5+ import-block-based adoption, copy `imports/prod.tf.example` to `imports.prod.tf`, replace placeholder DNS and route IDs, run a production plan against remote state, then delete `imports.prod.tf` after the imports are recorded. Do not commit a live `imports.prod.tf`; import blocks are evaluated during every plan.
+
 Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, Queue, and Access IDs before importing those resources. After imports, run:
 
 ```bash
@@ -111,6 +113,17 @@ The plan should show no replacement for D1, R2, or Queue. If it wants to replace
 ## Wrangler Boundary
 
 `apps/worker/wrangler.jsonc` still deploys Worker code and declares runtime bindings. Terraform owns the API DNS record and Worker route, so Wrangler deploys must not declare custom `routes`.
+
+Terraform provider `4.52.x` can manage a Worker script with D1, R2, Queue, and Analytics Engine bindings through [`cloudflare_workers_script`](https://registry.terraform.io/providers/cloudflare/cloudflare/4.52.5/docs/resources/workers_script), but it does not expose the Durable Object binding block needed for `CONFIG_DO` or a Queue consumer resource. Do not partially migrate Worker script ownership on provider 4.x; that would make Terraform overwrite a Worker version without the complete runtime contract.
+
+The full Worker migration should first move this stack to the provider 5.x resources:
+
+- [`cloudflare_worker`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/worker) for the script identity and `workers.dev` subdomain settings.
+- [`cloudflare_worker_version`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/worker_version) for code modules, compatibility date/flags, Durable Object migrations, and all bindings.
+- [`cloudflare_workers_deployment`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/workers_deployment) for the active version rollout.
+- [`cloudflare_queue_consumer`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/queue_consumer) for the `fp-events` consumer settings.
+
+After that migration, Wrangler should only build the Worker bundle that Terraform uploads, or be removed from production Worker deploys entirely.
 
 Cloudflare Pages uses Wrangler only for asset uploads. Terraform owns Pages
 project settings and both production and preview `deployment_configs`. If Pages

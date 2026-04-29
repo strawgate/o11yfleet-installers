@@ -33,8 +33,10 @@ The Terraform target splits these into separate Pages projects:
 - `o11yfleet-app` -> `app.o11yfleet.com`
 - `o11yfleet-admin` -> `admin.o11yfleet.com`
 
-Do not move the custom domains until the new Pages projects are provisioned and
-the deployment workflow is ready to publish to them.
+The deployment workflows publish the same built SPA bundle to all three split
+Pages projects, so Terraform can attach each custom domain to its target
+project after the existing Pages custom domains are imported or detached from
+the legacy project.
 
 ## GitHub Secrets
 
@@ -95,13 +97,15 @@ curl "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6
 
 ## Current Resource IDs
 
-| Resource             | ID                                     |
-| -------------------- | -------------------------------------- |
-| D1 Database (fp-db)  | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
-| Worker               | `o11yfleet-worker`                     |
-| Pages Project        | `o11yfleet-site`                       |
-| CF Account           | `417e8c0fd8f1a64e9f2c4845afa6dc56`     |
-| Zone (o11yfleet.com) | `2650adcd696a6e400201a68323e90c5e`     |
+| Resource              | ID                                     |
+| --------------------- | -------------------------------------- |
+| D1 Database (fp-db)   | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
+| Worker                | `o11yfleet-worker`                     |
+| Pages Project (site)  | `o11yfleet-site`                       |
+| Pages Project (app)   | `o11yfleet-app`                        |
+| Pages Project (admin) | `o11yfleet-admin`                      |
+| CF Account            | `417e8c0fd8f1a64e9f2c4845afa6dc56`     |
+| Zone (o11yfleet.com)  | `2650adcd696a6e400201a68323e90c5e`     |
 
 ## URLs
 

@@ -1,0 +1,61 @@
+# Copy this file to infra/terraform/imports.prod.tf only during a production
+# adoption run, then delete it after the imports have landed in remote state.
+# Keep placeholder IDs out of committed .tf files; Terraform evaluates import
+# blocks during plan.
+
+import {
+  to = cloudflare_d1_database.fleet
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/192ca9ca-bd47-4bd2-9321-fcdf62d9cf05"
+}
+
+import {
+  to = cloudflare_r2_bucket.configs
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/fp-configs"
+}
+
+import {
+  to = cloudflare_queue.events
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/fp-events"
+}
+
+import {
+  to = cloudflare_pages_project.pages["site"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-site"
+}
+
+import {
+  to = cloudflare_pages_project.pages["app"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-app"
+}
+
+import {
+  to = cloudflare_pages_project.pages["admin"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-admin"
+}
+
+# Fill these IDs from the Cloudflare dashboard or cf-terraforming before use.
+
+import {
+  to = cloudflare_record.api
+  id = "2650adcd696a6e400201a68323e90c5e/<api-dns-record-id>"
+}
+
+import {
+  to = cloudflare_workers_route.api
+  id = "2650adcd696a6e400201a68323e90c5e/<api-worker-route-id>"
+}
+
+import {
+  to = cloudflare_pages_domain.pages["site"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-site/o11yfleet.com"
+}
+
+import {
+  to = cloudflare_pages_domain.pages["app"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-app/app.o11yfleet.com"
+}
+
+import {
+  to = cloudflare_pages_domain.pages["admin"]
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-admin/admin.o11yfleet.com"
+}

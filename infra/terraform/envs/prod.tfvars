@@ -12,8 +12,9 @@ site_pages_project_name  = "o11yfleet-site"
 app_pages_project_name   = "o11yfleet-app"
 admin_pages_project_name = "o11yfleet-admin"
 
-# Do not move app/admin custom domains until those projects have deploy workflows.
-pages_custom_domains_to_attach = ["site"]
+# The deploy workflows publish the same SPA bundle to all three split Pages
+# projects, so Terraform can move each custom hostname to its target project.
+pages_custom_domains_to_attach = ["site", "app", "admin"]
 
 # Enable after the Access identity allow-list is final.
 enable_admin_access = false

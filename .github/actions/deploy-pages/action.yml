@@ -1,0 +1,69 @@
+name: Deploy and smoke test Pages projects
+description: Deploy one built Pages bundle to one or more projects and smoke test URLs.
+
+inputs:
+  projects:
+    description: Newline-delimited Cloudflare Pages project names to deploy.
+    required: false
+    default: ""
+  smoke-targets:
+    description: Newline-delimited smoke targets as label|url.
+    required: true
+  dist-dir:
+    description: Built Pages asset directory.
+    required: false
+    default: apps/site/dist
+
+runs:
+  using: composite
+  steps:
+    - name: Deploy Pages projects
+      if: ${{ inputs.projects != '' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        while IFS= read -r project; do
+          [ -n "$project" ] || continue
+          pnpm exec wrangler pages deploy "${{ inputs.dist-dir }}" \
+            --project-name "$project" \
+            --commit-dirty=true
+        done <<'PROJECTS'
+        ${{ inputs.projects }}
+        PROJECTS
+
+    - name: Smoke test Pages targets
+      shell: bash
+      run: |
+        set -euo pipefail
+        sleep 5
+
+        while IFS= read -r target; do
+          [ -n "$target" ] || continue
+          surface="${target%%|*}"
+          url="${target#*|}"
+          STATUS=""
+
+          for attempt in 1 2 3 4 5; do
+            STATUS=$(curl -sS --connect-timeout 5 --max-time 20 \
+              -o /tmp/pages-smoke.html -w "%{http_code}" "$url" || true)
+            [ "$STATUS" = "200" ] && break
+            echo "$surface smoke attempt $attempt failed with status ${STATUS:-curl-error}; retrying..."
+            sleep 3
+          done
+
+          if [ "$STATUS" != "200" ]; then
+            echo "$surface smoke failed: $STATUS"
+            [ ! -f /tmp/pages-smoke.html ] || cat /tmp/pages-smoke.html
+            exit 1
+          fi
+
+          grep 'id="root"' /tmp/pages-smoke.html >/dev/null
+          if grep -E 'Prototype|AI-powered insights are coming soon|portal-shared\.css' /tmp/pages-smoke.html >/dev/null; then
+            echo "$surface route served stale prototype HTML"
+            exit 1
+          fi
+        done <<'TARGETS'
+        ${{ inputs.smoke-targets }}
+        TARGETS
+
+        echo "✓ Pages targets responding"

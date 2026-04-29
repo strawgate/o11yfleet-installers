@@ -148,7 +148,7 @@ jobs:
 
           echo "✓ Production smoke tests passed"
 
-  deploy-site:
+  deploy-pages:
     needs: [test]
     if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
@@ -171,25 +171,31 @@ jobs:
       - name: Build site
         run: pnpm --filter @o11yfleet/site run build
 
-      - name: Deploy site to Cloudflare Pages
-        uses: cloudflare/wrangler-action@v3
+      - name: Deploy and smoke test Pages projects
+        uses: ./.github/actions/deploy-pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          command: pages deploy apps/site/dist --project-name o11yfleet-site --commit-dirty=true
+          projects: |
+            o11yfleet-site
+            o11yfleet-app
+            o11yfleet-admin
+          smoke-targets: |
+            site|https://o11yfleet-site.pages.dev/
+            app|https://o11yfleet-app.pages.dev/portal/overview
+            admin|https://o11yfleet-admin.pages.dev/admin/overview
 
-      - name: Smoke test site
-        run: |
-          sleep 5
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://o11yfleet.com/)
-          if [ "$STATUS" != "200" ]; then
-            echo "Site smoke test failed: $STATUS"
-            exit 1
-          fi
-          PORTAL_HTML=$(curl -fsS https://app.o11yfleet.com/portal/overview)
-          echo "$PORTAL_HTML" | grep 'id="root"' >/dev/null
-          if echo "$PORTAL_HTML" | grep -E 'Prototype|AI-powered insights are coming soon|portal-shared\.css' >/dev/null; then
-            echo "Portal route served stale prototype HTML"
-            exit 1
-          fi
-          echo "✓ Site deployed and responding"
+  smoke-custom-domains:
+    needs: [deploy-pages]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Smoke test production custom domains
+        uses: ./.github/actions/deploy-pages
+        with:
+          smoke-targets: |
+            site-custom|https://o11yfleet.com/
+            app-custom|https://app.o11yfleet.com/portal/overview
+            admin-custom|https://admin.o11yfleet.com/admin/overview
