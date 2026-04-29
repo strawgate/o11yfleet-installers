@@ -60,6 +60,7 @@
   "env": {
     "staging": {
       "main": "src/instrumented.ts",
+      "routes": [],
       "vars": {
         "ENVIRONMENT": "staging",
       },
