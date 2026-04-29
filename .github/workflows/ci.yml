@@ -31,6 +31,12 @@ jobs:
       - name: Lint
         run: pnpm turbo lint
 
+      - name: Lint repo scripts
+        run: pnpm lint:scripts
+
+      - name: Dev-check script tests
+        run: pnpm test:dev-check
+
       - name: Format check
         run: pnpm prettier --check .
 

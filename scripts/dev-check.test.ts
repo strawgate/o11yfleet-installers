@@ -8,6 +8,7 @@ test("plans the full fast suite for root config changes", () => {
 
   assert.equal(plan.runAllFast, true);
   assert.equal(plan.runDocsApiCheck, false);
+  assert.equal(plan.runScriptsLint, true);
   assert.equal(plan.runWorkerRuntime, false);
   assert.equal(plan.runWorkerTypegenCheck, false);
 });
@@ -48,12 +49,20 @@ test("plans docs API checks for worker route changes", () => {
   assert.equal(plan.runWorkerRuntime, true);
 });
 
+test("plans script linting for script changes", () => {
+  const plan = buildPlan(["scripts/dev-check.ts"]);
+
+  assert.equal(plan.runAllFast, true);
+  assert.equal(plan.runScriptsLint, true);
+});
+
 test("does not run code checks for non-code docs changes", () => {
   const plan = buildPlan(["README.md"]);
 
   assert.equal(plan.formatFiles.includes("README.md"), true);
   assert.equal(plan.runAllFast, false);
   assert.equal(plan.runDocsApiCheck, false);
+  assert.equal(plan.runScriptsLint, false);
   assert.equal(plan.runWorkerRuntime, false);
   assert.equal(plan.runWorkerTypegenCheck, false);
 });

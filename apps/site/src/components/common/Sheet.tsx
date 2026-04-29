@@ -40,20 +40,22 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
   );
 
   useEffect(() => {
-    if (open) {
-      previousFocusRef.current = document.activeElement as HTMLElement | null;
-      document.addEventListener("keydown", handleKeyDown);
-      requestAnimationFrame(() => {
-        if (sheetRef.current) {
-          const first = sheetRef.current.querySelector<HTMLElement>(FOCUSABLE);
-          first?.focus();
-        }
-      });
-      return () => {
-        document.removeEventListener("keydown", handleKeyDown);
-        previousFocusRef.current?.focus();
-      };
+    if (!open) {
+      return undefined;
     }
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    document.addEventListener("keydown", handleKeyDown);
+    requestAnimationFrame(() => {
+      if (sheetRef.current) {
+        const first = sheetRef.current.querySelector<HTMLElement>(FOCUSABLE);
+        first?.focus();
+      }
+    });
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
   }, [open, handleKeyDown]);
 
   return (

@@ -9,7 +9,7 @@
 
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { api, log, loadState, saveState, BASE_URL, requireApiKey } from "./lib.js";
+import { api, log, loadState, saveState, requireApiKey } from "./lib.js";
 
 async function main() {
   const args = process.argv.slice(2).filter((a) => !a.startsWith("--"));

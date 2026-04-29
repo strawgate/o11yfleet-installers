@@ -25,7 +25,7 @@ async function main() {
     const health = await fetch(`${BASE_URL}/healthz`);
     if (!health.ok) throw new Error(`status ${health.status}`);
     log.ok("Worker is healthy");
-  } catch (e) {
+  } catch {
     log.error(`Cannot reach worker at ${BASE_URL}/healthz`);
     log.error("Run 'just dev' first to start the local worker");
     process.exit(1);

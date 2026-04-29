@@ -28,6 +28,9 @@ export default tseslint.config(
       "no-console": ["warn", { allow: ["warn", "error"] }],
       eqeqeq: ["error", "always"],
       "no-throw-literal": "error",
+      "no-self-compare": "error",
+      "no-template-curly-in-string": "error",
+      "no-useless-return": "error",
     },
   },
   // Relax rules for test files

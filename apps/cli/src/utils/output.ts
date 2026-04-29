@@ -47,10 +47,6 @@ export class Output {
     this.stream.write(msg);
   }
 
-  private printErr(msg: string): void {
-    this.errStream.write(msg);
-  }
-
   private formatLink(text: string, url: string): string {
     if (this.caps.supportsHyperlink) {
       return `\x1b]8;;${url}\x07${text}\x1b]8;;\x07`;

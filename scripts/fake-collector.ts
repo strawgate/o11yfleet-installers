@@ -104,16 +104,14 @@ function hexFromBytes(arr: Uint8Array): string {
 }
 
 async function runCollector(token: string, name: string): Promise<void> {
-  let state = initialState();
+  const state = initialState();
   let reconnects = 0;
-  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   let running = true;
 
   // Graceful shutdown
   const shutdown = () => {
     log.warn("Shutting down...");
     running = false;
-    if (heartbeatTimer) clearInterval(heartbeatTimer);
   };
   process.on("SIGINT", shutdown);
   process.on("SIGTERM", shutdown);
@@ -172,10 +170,7 @@ function connectAndRun(
     ws.binaryType = "arraybuffer";
 
     let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
-    let closed = false;
-
     const cleanup = () => {
-      closed = true;
       if (heartbeatTimer) {
         clearInterval(heartbeatTimer);
         heartbeatTimer = null;
@@ -235,7 +230,7 @@ function connectAndRun(
       resolve();
     });
 
-    ws.addEventListener("error", (event) => {
+    ws.addEventListener("error", () => {
       cleanup();
       reject(new Error("WebSocket error"));
     });
@@ -246,7 +241,9 @@ function connectAndRun(
       if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
         try {
           ws.close(1000, "client shutdown");
-        } catch {}
+        } catch {
+          // The socket may already be closed by the peer.
+        }
       }
       resolve();
     };

@@ -41,21 +41,23 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   );
 
   useEffect(() => {
-    if (open) {
-      previousFocusRef.current = document.activeElement as HTMLElement | null;
-      document.addEventListener("keydown", handleKeyDown);
-      // Focus first focusable element
-      requestAnimationFrame(() => {
-        if (modalRef.current) {
-          const first = modalRef.current.querySelector<HTMLElement>(FOCUSABLE);
-          first?.focus();
-        }
-      });
-      return () => {
-        document.removeEventListener("keydown", handleKeyDown);
-        previousFocusRef.current?.focus();
-      };
+    if (!open) {
+      return undefined;
     }
+
+    previousFocusRef.current = document.activeElement as HTMLElement | null;
+    document.addEventListener("keydown", handleKeyDown);
+    // Focus first focusable element
+    requestAnimationFrame(() => {
+      if (modalRef.current) {
+        const first = modalRef.current.querySelector<HTMLElement>(FOCUSABLE);
+        first?.focus();
+      }
+    });
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+      previousFocusRef.current?.focus();
+    };
   }, [open, handleKeyDown]);
 
   const handleBackdropClick = useCallback(

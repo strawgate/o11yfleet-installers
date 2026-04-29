@@ -4,6 +4,7 @@
   "packageManager": "pnpm@9.15.4",
   "scripts": {
     "lint": "turbo lint",
+    "lint:scripts": "eslint scripts/",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:dev-check": "tsx --test scripts/dev-check.test.ts",

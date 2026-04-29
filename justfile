@@ -27,6 +27,10 @@ typegen-check:
 test-dev-check:
     pnpm test:dev-check
 
+# Lint repo maintenance scripts
+lint-scripts:
+    pnpm lint:scripts
+
 # Fast full check: lint, typecheck, and unit tests
 check-all:
     pnpm turbo lint typecheck test
@@ -44,7 +48,7 @@ test:
     pnpm turbo test
 
 # Run all fast CI checks
-ci: typegen-check check-all test-dev-check docs-api-check fmt-check
+ci: typegen-check check-all lint-scripts test-dev-check docs-api-check fmt-check
 
 # Format code
 fmt:

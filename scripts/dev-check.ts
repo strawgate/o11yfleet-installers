@@ -7,6 +7,7 @@ type CheckPlan = {
   formatFiles: string[];
   runAllFast: boolean;
   runDocsApiCheck: boolean;
+  runScriptsLint: boolean;
   runWorkerTypegenCheck: boolean;
   runWorkerRuntime: boolean;
 };
@@ -129,6 +130,7 @@ export function buildPlan(files: string[]): CheckPlan {
       formatFiles: [],
       runAllFast: true,
       runDocsApiCheck: true,
+      runScriptsLint: true,
       runWorkerTypegenCheck: true,
       runWorkerRuntime: true,
     };
@@ -147,10 +149,24 @@ export function buildPlan(files: string[]): CheckPlan {
       file === "scripts/check-api-docs.ts",
   );
 
+  const runScriptsLint = files.some(
+    (file) =>
+      file.startsWith("scripts/") ||
+      file === "eslint.config.mjs" ||
+      file === "package.json" ||
+      file === "pnpm-lock.yaml",
+  );
   const runWorkerTypegenCheck = files.some(affectsWorkerTypegen);
   const runWorkerRuntime = files.some(affectsWorkerRuntime);
 
-  return { formatFiles, runAllFast, runDocsApiCheck, runWorkerTypegenCheck, runWorkerRuntime };
+  return {
+    formatFiles,
+    runAllFast,
+    runDocsApiCheck,
+    runScriptsLint,
+    runWorkerTypegenCheck,
+    runWorkerRuntime,
+  };
 }
 
 function run(command: string, commandArgs: string[]): void {
@@ -196,6 +212,9 @@ function printPlan(plan: CheckPlan, files: string[]): void {
   if (plan.runDocsApiCheck) {
     console.log("API docs-adjacent change detected: checking generated API docs.");
   }
+  if (plan.runScriptsLint) {
+    console.log("Script/tooling change detected: linting repo maintenance scripts.");
+  }
   if (plan.runWorkerTypegenCheck) {
     console.log("Worker typegen-adjacent change detected: checking generated Worker types.");
   }
@@ -216,6 +235,10 @@ function main(): void {
 
   if (plan.runWorkerTypegenCheck) {
     run("pnpm", ["--filter", "@o11yfleet/worker", "typegen:check"]);
+  }
+
+  if (plan.runScriptsLint) {
+    run("pnpm", ["lint:scripts"]);
   }
 
   if (plan.runAllFast) {
