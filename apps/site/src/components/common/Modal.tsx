@@ -67,6 +67,8 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
     [onClose],
   );
 
+  if (!open) return null;
+
   return (
     <div className={`modal-backdrop${open ? " open" : ""}`} onClick={handleBackdropClick}>
       <div

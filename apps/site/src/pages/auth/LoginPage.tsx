@@ -1,20 +1,15 @@
-import { useState, useEffect, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuth, useLogin } from "../../api/hooks/auth";
+import { useLogin } from "../../api/hooks/auth";
 import { Logo } from "@/components/common/Logo";
 
 export default function LoginPage() {
   const navigate = useNavigate();
-  const { user, isLoading } = useAuth();
   const login = useLogin();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isLoading && user) navigate("/portal/overview", { replace: true });
-  }, [user, isLoading, navigate]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -74,19 +69,25 @@ export default function LoginPage() {
           </div>
 
           <div className="field">
-            <label htmlFor="password">
-              Password
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: "12px",
+              }}
+            >
+              <label htmlFor="password">Password</label>
               <Link
                 to="/forgot"
                 style={{
-                  marginLeft: "auto",
                   fontSize: "12px",
                   color: "var(--accent)",
                 }}
               >
                 Forgot?
               </Link>
-            </label>
+            </div>
             <input
               id="password"
               className="input"

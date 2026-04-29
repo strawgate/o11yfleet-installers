@@ -57,6 +57,7 @@ export default function TenantsPage() {
         <div className="dt-toolbar">
           <input
             className="input"
+            aria-label="Filter tenants by name"
             placeholder="Filter by name…"
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -131,14 +132,15 @@ export default function TenantsPage() {
               onClick={() => void handleCreate()}
               disabled={!name.trim() || createTenant.isPending}
             >
-              {createTenant.isPending ? "Creating…" : "Create"}
+              {createTenant.isPending ? "Creating…" : "Create tenant"}
             </button>
           </>
         }
       >
         <div className="field">
-          <label>Name</label>
+          <label htmlFor="tenant-name">Name</label>
           <input
+            id="tenant-name"
             className="input"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -147,8 +149,13 @@ export default function TenantsPage() {
           />
         </div>
         <div className="field mt-6">
-          <label>Plan</label>
-          <select className="input" value={plan} onChange={(e) => setPlan(e.target.value)}>
+          <label htmlFor="tenant-plan">Plan</label>
+          <select
+            id="tenant-plan"
+            className="input"
+            value={plan}
+            onChange={(e) => setPlan(e.target.value)}
+          >
             <option value="free">Free</option>
             <option value="pro">Pro</option>
             <option value="enterprise">Enterprise</option>

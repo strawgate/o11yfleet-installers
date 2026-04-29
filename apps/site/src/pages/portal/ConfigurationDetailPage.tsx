@@ -55,7 +55,8 @@ export default function ConfigurationDetailPage() {
   const { toast } = useToast();
 
   const config = useConfiguration(id);
-  const yaml = useConfigurationYaml(id);
+  const hasConfigContent = Boolean(config.data?.["current_config_hash"]);
+  const yaml = useConfigurationYaml(id, hasConfigContent);
   const agents = useConfigurationAgents(id);
   const versions = useConfigurationVersions(id);
   const tokens = useConfigurationTokens(id);
@@ -89,7 +90,7 @@ export default function ConfigurationDetailPage() {
     versions.isFetched &&
     tokens.isFetched &&
     stats.isFetched &&
-    yaml.isFetched;
+    (!hasConfigContent || yaml.isFetched);
   const insightSurface = insightSurfaces.portalConfiguration;
   const pageContext =
     guidanceReady && c
@@ -218,8 +219,12 @@ export default function ConfigurationDetailPage() {
   }
 
   async function handleRollout() {
+    if (!yaml.data || yaml.isLoading || yaml.error) {
+      toast("Rollout failed", "YAML is loading or unavailable", "err");
+      return;
+    }
     try {
-      await rollout.mutateAsync(yaml.data ?? "");
+      await rollout.mutateAsync(yaml.data);
       toast("Rollout initiated", c!.name);
       setRolloutOpen(false);
     } catch (err) {
@@ -488,7 +493,13 @@ export default function ConfigurationDetailPage() {
           <button
             className="btn btn-primary mt-6"
             onClick={() => setRolloutOpen(true)}
-            disabled={rollout.isPending}
+            disabled={
+              !hasConfigContent ||
+              !yaml.data ||
+              yaml.isLoading ||
+              Boolean(yaml.error) ||
+              rollout.isPending
+            }
           >
             {rollout.isPending ? "Rolling out…" : "Start rollout"}
           </button>
@@ -505,7 +516,13 @@ export default function ConfigurationDetailPage() {
                 <button
                   className="btn btn-primary"
                   onClick={() => void handleRollout()}
-                  disabled={rollout.isPending}
+                  disabled={
+                    !hasConfigContent ||
+                    !yaml.data ||
+                    yaml.isLoading ||
+                    Boolean(yaml.error) ||
+                    rollout.isPending
+                  }
                 >
                   {rollout.isPending ? "Rolling out…" : "Roll out now"}
                 </button>

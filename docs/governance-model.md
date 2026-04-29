@@ -13,7 +13,7 @@ The workspace owns all customer resources:
 - enrollment tokens
 - future API tokens
 - users and roles
-- audit events
+- future audit events
 
 Every customer API call must be scoped to one workspace.
 
@@ -67,9 +67,10 @@ Plans gate both limits and capabilities:
 
 Plan downgrade behavior must be explicit. A downgrade from managed config to monitor-only should preserve historical data but disable new config mutations and rollouts.
 
-## Audit Events
+## Future Audit Events
 
-Audit events should answer:
+O11yFleet does not currently expose an audit-event product surface. When that
+surface is implemented, it should answer:
 
 - who acted
 - what action they took

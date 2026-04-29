@@ -79,7 +79,7 @@ export default function BillingPage() {
           <h3>Control mode</h3>
           <p className="meta mt-6">
             Plans should gate more than quotas. They also decide whether a workspace is monitor-only
-            or can manage desired config, rollouts, team roles, API tokens, audit export, and
+            or can manage desired config, rollouts, team roles, enrollment policy, audit export, and
             approval workflows.
           </p>
           <div className="mt-6">

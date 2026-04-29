@@ -44,8 +44,7 @@ export default function EnterprisePage() {
         </div>
         <h1>
           Collector governance
-          <br />
-          for large organizations
+          <br /> for large organizations
         </h1>
         <p className="lede">
           SSO, audit trails, role-based access, and dedicated support — built for teams that need

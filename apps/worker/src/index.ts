@@ -37,21 +37,16 @@ const PRODUCTION_ORIGINS = [
   "https://o11yfleet-site.pages.dev",
 ];
 
-// Localhost origins (only allowed in non-production environments)
-const DEV_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:4000",
-  "http://localhost:8788",
-  "http://127.0.0.1:3000",
-  "http://127.0.0.1:4000",
-  "http://127.0.0.1:8788",
-];
-
-function getAllowedOrigins(env: Env): string[] {
-  if (env.ENVIRONMENT === "production") {
-    return PRODUCTION_ORIGINS;
+function isLocalDevOrigin(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return (
+      (url.protocol === "http:" || url.protocol === "https:") &&
+      ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
+    );
+  } catch {
+    return false;
   }
-  return [...PRODUCTION_ORIGINS, ...DEV_ORIGINS];
 }
 
 /** Check if origin is a Cloudflare Pages preview deploy (e.g. abc123.o11yfleet-site.pages.dev). */
@@ -66,12 +61,19 @@ function isPagesPreview(origin: string): boolean {
   }
 }
 
+function isAllowedOrigin(origin: string, env: Env): boolean {
+  return (
+    PRODUCTION_ORIGINS.includes(origin) ||
+    isPagesPreview(origin) ||
+    (env.ENVIRONMENT !== "production" && isLocalDevOrigin(origin))
+  );
+}
+
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get("Origin") || "";
-  const origins = getAllowedOrigins(env);
-  const allowed = origins.includes(origin) || isPagesPreview(origin);
+  const allowed = isAllowedOrigin(origin, env);
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : (origins[0] ?? ""),
+    "Access-Control-Allow-Origin": allowed ? origin : PRODUCTION_ORIGINS[0]!,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
     "Access-Control-Allow-Credentials": "true",
@@ -111,17 +113,16 @@ function addSecurityHeaders(resp: Response): Response {
 const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 
 function isTrustedOrigin(request: Request, env: Env): boolean {
-  const origins = getAllowedOrigins(env);
   const origin = request.headers.get("Origin");
   if (origin) {
-    return origins.includes(origin) || isPagesPreview(origin);
+    return isAllowedOrigin(origin, env);
   }
   // Fallback: same-origin requests may omit Origin; check Referer
   const referer = request.headers.get("Referer");
   if (referer) {
     try {
       const refOrigin = new URL(referer).origin;
-      return origins.includes(refOrigin) || isPagesPreview(refOrigin);
+      return isAllowedOrigin(refOrigin, env);
     } catch {
       return false;
     }

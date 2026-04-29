@@ -49,21 +49,6 @@ const USER_NAV: (NavSection | NavItem)[] = [
   { id: "overview", label: "Overview", href: "/portal/overview", icon: "home" },
   { id: "agents", label: "Agents", href: "/portal/agents", icon: "cpu" },
   { id: "configurations", label: "Configurations", href: "/portal/configurations", icon: "file" },
-  {
-    id: "rollouts",
-    label: "Rollouts",
-    href: "/portal/rollouts",
-    icon: "rocket",
-    placeholder: true,
-  },
-  {
-    id: "flow",
-    label: "Flow & metrics",
-    href: "/portal/flow",
-    icon: "activity",
-    placeholder: true,
-  },
-  { id: "audit", label: "Audit log", href: "/portal/audit", icon: "list", placeholder: true },
   { sec: "Setup" },
   {
     id: "getting-started",
@@ -71,14 +56,7 @@ const USER_NAV: (NavSection | NavItem)[] = [
     href: "/portal/getting-started",
     icon: "play",
   },
-  {
-    id: "integrations",
-    label: "Integrations",
-    href: "/portal/integrations",
-    icon: "link",
-    placeholder: true,
-  },
-  { id: "tokens", label: "API tokens", href: "/portal/tokens", icon: "key" },
+  { id: "tokens", label: "Enrollment tokens", href: "/portal/tokens", icon: "key" },
   { sec: "Settings" },
   { id: "team", label: "Team", href: "/portal/team", icon: "users" },
   { id: "billing", label: "Plan & billing", href: "/portal/billing", icon: "card" },
@@ -378,8 +356,9 @@ export default function PortalLayout() {
   if (isLoading) return <LoadingSpinner />;
   if (!user) return null;
 
-  const userName = user.name ?? user.email ?? "User";
+  const userName = user.name ?? user.displayName ?? user.email ?? "User";
   const userEmail = user.email ?? "";
+  const isImpersonating = Boolean(user.isImpersonation);
   const orgName =
     tenant.data?.name?.trim() || (tenant.isLoading ? "Loading workspace…" : "Workspace");
   const orgPlan =
@@ -392,7 +371,7 @@ export default function PortalLayout() {
     .toUpperCase();
 
   return (
-    <div className="app">
+    <div className={`app${isImpersonating ? " impersonating" : ""}`}>
       <aside className={`sidebar${sidebarOpen ? " open" : ""}`}>
         <NavLink to="/portal/overview" className="sidebar-brand">
           <Logo />
@@ -452,6 +431,20 @@ export default function PortalLayout() {
         items={navCommands(USER_NAV)}
         placeholder="Search collectors, configs, pages..."
       />
+
+      {isImpersonating ? (
+        <div className="impersonation-bar" role="status" aria-live="polite">
+          <div>
+            <strong>Viewing as tenant</strong>
+            <span>
+              You are impersonating {orgName}. Actions in this portal affect this tenant workspace.
+            </span>
+          </div>
+          <button className="btn btn-secondary btn-sm" onClick={handleLogout}>
+            End impersonation
+          </button>
+        </div>
+      ) : null}
 
       <main className="main">
         <div className="main-wide">

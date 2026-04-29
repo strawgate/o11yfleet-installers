@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
+import { useAdminHealth, useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -13,12 +13,14 @@ import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 export default function OverviewPage() {
   const overview = useAdminOverview();
   const tenants = useAdminTenants();
+  const health = useAdminHealth();
   const ov = overview.data;
   const tenantList = tenants.data ?? [];
-  const totalTenants = ov?.tenants ?? tenantList.length;
-  const totalConfigs = (ov?.["total_configs"] as number) ?? 0;
-  const totalAgents = ov?.agents ?? 0;
-  const healthStatus = (ov?.["health"] as string) ?? "ok";
+  const totalTenants = ov?.total_tenants ?? ov?.tenants ?? tenantList.length;
+  const totalConfigs =
+    ov?.total_configurations ?? (ov?.["total_configs"] as number | undefined) ?? 0;
+  const totalAgents = ov?.total_agents ?? ov?.agents ?? 0;
+  const healthStatus = health.data?.status ?? (ov?.["health"] as string | undefined) ?? "unknown";
 
   // Plan distribution
   const planCounts: Record<string, number> = {};
@@ -81,20 +83,18 @@ export default function OverviewPage() {
     (item) => item.target_key === "admin.overview.agents",
   );
 
-  if (overview.isLoading || tenants.isLoading) return <LoadingSpinner />;
+  if (overview.isLoading || tenants.isLoading || health.isLoading) return <LoadingSpinner />;
   if (overview.error)
     return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
   if (tenants.error)
     return <ErrorState error={tenants.error} retry={() => void tenants.refetch()} />;
+  if (health.error) return <ErrorState error={health.error} retry={() => void health.refetch()} />;
 
   return (
     <>
       <div className="page-head">
         <h1>Admin Overview</h1>
         <div className="actions">
-          <Link to="/admin/events" className="btn btn-ghost btn-sm">
-            Audit events
-          </Link>
           <Link to="/admin/health" className="btn btn-ghost btn-sm">
             System health
           </Link>

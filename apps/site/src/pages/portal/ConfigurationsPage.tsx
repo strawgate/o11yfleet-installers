@@ -116,14 +116,15 @@ export default function ConfigurationsPage() {
               onClick={() => void handleCreate()}
               disabled={!name.trim() || createConfig.isPending}
             >
-              {createConfig.isPending ? "Creating…" : "Create"}
+              {createConfig.isPending ? "Creating…" : "Create configuration"}
             </button>
           </>
         }
       >
         <div className="field">
-          <label>Name</label>
+          <label htmlFor="config-name">Name</label>
           <input
+            id="config-name"
             className="input mono"
             value={name}
             onChange={(e) => setName(e.target.value)}
@@ -132,8 +133,9 @@ export default function ConfigurationsPage() {
           />
         </div>
         <div className="field">
-          <label>Description</label>
+          <label htmlFor="config-description">Description</label>
           <textarea
+            id="config-description"
             className="textarea"
             value={description}
             onChange={(e) => setDescription(e.target.value)}

@@ -14,8 +14,8 @@ function handleGlobalError(error: Error) {
   if (error instanceof AuthError) {
     queryClient.setQueryData(["auth", "me"], null);
 
-    // Don't redirect if already on an auth page — the login/signup pages
-    // expect 401 from /auth/me and handle it locally.
+    // Don't redirect if already on an auth page; login/signup/forgot own
+    // their empty-session states.
     const path = window.location.pathname;
     if (path === "/login" || path === "/signup" || path === "/forgot" || path === "/admin-login") {
       return;
@@ -132,9 +132,7 @@ const AdminOverviewPage = lazyPage(() => import("./pages/admin/OverviewPage"), "
 const TenantsPage = lazyPage(() => import("./pages/admin/TenantsPage"), "Tenants");
 const TenantDetailPage = lazyPage(() => import("./pages/admin/TenantDetailPage"), "Tenant Detail");
 const HealthPage = lazyPage(() => import("./pages/admin/HealthPage"), "Health");
-const EventsPage = lazyPage(() => import("./pages/admin/EventsPage"), "Events");
 const PlansPage = lazyPage(() => import("./pages/admin/PlansPage"), "Plans");
-const FlagsPage = lazyPage(() => import("./pages/admin/FlagsPage"), "Flags");
 
 /* ------------------------------------------------------------------ */
 /*  404 page                                                           */
@@ -208,9 +206,7 @@ export function App() {
                   <Route path="tenants" element={<TenantsPage />} />
                   <Route path="tenants/:id" element={<TenantDetailPage />} />
                   <Route path="health" element={<HealthPage />} />
-                  <Route path="events" element={<EventsPage />} />
                   <Route path="plans" element={<PlansPage />} />
-                  <Route path="flags" element={<FlagsPage />} />
                 </Route>
 
                 {/* 404 catch-all */}

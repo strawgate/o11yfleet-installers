@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAdminTenant,
   useAdminTenantConfigs,
   useAdminTenantUsers,
   useUpdateAdminTenant,
   useDeleteAdminTenant,
+  useImpersonateTenant,
 } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel } from "../../components/ai";
@@ -42,6 +43,7 @@ export default function TenantDetailPage() {
   const users = useAdminTenantUsers(id);
   const updateTenant = useUpdateAdminTenant(id!);
   const deleteTenant = useDeleteAdminTenant(id!);
+  const impersonateTenant = useImpersonateTenant(id!);
 
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<Tab>(isTab(tabParam) ? tabParam : "overview");
@@ -130,6 +132,15 @@ export default function TenantDetailPage() {
     }
   }
 
+  async function handleImpersonate() {
+    try {
+      await impersonateTenant.mutateAsync();
+      window.location.assign("/portal/overview");
+    } catch (err) {
+      toast("Failed to view tenant", err instanceof Error ? err.message : "Unknown error", "err");
+    }
+  }
+
   const tabs: { key: Tab; label: string }[] = [
     { key: "overview", label: "Overview" },
     { key: "configurations", label: "Configurations" },
@@ -150,12 +161,14 @@ export default function TenantDetailPage() {
         </div>
         <div className="actions">
           {<PlanTag plan={t.plan ?? "free"} />}
-          <Link
-            to={`/portal/overview?tenant=${encodeURIComponent(t.id)}`}
+          <button
+            type="button"
             className="btn btn-ghost btn-sm"
+            onClick={() => void handleImpersonate()}
+            disabled={impersonateTenant.isPending}
           >
-            Open portal
-          </Link>
+            {impersonateTenant.isPending ? "Opening..." : "View as tenant"}
+          </button>
         </div>
       </div>
 
@@ -324,8 +337,9 @@ export default function TenantDetailPage() {
             <h3>General</h3>
 
             <div className="field mt-6">
-              <label>Tenant name</label>
+              <label htmlFor="admin-tenant-name">Tenant name</label>
               <input
+                id="admin-tenant-name"
                 className="input"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
@@ -333,8 +347,9 @@ export default function TenantDetailPage() {
             </div>
 
             <div className="field mt-6">
-              <label>Plan</label>
+              <label htmlFor="admin-tenant-plan">Plan</label>
               <select
+                id="admin-tenant-plan"
                 className="input"
                 value={editPlan}
                 onChange={(e) => setEditPlan(e.target.value)}
@@ -405,7 +420,11 @@ export default function TenantDetailPage() {
         <p>
           Type <strong>delete</strong> to confirm.
         </p>
+        <label className="sr-only" htmlFor="delete-confirmation">
+          Delete confirmation
+        </label>
         <input
+          id="delete-confirmation"
           className="input mt-2"
           value={confirmText}
           onChange={(e) => setConfirmText(e.target.value)}

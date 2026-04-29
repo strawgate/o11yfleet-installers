@@ -137,10 +137,22 @@ test.describe("AI guidance surfaces", () => {
       },
     });
     await mockJson(page, "/api/admin/overview", {
-      tenants: 1,
-      total_configs: 1,
-      agents: 12,
-      health: "ok",
+      total_tenants: 1,
+      total_configurations: 1,
+      total_agents: 12,
+      total_active_tokens: 1,
+      total_users: 2,
+    });
+    await mockJson(page, "/api/admin/health", {
+      status: "healthy",
+      checks: {
+        worker: { status: "healthy" },
+        d1: { status: "healthy", latency_ms: 2 },
+        r2: { status: "healthy", latency_ms: 3 },
+        durable_objects: { status: "healthy" },
+        queue: { status: "healthy" },
+      },
+      timestamp: "2026-04-28T20:00:00.000Z",
     });
     await mockJson(page, "/api/admin/tenants", {
       tenants: [

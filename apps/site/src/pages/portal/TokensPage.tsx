@@ -23,6 +23,7 @@ function TokenSection({ config }: { config: Configuration }) {
   const [createOpen, setCreateOpen] = useState(false);
   const [tokenLabel, setTokenLabel] = useState("");
   const [newTokenValue, setNewTokenValue] = useState<string | null>(null);
+  const tokenLabelId = `token-label-${config.id}`;
 
   async function handleCreate() {
     try {
@@ -156,8 +157,9 @@ function TokenSection({ config }: { config: Configuration }) {
         }
       >
         <div className="field">
-          <label>Label (optional)</label>
+          <label htmlFor={tokenLabelId}>Label (optional)</label>
           <input
+            id={tokenLabelId}
             className="input"
             value={tokenLabel}
             onChange={(e) => setTokenLabel(e.target.value)}

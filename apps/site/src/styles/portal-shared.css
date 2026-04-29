@@ -30,6 +30,13 @@ body::before {
   height: 100vh;
   background: var(--bg);
 }
+.app.impersonating {
+  grid-template-rows: var(--topbar-h) auto minmax(0, 1fr);
+  grid-template-areas:
+    "sidebar topbar"
+    "sidebar impersonation"
+    "sidebar main";
+}
 #shell-sidebar {
   grid-area: sidebar;
   min-width: 0;
@@ -341,6 +348,45 @@ body::before {
   color: var(--fg);
   border-color: var(--line-strong);
   background: var(--surface-2);
+}
+.impersonation-bar {
+  grid-area: impersonation;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  justify-content: space-between;
+  min-width: 0;
+  padding: 10px 24px;
+  border-bottom: 1px solid color-mix(in oklab, var(--warn) 45%, var(--line));
+  background:
+    linear-gradient(90deg, color-mix(in oklab, var(--warn) 26%, var(--surface)), var(--surface)),
+    var(--surface);
+  color: var(--fg);
+  box-shadow: 0 10px 24px -22px var(--warn);
+  z-index: 9;
+}
+.impersonation-bar > div {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  font-size: 13.5px;
+}
+.impersonation-bar strong {
+  flex-shrink: 0;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--warn);
+}
+.impersonation-bar span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--fg-2);
 }
 .icon-btn {
   width: 32px;
@@ -1485,6 +1531,12 @@ body.auth {
       "topbar"
       "main";
   }
+  .app.impersonating {
+    grid-template-areas:
+      "topbar"
+      "impersonation"
+      "main";
+  }
   .sidebar {
     position: fixed;
     top: 0;
@@ -1530,6 +1582,18 @@ body.auth {
   }
   .profile {
     padding-right: 4px;
+  }
+  .impersonation-bar {
+    align-items: flex-start;
+    padding: 10px 14px;
+  }
+  .impersonation-bar > div {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 2px;
+  }
+  .impersonation-bar span {
+    white-space: normal;
   }
 }
 

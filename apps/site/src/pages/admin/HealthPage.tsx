@@ -4,6 +4,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 
 const serviceLabels: Record<string, string> = {
+  worker: "Worker / API",
   d1: "D1 Database",
   r2: "R2 Storage",
   durable_objects: "Durable Objects",

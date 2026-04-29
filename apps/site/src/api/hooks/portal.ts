@@ -125,7 +125,7 @@ export function useConfiguration(id: string | undefined) {
   });
 }
 
-export function useConfigurationYaml(id: string | undefined) {
+export function useConfigurationYaml(id: string | undefined, enabled = true) {
   return useQuery({
     queryKey: ["configuration", id, "yaml"],
     queryFn: async () => {
@@ -133,7 +133,7 @@ export function useConfigurationYaml(id: string | undefined) {
       if (!res.ok) throw new ApiError(`GET yaml: ${res.status}`, res.status);
       return res.text();
     },
-    enabled: !!id,
+    enabled: !!id && enabled,
   });
 }
 

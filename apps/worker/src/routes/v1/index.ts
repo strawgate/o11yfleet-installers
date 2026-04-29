@@ -588,9 +588,9 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
   let healthyAgents = 0;
   const configStats: Array<Record<string, unknown>> = [];
   for (const { config, stats } of statsResults) {
-    totalAgents += stats["total"] ?? 0;
-    connectedAgents += stats["connected"] ?? 0;
-    healthyAgents += stats["healthy"] ?? 0;
+    totalAgents += stats["total_agents"] ?? stats["total"] ?? 0;
+    connectedAgents += stats["connected_agents"] ?? stats["connected"] ?? 0;
+    healthyAgents += stats["healthy_agents"] ?? stats["healthy"] ?? 0;
     configStats.push({ ...config, stats });
   }
 

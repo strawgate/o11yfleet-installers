@@ -63,7 +63,7 @@ export default function TeamPage() {
           <div>
             <span className="tag tag-warn">admin</span>
             <p className="meta mt-2">
-              Manage team, billing, API tokens, and destructive workspace actions.
+              Manage team, billing, enrollment policy, and destructive workspace actions.
             </p>
           </div>
         </div>

@@ -26,8 +26,7 @@ export default function ProductConfigPage() {
         </div>
         <h1>
           Configuration management
-          <br />
-          that doesn't break prod
+          <br /> that doesn't break prod
         </h1>
         <p className="lede">
           Versioned configs, immediate rollouts, and effective config visibility — so you can see

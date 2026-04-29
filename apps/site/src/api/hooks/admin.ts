@@ -6,8 +6,15 @@ import { apiGet, apiPost, apiPut, apiDel } from "../client";
 /* ------------------------------------------------------------------ */
 
 export interface AdminOverview {
-  tenants: number;
-  agents: number;
+  total_tenants?: number;
+  total_configurations?: number;
+  total_agents?: number;
+  connected_agents?: number;
+  healthy_agents?: number;
+  total_active_tokens?: number;
+  total_users?: number;
+  tenants?: number;
+  agents?: number;
   [key: string]: unknown;
 }
 
@@ -112,7 +119,11 @@ export function useAdminTenantUsers(id: string | undefined) {
 export function useAdminPlans() {
   return useQuery({
     queryKey: ["admin", "plans"],
-    queryFn: () => apiGet<AdminPlan[]>("/api/admin/plans"),
+    queryFn: async () =>
+      unwrapList<AdminPlan>(
+        await apiGet<AdminPlan[] | { plans: AdminPlan[] }>("/api/admin/plans"),
+        "plans",
+      ),
   });
 }
 
@@ -159,5 +170,11 @@ export function useDeleteAdminTenant(id: string) {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
     },
+  });
+}
+
+export function useImpersonateTenant(id: string) {
+  return useMutation({
+    mutationFn: () => apiPost(`/api/admin/tenants/${id}/impersonate`),
   });
 }

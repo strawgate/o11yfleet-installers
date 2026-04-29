@@ -73,6 +73,30 @@ describe("API Authentication", () => {
     expect(response.headers.get("Access-Control-Allow-Methods")).toContain("POST");
   });
 
+  it("allows Vite dev server origins in local environments", async () => {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://127.0.0.1:3001",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:3001");
+  });
+
+  it("allows fallback Vite dev server ports in local environments", async () => {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "OPTIONS",
+      headers: {
+        Origin: "http://127.0.0.1:3002",
+        "Access-Control-Request-Method": "POST",
+      },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("http://127.0.0.1:3002");
+  });
+
   it("API responses include CORS headers", async () => {
     const response = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",

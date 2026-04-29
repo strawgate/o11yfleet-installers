@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, login as doLogin, logout as doLogout } from "../client";
+import { apiGet, login as doLogin, logout as doLogout, normalizeUser } from "../client";
 import type { User } from "../client";
 
 /* ------------------------------------------------------------------ */
@@ -18,7 +18,10 @@ interface AuthMeResponse {
 export function useAuth() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["auth", "me"],
-    queryFn: () => apiGet<AuthMeResponse>("/auth/me"),
+    queryFn: async () => {
+      const response = await apiGet<AuthMeResponse>("/auth/me");
+      return { user: normalizeUser(response.user) };
+    },
     retry: false,
     staleTime: 5 * 60_000,
   });

@@ -56,3 +56,11 @@ export interface AgentSummary {
   created_at: string;
   updated_at: string;
 }
+
+export interface Session {
+  id: string;
+  user_id: string;
+  expires_at: string;
+  is_impersonation: boolean;
+  created_at: string;
+}

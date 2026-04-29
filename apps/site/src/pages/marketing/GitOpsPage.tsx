@@ -26,8 +26,7 @@ export default function GitOpsPage() {
         </div>
         <h1>
           GitOps for
-          <br />
-          collector configuration
+          <br /> collector configuration
         </h1>
         <p className="lede">
           Keep collector YAML in your repo, then upload approved configs to O11yFleet. Native Git

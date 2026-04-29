@@ -211,12 +211,12 @@ The portal UI needs these data flows:
 | Settings (workspace)  | D1                         | `GET /api/v1/tenant` ✅ exists                               |
 | Rollout (push config) | DO command                 | `POST /api/v1/configurations/:id/rollout` ✅ exists          |
 
-### New Endpoints Needed
+### Current Aggregate Endpoints
 
-```
+```http
 GET  /api/v1/overview
   → Iterates tenant's configs, calls each DO's /stats, aggregates:
-    { total_agents, connected_agents, healthy_agents, configs_count, configs: [{id, name, stats}] }
+    { total_agents, connected_agents, healthy_agents, configs_count, configurations: [{id, name, stats}] }
 
 GET  /api/v1/configurations/:id/agents/:uid
   → Calls DO /agents, filters to single agent, returns detail
@@ -225,7 +225,11 @@ PUT  /api/v1/tenant
   → Update tenant name (user self-service)
 
 GET  /api/admin/overview
-  → { total_tenants, total_configs, aggregate stats across all DOs }
+  → { total_tenants, total_configurations, total_active_tokens, total_users, total_agents,
+      connected_agents, healthy_agents }
+
+POST /api/admin/tenants/:id/impersonate
+  → Creates a tenant-scoped browser session for admin troubleshooting.
 ```
 
 ### How Config Gets to Agents (Full Flow)

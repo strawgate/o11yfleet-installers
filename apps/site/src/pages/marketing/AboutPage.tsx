@@ -9,8 +9,7 @@ export default function AboutPage() {
         </div>
         <h1>
           OpenTelemetry is open.
-          <br />
-          Collector management should be too.
+          <br /> Collector management should be too.
         </h1>
         <div
           style={{

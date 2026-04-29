@@ -4,6 +4,14 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 
+function numberValue(value: unknown, fallback: number): number {
+  return typeof value === "number" ? value : fallback;
+}
+
+function optionalNumber(value: unknown): number | string {
+  return typeof value === "number" ? value : "—";
+}
+
 export default function PlansPage() {
   const { data: plans, isLoading, error, refetch } = useAdminPlans();
 
@@ -25,7 +33,7 @@ export default function PlansPage() {
               <th>Name</th>
               <th>Max configs</th>
               <th>Agent limit / config</th>
-              <th>Price</th>
+              <th>Tenants</th>
             </tr>
           </thead>
           <tbody>
@@ -45,9 +53,9 @@ export default function PlansPage() {
                   <td>
                     <PlanTag plan={p.name} />
                   </td>
-                  <td>{(p["max_configs"] as number) ?? "—"}</td>
-                  <td>{(p["max_agents_per_config"] as number) ?? "—"}</td>
-                  <td>{(p["price"] as string | number) ?? "—"}</td>
+                  <td>{optionalNumber(p["max_configs"])}</td>
+                  <td>{optionalNumber(p["max_agents_per_config"])}</td>
+                  <td>{numberValue(p["tenant_count"], 0)}</td>
                 </tr>
               ))
             )}

@@ -134,10 +134,46 @@ export interface LoginResponse {
 
 export interface User {
   id: string;
+  userId?: string;
   email: string;
   name?: string;
+  displayName?: string;
   role?: string;
   tenant_id?: string;
+  tenantId?: string;
+  isImpersonation?: boolean;
+}
+
+interface RawUser {
+  id?: string;
+  userId?: string;
+  email: string;
+  name?: string;
+  displayName?: string;
+  role?: string;
+  tenant_id?: string;
+  tenantId?: string;
+  isImpersonation?: boolean;
+}
+
+interface RawLoginResponse {
+  user: RawUser;
+}
+
+export function normalizeUser(raw: RawUser): User {
+  const id = raw.id ?? raw.userId;
+  if (!id) throw new ApiError("User response missing user id", 500);
+  return {
+    id,
+    userId: raw.userId ?? raw.id,
+    email: raw.email,
+    name: raw.name,
+    displayName: raw.displayName,
+    role: raw.role,
+    tenant_id: raw.tenant_id,
+    tenantId: raw.tenantId ?? raw.tenant_id,
+    isImpersonation: raw.isImpersonation,
+  };
 }
 
 export async function login(email: string, password: string): Promise<LoginResponse> {
@@ -157,7 +193,8 @@ export async function login(email: string, password: string): Promise<LoginRespo
     }
     throw new ApiError(msg, res.status);
   }
-  return res.json() as Promise<LoginResponse>;
+  const raw = (await res.json()) as RawLoginResponse;
+  return { user: normalizeUser(raw.user) };
 }
 
 export async function logout(): Promise<void> {

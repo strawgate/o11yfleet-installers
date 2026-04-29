@@ -4,11 +4,12 @@ const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
 const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
 
 const memberUser = {
-  id: "user-1",
+  userId: "user-1",
   email: "demo@o11yfleet.com",
-  name: "Demo User",
+  displayName: "Demo User",
   role: "member",
-  tenant_id: "tenant-1",
+  tenantId: "tenant-1",
+  isImpersonation: false,
 };
 
 async function mockJson(page: Page, path: string, body: unknown, status = 200) {
@@ -192,6 +193,210 @@ test.describe("portal smoke coverage", () => {
     await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
     await expect(page.getByText("abcdef123456")).toBeVisible();
     await expect(page.getByText("Production collector group")).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+});
+
+test.describe("admin operations coverage", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.route(`${API_URL}/**`, failUnexpectedApi);
+  });
+
+  test("admin overview renders live health totals", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "admin-1",
+        email: "admin@o11yfleet.com",
+        displayName: "Admin",
+        role: "admin",
+        tenantId: null,
+        isImpersonation: false,
+      },
+    });
+    await mockJson(page, "/api/admin/overview", {
+      total_tenants: 1,
+      total_configurations: 2,
+      total_agents: 3,
+      total_active_tokens: 1,
+      total_users: 4,
+    });
+    await mockJson(page, "/api/admin/tenants", {
+      tenants: [
+        {
+          id: "tenant-1",
+          name: "Demo Org",
+          plan: "pro",
+          max_configs: 50,
+          max_agents_per_config: 100000,
+          config_count: 2,
+          user_count: 1,
+          created_at: "2026-04-28T20:00:00.000Z",
+        },
+      ],
+    });
+    await mockJson(page, "/api/admin/health", {
+      status: "healthy",
+      checks: {
+        d1: { status: "healthy", latency_ms: 2 },
+        r2: { status: "healthy", latency_ms: 3 },
+        durable_objects: { status: "healthy", latency_ms: 1 },
+        queue: { status: "healthy", latency_ms: 4 },
+      },
+    });
+    await mockJson(page, "/api/admin/ai/guidance", {
+      summary: "No guidance.",
+      generated_at: "2026-04-28T20:00:00.000Z",
+      model: "o11yfleet-guidance-fixture",
+      items: [],
+    });
+
+    await page.goto(`${UI_URL}/admin/overview?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Admin Overview" })).toBeVisible();
+    await expect(page.locator(".stat", { hasText: "Total tenants" }).locator(".val")).toHaveText(
+      "1",
+    );
+    await expect(page.locator(".stat", { hasText: "Total configs" }).locator(".val")).toHaveText(
+      "2",
+    );
+    await expect(page.locator(".stat", { hasText: "Total agents" }).locator(".val")).toHaveText(
+      "3",
+    );
+    await expect(page.locator(".stat", { hasText: "System health" }).locator(".tag")).toHaveText(
+      "healthy",
+    );
+    await expect(page.getByRole("main").getByRole("link", { name: "System health" })).toBeVisible();
+    await expect(page.getByText("Demo Org")).toBeVisible();
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("admin plans unwrap the backend payload", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "admin-1",
+        email: "admin@o11yfleet.com",
+        displayName: "Admin",
+        role: "admin",
+        tenantId: null,
+        isImpersonation: false,
+      },
+    });
+    await mockJson(page, "/api/admin/plans", {
+      plans: [
+        {
+          id: "free",
+          name: "free",
+          max_configs: 5,
+          max_agents_per_config: 50000,
+          tenant_count: 1,
+        },
+      ],
+    });
+
+    await page.goto(`${UI_URL}/admin/plans?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Plans" })).toBeVisible();
+    await expect(page.getByText("free")).toBeVisible();
+    await expect(page.getByRole("columnheader", { name: "Tenants" })).toBeVisible();
+    await expect(page.getByRole("cell", { name: "1" })).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("admin can view a tenant through the normal portal", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    let impersonated = false;
+
+    await page.route(`${API_URL}/auth/me`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: impersonated
+            ? {
+                userId: "user-1",
+                email: "impersonation+tenant-1@o11yfleet.local",
+                displayName: "Admin view: Demo Org",
+                role: "member",
+                tenantId: "tenant-1",
+                isImpersonation: true,
+              }
+            : {
+                userId: "admin-1",
+                email: "admin@o11yfleet.com",
+                displayName: "Admin",
+                role: "admin",
+                tenantId: null,
+                isImpersonation: false,
+              },
+        }),
+      });
+    });
+    await mockJson(page, "/api/admin/tenants/tenant-1", {
+      id: "tenant-1",
+      name: "Demo Org",
+      plan: "pro",
+      max_configs: 50,
+      max_agents_per_config: 100000,
+      created_at: "2026-04-28T20:00:00.000Z",
+    });
+    await mockJson(page, "/api/admin/tenants/tenant-1/configurations", {
+      configurations: [
+        {
+          id: "config-1",
+          name: "prod-collectors",
+          status: "active",
+          updated_at: "2026-04-28T20:00:00.000Z",
+        },
+      ],
+    });
+    await mockJson(page, "/api/admin/tenants/tenant-1/users", {
+      users: [{ id: "user-1", email: "demo@o11yfleet.com", role: "member" }],
+    });
+    await mockJson(page, "/api/admin/ai/guidance", {
+      summary: "No guidance.",
+      generated_at: "2026-04-28T20:00:00.000Z",
+      model: "o11yfleet-guidance-fixture",
+      items: [],
+    });
+    await page.route(`${API_URL}/api/admin/tenants/tenant-1/impersonate`, async (route) => {
+      expect(route.request().method()).toBe("POST");
+      impersonated = true;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          user: {
+            userId: "user-1",
+            email: "impersonation+tenant-1@o11yfleet.local",
+            displayName: "Admin view: Demo Org",
+            role: "member",
+            tenantId: "tenant-1",
+            isImpersonation: true,
+          },
+        }),
+      });
+    });
+    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockPortalOverview(page);
+
+    await page.goto(`${UI_URL}/admin/tenants/tenant-1?api=${encodeURIComponent(API_URL)}`);
+    await expect(page.getByRole("heading", { name: "Demo Org" })).toBeVisible();
+
+    await page.getByRole("button", { name: "View as tenant" }).click();
+
+    await expect(page).toHaveURL(/\/portal\/overview$/);
+    await expect(page.getByText("Viewing as tenant")).toBeVisible();
+    await expect(page.getByText("You are impersonating Demo Org")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
+    await expect(page.getByText("prod-collectors")).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });

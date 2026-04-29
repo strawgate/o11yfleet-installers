@@ -60,8 +60,7 @@ export default function PricingPage() {
       <section className="hero wrap">
         <h1>
           Simple pricing.
-          <br />
-          No telemetry tax.
+          <br /> No telemetry tax.
         </h1>
         <p className="lede">Pay for collector management, not for the data flowing through them.</p>
       </section>

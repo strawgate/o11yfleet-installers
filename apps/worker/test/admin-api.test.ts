@@ -9,7 +9,7 @@ beforeAll(async () => {
   );
   await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
   await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, is_impersonation INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
   await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
   await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
@@ -40,7 +40,9 @@ describe("admin API routes", () => {
 
     const sessionId = crypto.randomUUID().replace(/-/g, "");
     const expiresAt = new Date(Date.now() + 60_000).toISOString();
-    await env.FP_DB.prepare(`INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)`)
+    await env.FP_DB.prepare(
+      `INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 0)`,
+    )
       .bind(sessionId, userId, expiresAt)
       .run();
 
@@ -135,6 +137,26 @@ describe("admin API routes", () => {
     }>();
     expect(tenantUsersBody.users.some((u) => u.id === userId)).toBe(true);
 
+    const impersonateRes = await apiFetch(
+      `http://localhost/api/admin/tenants/${createdTenant.id}/impersonate`,
+      { method: "POST" },
+    );
+    expect(impersonateRes.status).toBe(200);
+    const impersonationCookie = impersonateRes.headers.get("Set-Cookie") ?? "";
+    expect(impersonationCookie).toContain("fp_session=");
+    expect(impersonationCookie).toContain("HttpOnly");
+    expect(impersonationCookie).toContain("Path=/");
+    expect(impersonationCookie).toContain("SameSite=Lax");
+    expect(impersonationCookie).toContain("Max-Age=");
+    expect(impersonationCookie).not.toContain("Secure");
+    const impersonateBody = await impersonateRes.json<{
+      user: { email: string; role: string; tenantId: string; isImpersonation: boolean };
+    }>();
+    expect(impersonateBody.user.email).toBe(`impersonation+${createdTenant.id}@o11yfleet.local`);
+    expect(impersonateBody.user.role).toBe("member");
+    expect(impersonateBody.user.tenantId).toBe(createdTenant.id);
+    expect(impersonateBody.user.isImpersonation).toBe(true);
+
     const deleteBlockedRes = await apiFetch(
       `http://localhost/api/admin/tenants/${createdTenant.id}`,
       {
@@ -163,11 +185,13 @@ describe("admin API routes", () => {
     const overviewBody = await overviewRes.json<{
       total_tenants: number;
       total_configurations: number;
+      total_agents: number;
       total_active_tokens: number;
       total_users: number;
     }>();
     expect(overviewBody.total_tenants).toBeTypeOf("number");
     expect(overviewBody.total_configurations).toBeTypeOf("number");
+    expect(overviewBody.total_agents).toBeTypeOf("number");
     expect(overviewBody.total_active_tokens).toBeTypeOf("number");
     expect(overviewBody.total_users).toBeTypeOf("number");
 
@@ -179,6 +203,7 @@ describe("admin API routes", () => {
       timestamp: string;
     }>();
     expect(healthBody.status === "healthy" || healthBody.status === "degraded").toBe(true);
+    expect(healthBody.checks.worker?.status).toBe("healthy");
     expect(healthBody.checks.d1?.status).toBe("healthy");
     expect(healthBody.checks.r2?.status).toBe("healthy");
     expect(healthBody.checks.durable_objects?.status).toBe("healthy");
@@ -188,6 +213,7 @@ describe("admin API routes", () => {
     expect(plansRes.status).toBe(200);
     const plansBody = await plansRes.json<{
       plans: Array<{
+        id: string;
         name: string;
         max_configs: number;
         max_agents_per_config: number;
@@ -201,6 +227,7 @@ describe("admin API routes", () => {
     expect(freePlan).toBeDefined();
     expect(proPlan).toBeDefined();
     expect(enterprisePlan).toBeDefined();
+    expect(freePlan?.id).toBe("free");
     expect(plansBody.plans.every((p) => typeof p.tenant_count === "number")).toBe(true);
   });
 });

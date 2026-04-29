@@ -5,6 +5,16 @@ import type { Env } from "../../index.js";
 import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
 import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
 import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
+import { sessionCookie } from "../../shared/cookies.js";
+
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+
+function generateSessionId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(32));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 // ─── Router ─────────────────────────────────────────────────────────
 
@@ -65,6 +75,11 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
   const tenantUsersMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/users$/);
   if (tenantUsersMatch && method === "GET") {
     return handleListTenantUsers(env, tenantUsersMatch[1]!);
+  }
+
+  const tenantImpersonateMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/impersonate$/);
+  if (tenantImpersonateMatch && method === "POST") {
+    return handleImpersonateTenant(env, tenantImpersonateMatch[1]!);
   }
 
   // ─── Health ─────────────────────────────────────────────────
@@ -219,6 +234,8 @@ async function handleListTenantUsers(env: Env, tenantId: string): Promise<Respon
 async function handleHealthCheck(env: Env): Promise<Response> {
   const checks: Record<string, { status: string; latency_ms?: number; error?: string }> = {};
 
+  checks["worker"] = { status: "healthy" };
+
   // D1 health
   const d1Start = Date.now();
   try {
@@ -282,7 +299,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
 // ─── Plans ──────────────────────────────────────────────────────────
 
 async function handleListPlans(env: Env): Promise<Response> {
-  const planDefs = Object.entries(PLAN_LIMITS).map(([name, v]) => ({ name, ...v }));
+  const planDefs = Object.entries(PLAN_LIMITS).map(([name, v]) => ({ id: name, name, ...v }));
 
   const counts = await env.FP_DB.prepare(
     `SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan`,
@@ -309,17 +326,108 @@ async function handleAdminOverview(env: Env): Promise<Response> {
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
+    env.FP_DB.prepare(
+      `SELECT
+        COUNT(*) as total_agents,
+        COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
+        COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents
+       FROM agent_summaries`,
+    ),
   ]);
 
   function getCount(idx: number): number {
     const row = results[idx]?.results?.[0] as { count?: number } | undefined;
     return row?.count ?? 0;
   }
+  const fleetStats = results[4]?.results?.[0] as
+    | { total_agents?: number; connected_agents?: number; healthy_agents?: number }
+    | undefined;
 
   return Response.json({
     total_tenants: getCount(0),
     total_configurations: getCount(1),
     total_active_tokens: getCount(2),
     total_users: getCount(3),
+    total_agents: fleetStats?.total_agents ?? 0,
+    connected_agents: fleetStats?.connected_agents ?? 0,
+    healthy_agents: fleetStats?.healthy_agents ?? 0,
   });
+}
+
+// ─── Tenant Impersonation ────────────────────────────────────────────
+
+async function handleImpersonateTenant(env: Env, tenantId: string): Promise<Response> {
+  const tenant = await env.FP_DB.prepare(`SELECT id, name FROM tenants WHERE id = ?`)
+    .bind(tenantId)
+    .first<{ id: string; name: string }>();
+  if (!tenant) return jsonError("Tenant not found", 404);
+
+  const email = `impersonation+${tenantId}@o11yfleet.local`;
+  let user = await env.FP_DB.prepare(
+    `SELECT id, email, display_name, role, tenant_id
+     FROM users
+     WHERE email = ?
+     LIMIT 1`,
+  )
+    .bind(email)
+    .first<{
+      id: string;
+      email: string;
+      display_name: string;
+      role: string;
+      tenant_id: string | null;
+    }>();
+
+  if (!user) {
+    await env.FP_DB.prepare(
+      `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, role, tenant_id)
+       VALUES (?, ?, ?, ?, 'member', ?)`,
+    )
+      .bind(
+        crypto.randomUUID(),
+        email,
+        "impersonation:disabled",
+        `Admin view: ${tenant.name}`,
+        tenantId,
+      )
+      .run();
+    user = await env.FP_DB.prepare(
+      `SELECT id, email, display_name, role, tenant_id
+       FROM users
+       WHERE email = ?
+       LIMIT 1`,
+    )
+      .bind(email)
+      .first<{
+        id: string;
+        email: string;
+        display_name: string;
+        role: string;
+        tenant_id: string | null;
+      }>();
+    if (!user) throw new ApiError("Failed to provision impersonation user", 500);
+  }
+
+  const sessionId = generateSessionId();
+  const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  await env.FP_DB.prepare(
+    "INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 1)",
+  )
+    .bind(sessionId, user.id, expiresAt)
+    .run();
+
+  const maxAge = Math.floor(SESSION_TTL_MS / 1000);
+  return Response.json(
+    {
+      user: {
+        userId: user.id,
+        email: user.email,
+        displayName: user.display_name,
+        role: user.role,
+        tenantId: user.tenant_id,
+        isImpersonation: true,
+      },
+    },
+    { headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env) } },
+  );
 }

@@ -20,9 +20,7 @@ const ICONS: Record<string, string> = {
   users:
     '<circle cx="6" cy="6" r="2.5"/><path d="M2 13c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/><circle cx="11.5" cy="6" r="2"/><path d="M11 9.5c1.6 0 3 1.2 3 3"/>',
   activity: '<path d="M2 8h3l2-5 3 10 2-5h3"/>',
-  list: '<path d="M5 4h9M5 8h9M5 12h9"/><circle cx="2.5" cy="4" r="0.8" fill="currentColor"/><circle cx="2.5" cy="8" r="0.8" fill="currentColor"/><circle cx="2.5" cy="12" r="0.8" fill="currentColor"/>',
   card: '<rect x="2" y="4" width="12" height="9" rx="1.4"/><path d="M2 7h12"/>',
-  flag: '<path d="M3 14V2M3 3l8 1-1 3 1 3-8-1"/>',
   tag: '<path d="M2 8V3a1 1 0 0 1 1-1h5l6 6-6 6-6-6z"/><circle cx="5.5" cy="5.5" r="0.8" fill="currentColor"/>',
   settings:
     '<circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/>',
@@ -45,21 +43,9 @@ const ADMIN_NAV: (NavSection | NavItem)[] = [
   { sec: "Operations" },
   { id: "overview", label: "Overview", href: "/admin/overview", icon: "home" },
   { id: "tenants", label: "Tenants", href: "/admin/tenants", icon: "building" },
-  { id: "users", label: "Users", href: "/admin/users", icon: "users", placeholder: true },
   { id: "health", label: "System health", href: "/admin/health", icon: "activity" },
-  { id: "events", label: "Audit events", href: "/admin/events", icon: "list" },
   { sec: "Plans" },
-  { id: "plans", label: "Plans & pricing", href: "/admin/plans", icon: "card" },
-  { id: "flags", label: "Feature flags", href: "/admin/flags", icon: "flag" },
-  { sec: "Platform" },
-  { id: "releases", label: "Releases", href: "/admin/releases", icon: "tag", placeholder: true },
-  {
-    id: "settings",
-    label: "Settings",
-    href: "/admin/settings",
-    icon: "settings",
-    placeholder: true,
-  },
+  { id: "plans", label: "Plans", href: "/admin/plans", icon: "card" },
 ];
 
 function navCommands(nav: (NavSection | NavItem)[]): CommandItem[] {
@@ -190,10 +176,6 @@ function ProfileDropdown({
           <div className="name">{userName}</div>
           <div className="email">{userEmail}</div>
         </div>
-        <NavLink to="/admin/settings" onClick={() => setOpen(false)}>
-          Account settings
-        </NavLink>
-        <div className="divider" />
         <button
           onClick={() => {
             const cur = document.documentElement.getAttribute("data-theme");
@@ -385,9 +367,9 @@ export default function AdminLayout() {
         <Breadcrumbs />
         <SearchBar onOpen={() => setCommandOpen(true)} />
         <div className="topbar-right">
-          <a href="/docs/" className="topbar-docs">
-            Docs
-          </a>
+          <NavLink to="/admin/health" className="topbar-docs">
+            Health
+          </NavLink>
           <ThemeToggle />
           <NotificationsButton />
           <ProfileDropdown userName={userName} userEmail={userEmail} onLogout={handleLogout} />

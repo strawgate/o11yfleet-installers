@@ -69,13 +69,18 @@ export default function SettingsPage() {
         <h3>General</h3>
 
         <div className="field mt-6">
-          <label>Workspace name</label>
-          <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+          <label htmlFor="workspace-name">Workspace name</label>
+          <input
+            id="workspace-name"
+            className="input"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
         </div>
 
         <div className="field mt-6">
-          <label>Tenant ID</label>
-          <input className="input mono" value={t?.id ?? ""} readOnly />
+          <label htmlFor="workspace-tenant-id">Tenant ID</label>
+          <input id="workspace-tenant-id" className="input mono" value={t?.id ?? ""} readOnly />
           <span className="help">Read-only identifier for your workspace.</span>
         </div>
 

@@ -4,6 +4,7 @@ import type { Env } from "../index.js";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits } from "../shared/plans.js";
 import { jsonError } from "../shared/errors.js";
+import { clearSessionCookie, sessionCookie } from "../shared/cookies.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -56,15 +57,6 @@ function getCookie(request: Request, name: string): string | null {
   return match ? decodeURIComponent(match[1]!) : null;
 }
 
-function sessionCookie(sessionId: string, maxAge: number): string {
-  // SameSite=None required for cross-origin requests (pages.dev → workers.dev)
-  return `fp_session=${sessionId}; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=${maxAge}`;
-}
-
-function clearSessionCookie(): string {
-  return "fp_session=; HttpOnly; Secure; SameSite=None; Path=/; Max-Age=0";
-}
-
 // ─── Auth context (used by middleware) ──────────────────────────────
 
 export interface AuthContext {
@@ -73,6 +65,7 @@ export interface AuthContext {
   displayName: string;
   tenantId: string | null;
   role: "member" | "admin";
+  isImpersonation: boolean;
 }
 
 export async function authenticate(request: Request, env: Env): Promise<AuthContext | null> {
@@ -80,7 +73,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
   if (!sessionId) return null;
 
   const row = await env.FP_DB.prepare(
-    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role
+    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role, s.is_impersonation
      FROM sessions s JOIN users u ON s.user_id = u.id
      WHERE s.id = ? AND s.expires_at > datetime('now')`,
   )
@@ -91,6 +84,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
       display_name: string;
       tenant_id: string | null;
       role: string;
+      is_impersonation: number;
     }>();
 
   if (!row) return null;
@@ -100,6 +94,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
     displayName: row.display_name,
     tenantId: row.tenant_id,
     role: row.role as "member" | "admin",
+    isImpersonation: row.is_impersonation === 1,
   };
 }
 
@@ -160,7 +155,9 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   // Create session
   const sessionId = generateSessionId();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  await env.FP_DB.prepare("INSERT INTO sessions (id, user_id, expires_at) VALUES (?, ?, ?)")
+  await env.FP_DB.prepare(
+    "INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 0)",
+  )
     .bind(sessionId, user.id, expiresAt)
     .run();
 
@@ -181,7 +178,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
       },
     },
     {
-      headers: { "Set-Cookie": sessionCookie(sessionId, maxAge) },
+      headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env) },
     },
   );
 }
@@ -193,7 +190,7 @@ async function handleLogout(request: Request, env: Env): Promise<Response> {
   if (sessionId) {
     await env.FP_DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
   }
-  return Response.json({ ok: true }, { headers: { "Set-Cookie": clearSessionCookie() } });
+  return Response.json({ ok: true }, { headers: { "Set-Cookie": clearSessionCookie(env) } });
 }
 
 // ─── GET /auth/me ───────────────────────────────────────────────────

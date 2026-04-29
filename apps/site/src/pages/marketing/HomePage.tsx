@@ -11,8 +11,7 @@ export default function HomePage() {
         </div>
         <h1>
           The hosted OpAMP control plane
-          <br />
-          for OpenTelemetry Collectors
+          <br /> for OpenTelemetry Collectors
         </h1>
         <p className="lede" style={{ marginTop: 22 }}>
           Monitor collector health, inspect effective configs, upload managed configs, and trigger
