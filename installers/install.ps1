@@ -59,7 +59,7 @@ if ($Token -and -not $Token.StartsWith("fp_enroll_")) {
 }
 
 if ($DryRun) {
-    Write-Info "Dry run mode — downloading and verifying only"
+    Write-Info "Dry run mode -- downloading and verifying only"
 }
 
 # Download
