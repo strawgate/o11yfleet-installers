@@ -8,13 +8,6 @@
   --topbar-h: 56px;
 }
 
-html,
-body {
-  height: 100%;
-}
-body {
-  overflow: hidden;
-} /* shell scrolls in <main> */
 body::before {
   display: none;
 } /* drop marketing grain */
