@@ -16,9 +16,9 @@ describe("Worker health check", () => {
   });
 
   it("GET /api/anything returns a response (API handler active)", async () => {
-    const response = await exports.default.fetch("http://localhost/api/tenants");
-    // API handler is active — GET /api/tenants would be 404 (no matching route for GET)
-    expect(response.status).toBeDefined();
+    const response = await exports.default.fetch("http://localhost/api/admin/tenants");
+    // API handler is active and admin routes reject unauthenticated requests.
+    expect(response.status).toBe(403);
   });
 
   it("GET /v1/opamp without upgrade returns 426", async () => {

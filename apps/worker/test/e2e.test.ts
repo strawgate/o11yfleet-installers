@@ -49,7 +49,7 @@ beforeAll(setupD1);
 describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
   it("complete lifecycle: enrollment → claim → initial OpAMP response", async () => {
     // 1. Create tenant
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "E2E Corp" }),
       headers: { "Content-Type": "application/json" },
@@ -58,7 +58,7 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     // 2. Create config
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "prod-collectors" }),
       headers: { "Content-Type": "application/json" },
@@ -68,15 +68,18 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
 
     // 3. Upload YAML v1
     const yamlV1 = "receivers:\n  otlp:\n    protocols:\n      grpc:\n";
-    const uploadRes = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
-      method: "POST",
-      body: yamlV1,
-    });
+    const uploadRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: yamlV1,
+      },
+    );
     expect(uploadRes.status).toBe(201);
 
     // 4. Create enrollment token
     const tokenRes = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/enrollment-token`,
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
         body: JSON.stringify({ label: "e2e-agent" }),
@@ -132,14 +135,14 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
 // ========================
 describe("E2E Scenario #1: New enrollment", () => {
   it("enrollment token → claim → connected", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Scenario 1" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s1-config" }),
       headers: { "Content-Type": "application/json" },
@@ -147,7 +150,7 @@ describe("E2E Scenario #1: New enrollment", () => {
     const config = await configRes.json<{ id: string }>();
 
     const tokenRes = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/enrollment-token`,
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
       { method: "POST", body: JSON.stringify({}), headers: { "Content-Type": "application/json" } },
     );
     const { token } = await tokenRes.json<{ token: string }>();
@@ -367,14 +370,14 @@ describe("E2E Scenario #7: Queue consumer idempotency", () => {
 
 describe("E2E Scenario #8: R2 dedup", () => {
   it("same YAML → deduplicated on second upload", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "S8 Corp" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s8-config" }),
       headers: { "Content-Type": "application/json" },
@@ -383,13 +386,13 @@ describe("E2E Scenario #8: R2 dedup", () => {
 
     const yaml = "processors:\n  batch:\n    timeout: 10s\n";
 
-    const r1 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+    const r1 = await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
       method: "POST",
       body: yaml,
     });
     const b1 = await r1.json<{ hash: string; deduplicated: boolean }>();
 
-    const r2 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+    const r2 = await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
       method: "POST",
       body: yaml,
     });
@@ -403,7 +406,7 @@ describe("E2E Scenario #8: R2 dedup", () => {
 
 describe("E2E Scenario #9: Free-tier config limits", () => {
   it("6th config rejected on free tier", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "S9 Limited" }),
       headers: { "Content-Type": "application/json" },
@@ -411,7 +414,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     for (let i = 0; i < 5; i++) {
-      const r = await apiFetch("http://localhost/api/configurations", {
+      const r = await apiFetch("http://localhost/api/v1/configurations", {
         method: "POST",
         body: JSON.stringify({ tenant_id: tenant.id, name: `s9-cfg-${i}` }),
         headers: { "Content-Type": "application/json" },
@@ -419,7 +422,7 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
       expect(r.status).toBe(201);
     }
 
-    const res = await apiFetch("http://localhost/api/configurations", {
+    const res = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "s9-overflow" }),
       headers: { "Content-Type": "application/json" },

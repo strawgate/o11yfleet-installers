@@ -48,10 +48,6 @@ have already tried to create a workspace.
 
 - Add real privacy, terms, and status pages before restoring those public footer
   links.
-- Choose one canonical portal code path between `apps/site` and `apps/web`, or
-  document why both are intentionally maintained.
-- Generate or manually maintain an API reference from the worker routes so docs
-  stay aligned with implementation.
 - Add Playwright assertions for the homepage CTA, signup expectation, docs
   installer URL, and absence of placeholder `#` links in public marketing nav.
 - Decide whether pricing should stay public while hosted access is manually

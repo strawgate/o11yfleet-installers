@@ -6,6 +6,49 @@
 
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
+export const API_KEY =
+  process.env.FP_API_KEY ??
+  process.env.O11YFLEET_API_KEY ??
+  process.env.API_SECRET ??
+  "test-api-secret-for-dev-only-32chars";
+
+const configTenantIds = new Map<string, string>();
+
+function tenantIdForConfig(configId: string): string {
+  const tenantId = configTenantIds.get(configId);
+  if (!tenantId) {
+    throw new Error(`No tenant ID tracked for config ${configId}`);
+  }
+  return tenantId;
+}
+
+function headersForConfig(configId: string, extra: Record<string, string> = {}) {
+  return {
+    Authorization: `Bearer ${API_KEY}`,
+    ...extra,
+    "X-Tenant-Id": tenantIdForConfig(configId),
+  };
+}
+
+function tenantIdFromRequest(path: string, opts?: RequestInit): string | null {
+  const headers = new Headers(opts?.headers);
+  const explicitTenantId = headers.get("X-Tenant-Id");
+  if (explicitTenantId) return explicitTenantId;
+
+  const configId = path.match(/^\/api\/v1\/configurations\/([^/]+)/)?.[1];
+  if (configId) return configTenantIds.get(configId) ?? null;
+
+  if (typeof opts?.body === "string") {
+    try {
+      const body = JSON.parse(opts.body) as { tenant_id?: unknown };
+      return typeof body.tenant_id === "string" ? body.tenant_id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
 
 /** Fetch JSON from the o11yfleet API */
 export async function api<T = unknown>(
@@ -13,20 +56,34 @@ export async function api<T = unknown>(
   opts?: RequestInit,
 ): Promise<{ status: number; data: T }> {
   const url = `${BASE_URL}${path}`;
+  const headers = new Headers(opts?.headers);
+  if (path.startsWith("/api/") && !headers.has("Authorization")) {
+    headers.set("Authorization", `Bearer ${API_KEY}`);
+  }
+  if (path.startsWith("/api/v1/") && !headers.has("X-Tenant-Id")) {
+    const tenantId = tenantIdFromRequest(path, { ...opts, headers });
+    if (!tenantId) {
+      throw new Error(`Could not derive X-Tenant-Id for ${path}`);
+    }
+    headers.set("X-Tenant-Id", tenantId);
+  }
   const res = await fetch(url, {
     ...opts,
-    headers: {
-      "Content-Type": "application/json",
-      ...opts?.headers,
-    },
+    headers: { "Content-Type": "application/json", ...Object.fromEntries(headers) },
   });
   const data = (await res.json().catch(() => null)) as T;
+  if (path === "/api/v1/configurations" && opts?.method === "POST" && res.status === 201) {
+    const config = data as { id?: unknown; tenant_id?: unknown };
+    if (typeof config.id === "string" && typeof config.tenant_id === "string") {
+      configTenantIds.set(config.id, config.tenant_id);
+    }
+  }
   return { status: res.status, data };
 }
 
 /** Create a tenant. Returns { id, name }. */
 export async function createTenant(name: string): Promise<{ id: string; name: string }> {
-  const { status, data } = await api<{ id: string; name: string }>("/api/tenants", {
+  const { status, data } = await api<{ id: string; name: string }>("/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
   });
@@ -43,11 +100,12 @@ export async function createConfig(
     id: string;
     tenant_id: string;
     name: string;
-  }>("/api/configurations", {
+  }>("/api/v1/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, name }),
   });
   if (status !== 201) throw new Error(`Failed to create config: ${status}`);
+  configTenantIds.set(data.id, tenantId);
   return data;
 }
 
@@ -56,10 +114,10 @@ export async function uploadConfigVersion(
   configId: string,
   yaml: string,
 ): Promise<{ hash: string; deduplicated: boolean }> {
-  const res = await fetch(`${BASE_URL}/api/configurations/${configId}/versions`, {
+  const res = await fetch(`${BASE_URL}/api/v1/configurations/${configId}/versions`, {
     method: "POST",
     body: yaml,
-    headers: { "Content-Type": "text/yaml" },
+    headers: headersForConfig(configId, { "Content-Type": "text/yaml" }),
   });
   if (res.status !== 201) throw new Error(`Failed to upload config: ${res.status}`);
   return res.json();
@@ -70,7 +128,7 @@ export async function createEnrollmentToken(
   configId: string,
 ): Promise<{ id: string; token: string }> {
   const { status, data } = await api<{ id: string; token: string }>(
-    `/api/configurations/${configId}/enrollment-token`,
+    `/api/v1/configurations/${configId}/enrollment-token`,
     { method: "POST", body: JSON.stringify({ label: "e2e-test" }) },
   );
   if (status !== 201) throw new Error(`Failed to create token: ${status}`);
@@ -84,7 +142,7 @@ export async function rolloutConfig(
   const { status, data } = await api<{
     pushed: number;
     config_hash: string;
-  }>(`/api/configurations/${configId}/rollout`, { method: "POST" });
+  }>(`/api/v1/configurations/${configId}/rollout`, { method: "POST" });
   if (status !== 200) throw new Error(`Failed to rollout: ${status}`);
   return data;
 }
@@ -97,7 +155,7 @@ export async function getConfigStats(configId: string): Promise<{
   desired_config_hash: string | null;
   active_websockets: number;
 }> {
-  const { status, data } = await api(`/api/configurations/${configId}/stats`);
+  const { status, data } = await api(`/api/v1/configurations/${configId}/stats`);
   if (status !== 200) throw new Error(`Failed to get stats: ${status}`);
   return data as any;
 }
@@ -106,7 +164,7 @@ export async function getConfigStats(configId: string): Promise<{
 export async function getAgentSummaries(
   configId: string,
 ): Promise<{ agents: Array<Record<string, unknown>> }> {
-  const { status, data } = await api(`/api/configurations/${configId}/agents`);
+  const { status, data } = await api(`/api/v1/configurations/${configId}/agents`);
   if (status !== 200) throw new Error(`Failed to get agents: ${status}`);
   return data as any;
 }
@@ -115,14 +173,14 @@ export async function getAgentSummaries(
 export async function listTenants(): Promise<{
   tenants: Array<{ id: string; name: string }>;
 }> {
-  const { status, data } = await api("/api/tenants");
+  const { status, data } = await api("/api/admin/tenants");
   if (status !== 200) throw new Error(`Failed to list tenants: ${status}`);
   return data as any;
 }
 
 /** Get a tenant by ID. */
 export async function getTenant(tenantId: string): Promise<Record<string, unknown>> {
-  const { status, data } = await api(`/api/tenants/${tenantId}`);
+  const { status, data } = await api(`/api/admin/tenants/${tenantId}`);
   if (status !== 200) throw new Error(`Failed to get tenant: ${status}`);
   return data as any;
 }
@@ -132,18 +190,22 @@ export async function updateTenant(
   tenantId: string,
   body: { name?: string },
 ): Promise<{ id: string; name: string }> {
-  const { status, data } = await api<{ id: string; name: string }>(`/api/tenants/${tenantId}`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
+  const { status, data } = await api<{ id: string; name: string }>(
+    `/api/admin/tenants/${tenantId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    },
+  );
   if (status !== 200) throw new Error(`Failed to update tenant: ${status}`);
   return data;
 }
 
 /** Delete a tenant. */
 export async function deleteTenant(tenantId: string): Promise<number> {
-  const res = await fetch(`${BASE_URL}/api/tenants/${tenantId}`, {
+  const res = await fetch(`${BASE_URL}/api/admin/tenants/${tenantId}`, {
     method: "DELETE",
+    headers: { Authorization: `Bearer ${API_KEY}` },
   });
   return res.status;
 }
@@ -153,7 +215,7 @@ export async function updateConfig(
   configId: string,
   body: { name?: string; description?: string },
 ): Promise<Record<string, unknown>> {
-  const { status, data } = await api(`/api/configurations/${configId}`, {
+  const { status, data } = await api(`/api/v1/configurations/${configId}`, {
     method: "PUT",
     body: JSON.stringify(body),
   });
@@ -163,8 +225,9 @@ export async function updateConfig(
 
 /** Delete a configuration. */
 export async function deleteConfig(configId: string): Promise<number> {
-  const res = await fetch(`${BASE_URL}/api/configurations/${configId}`, {
+  const res = await fetch(`${BASE_URL}/api/v1/configurations/${configId}`, {
     method: "DELETE",
+    headers: headersForConfig(configId),
   });
   return res.status;
 }
@@ -174,7 +237,7 @@ export async function listConfigVersions(configId: string): Promise<{
   versions: Array<{ config_hash: string; created_at: string }>;
   current_config_hash: string;
 }> {
-  const { status, data } = await api(`/api/configurations/${configId}/versions`);
+  const { status, data } = await api(`/api/v1/configurations/${configId}/versions`);
   if (status !== 200) throw new Error(`Failed to list versions: ${status}`);
   return data as any;
 }
@@ -183,7 +246,7 @@ export async function listConfigVersions(configId: string): Promise<{
 export async function listEnrollmentTokens(configId: string): Promise<{
   tokens: Array<{ id: string; label: string | null; revoked_at: string | null }>;
 }> {
-  const { status, data } = await api(`/api/configurations/${configId}/enrollment-tokens`);
+  const { status, data } = await api(`/api/v1/configurations/${configId}/enrollment-tokens`);
   if (status !== 200) throw new Error(`Failed to list tokens: ${status}`);
   return data as any;
 }
@@ -193,7 +256,9 @@ export async function revokeEnrollmentToken(
   configId: string,
   tokenId: string,
 ): Promise<{ status: number; data: unknown }> {
-  return api(`/api/configurations/${configId}/enrollment-tokens/${tokenId}`, { method: "DELETE" });
+  return api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
+    method: "DELETE",
+  });
 }
 
 /** Upload invalid content and return the status + error. */
@@ -201,10 +266,10 @@ export async function uploadRaw(
   configId: string,
   body: string,
 ): Promise<{ status: number; error?: string }> {
-  const res = await fetch(`${BASE_URL}/api/configurations/${configId}/versions`, {
+  const res = await fetch(`${BASE_URL}/api/v1/configurations/${configId}/versions`, {
     method: "POST",
     body,
-    headers: { "Content-Type": "text/yaml" },
+    headers: headersForConfig(configId, { "Content-Type": "text/yaml" }),
   });
   const data = await res.json().catch(() => ({}));
   return { status: res.status, ...(data as any) };
@@ -214,7 +279,7 @@ export async function uploadRaw(
 export async function listConfigs(tenantId: string): Promise<{
   configurations: Array<{ id: string; name: string; tenant_id: string }>;
 }> {
-  const { status, data } = await api(`/api/tenants/${tenantId}/configurations`);
+  const { status, data } = await api(`/api/admin/tenants/${tenantId}/configurations`);
   if (status !== 200) throw new Error(`Failed to list configs: ${status}`);
   return data as any;
 }

@@ -64,7 +64,7 @@ async function makeSignedClaim(): Promise<{ claim: AssignmentClaim; token: strin
 // ========================
 describe("API Authentication", () => {
   it("CORS preflight returns 204 with proper headers", async () => {
-    const response = await apiFetch("http://localhost/api/tenants", {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
       method: "OPTIONS",
     });
     expect(response.status).toBe(204);
@@ -74,11 +74,12 @@ describe("API Authentication", () => {
   });
 
   it("API responses include CORS headers", async () => {
-    const response = await apiFetch("http://localhost/api/tenants", {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "CORS Test" }),
       headers: { "Content-Type": "application/json" },
     });
+    expect(response.status).toBe(201);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
   });
 });

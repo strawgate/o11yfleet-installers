@@ -38,31 +38,40 @@ async function run() {
 
   try {
     // 1. Setup
-    const tenant = await apiJson<{ id: string }>("/api/tenants", {
+    const tenant = await apiJson<{ id: string }>("/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: `smoke-test-${Date.now()}` }),
     });
     pass(`Created tenant ${tenant.id}`);
 
-    const config = await apiJson<{ id: string }>("/api/configurations", {
+    const config = await apiJson<{ id: string }>("/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "smoke-config" }),
+      headers: { "X-Tenant-Id": tenant.id },
     });
     pass(`Created config ${config.id}`);
 
     const yaml = `receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: "0.0.0.0:4317"\nexporters:\n  debug:\n    verbosity: basic\nservice:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [debug]\n`;
-    const versionRes = await fetch(`${BASE_URL}/api/configurations/${config.id}/versions`, {
+    const versionRes = await fetch(`${BASE_URL}/api/v1/configurations/${config.id}/versions`, {
       method: "POST",
       body: yaml,
-      headers: { "Content-Type": "text/yaml", Authorization: `Bearer ${API_KEY}` },
+      headers: {
+        "Content-Type": "text/yaml",
+        Authorization: `Bearer ${API_KEY}`,
+        "X-Tenant-Id": tenant.id,
+      },
     });
     if (!versionRes.ok) throw new Error(`Upload failed: ${versionRes.status}`);
     const version = (await versionRes.json()) as { hash: string };
     pass(`Uploaded config version ${version.hash.slice(0, 12)}...`);
 
     const tokenBody = await apiJson<{ token: string }>(
-      `/api/configurations/${config.id}/enrollment-token`,
-      { method: "POST", body: JSON.stringify({ label: "smoke-test" }) },
+      `/api/v1/configurations/${config.id}/enrollment-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ label: "smoke-test" }),
+        headers: { "X-Tenant-Id": tenant.id },
+      },
     );
     pass(`Created enrollment token`);
 
@@ -79,8 +88,8 @@ async function run() {
 
     // 3. Config rollout
     const rollout = await apiJson<{ pushed: number; config_hash: string }>(
-      `/api/configurations/${config.id}/rollout`,
-      { method: "POST" },
+      `/api/v1/configurations/${config.id}/rollout`,
+      { method: "POST", headers: { "X-Tenant-Id": tenant.id } },
     );
     pass(
       `Rollout triggered → pushed=${rollout.pushed}, hash=${rollout.config_hash.slice(0, 12)}...`,
@@ -108,7 +117,7 @@ async function run() {
     const stats = await apiJson<{
       total_agents: number;
       connected_agents: number;
-    }>(`/api/configurations/${config.id}/stats`);
+    }>(`/api/v1/configurations/${config.id}/stats`, { headers: { "X-Tenant-Id": tenant.id } });
     pass(`Stats: total=${stats.total_agents}, connected=${stats.connected_agents}`);
 
     // 8. Reconnect with claim

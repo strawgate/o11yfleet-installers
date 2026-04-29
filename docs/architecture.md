@@ -54,16 +54,16 @@ Agent → WebSocket → Worker (ingress) → Config DO → Queue → Consumer �
 
 ## Component Map
 
-| Component      | Location                            | Runtime             |
-| -------------- | ----------------------------------- | ------------------- |
-| OpAMP Codec    | `packages/core/src/codec/`          | Pure TS, no CF      |
-| State Machine  | `packages/core/src/state-machine/`  | Pure TS, no CF      |
-| Auth/Claims    | `packages/core/src/auth/`           | Pure TS, Web Crypto |
-| D1 Schema      | `packages/db/`                      | SQL                 |
-| Fake Agent     | `packages/test-utils/`              | Pure TS             |
-| Worker         | `apps/worker/src/index.ts`          | CF Worker           |
-| Config DO      | `apps/worker/src/durable-objects/`  | CF DO               |
-| Config Store   | `apps/worker/src/config-store.ts`   | CF Worker + R2      |
-| Event Consumer | `apps/worker/src/event-consumer.ts` | CF Queue            |
-| API Routes     | `apps/worker/src/routes/api/`       | CF Worker           |
-| Terraform      | `infra/terraform/`                  | HCL                 |
+| Component      | Location                                                                                        | Runtime             |
+| -------------- | ----------------------------------------------------------------------------------------------- | ------------------- |
+| OpAMP Codec    | `packages/core/src/codec/`                                                                      | Pure TS, no CF      |
+| State Machine  | `packages/core/src/state-machine/`                                                              | Pure TS, no CF      |
+| Auth/Claims    | `packages/core/src/auth/`                                                                       | Pure TS, Web Crypto |
+| D1 Schema      | `packages/db/`                                                                                  | SQL                 |
+| Fake Agent     | `packages/test-utils/`                                                                          | Pure TS             |
+| Worker         | `apps/worker/src/index.ts`                                                                      | CF Worker           |
+| Config DO      | `apps/worker/src/durable-objects/`                                                              | CF DO               |
+| Config Store   | `apps/worker/src/config-store.ts`                                                               | CF Worker + R2      |
+| Event Consumer | `apps/worker/src/event-consumer.ts`                                                             | CF Queue            |
+| API Routes     | `apps/worker/src/routes/v1/`, `apps/worker/src/routes/admin/`, `apps/worker/src/routes/auth.ts` | CF Worker           |
+| Terraform      | `infra/terraform/`                                                                              | HCL                 |

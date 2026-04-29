@@ -146,10 +146,10 @@ describe("Multi-Tenant Isolation", () => {
   });
 
   it("tenant configs are isolated in D1 listings", async () => {
-    const listA = await apiFetch(`http://localhost/api/tenants/${tenantA.id}/configurations`);
+    const listA = await apiFetch(`http://localhost/api/admin/tenants/${tenantA.id}/configurations`);
     const dataA = await listA.json<{ configurations: { id: string }[] }>();
 
-    const listB = await apiFetch(`http://localhost/api/tenants/${tenantB.id}/configurations`);
+    const listB = await apiFetch(`http://localhost/api/admin/tenants/${tenantB.id}/configurations`);
     const dataB = await listB.json<{ configurations: { id: string }[] }>();
 
     // Tenant A should only see config A

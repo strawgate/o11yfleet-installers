@@ -85,24 +85,29 @@ async function apiJson<T>(baseUrl: string, path: string, opts?: RequestInit): Pr
 async function setupTestInfra(baseUrl: string) {
   console.log("📦 Setting up test infrastructure...");
 
-  const tenant = await apiJson<{ id: string }>(baseUrl, "/api/tenants", {
+  const tenant = await apiJson<{ id: string }>(baseUrl, "/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name: `load-test-${Date.now()}` }),
   });
   console.log(`   Tenant: ${tenant.id}`);
 
-  const config = await apiJson<{ id: string }>(baseUrl, "/api/configurations", {
+  const config = await apiJson<{ id: string }>(baseUrl, "/api/v1/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenant.id, name: "load-test-config" }),
+    headers: { "X-Tenant-Id": tenant.id },
   });
   console.log(`   Config: ${config.id}`);
 
   // Upload a basic YAML config
   const yaml = `receivers:\n  otlp:\n    protocols:\n      grpc:\n        endpoint: "0.0.0.0:4317"\nexporters:\n  debug:\n    verbosity: basic\nservice:\n  pipelines:\n    traces:\n      receivers: [otlp]\n      exporters: [debug]\n`;
-  const res = await fetch(`${baseUrl}/api/configurations/${config.id}/versions`, {
+  const res = await fetch(`${baseUrl}/api/v1/configurations/${config.id}/versions`, {
     method: "POST",
     body: yaml,
-    headers: { "Content-Type": "text/yaml", Authorization: `Bearer ${API_KEY}` },
+    headers: {
+      "Content-Type": "text/yaml",
+      Authorization: `Bearer ${API_KEY}`,
+      "X-Tenant-Id": tenant.id,
+    },
   });
   if (!res.ok) throw new Error(`Upload config failed: ${res.status}`);
   const version = (await res.json()) as { hash: string };
@@ -110,8 +115,12 @@ async function setupTestInfra(baseUrl: string) {
 
   const token = await apiJson<{ token: string }>(
     baseUrl,
-    `/api/configurations/${config.id}/enrollment-token`,
-    { method: "POST", body: JSON.stringify({ label: "load-test" }) },
+    `/api/v1/configurations/${config.id}/enrollment-token`,
+    {
+      method: "POST",
+      body: JSON.stringify({ label: "load-test" }),
+      headers: { "X-Tenant-Id": tenant.id },
+    },
   );
   console.log(`   Enrollment token: ${token.token.slice(0, 20)}...`);
 

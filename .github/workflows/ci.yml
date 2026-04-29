@@ -238,8 +238,14 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Smoke test
+        env:
+          STAGING_API_SECRET: ${{ secrets.STAGING_API_SECRET || secrets.API_SECRET }}
         run: |
           WORKER_URL="${{ vars.STAGING_WORKER_URL }}"
+          if [ -z "$STAGING_API_SECRET" ]; then
+            echo "STAGING_API_SECRET or API_SECRET is required for authenticated staging smoke tests"
+            exit 1
+          fi
           echo "=== Health check ==="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL/healthz")
           if [ "$STATUS" != "200" ]; then
@@ -249,7 +255,8 @@ jobs:
           echo "✓ Health check passed"
 
           echo "=== API smoke: create tenant ==="
-          TENANT=$(curl -s -X POST "$WORKER_URL/api/tenants" \
+          TENANT=$(curl -s -X POST "$WORKER_URL/api/admin/tenants" \
+            -H "Authorization: Bearer $STAGING_API_SECRET" \
             -H "Content-Type: application/json" \
             -d '{"name":"ci-smoke-test"}')
           TENANT_ID=$(echo "$TENANT" | jq -r '.id')
@@ -260,7 +267,9 @@ jobs:
           echo "✓ Created tenant: $TENANT_ID"
 
           echo "=== API smoke: create config ==="
-          CONFIG=$(curl -s -X POST "$WORKER_URL/api/configurations" \
+          CONFIG=$(curl -s -X POST "$WORKER_URL/api/v1/configurations" \
+            -H "Authorization: Bearer $STAGING_API_SECRET" \
+            -H "X-Tenant-Id: $TENANT_ID" \
             -H "Content-Type: application/json" \
             -d "{\"tenant_id\":\"$TENANT_ID\",\"name\":\"ci-smoke-config\"}")
           CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
@@ -271,7 +280,9 @@ jobs:
           echo "✓ Created config: $CONFIG_ID"
 
           echo "=== API smoke: create enrollment token ==="
-          TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/configurations/$CONFIG_ID/enrollment-token" \
+          TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-token" \
+            -H "Authorization: Bearer $STAGING_API_SECRET" \
+            -H "X-Tenant-Id: $TENANT_ID" \
             -H "Content-Type: application/json" \
             -d '{"label":"ci-smoke"}')
           TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
@@ -282,8 +293,19 @@ jobs:
           echo "✓ Created enrollment token"
 
           echo "=== API smoke: config stats ==="
-          STATS=$(curl -s "$WORKER_URL/api/configurations/$CONFIG_ID/stats")
-          echo "Stats: $STATS"
+          STATS_BODY=$(mktemp)
+          STATS_STATUS=$(curl -s -o "$STATS_BODY" -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
+            -H "Authorization: Bearer $STAGING_API_SECRET" \
+            -H "X-Tenant-Id: $TENANT_ID")
+          if [ "$STATS_STATUS" != "200" ]; then
+            echo "Config stats failed ($STATS_STATUS): $(cat "$STATS_BODY")"
+            exit 1
+          fi
+          if ! jq -e '.total_agents != null and .connected_agents != null' "$STATS_BODY" >/dev/null; then
+            echo "Config stats returned unexpected payload: $(cat "$STATS_BODY")"
+            exit 1
+          fi
+          echo "Stats: $(cat "$STATS_BODY")"
           echo "✓ Stats endpoint responding"
 
           echo ""

@@ -5,12 +5,17 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readFile, writeFile, mkdir, chmod, rename, unlink } from "node:fs/promises";
+import { readFile, writeFile, mkdir, chmod, rename, unlink, copyFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 
-const CONFIG_DIR = join(homedir(), ".config", "o11y");
+const CONFIG_DIR = join(homedir(), ".config", "ofleet");
+const LEGACY_CONFIG_DIR = join(homedir(), ".config", "o11y");
 const AUTH_FILE = join(CONFIG_DIR, "auth.json");
 const CONFIG_FILE = join(CONFIG_DIR, "config.json");
+const LEGACY_AUTH_FILE = join(LEGACY_CONFIG_DIR, "auth.json");
+const LEGACY_CONFIG_FILE = join(LEGACY_CONFIG_DIR, "config.json");
+
+let legacyMigrationChecked = false;
 
 export interface AuthConfig {
   apiUrl: string;
@@ -28,6 +33,26 @@ async function ensureConfigDir(): Promise<void> {
   if (!existsSync(CONFIG_DIR)) {
     await mkdir(CONFIG_DIR, { recursive: true });
   }
+}
+
+async function copyLegacyConfigFile(
+  legacyPath: string,
+  currentPath: string,
+  mode: number,
+): Promise<void> {
+  if (existsSync(currentPath) || !existsSync(legacyPath)) return;
+  await ensureConfigDir();
+  await copyFile(legacyPath, currentPath);
+  await chmod(currentPath, mode);
+}
+
+async function migrateLegacyConfig(): Promise<void> {
+  if (legacyMigrationChecked) return;
+  legacyMigrationChecked = true;
+  if (!existsSync(LEGACY_CONFIG_DIR)) return;
+
+  await copyLegacyConfigFile(LEGACY_AUTH_FILE, AUTH_FILE, 0o600);
+  await copyLegacyConfigFile(LEGACY_CONFIG_FILE, CONFIG_FILE, 0o644);
 }
 
 /**
@@ -55,6 +80,7 @@ export async function loadAuth(): Promise<AuthConfig> {
     apiUrl: process.env.O11YFLEET_API_URL || "http://localhost:8787",
   };
 
+  await migrateLegacyConfig();
   if (!existsSync(AUTH_FILE)) {
     return defaults;
   }
@@ -79,6 +105,7 @@ export async function loadConfig(): Promise<GlobalConfig> {
     apiUrl: process.env.O11YFLEET_API_URL || "http://localhost:8787",
   };
 
+  await migrateLegacyConfig();
   if (!existsSync(CONFIG_FILE)) {
     return defaults;
   }

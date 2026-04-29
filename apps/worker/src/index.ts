@@ -1,7 +1,6 @@
 // o11yfleet Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
-import { handleApiRequest } from "./routes/api/index.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
@@ -241,30 +240,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       }
       resp = await handleV1Request(request, env, url, tenantId);
     }
-    // Legacy routes — /api/*
+    // Unknown API routes
     else {
-      if (!hasBearerAuth && !sessionAuth) {
-        return addSecurityHeaders(
-          addCorsHeaders(
-            Response.json({ error: "Authentication required" }, { status: 401 }),
-            request,
-            env,
-          ),
-        );
-      }
-      // Tenant management routes require admin privileges
-      if (url.pathname.startsWith("/api/tenants")) {
-        if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
-          return addSecurityHeaders(
-            addCorsHeaders(
-              Response.json({ error: "Admin access required" }, { status: 403 }),
-              request,
-              env,
-            ),
-          );
-        }
-      }
-      resp = await handleApiRequest(request, env, url, sessionAuth?.tenantId);
+      resp = Response.json({ error: "Not found" }, { status: 404 });
     }
 
     return addSecurityHeaders(addCorsHeaders(resp, request, env));

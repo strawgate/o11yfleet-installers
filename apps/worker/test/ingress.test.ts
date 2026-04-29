@@ -136,7 +136,7 @@ describe("Ingress Router", () => {
 
   it("enrollment flow: create tenant, config, token, then connect", async () => {
     // Create tenant
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Enrollment Test" }),
       headers: { "Content-Type": "application/json" },
@@ -144,7 +144,7 @@ describe("Ingress Router", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     // Create config
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "enroll-config" }),
       headers: { "Content-Type": "application/json" },
@@ -153,7 +153,7 @@ describe("Ingress Router", () => {
 
     // Create enrollment token
     const tokenRes = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/enrollment-token`,
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
         body: JSON.stringify({ label: "test" }),

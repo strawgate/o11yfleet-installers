@@ -18,7 +18,16 @@ const legacyScanFiles = [
   "apps/site/public/docs/getting-started.html",
   "apps/site/public/docs/how-to/install.html",
   "docs/portal-design-prompt.md",
-  "docs/research/plan.md",
+  ".github/workflows/ci.yml",
+  "apps/worker/src/index.ts",
+  "apps/worker/test/api.test.ts",
+  "apps/worker/test/beta-features.test.ts",
+  "apps/worker/test/e2e.test.ts",
+  "apps/worker/test/helpers.ts",
+  "tests/e2e/src/helpers.ts",
+  "tests/load/src/load-test.ts",
+  "tests/load/src/smoke-test.ts",
+  "tests/ui/src/dashboard.test.ts",
   "scripts/seed-local.ts",
   "scripts/push-config.ts",
   "scripts/show-fleet.ts",
@@ -32,7 +41,7 @@ function routeFromRegexLiteral(text: string): string | null {
   if (!text.startsWith("/^") || !text.endsWith("$/")) return null;
   let route = text.slice(2, -2);
   route = route.replace(/\\\//g, "/").replace(/\(\[\^\/\]\+\)/g, ":id");
-  if (!route.startsWith("/api/v1/") && !route.startsWith("/api/admin/")) return null;
+  if (!route.startsWith("/api/")) return null;
   return normalizePath(route);
 }
 
@@ -46,7 +55,9 @@ function extractRoutes(file: string): Set<string> {
     if (
       route?.startsWith("/auth/") ||
       route?.startsWith("/api/v1/") ||
-      route?.startsWith("/api/admin/")
+      route?.startsWith("/api/admin/") ||
+      route?.startsWith("/api/tenants") ||
+      route?.startsWith("/api/configurations")
     ) {
       routes.add(normalizePath(route));
     }
@@ -93,12 +104,18 @@ if (legacyMatches.length > 0) {
 }
 
 const legacyRouteFamilyPattern = /\/api\/(?:tenants|configurations)(?:\/[a-z0-9:_/-]*)?/gi;
+const legacyRouteFamilyExactPattern = /^\/api\/(?:tenants|configurations)(?:\/[a-z0-9:_/-]*)?$/i;
 const legacyScanText = legacyScanFiles
   .map((file) => fs.readFileSync(file, "utf8").replace(/\s(?:href|src)="[^"]*"/g, ""))
   .join("\n");
 const legacyRouteFamilyMatches = [...legacyScanText.matchAll(legacyRouteFamilyPattern)].map(
   (match) => match[0],
 );
+const legacyRouteFamilyRegexMatches = legacyScanFiles
+  .filter((file) => /\.[cm]?[jt]sx?$/.test(file))
+  .flatMap((file) => [...extractRoutes(file)])
+  .filter((route) => legacyRouteFamilyExactPattern.test(route));
+legacyRouteFamilyMatches.push(...legacyRouteFamilyRegexMatches);
 if (legacyRouteFamilyMatches.length > 0) {
   failures.push(
     `Docs or local scripts mention legacy API route families: ${[

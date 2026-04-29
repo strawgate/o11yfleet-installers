@@ -16,18 +16,73 @@ export function authHeaders(extra: Record<string, string> = {}): Record<string, 
   return { Authorization: `Bearer ${API_SECRET}`, ...extra };
 }
 
+const configTenantIds = new Map<string, string>();
+
+function tenantIdForConfig(configId: string): string {
+  const tenantId = configTenantIds.get(configId);
+  if (!tenantId) {
+    throw new Error(`No tenant ID tracked for config ${configId}`);
+  }
+  return tenantId;
+}
+
+function authHeadersForConfig(
+  configId: string,
+  extra: Record<string, string> = {},
+): Record<string, string> {
+  return authHeaders({ ...extra, "X-Tenant-Id": tenantIdForConfig(configId) });
+}
+
+function tenantIdFromRequest(url: string, init?: RequestInit): string | null {
+  const headers = new Headers(init?.headers);
+  const explicitTenantId = headers.get("X-Tenant-Id");
+  if (explicitTenantId) return explicitTenantId;
+
+  const configId = new URL(url).pathname.match(/^\/api\/v1\/configurations\/([^/]+)/)?.[1];
+  if (configId) return configTenantIds.get(configId) ?? null;
+
+  if (typeof init?.body === "string") {
+    try {
+      const body = JSON.parse(init.body) as { tenant_id?: unknown };
+      return typeof body.tenant_id === "string" ? body.tenant_id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
 /**
  * Fetch wrapper that auto-adds Bearer auth for /api/ routes.
  * Drop-in replacement for exports.default.fetch in tests.
  */
-export function apiFetch(url: string, init?: RequestInit): Promise<Response> {
+export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const needsAuth = url.includes("/api/");
   if (needsAuth) {
     const headers = new Headers(init?.headers);
     if (!headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${API_SECRET}`);
     }
-    return exports.default.fetch(url, { ...init, headers });
+    if (url.includes("/api/v1/") && !headers.has("X-Tenant-Id")) {
+      const tenantId = tenantIdFromRequest(url, { ...init, headers });
+      if (!tenantId) {
+        throw new Error(`Could not derive X-Tenant-Id for ${url}`);
+      }
+      headers.set("X-Tenant-Id", tenantId);
+    }
+    const response = await exports.default.fetch(url, { ...init, headers });
+    if (
+      new URL(url).pathname === "/api/v1/configurations" &&
+      init?.method === "POST" &&
+      response.status === 201
+    ) {
+      const body = (await response.clone().json()) as { id?: unknown; tenant_id?: unknown };
+      if (typeof body.id === "string" && typeof body.tenant_id === "string") {
+        configTenantIds.set(body.id, body.tenant_id);
+      }
+    }
+    return response;
   }
   return exports.default.fetch(url, init);
 }
@@ -122,7 +177,7 @@ interface EnrollmentResult {
  * Create a tenant via the API. Returns { id, name }.
  */
 export async function createTenant(name: string): Promise<TenantResult> {
-  const res = await exports.default.fetch("http://localhost/api/tenants", {
+  const res = await exports.default.fetch("http://localhost/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
     headers: authHeaders({ "Content-Type": "application/json" }),
@@ -135,13 +190,15 @@ export async function createTenant(name: string): Promise<TenantResult> {
  * Create a configuration for a tenant. Returns { id, tenant_id, name }.
  */
 export async function createConfig(tenantId: string, name: string): Promise<ConfigResult> {
-  const res = await exports.default.fetch("http://localhost/api/configurations", {
+  const res = await exports.default.fetch("http://localhost/api/v1/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenantId, name }),
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: authHeaders({ "Content-Type": "application/json", "X-Tenant-Id": tenantId }),
   });
   expect(res.status).toBe(201);
-  return res.json<ConfigResult>();
+  const config = await res.json<ConfigResult>();
+  configTenantIds.set(config.id, tenantId);
+  return config;
 }
 
 /**
@@ -152,8 +209,12 @@ export async function uploadConfigVersion(
   yaml: string,
 ): Promise<{ hash: string; deduplicated: boolean }> {
   const res = await exports.default.fetch(
-    `http://localhost/api/configurations/${configId}/versions`,
-    { method: "POST", body: yaml, headers: authHeaders() },
+    `http://localhost/api/v1/configurations/${configId}/versions`,
+    {
+      method: "POST",
+      body: yaml,
+      headers: authHeadersForConfig(configId),
+    },
   );
   expect(res.status).toBe(201);
   return res.json<{ hash: string; deduplicated: boolean }>();
@@ -164,11 +225,11 @@ export async function uploadConfigVersion(
  */
 export async function createEnrollmentToken(configId: string): Promise<EnrollmentResult> {
   const res = await exports.default.fetch(
-    `http://localhost/api/configurations/${configId}/enrollment-token`,
+    `http://localhost/api/v1/configurations/${configId}/enrollment-token`,
     {
       method: "POST",
       body: JSON.stringify({}),
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: authHeadersForConfig(configId, { "Content-Type": "application/json" }),
     },
   );
   expect(res.status).toBe(201);
@@ -182,8 +243,11 @@ export async function rolloutConfig(
   configId: string,
 ): Promise<{ pushed: number; config_hash: string }> {
   const res = await exports.default.fetch(
-    `http://localhost/api/configurations/${configId}/rollout`,
-    { method: "POST", headers: authHeaders() },
+    `http://localhost/api/v1/configurations/${configId}/rollout`,
+    {
+      method: "POST",
+      headers: authHeadersForConfig(configId),
+    },
   );
   expect(res.status).toBe(200);
   return res.json<{ pushed: number; config_hash: string }>();
@@ -199,9 +263,12 @@ export async function getConfigStats(configId: string): Promise<{
   desired_config_hash: string | null;
   active_websockets: number;
 }> {
-  const res = await exports.default.fetch(`http://localhost/api/configurations/${configId}/stats`, {
-    headers: authHeaders(),
-  });
+  const res = await exports.default.fetch(
+    `http://localhost/api/v1/configurations/${configId}/stats`,
+    {
+      headers: authHeadersForConfig(configId),
+    },
+  );
   expect(res.status).toBe(200);
   return res.json();
 }
@@ -213,8 +280,8 @@ export async function getAgentSummaries(
   configId: string,
 ): Promise<{ agents: Record<string, unknown>[] }> {
   const res = await exports.default.fetch(
-    `http://localhost/api/configurations/${configId}/agents`,
-    { headers: authHeaders() },
+    `http://localhost/api/v1/configurations/${configId}/agents`,
+    { headers: authHeadersForConfig(configId) },
   );
   expect(res.status).toBe(200);
   return res.json();

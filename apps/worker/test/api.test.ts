@@ -22,8 +22,8 @@ beforeAll(async () => {
 });
 
 describe("API routes", () => {
-  it("POST /api/tenants creates a tenant", async () => {
-    const response = await apiFetch("http://localhost/api/tenants", {
+  it("POST /api/admin/tenants creates a tenant", async () => {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Test Corp" }),
       headers: { "Content-Type": "application/json" },
@@ -35,16 +35,16 @@ describe("API routes", () => {
     expect(body.id).toBeDefined();
   });
 
-  it("POST /api/configurations creates a configuration", async () => {
+  it("POST /api/v1/configurations creates a configuration", async () => {
     // First create a tenant
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Config Test Corp" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const response = await apiFetch("http://localhost/api/configurations", {
+    const response = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "production" }),
       headers: { "Content-Type": "application/json" },
@@ -54,22 +54,22 @@ describe("API routes", () => {
     expect(body.name).toBe("production");
   });
 
-  it("POST /api/configurations trims and validates configuration name", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+  it("POST /api/v1/configurations trims and validates configuration name", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: `Trim Test ${crypto.randomUUID()}` }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const whitespaceRes = await apiFetch("http://localhost/api/configurations", {
+    const whitespaceRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "   " }),
       headers: { "Content-Type": "application/json" },
     });
     expect(whitespaceRes.status).toBe(400);
 
-    const response = await apiFetch("http://localhost/api/configurations", {
+    const response = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "  production  " }),
       headers: { "Content-Type": "application/json" },
@@ -79,43 +79,52 @@ describe("API routes", () => {
     expect(body.name).toBe("production");
   });
 
-  it("GET /api/configurations/:id returns config", async () => {
+  it("GET /api/v1/configurations/:id returns config", async () => {
     // Create tenant + config
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Get Test" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "staging" }),
       headers: { "Content-Type": "application/json" },
     });
     const config = await configRes.json<{ id: string }>();
 
-    const getRes = await apiFetch(`http://localhost/api/configurations/${config.id}`);
+    const getRes = await apiFetch(`http://localhost/api/v1/configurations/${config.id}`);
     expect(getRes.status).toBe(200);
     const body = await getRes.json<{ id: string; name: string }>();
     expect(body.name).toBe("staging");
   });
 
-  it("GET /api/configurations/nonexistent returns 404", async () => {
-    const response = await apiFetch("http://localhost/api/configurations/does-not-exist");
+  it("GET /api/v1/configurations/nonexistent returns 404", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: "Missing Config Test" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const tenant = await tenantRes.json<{ id: string }>();
+
+    const response = await apiFetch("http://localhost/api/v1/configurations/does-not-exist", {
+      headers: { "X-Tenant-Id": tenant.id },
+    });
     expect(response.status).toBe(404);
   });
 
-  it("POST /api/configurations/:id/versions uploads YAML", async () => {
+  it("POST /api/v1/configurations/:id/versions uploads YAML", async () => {
     // Create tenant + config
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Upload Test" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "upload-test" }),
       headers: { "Content-Type": "application/json" },
@@ -123,11 +132,14 @@ describe("API routes", () => {
     const config = await configRes.json<{ id: string }>();
 
     const yaml = "receivers:\n  otlp:\n    protocols:\n      grpc:\n";
-    const uploadRes = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
-      method: "POST",
-      body: yaml,
-      headers: { "Content-Type": "text/yaml" },
-    });
+    const uploadRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: yaml,
+        headers: { "Content-Type": "text/yaml" },
+      },
+    );
     expect(uploadRes.status).toBe(201);
     const body = await uploadRes.json<{ hash: string; r2Key: string; deduplicated: boolean }>();
     expect(body.hash).toBeDefined();
@@ -136,14 +148,14 @@ describe("API routes", () => {
   });
 
   it("POST same YAML twice results in dedup", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Dedup Test" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "dedup-test" }),
       headers: { "Content-Type": "application/json" },
@@ -153,7 +165,7 @@ describe("API routes", () => {
     const yaml = "exporters:\n  debug:\n    verbosity: detailed\n";
 
     // First upload
-    const r1 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+    const r1 = await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
       method: "POST",
       body: yaml,
     });
@@ -161,7 +173,7 @@ describe("API routes", () => {
     expect(b1.deduplicated).toBe(false);
 
     // Second upload — same content
-    const r2 = await apiFetch(`http://localhost/api/configurations/${config.id}/versions`, {
+    const r2 = await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
       method: "POST",
       body: yaml,
     });
@@ -170,15 +182,15 @@ describe("API routes", () => {
     expect(b2.hash).toBe(b1.hash);
   });
 
-  it("POST /api/configurations/:id/enrollment-token creates token", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+  it("POST /api/v1/configurations/:id/enrollment-token creates token", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Token Test" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configRes = await apiFetch("http://localhost/api/configurations", {
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "token-test" }),
       headers: { "Content-Type": "application/json" },
@@ -186,7 +198,7 @@ describe("API routes", () => {
     const config = await configRes.json<{ id: string }>();
 
     const tokenRes = await apiFetch(
-      `http://localhost/api/configurations/${config.id}/enrollment-token`,
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
       {
         method: "POST",
         body: JSON.stringify({ label: "test-agent" }),
@@ -198,8 +210,8 @@ describe("API routes", () => {
     expect(body.token).toMatch(/^fp_enroll_/);
   });
 
-  it("GET /api/tenants/:id/configurations lists configs", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+  it("GET /api/admin/tenants/:id/configurations lists configs", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "List Test" }),
       headers: { "Content-Type": "application/json" },
@@ -207,25 +219,27 @@ describe("API routes", () => {
     const tenant = await tenantRes.json<{ id: string }>();
 
     // Create 2 configs
-    await apiFetch("http://localhost/api/configurations", {
+    await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "config-a" }),
       headers: { "Content-Type": "application/json" },
     });
-    await apiFetch("http://localhost/api/configurations", {
+    await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "config-b" }),
       headers: { "Content-Type": "application/json" },
     });
 
-    const listRes = await apiFetch(`http://localhost/api/tenants/${tenant.id}/configurations`);
+    const listRes = await apiFetch(
+      `http://localhost/api/admin/tenants/${tenant.id}/configurations`,
+    );
     expect(listRes.status).toBe(200);
     const body = await listRes.json<{ configurations: Array<{ name: string }> }>();
     expect(body.configurations.length).toBe(2);
   });
 
   it("enforces config limit for free tier", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Limit Test" }),
       headers: { "Content-Type": "application/json" },
@@ -234,7 +248,7 @@ describe("API routes", () => {
 
     // Create 5 configs (free tier limit)
     for (let i = 0; i < 5; i++) {
-      const res = await apiFetch("http://localhost/api/configurations", {
+      const res = await apiFetch("http://localhost/api/v1/configurations", {
         method: "POST",
         body: JSON.stringify({ tenant_id: tenant.id, name: `config-${i}` }),
         headers: { "Content-Type": "application/json" },
@@ -243,7 +257,7 @@ describe("API routes", () => {
     }
 
     // 6th should fail
-    const res = await apiFetch("http://localhost/api/configurations", {
+    const res = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "config-overflow" }),
       headers: { "Content-Type": "application/json" },
@@ -252,7 +266,7 @@ describe("API routes", () => {
   });
 
   it("enforces config limit under concurrent creates", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: `Concurrent Limit ${crypto.randomUUID()}` }),
       headers: { "Content-Type": "application/json" },
@@ -265,7 +279,7 @@ describe("API routes", () => {
 
     const attempts = await Promise.all(
       Array.from({ length: 8 }, (_, i) =>
-        apiFetch("http://localhost/api/configurations", {
+        apiFetch("http://localhost/api/v1/configurations", {
           method: "POST",
           body: JSON.stringify({ tenant_id: tenant.id, name: `concurrent-${i}` }),
           headers: { "Content-Type": "application/json" },
@@ -285,14 +299,14 @@ describe("API routes", () => {
   });
 
   it("keeps shared R2 config content until all referencing configs are deleted", async () => {
-    const tenantRes = await apiFetch("http://localhost/api/tenants", {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: `R2 Cleanup ${crypto.randomUUID()}` }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    const configARes = await apiFetch("http://localhost/api/configurations", {
+    const configARes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "shared-a" }),
       headers: { "Content-Type": "application/json" },
@@ -300,7 +314,7 @@ describe("API routes", () => {
     expect(configARes.status).toBe(201);
     const configA = await configARes.json<{ id: string }>();
 
-    const configBRes = await apiFetch("http://localhost/api/configurations", {
+    const configBRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       body: JSON.stringify({ tenant_id: tenant.id, name: "shared-b" }),
       headers: { "Content-Type": "application/json" },
@@ -310,27 +324,27 @@ describe("API routes", () => {
 
     const yaml = `receivers:\n  otlp:\n    protocols:\n      grpc:\n# ${crypto.randomUUID()}\n`;
     const uploadARes = await apiFetch(
-      `http://localhost/api/configurations/${configA.id}/versions`,
+      `http://localhost/api/v1/configurations/${configA.id}/versions`,
       { method: "POST", body: yaml, headers: { "Content-Type": "text/yaml" } },
     );
     expect(uploadARes.status).toBe(201);
     const uploadA = await uploadARes.json<{ r2Key: string }>();
 
     const uploadBRes = await apiFetch(
-      `http://localhost/api/configurations/${configB.id}/versions`,
+      `http://localhost/api/v1/configurations/${configB.id}/versions`,
       { method: "POST", body: yaml, headers: { "Content-Type": "text/yaml" } },
     );
     expect(uploadBRes.status).toBe(201);
     const uploadB = await uploadBRes.json<{ r2Key: string }>();
     expect(uploadB.r2Key).toBe(uploadA.r2Key);
 
-    const deleteARes = await apiFetch(`http://localhost/api/configurations/${configA.id}`, {
+    const deleteARes = await apiFetch(`http://localhost/api/v1/configurations/${configA.id}`, {
       method: "DELETE",
     });
     expect(deleteARes.status).toBe(204);
     expect(await env.FP_CONFIGS.get(uploadA.r2Key)).not.toBeNull();
 
-    const deleteBRes = await apiFetch(`http://localhost/api/configurations/${configB.id}`, {
+    const deleteBRes = await apiFetch(`http://localhost/api/v1/configurations/${configB.id}`, {
       method: "DELETE",
     });
     expect(deleteBRes.status).toBe(204);

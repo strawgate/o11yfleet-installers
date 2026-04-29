@@ -97,7 +97,7 @@ describe("admin API routes", () => {
     expect(updateBody.plan).toBe("enterprise");
     expect(updateBody.max_configs).toBe(1000);
 
-    const createConfigRes = await apiFetch("http://localhost/api/configurations", {
+    const createConfigRes = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ tenant_id: createdTenant.id, name: "admin-config-a" }),
