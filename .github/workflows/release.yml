@@ -10,8 +10,6 @@ permissions:
 
 jobs:
 
-jobs:
-
   # ─── Build binaries for all platforms ───────────────────────────────────
   build-darwin-arm64:
     name: Build darwin-arm64
