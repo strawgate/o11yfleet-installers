@@ -23,6 +23,7 @@ jobs:
         run: |
           curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.sh -o apps/site/public/install.sh
           chmod +x apps/site/public/install.sh
+          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.ps1 -o apps/site/public/install.ps1
 
       - uses: pnpm/action-setup@v6
 
