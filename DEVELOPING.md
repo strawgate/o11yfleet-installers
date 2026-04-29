@@ -338,3 +338,25 @@ This is a two-step process by design: upload is separate from rollout. This lets
 | Two-step upload+rollout                | Matches real workflow: review config before pushing to fleet                                                     | Auto-rollout on upload         |
 | DO is source of truth for agent state  | Agent state changes too fast for D1 writes; DO SQLite handles it in-memory                                       | Write-through to D1            |
 | No separate "user API keys" yet        | API_SECRET covers programmatic access; per-user keys are a v2 feature                                            | Implement now                  |
+
+---
+
+## Frontend Styling Direction
+
+The React site now supports Tailwind CSS v4 and shadcn-compatible local primitives. Existing marketing,
+portal, and admin screens still use the custom CSS files under `apps/site/src/styles`; do not rewrite stable
+screens just to move classes around.
+
+Use Tailwind and `apps/site/src/components/ui/*` for new interactive product surfaces, especially AI UI,
+command/search, popovers, dialogs, tool-call displays, editor affordances, and other state-heavy controls.
+Keep those primitives aliased to the existing O11yFleet CSS variables in `styles.css` so dark/light mode and
+the current visual language stay consistent.
+
+Guidelines:
+
+- Prefer local primitives from `@/components/ui/*` over one-off button/input/dialog markup for new work.
+- Add new shadcn-style primitives only when a feature needs them; keep generated code reviewed and trimmed.
+- Keep page layouts and legacy CSS stable until a page is already being materially changed.
+- AI Elements can be used as a source registry for patterns, but avoid wholesale installation unless the
+  component fits our local primitive layer and passes typecheck/build without introducing a second design
+  language.
