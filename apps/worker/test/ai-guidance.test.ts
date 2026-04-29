@@ -23,8 +23,8 @@ const overviewRequest = {
   ],
   context: {
     total_agents: 10,
-    connected_agents: 7,
-    healthy_agents: 6,
+    connected_agents: 4,
+    healthy_agents: 3,
     configs_count: 2,
   },
   page_context: {
@@ -32,8 +32,8 @@ const overviewRequest = {
     title: "Fleet overview",
     metrics: [
       { key: "total_agents", label: "Total collectors", value: 10 },
-      { key: "connected_agents", label: "Connected collectors", value: 7 },
-      { key: "healthy_agents", label: "Healthy collectors", value: 6 },
+      { key: "connected_agents", label: "Connected collectors", value: 4 },
+      { key: "healthy_agents", label: "Healthy collectors", value: 3 },
       { key: "configs_count", label: "Configurations", value: 2 },
     ],
     tables: [
@@ -107,7 +107,7 @@ describe("AI guidance routes", () => {
     expect(response.items[0]?.evidence).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ label: "Total collectors", value: "10" }),
-        expect.objectContaining({ label: "Connected collectors", value: "7" }),
+        expect.objectContaining({ label: "Connected collectors", value: "4" }),
       ]),
     );
   });
@@ -357,8 +357,8 @@ describe("AI guidance routes", () => {
         ],
         context: {
           total_agents: 10,
-          connected_agents: 7,
-          healthy_agents: 6,
+          connected_agents: 4,
+          healthy_agents: 3,
         },
       },
       {
@@ -369,6 +369,28 @@ describe("AI guidance routes", () => {
 
     expect(response.items.length).toBeGreaterThan(0);
     expect(response.items.every((item) => item.action?.kind !== "open_page")).toBe(true);
+  });
+
+  it("does not turn moderate raw count gaps into deterministic guidance", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "portal.overview",
+        targets: overviewRequest.targets,
+        context: {
+          total_agents: 10,
+          connected_agents: 8,
+          healthy_agents: 8,
+          configs_count: 2,
+        },
+      },
+      {
+        env: {},
+        scopeLabel: "tenant:tenant-ai-test",
+      },
+    );
+
+    expect(response.items).toEqual([]);
+    expect(response.summary).toContain("No non-obvious guidance");
   });
 
   it("keeps admin deterministic configuration guidance inside admin routes", async () => {

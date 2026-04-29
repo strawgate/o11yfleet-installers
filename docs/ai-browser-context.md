@@ -25,6 +25,10 @@ Core fields:
 
 Client helpers live in `apps/site/src/ai/page-context.ts`.
 
+Insight quality rules live in `docs/ai-insight-quality.md`. The important rule is:
+do not ask the model to turn raw counts into significance claims unless the page context
+includes baseline, correlation, rollout timing, clustering, or an explicit threshold.
+
 ## Fan-Out Ideas
 
 - Configuration copilot: explain YAML, summarize version diffs, draft safe config changes.

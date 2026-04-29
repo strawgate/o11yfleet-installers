@@ -2,10 +2,10 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { generateText } from "ai";
 import {
   aiGuidanceResponseSchema,
-  type AiGuidanceItem,
+  analyzeGuidanceCandidates,
+  candidatesToGuidanceItems,
   type AiGuidanceRequest,
   type AiGuidanceResponse,
-  type AiGuidanceTarget,
 } from "@o11yfleet/core/ai";
 import type { Env } from "../index.js";
 
@@ -30,11 +30,11 @@ export async function generateAiGuidance(
 ): Promise<AiGuidanceResponse> {
   const providerMode = opts.env.LLM_PROVIDER?.trim().toLowerCase() ?? "fixture";
   const model = opts.env.LLM_MODEL?.trim() || "MiniMax-M2.7";
+  const candidates = analyzeGuidanceCandidates(input, { scopeLabel: opts.scopeLabel });
 
   if (providerMode === "fixture" || providerMode === "deterministic" || !opts.env.LLM_PROVIDER) {
-    return buildDeterministicGuidance(input, {
+    return buildDeterministicGuidance(input, candidatesToGuidanceItems(candidates), {
       model: "o11yfleet-guidance-fixture",
-      scopeLabel: opts.scopeLabel,
     });
   }
 
@@ -57,7 +57,7 @@ export async function generateAiGuidance(
       model: provider(model),
       system:
         "You are the o11yFleet guidance engine. Return concise, operational guidance only. Base every item on the supplied targets and context. Do not invent data, credentials, outages, tenants, agents, or configuration state. Return only valid JSON matching the requested schema.",
-      prompt: buildGuidancePrompt(input, opts.scopeLabel),
+      prompt: buildGuidancePrompt(input, opts.scopeLabel, candidates),
       temperature: 0.2,
       maxOutputTokens: 1600,
     });
@@ -74,7 +74,11 @@ export async function generateAiGuidance(
   }
 }
 
-function buildGuidancePrompt(input: AiGuidanceRequest, scopeLabel: string): string {
+function buildGuidancePrompt(
+  input: AiGuidanceRequest,
+  scopeLabel: string,
+  candidates: ReturnType<typeof analyzeGuidanceCandidates>,
+): string {
   return JSON.stringify(
     {
       task: "Generate up to 6 high-signal guidance items for this app surface. Prefer actionable fleet operations insights over generic observations.",
@@ -90,6 +94,8 @@ function buildGuidancePrompt(input: AiGuidanceRequest, scopeLabel: string): stri
         "Severity must reflect operational urgency: notice, warning, or critical.",
         "Confidence should be conservative when context is sparse.",
         "Evidence values must come from page_context, generic context, or target context.",
+        "Candidate insights are deterministic pre-analysis from app-owned rules. Prefer them when present, and do not weaken their evidence or caveats.",
+        "Do not turn raw counts into claims like unusual, high, low, spike, or regression unless the context includes a baseline, history, rollout timing, clustering, or an explicit threshold.",
         "Actions are optional; use kind none when no safe app action is obvious.",
         "If there is no non-obvious useful insight, return an empty items array.",
         "Return only a JSON object with keys summary and items. Do not wrap it in Markdown.",
@@ -100,6 +106,7 @@ function buildGuidancePrompt(input: AiGuidanceRequest, scopeLabel: string): stri
           "array of up to 12 objects: { target_key, headline, detail, severity, confidence, evidence?, action? }",
       },
       targets: input.targets,
+      candidate_insights: candidates,
       page_context: input.page_context ?? null,
       context: input.context,
     },
@@ -146,121 +153,9 @@ function sanitizeModelOutput(output: Pick<AiGuidanceResponse, "summary" | "items
 
 function buildDeterministicGuidance(
   input: AiGuidanceRequest,
-  opts: { model: string; scopeLabel: string },
+  items: ReturnType<typeof candidatesToGuidanceItems>,
+  opts: { model: string },
 ): AiGuidanceResponse {
-  const items: AiGuidanceItem[] = [];
-  const pageTarget = targetFor(input, "page") ?? input.targets[0]!;
-  const metricTarget = targetFor(input, "metric") ?? pageTarget;
-  const sectionTarget = targetFor(input, "section") ?? pageTarget;
-
-  const totalAgents = numberFromRequest(input, "total_agents");
-  const connectedAgents = numberFromRequest(input, "connected_agents");
-  const healthyAgents = numberFromRequest(input, "healthy_agents");
-  const configCount =
-    numberFromRequest(input, "configs_count") ?? numberFromRequest(input, "total_configurations");
-  const activeTokens = numberFromRequest(input, "total_active_tokens");
-  const tenantCount = numberFromRequest(input, "total_tenants");
-  const reviewAgentsAction =
-    opts.scopeLabel === "admin"
-      ? undefined
-      : ({ kind: "open_page", label: "Review agents", href: "/portal/agents" } as const);
-
-  if (totalAgents !== null && connectedAgents !== null && connectedAgents < totalAgents) {
-    const offline = totalAgents - connectedAgents;
-    items.push({
-      target_key: metricTarget.key,
-      headline: `${offline} collector${offline === 1 ? "" : "s"} offline`,
-      detail:
-        "Some enrolled collectors are not currently connected. Check whether the gap is concentrated in one configuration before changing rollout policy.",
-      severity: offline / Math.max(totalAgents, 1) > 0.25 ? "critical" : "warning",
-      confidence: 0.8,
-      evidence: [
-        { label: "Total collectors", value: String(totalAgents), source: opts.scopeLabel },
-        { label: "Connected collectors", value: String(connectedAgents), source: opts.scopeLabel },
-      ],
-      action: reviewAgentsAction,
-    });
-  }
-
-  if (
-    healthyAgents !== null &&
-    connectedAgents !== null &&
-    connectedAgents > 0 &&
-    healthyAgents < connectedAgents
-  ) {
-    const unhealthy = connectedAgents - healthyAgents;
-    items.push({
-      target_key: sectionTarget.key,
-      headline: `${unhealthy} connected collector${unhealthy === 1 ? "" : "s"} unhealthy`,
-      detail:
-        "Connected but unhealthy collectors usually indicate config status, resource pressure, or exporter failures rather than network loss.",
-      severity: unhealthy / connectedAgents > 0.2 ? "critical" : "warning",
-      confidence: 0.74,
-      evidence: [
-        { label: "Connected collectors", value: String(connectedAgents), source: opts.scopeLabel },
-        { label: "Healthy collectors", value: String(healthyAgents), source: opts.scopeLabel },
-      ],
-      action: reviewAgentsAction
-        ? { ...reviewAgentsAction, label: "Inspect unhealthy agents" }
-        : undefined,
-    });
-  }
-
-  if (configCount === 0) {
-    items.push({
-      target_key: pageTarget.key,
-      headline: "No managed configurations yet",
-      detail:
-        "There is not enough fleet data for optimization guidance until at least one configuration and collector are connected.",
-      severity: "notice",
-      confidence: 0.95,
-      evidence: [{ label: "Configurations", value: "0", source: opts.scopeLabel }],
-      action:
-        opts.scopeLabel === "admin"
-          ? {
-              kind: "open_page",
-              label: "Open tenants",
-              href: "/admin/tenants",
-            }
-          : {
-              kind: "open_page",
-              label: "Create configuration",
-              href: "/portal/configurations",
-            },
-    });
-  }
-
-  if (opts.scopeLabel === "admin" && tenantCount !== null && tenantCount > 0 && configCount === 0) {
-    items.push({
-      target_key: pageTarget.key,
-      headline: "Tenants exist without configurations",
-      detail:
-        "The admin view shows tenants but no configurations. This is likely an onboarding or seed-data gap rather than a fleet health issue.",
-      severity: "notice",
-      confidence: 0.76,
-      evidence: [
-        { label: "Tenants", value: String(tenantCount), source: opts.scopeLabel },
-        { label: "Configurations", value: "0", source: opts.scopeLabel },
-      ],
-      action: { kind: "open_page", label: "Open tenants", href: "/admin/tenants" },
-    });
-  }
-
-  if (activeTokens !== null && activeTokens > 0 && configCount === 0) {
-    items.push({
-      target_key: sectionTarget.key,
-      headline: "Active enrollment tokens without configurations",
-      detail:
-        "Enrollment tokens should normally be attached to managed configurations. Verify that the overview context is complete before sharing new tokens.",
-      severity: "warning",
-      confidence: 0.7,
-      evidence: [
-        { label: "Active tokens", value: String(activeTokens), source: opts.scopeLabel },
-        { label: "Configurations", value: "0", source: opts.scopeLabel },
-      ],
-    });
-  }
-
   const summary =
     items.length > 0
       ? `Found ${items.length} guidance item${items.length === 1 ? "" : "s"} from the provided ${input.surface} context.`
@@ -268,39 +163,12 @@ function buildDeterministicGuidance(
 
   return aiGuidanceResponseSchema.parse({
     summary,
-    items: items.slice(0, 12),
+    items,
     generated_at: new Date().toISOString(),
     model: opts.model,
   });
 }
 
-function targetFor(
-  input: AiGuidanceRequest,
-  kind: AiGuidanceTarget["kind"],
-): AiGuidanceTarget | null {
-  return input.targets.find((target) => target.kind === kind) ?? null;
-}
-
 function isAppRelativeHref(href: string): boolean {
   return href.startsWith("/") && !href.startsWith("//");
-}
-
-function numberFromRequest(input: AiGuidanceRequest, key: string): number | null {
-  return numberFromPageContext(input, key) ?? numberFromContext(input.context, key);
-}
-
-function numberFromContext(context: Record<string, unknown>, key: string): number | null {
-  const value = context[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function numberFromPageContext(input: AiGuidanceRequest, key: string): number | null {
-  const metric = input.page_context?.metrics.find((candidate) => candidate.key === key);
-  if (!metric) return null;
-  if (typeof metric.value === "number" && Number.isFinite(metric.value)) return metric.value;
-  if (typeof metric.value === "string" && metric.value.trim() !== "") {
-    const parsed = Number(metric.value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
 }
