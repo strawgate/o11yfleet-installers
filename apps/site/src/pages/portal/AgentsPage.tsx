@@ -21,6 +21,7 @@ import {
   agentUid,
   hashLabel,
 } from "../../utils/agents";
+import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 function AgentSection({ config }: { config: Configuration }) {
@@ -39,25 +40,24 @@ function AgentSection({ config }: { config: Configuration }) {
   const connectedCount = (agents ?? []).filter((agent) => agent.status === "connected").length;
   const healthyCount = (agents ?? []).filter((agent) => agentIsHealthy(agent) === true).length;
   const degradedCount = (agents ?? []).filter((agent) => agent.status === "degraded").length;
+  const insightSurface = insightSurfaces.portalAgent;
   const guidanceRequest: AiGuidanceRequest | null =
     agents && !isLoading
-      ? {
-          surface: "portal.agent",
-          targets: [
-            {
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, {
               key: `agents.${config.id}.section`,
               label: `${config.name} agents`,
-              surface: "portal.agent",
               kind: "section",
-            },
-            {
+            }),
+            insightTarget(insightSurface, {
               key: `agents.${config.id}.table`,
               label: `${config.name} agent table`,
-              surface: "portal.agent",
               kind: "table",
-            },
+            }),
           ],
-          context: {
+          {
             configuration_id: config.id,
             configuration_name: config.name,
             total_agents: agents.length,
@@ -71,7 +71,7 @@ function AgentSection({ config }: { config: Configuration }) {
               last_seen: agentLastSeen(agent) ?? null,
             })),
           },
-        }
+        )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);
 

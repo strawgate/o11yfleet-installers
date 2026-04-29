@@ -1,26 +1,18 @@
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel } from "../../components/ai";
+import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function BuilderPage() {
-  const guidanceRequest: AiGuidanceRequest = {
-    surface: "portal.builder",
-    targets: [
-      {
-        key: "builder.page",
-        label: "Pipeline builder",
-        surface: "portal.builder",
-        kind: "page",
-      },
-      {
-        key: "builder.editor",
-        label: "Visual editor plan",
-        surface: "portal.builder",
-        kind: "editor_selection",
-      },
+  const insightSurface = insightSurfaces.portalBuilder;
+  const guidanceRequest: AiGuidanceRequest = buildInsightRequest(
+    insightSurface,
+    [
+      insightTarget(insightSurface, insightSurface.targets.page),
+      insightTarget(insightSurface, insightSurface.targets.editor),
     ],
-    context: {
+    {
       status: "prototype",
       planned_features: [
         "component palette",
@@ -30,7 +22,7 @@ export default function BuilderPage() {
         "AI-powered suggestions",
       ],
     },
-  };
+  );
   const guidance = usePortalGuidance(guidanceRequest);
 
   return (

@@ -17,6 +17,12 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
+import {
+  buildInsightRequest,
+  insightSurfaces,
+  insightTarget,
+  tabInsightTarget,
+} from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "overview" | "configurations" | "users" | "settings";
@@ -52,37 +58,18 @@ export default function TenantDetailPage() {
   const userList = users.data ?? [];
   const overviewGuidanceReady =
     activeTab === "overview" && Boolean(t) && configs.isSuccess && users.isSuccess;
+  const insightSurface = insightSurfaces.adminTenant;
   const guidanceRequest: AiGuidanceRequest | null =
     overviewGuidanceReady && t
-      ? {
-          surface: "admin.tenant",
-          targets: [
-            {
-              key: "admin.tenant.page",
-              label: "Tenant detail",
-              surface: "admin.tenant",
-              kind: "page",
-            },
-            {
-              key: "admin.tenant.configurations",
-              label: "Configurations section",
-              surface: "admin.tenant",
-              kind: "section",
-            },
-            {
-              key: "admin.tenant.users",
-              label: "Users section",
-              surface: "admin.tenant",
-              kind: "section",
-            },
-            {
-              key: `admin.tenant.tab.${activeTab}`,
-              label: `${activeTab} tab`,
-              surface: "admin.tenant",
-              kind: "section",
-            },
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, insightSurface.targets.page),
+            insightTarget(insightSurface, insightSurface.targets.configurations),
+            insightTarget(insightSurface, insightSurface.targets.users),
+            tabInsightTarget(insightSurface, "admin.tenant.tab", activeTab),
           ],
-          context: {
+          {
             tenant_id: t.id,
             tenant_name: t.name,
             plan: t.plan ?? "free",
@@ -106,7 +93,7 @@ export default function TenantDetailPage() {
               created_at: user["created_at"] ?? null,
             })),
           },
-        }
+        )
       : null;
   const guidance = useAdminGuidance(guidanceRequest);
 

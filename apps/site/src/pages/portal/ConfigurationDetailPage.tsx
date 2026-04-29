@@ -28,6 +28,12 @@ import {
   agentUid,
   hashLabel,
 } from "../../utils/agents";
+import {
+  buildInsightRequest,
+  insightSurfaces,
+  insightTarget,
+  tabInsightTarget,
+} from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
@@ -76,46 +82,26 @@ export default function ConfigurationDetailPage() {
     tokens.isFetched &&
     stats.isFetched &&
     yaml.isFetched;
+  const insightSurface = insightSurfaces.portalConfiguration;
   const guidanceRequest: AiGuidanceRequest | null =
     guidanceReady && c
-      ? {
-          surface: "portal.configuration",
-          targets: [
-            {
-              key: "configuration.page",
-              label: "Configuration detail",
-              surface: "portal.configuration",
-              kind: "page",
-            },
-            {
-              key: "configuration.agents",
-              label: "Agents metric",
-              surface: "portal.configuration",
-              kind: "metric",
-              context: { total_agents: totalAgents, connected_agents: connectedAgents },
-            },
-            {
-              key: "configuration.versions",
-              label: "Versions metric",
-              surface: "portal.configuration",
-              kind: "metric",
-              context: { versions: versionList.length },
-            },
-            {
-              key: "configuration.tokens",
-              label: "Enrollment tokens metric",
-              surface: "portal.configuration",
-              kind: "metric",
-              context: { total_active_tokens: tokenList.length },
-            },
-            {
-              key: `configuration.tab.${activeTab}`,
-              label: `${activeTab} tab`,
-              surface: "portal.configuration",
-              kind: "section",
-            },
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, insightSurface.targets.page),
+            insightTarget(insightSurface, insightSurface.targets.agents, {
+              total_agents: totalAgents,
+              connected_agents: connectedAgents,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.versions, {
+              versions: versionList.length,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.tokens, {
+              total_active_tokens: tokenList.length,
+            }),
+            tabInsightTarget(insightSurface, "configuration.tab", activeTab),
           ],
-          context: {
+          {
             configuration_id: c.id,
             configuration_name: c.name,
             status: c.status ?? null,
@@ -132,7 +118,7 @@ export default function ConfigurationDetailPage() {
             latest_version_created_at: versionList[0]?.created_at ?? null,
             yaml_available: Boolean(yaml.data),
           },
-        }
+        )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);
   const agentInsight = guidance.data?.items.find(

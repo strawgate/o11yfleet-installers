@@ -7,6 +7,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
+import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
@@ -34,43 +35,19 @@ export default function OverviewPage() {
     })
     .slice(0, 5);
 
+  const insightSurface = insightSurfaces.adminOverview;
   const guidanceRequest: AiGuidanceRequest | null =
     overview.data && tenants.data
-      ? {
-          surface: "admin.overview",
-          targets: [
-            {
-              key: "admin.overview.page",
-              label: "Admin overview",
-              surface: "admin.overview",
-              kind: "page",
-            },
-            {
-              key: "admin.overview.tenants",
-              label: "Tenants metric",
-              surface: "admin.overview",
-              kind: "metric",
-            },
-            {
-              key: "admin.overview.configs",
-              label: "Configurations metric",
-              surface: "admin.overview",
-              kind: "metric",
-            },
-            {
-              key: "admin.overview.agents",
-              label: "Agents metric",
-              surface: "admin.overview",
-              kind: "metric",
-            },
-            {
-              key: "admin.overview.recent-tenants",
-              label: "Recent tenants table",
-              surface: "admin.overview",
-              kind: "table",
-            },
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, insightSurface.targets.page),
+            insightTarget(insightSurface, insightSurface.targets.tenants),
+            insightTarget(insightSurface, insightSurface.targets.configurations),
+            insightTarget(insightSurface, insightSurface.targets.agents),
+            insightTarget(insightSurface, insightSurface.targets.recentTenants),
           ],
-          context: {
+          {
             total_tenants: totalTenants,
             total_configurations: totalConfigs,
             total_agents: totalAgents,
@@ -91,7 +68,7 @@ export default function OverviewPage() {
               created_at: tenant.created_at ?? null,
             })),
           },
-        }
+        )
       : null;
   const guidance = useAdminGuidance(guidanceRequest);
   const tenantInsight = guidance.data?.items.find(

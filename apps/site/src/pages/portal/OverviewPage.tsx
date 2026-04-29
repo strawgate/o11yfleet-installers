@@ -7,6 +7,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
+import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
@@ -29,39 +30,22 @@ export default function OverviewPage() {
   const connectedAgents = typeof ov?.connected_agents === "number" ? ov.connected_agents : 0;
   const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
   const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
+  const insightSurface = insightSurfaces.portalOverview;
   const guidanceRequest: AiGuidanceRequest | null =
     overview.data && configs.data
-      ? {
-          surface: "portal.overview",
-          targets: [
-            {
-              key: "overview.page",
-              label: "Overview page",
-              surface: "portal.overview",
-              kind: "page",
-            },
-            {
-              key: "overview.configurations",
-              label: "Configurations metric",
-              surface: "portal.overview",
-              kind: "metric",
-              context: { total_configurations: totalConfigs },
-            },
-            {
-              key: "overview.agents",
-              label: "Agents metric",
-              surface: "portal.overview",
-              kind: "metric",
-              context: { total_agents: totalAgents },
-            },
-            {
-              key: "overview.recent-configurations",
-              label: "Recent configurations table",
-              surface: "portal.overview",
-              kind: "table",
-            },
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, insightSurface.targets.page),
+            insightTarget(insightSurface, insightSurface.targets.configurations, {
+              total_configurations: totalConfigs,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.agents, {
+              total_agents: totalAgents,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.recentConfigurations),
           ],
-          context: {
+          {
             configs_count: totalConfigs,
             total_agents: totalAgents,
             active_rollouts: activeRollouts,
@@ -72,7 +56,7 @@ export default function OverviewPage() {
               updated_at: config.updated_at ?? null,
             })),
           },
-        }
+        )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);
   const configurationInsight = guidance.data?.items.find(
