@@ -6,6 +6,7 @@ const NAV_LINKS = [
   { label: "Product", to: "/product/configuration-management" },
   { label: "Pricing", to: "/pricing" },
   { label: "Enterprise", to: "/enterprise" },
+  { label: "Partners", to: "/partners" },
   { label: "About", to: "/about" },
   { label: "Docs", to: "/docs/index.html" },
 ] as const;
@@ -24,6 +25,7 @@ const FOOTER_RESOURCES = [
 ];
 const FOOTER_COMPANY = [
   { label: "About", to: "/about" },
+  { label: "Partners", to: "/partners" },
   { label: "Contact", to: "mailto:hello@o11yfleet.com" },
   { label: "Security", to: "mailto:security@o11yfleet.com" },
 ];

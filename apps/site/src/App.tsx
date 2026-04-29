@@ -89,6 +89,7 @@ import HomePage from "./pages/marketing/HomePage";
 import AboutPage from "./pages/marketing/AboutPage";
 import PricingPage from "./pages/marketing/PricingPage";
 import EnterprisePage from "./pages/marketing/EnterprisePage";
+import PartnersPage from "./pages/marketing/PartnersPage";
 import ProductConfigPage from "./pages/marketing/ProductConfigPage";
 import GitOpsPage from "./pages/marketing/GitOpsPage";
 
@@ -184,6 +185,7 @@ export function App() {
                     <Route path="about" element={<AboutPage />} />
                     <Route path="pricing" element={<PricingPage />} />
                     <Route path="enterprise" element={<EnterprisePage />} />
+                    <Route path="partners" element={<PartnersPage />} />
                     <Route
                       path="product"
                       element={<Navigate to="/product/configuration-management" replace />}
