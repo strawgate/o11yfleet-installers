@@ -51,7 +51,7 @@ jobs:
         env:
           OTELCOL_VERSION: "0.116.0"
         run: |
-          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$OTELCOL_VERSION"
+          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$env:OTELCOL_VERSION"
 
       - name: Verify binary download and checksum
         if: matrix.os != 'windows'
@@ -72,7 +72,7 @@ jobs:
           OTELCOL_VERSION: "0.116.0"
         run: |
           $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
-          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir $TEST_DIR
+          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$env:OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir $TEST_DIR
           if (Test-Path "$TEST_DIR\bin\otelcol-contrib.exe") { Write-Host "Binary exists" }
           Remove-Item -Recurse -Force $TEST_DIR -ErrorAction SilentlyContinue
 
