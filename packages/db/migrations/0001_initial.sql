@@ -4,9 +4,9 @@
 CREATE TABLE IF NOT EXISTS tenants (
   id TEXT PRIMARY KEY,
   name TEXT NOT NULL,
-  plan TEXT NOT NULL DEFAULT 'free' CHECK(plan IN ('free', 'pro', 'enterprise')),
-  max_configs INTEGER NOT NULL DEFAULT 5,
-  max_agents_per_config INTEGER NOT NULL DEFAULT 50000,
+  plan TEXT NOT NULL DEFAULT 'starter' CHECK(plan IN ('hobby', 'pro', 'starter', 'growth', 'enterprise')),
+  max_configs INTEGER NOT NULL DEFAULT 1 CHECK(max_configs >= 0),
+  max_agents_per_config INTEGER NOT NULL DEFAULT 1000 CHECK(max_agents_per_config >= 0),
   created_at TEXT NOT NULL DEFAULT (datetime('now')),
   updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

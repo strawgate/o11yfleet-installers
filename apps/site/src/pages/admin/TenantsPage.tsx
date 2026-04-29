@@ -8,6 +8,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
+import { PLAN_OPTIONS } from "../../shared/plans";
 
 export default function TenantsPage() {
   const { data: tenants, isLoading, error, refetch } = useAdminTenants();
@@ -18,7 +19,7 @@ export default function TenantsPage() {
   const [filter, setFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
-  const [plan, setPlan] = useState("free");
+  const [plan, setPlan] = useState("starter");
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
@@ -39,7 +40,7 @@ export default function TenantsPage() {
       toast("Tenant created", name);
       setModalOpen(false);
       setName("");
-      setPlan("free");
+      setPlan("starter");
       navigate(`/admin/tenants/${result.id}`);
     } catch (err) {
       toast("Failed to create tenant", err instanceof Error ? err.message : "Unknown error", "err");
@@ -117,12 +118,12 @@ export default function TenantsPage() {
                     <span className="meta mono tenant-id">{t.id}</span>
                   </div>
                   <div className="tenant-plan">
-                    <PlanTag plan={t.plan ?? "free"} />
+                    <PlanTag plan={t.plan ?? "starter"} />
                   </div>
                   <div className="tenant-stats">
                     <span>
                       <strong>{configCount}</strong>
-                      <span className="meta">configs / {t.max_configs ?? "—"}</span>
+                      <span className="meta">policies / {t.max_configs ?? "—"}</span>
                     </span>
                     <span>
                       <strong>{t.agent_count ?? 0}</strong>
@@ -186,9 +187,11 @@ export default function TenantsPage() {
             value={plan}
             onChange={(e) => setPlan(e.target.value)}
           >
-            <option value="free">Free</option>
-            <option value="pro">Pro</option>
-            <option value="enterprise">Enterprise</option>
+            {PLAN_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label} ({option.audience})
+              </option>
+            ))}
           </select>
         </div>
       </Modal>

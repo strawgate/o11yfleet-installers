@@ -224,7 +224,7 @@ async function handleSeed(env: Env): Promise<Response> {
   }>();
   if (!tenant) {
     const tenantId = crypto.randomUUID();
-    const seedPlan = "pro";
+    const seedPlan = "growth";
     const { max_configs, max_agents_per_config } = getPlanLimits(seedPlan);
     await env.FP_DB.prepare(
       "INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)",

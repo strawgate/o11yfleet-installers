@@ -3,7 +3,7 @@
 export interface Tenant {
   id: string;
   name: string;
-  plan: "free" | "pro" | "enterprise";
+  plan: "hobby" | "pro" | "starter" | "growth" | "enterprise";
   max_configs: number;
   max_agents_per_config: number;
   created_at: string;

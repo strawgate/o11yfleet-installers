@@ -25,7 +25,7 @@ test("admin overview AI context is aggregate and ratio based", () => {
       {
         id: "tenant-4",
         name: "Gamma",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 0,
         max_configs: 2,
@@ -33,7 +33,7 @@ test("admin overview AI context is aggregate and ratio based", () => {
       {
         id: "tenant-5",
         name: "Echo",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 1,
         max_configs: 2,
@@ -46,14 +46,14 @@ test("admin overview AI context is aggregate and ratio based", () => {
   assert.equal(context.onboarding_gap_ratio, 4 / 5);
   assert.deepEqual(context.plan_zero_state_rates, [
     { plan: "pro", tenant_count: 3, zero_config_rate: 2 / 3, zero_user_rate: 0 },
-    { plan: "free", tenant_count: 2, zero_config_rate: 1, zero_user_rate: 0.5 },
+    { plan: "starter", tenant_count: 2, zero_config_rate: 1, zero_user_rate: 0.5 },
   ]);
   assert.deepEqual(context.tenant_limit_utilization, [
     { plan: "pro", config_limit_utilization_ratio: 0.8 },
     { plan: "pro", config_limit_utilization_ratio: 0 },
     { plan: "pro", config_limit_utilization_ratio: 0 },
-    { plan: "free", config_limit_utilization_ratio: 0 },
-    { plan: "free", config_limit_utilization_ratio: 0 },
+    { plan: "starter", config_limit_utilization_ratio: 0 },
+    { plan: "starter", config_limit_utilization_ratio: 0 },
   ]);
   assert.equal(context.tenant_config_concentration_top3_ratio, 1);
   assert.equal(JSON.stringify(context).includes("Acme"), false);
@@ -67,7 +67,7 @@ test("admin overview AI ratios are suppressed for small tenant cohorts", () => {
       {
         id: "tenant-3",
         name: "Gamma",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 0,
         max_configs: 2,
@@ -105,8 +105,8 @@ test("admin overview AI ratios are suppressed when tenant totals disagree", () =
       { id: "tenant-1", name: "Acme", plan: "pro", config_count: 0, user_count: 1 },
       { id: "tenant-2", name: "Beta", plan: "pro", config_count: 1, user_count: 1 },
       { id: "tenant-3", name: "Delta", plan: "pro", config_count: 0, user_count: 1 },
-      { id: "tenant-4", name: "Gamma", plan: "free", config_count: 0, user_count: 0 },
-      { id: "tenant-5", name: "Echo", plan: "free", config_count: 0, user_count: 1 },
+      { id: "tenant-4", name: "Gamma", plan: "starter", config_count: 0, user_count: 0 },
+      { id: "tenant-5", name: "Echo", plan: "starter", config_count: 0, user_count: 1 },
     ],
     4,
     1,
@@ -141,7 +141,7 @@ test("admin overview AI context clamps negative count fields", () => {
       {
         id: "tenant-4",
         name: "Gamma",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 0,
         max_configs: 2,
@@ -149,7 +149,7 @@ test("admin overview AI context clamps negative count fields", () => {
       {
         id: "tenant-5",
         name: "Echo",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 1,
         max_configs: 2,
@@ -164,8 +164,8 @@ test("admin overview AI context clamps negative count fields", () => {
     { plan: "pro", config_limit_utilization_ratio: 0 },
     { plan: "pro", config_limit_utilization_ratio: 0.2 },
     { plan: "pro", config_limit_utilization_ratio: 0 },
-    { plan: "free", config_limit_utilization_ratio: 0 },
-    { plan: "free", config_limit_utilization_ratio: 0 },
+    { plan: "starter", config_limit_utilization_ratio: 0 },
+    { plan: "starter", config_limit_utilization_ratio: 0 },
   ]);
 });
 
@@ -185,7 +185,7 @@ test("admin overview AI context caps concentration at one", () => {
       {
         id: "tenant-4",
         name: "Gamma",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 0,
         max_configs: 2,
@@ -193,7 +193,7 @@ test("admin overview AI context caps concentration at one", () => {
       {
         id: "tenant-5",
         name: "Echo",
-        plan: "free",
+        plan: "starter",
         config_count: 0,
         user_count: 1,
         max_configs: 2,

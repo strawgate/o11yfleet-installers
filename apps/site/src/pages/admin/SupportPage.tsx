@@ -107,7 +107,7 @@ export default function SupportPage() {
                     <strong>{tenant.name}</strong>
                     <span className="meta mono">{tenant.id}</span>
                   </span>
-                  <PlanTag plan={tenant.plan ?? "free"} />
+                  <PlanTag plan={tenant.plan ?? "starter"} />
                 </button>
               ))
             )}

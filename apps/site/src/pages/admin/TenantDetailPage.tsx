@@ -17,6 +17,7 @@ import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
+import { PLAN_OPTIONS, normalizePlanId } from "../../shared/plans";
 import { relTime } from "../../utils/format";
 import {
   buildInsightRequest,
@@ -49,7 +50,7 @@ export default function TenantDetailPage() {
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<Tab>(isTab(tabParam) ? tabParam : "overview");
   const [editName, setEditName] = useState("");
-  const [editPlan, setEditPlan] = useState("free");
+  const [editPlan, setEditPlan] = useState("starter");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
@@ -62,11 +63,12 @@ export default function TenantDetailPage() {
       setEditName(tenant.data.name);
     }
     if (tenant.data?.plan) {
-      setEditPlan(tenant.data.plan);
+      setEditPlan(normalizePlanId(tenant.data.plan));
     }
   }, [tenant.data, editName]);
 
   const t = tenant.data;
+  const currentPlan = normalizePlanId(t?.plan);
   const configList = configs.data ?? [];
   const userList = users.data ?? [];
   const overviewGuidanceReady =
@@ -85,7 +87,7 @@ export default function TenantDetailPage() {
           {
             tenant_id: t.id,
             tenant_name: t.name,
-            plan: t.plan ?? "free",
+            plan: currentPlan,
             active_tab: activeTab,
             config_count: configList.length,
             user_count: userList.length,
@@ -165,7 +167,7 @@ export default function TenantDetailPage() {
           <h1>{t.name}</h1>
         </div>
         <div className="actions">
-          {<PlanTag plan={t.plan ?? "free"} />}
+          {<PlanTag plan={t.plan ?? "starter"} />}
           <button
             type="button"
             className="btn btn-ghost btn-sm"
@@ -199,12 +201,20 @@ export default function TenantDetailPage() {
                 <tr>
                   <td className="meta">Plan</td>
                   <td>
-                    <PlanTag plan={t.plan ?? "free"} />
+                    <PlanTag plan={t.plan ?? "starter"} />
                   </td>
                 </tr>
                 <tr>
-                  <td className="meta">Configurations</td>
+                  <td className="meta">Policies</td>
                   <td>{configList.length}</td>
+                </tr>
+                <tr>
+                  <td className="meta">Policy limit</td>
+                  <td>{String(t.max_configs ?? "—")}</td>
+                </tr>
+                <tr>
+                  <td className="meta">Collector limit</td>
+                  <td>{String(t.max_agents_per_config ?? "—")}</td>
                 </tr>
                 <tr>
                   <td className="meta">Users</td>
@@ -359,9 +369,11 @@ export default function TenantDetailPage() {
                 value={editPlan}
                 onChange={(e) => setEditPlan(e.target.value)}
               >
-                <option value="free">Free</option>
-                <option value="pro">Pro</option>
-                <option value="enterprise">Enterprise</option>
+                {PLAN_OPTIONS.map((option) => (
+                  <option key={option.id} value={option.id}>
+                    {option.label} ({option.audience})
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -369,8 +381,7 @@ export default function TenantDetailPage() {
               className="btn btn-primary mt-6"
               onClick={() => void handleSave()}
               disabled={
-                updateTenant.isPending ||
-                (editName.trim() === t.name && editPlan === (t.plan ?? "free"))
+                updateTenant.isPending || (editName.trim() === t.name && editPlan === currentPlan)
               }
             >
               {updateTenant.isPending ? "Saving…" : "Save changes"}

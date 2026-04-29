@@ -1,4 +1,5 @@
 import type { AdminTenant } from "../../api/hooks/admin";
+import { normalizePlanId } from "../../shared/plans";
 
 export interface AdminAiOverviewContext {
   onboarding_gap_ratio: number;
@@ -54,7 +55,7 @@ export function buildAdminAiOverviewContext(
       if (maxConfigs <= 0) return [];
       return [
         {
-          plan: tenant.plan ?? "free",
+          plan: normalizePlanId(tenant.plan),
           config_limit_utilization_ratio: numberField(tenant, "config_count") / maxConfigs,
         },
       ];
@@ -70,7 +71,7 @@ function planZeroStateRates(
   const buckets = tenants.reduce<
     Record<string, { total: number; zeroConfigs: number; zeroUsers: number }>
   >((acc, tenant) => {
-    const plan = tenant.plan ?? "free";
+    const plan = normalizePlanId(tenant.plan);
     const bucket = acc[plan] ?? { total: 0, zeroConfigs: 0, zeroUsers: 0 };
     bucket.total += 1;
     if (numberField(tenant, "config_count") === 0) bucket.zeroConfigs += 1;

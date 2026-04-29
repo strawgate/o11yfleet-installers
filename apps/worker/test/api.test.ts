@@ -5,7 +5,7 @@ import { apiFetch } from "./helpers.js";
 // Apply D1 migrations before tests
 beforeAll(async () => {
   await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter', max_configs INTEGER NOT NULL DEFAULT 1, max_agents_per_config INTEGER NOT NULL DEFAULT 1000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
   await env.FP_DB.exec(
     `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -31,7 +31,7 @@ describe("API routes", () => {
     expect(response.status).toBe(201);
     const body = await response.json<{ id: string; name: string; plan: string }>();
     expect(body.name).toBe("Test Corp");
-    expect(body.plan).toBe("free");
+    expect(body.plan).toBe("starter");
     expect(body.id).toBeDefined();
   });
 
@@ -39,7 +39,7 @@ describe("API routes", () => {
     // First create a tenant
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Config Test Corp" }),
+      body: JSON.stringify({ name: "Config Test Corp", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -57,7 +57,7 @@ describe("API routes", () => {
   it("derives tenant scope when test helper receives a blank tenant header", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Blank Header Test Corp" }),
+      body: JSON.stringify({ name: "Blank Header Test Corp", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -73,7 +73,7 @@ describe("API routes", () => {
   it("POST /api/v1/configurations trims and validates configuration name", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: `Trim Test ${crypto.randomUUID()}` }),
+      body: JSON.stringify({ name: `Trim Test ${crypto.randomUUID()}`, plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -99,7 +99,7 @@ describe("API routes", () => {
     // Create tenant + config
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Get Test" }),
+      body: JSON.stringify({ name: "Get Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -120,7 +120,7 @@ describe("API routes", () => {
   it("GET /api/v1/configurations/nonexistent returns 404", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Missing Config Test" }),
+      body: JSON.stringify({ name: "Missing Config Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -135,7 +135,7 @@ describe("API routes", () => {
     // Create tenant + config
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Upload Test" }),
+      body: JSON.stringify({ name: "Upload Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -166,7 +166,7 @@ describe("API routes", () => {
   it("POST same YAML twice results in dedup", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Dedup Test" }),
+      body: JSON.stringify({ name: "Dedup Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -201,7 +201,7 @@ describe("API routes", () => {
   it("POST /api/v1/configurations/:id/enrollment-token creates token", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Token Test" }),
+      body: JSON.stringify({ name: "Token Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -229,7 +229,7 @@ describe("API routes", () => {
   it("GET /api/admin/tenants/:id/configurations lists configs", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "List Test" }),
+      body: JSON.stringify({ name: "List Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -254,7 +254,7 @@ describe("API routes", () => {
     expect(body.configurations.length).toBe(2);
   });
 
-  it("enforces config limit for free tier", async () => {
+  it("enforces policy limit for Starter tier", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "Limit Test" }),
@@ -262,20 +262,16 @@ describe("API routes", () => {
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    // Create 5 configs (free tier limit)
-    for (let i = 0; i < 5; i++) {
-      const res = await apiFetch("http://localhost/api/v1/configurations", {
-        method: "POST",
-        body: JSON.stringify({ tenant_id: tenant.id, name: `config-${i}` }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(res.status).toBe(201);
-    }
+    const first = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: "starter-policy" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(first.status).toBe(201);
 
-    // 6th should fail
     const res = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",
-      body: JSON.stringify({ tenant_id: tenant.id, name: "config-overflow" }),
+      body: JSON.stringify({ tenant_id: tenant.id, name: "starter-overflow" }),
       headers: { "Content-Type": "application/json" },
     });
     expect(res.status).toBe(429);
@@ -284,7 +280,7 @@ describe("API routes", () => {
   it("enforces config limit under concurrent creates", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: `Concurrent Limit ${crypto.randomUUID()}` }),
+      body: JSON.stringify({ name: `Concurrent Limit ${crypto.randomUUID()}`, plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -317,7 +313,7 @@ describe("API routes", () => {
   it("keeps shared R2 config content until all referencing configs are deleted", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: `R2 Cleanup ${crypto.randomUUID()}` }),
+      body: JSON.stringify({ name: `R2 Cleanup ${crypto.randomUUID()}`, plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();

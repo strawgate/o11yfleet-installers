@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { useTenant, useOverview } from "../../api/hooks/portal";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { hasStatefulOperations, planLabel, policyLimitForPlan } from "../../shared/plans";
 
 export default function BillingPage() {
   const tenant = useTenant();
@@ -15,9 +16,10 @@ export default function BillingPage() {
   const t = tenant.data;
   const ov = overview.data;
 
-  const plan = t?.plan ?? "free";
-  const planLabel = plan.charAt(0).toUpperCase() + plan.slice(1);
-  const maxConfigs = (t?.["max_configs"] as number) ?? 5;
+  const plan = t?.plan ?? "starter";
+  const currentPlanLabel = planLabel(plan);
+  const maxConfigs =
+    typeof t?.["max_configs"] === "number" ? t["max_configs"] : policyLimitForPlan(plan);
   const usedConfigs =
     typeof ov?.configs_count === "number"
       ? ov.configs_count
@@ -25,7 +27,10 @@ export default function BillingPage() {
         ? ov.configurations.length
         : 0;
   const configPct =
-    maxConfigs > 0 ? Math.min(100, Math.round((usedConfigs / maxConfigs) * 100)) : 0;
+    typeof maxConfigs === "number" && maxConfigs > 0
+      ? Math.min(100, Math.round((usedConfigs / maxConfigs) * 100))
+      : 0;
+  const maxConfigsLabel = maxConfigs === null ? "Custom" : maxConfigs;
   const totalAgents =
     typeof ov?.total_agents === "number"
       ? ov.total_agents
@@ -45,15 +50,15 @@ export default function BillingPage() {
           <h3>Current plan</h3>
           <div className="mt-6">
             <span className="t-mono text-sm" style={{ color: "var(--accent)" }}>
-              {planLabel}
+              {currentPlanLabel}
             </span>
           </div>
 
           <div className="mt-6">
             <div className="flex-row justify-between text-sm">
-              <span>Configurations</span>
+              <span>Policies</span>
               <span>
-                {usedConfigs} / {maxConfigs}
+                {usedConfigs} / {maxConfigsLabel}
               </span>
             </div>
             <div className="bar mt-2">
@@ -63,7 +68,7 @@ export default function BillingPage() {
 
           <div className="mt-6">
             <div className="flex-row justify-between text-sm">
-              <span>Connected agents</span>
+              <span>Collectors</span>
               <span>{totalAgents}</span>
             </div>
           </div>
@@ -78,13 +83,15 @@ export default function BillingPage() {
         <div className="card card-pad">
           <h3>Control mode</h3>
           <p className="meta mt-6">
-            Plans should gate more than quotas. They also decide whether a workspace is monitor-only
-            or can manage desired config, rollouts, team roles, enrollment policy, audit export, and
-            approval workflows.
+            Plans should gate more than quotas. They decide whether a workspace has short-lived
+            fleet state only, or also gets retained history, rollback, rollout safety, automation,
+            team roles, audit export, and approval workflows.
           </p>
           <div className="mt-6">
-            <span className={`tag ${plan === "free" ? "tag-warn" : "tag-ok"}`}>
-              {plan === "free" ? "monitor-only" : "managed config enabled"}
+            <span className={`tag ${hasStatefulOperations(plan) ? "tag-ok" : "tag-warn"}`}>
+              {hasStatefulOperations(plan)
+                ? "stateful operations enabled"
+                : "stateless fleet management"}
             </span>
           </div>
         </div>

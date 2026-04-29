@@ -455,7 +455,7 @@ describe("ai insight candidates", () => {
           onboarding_gap_ratio: 0.5,
           plan_zero_state_rates: [
             { plan: "pro", tenant_count: 6, zero_config_rate: 0.67, zero_user_rate: 0.17 },
-            { plan: "free", tenant_count: 6, zero_config_rate: 0.33, zero_user_rate: 0 },
+            { plan: "starter", tenant_count: 6, zero_config_rate: 0.33, zero_user_rate: 0 },
           ],
         },
       },

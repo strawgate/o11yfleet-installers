@@ -5,7 +5,7 @@ import { apiFetch } from "./helpers.js";
 // Apply D1 migrations before tests
 beforeAll(async () => {
   await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter', max_configs INTEGER NOT NULL DEFAULT 1, max_agents_per_config INTEGER NOT NULL DEFAULT 1000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
   await env.FP_DB.exec(
     `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -25,7 +25,7 @@ beforeAll(async () => {
 async function createTenant(name = "Test Corp") {
   const res = await apiFetch("http://localhost/api/admin/tenants", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, plan: "growth" }),
     headers: { "Content-Type": "application/json" },
   });
   return res.json<{ id: string; name: string; plan: string }>();

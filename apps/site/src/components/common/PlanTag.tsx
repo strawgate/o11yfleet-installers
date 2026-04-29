@@ -1,14 +1,13 @@
-const PREMIUM_PLANS = new Set(["pro", "enterprise"]);
+import { isPremiumPlan, planLabel } from "../../shared/plans";
 
 export function PlanTag({ plan }: { plan: string }) {
-  const normalized = plan.trim().toLowerCase();
-  const isPremium = PREMIUM_PLANS.has(normalized);
+  const isPremium = isPremiumPlan(plan);
   return (
     <span
       className="tag"
       style={isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined}
     >
-      {plan}
+      {planLabel(plan)}
     </span>
   );
 }

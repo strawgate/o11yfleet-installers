@@ -47,7 +47,7 @@ describe("admin API routes", () => {
   it("rejects admin route access for non-admin session", async () => {
     const tenantId = crypto.randomUUID();
     await env.FP_DB.prepare(
-      `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, 'free', 5, 50000)`,
+      `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, 'starter', 1, 1000)`,
     )
       .bind(tenantId, `Auth Tenant ${tenantId}`)
       .run();
@@ -373,18 +373,25 @@ describe("admin API routes", () => {
         id: string;
         name: string;
         max_configs: number;
+        max_policies: number;
         max_agents_per_config: number;
         tenant_count: number;
       }>;
     }>();
-    const freePlan = plansBody.plans.find((p) => p.name === "free");
-    const proPlan = plansBody.plans.find((p) => p.name === "pro");
-    const enterprisePlan = plansBody.plans.find((p) => p.name === "enterprise");
+    const hobbyPlan = plansBody.plans.find((p) => p.id === "hobby");
+    const proPlan = plansBody.plans.find((p) => p.id === "pro");
+    const starterPlan = plansBody.plans.find((p) => p.id === "starter");
+    const growthPlan = plansBody.plans.find((p) => p.id === "growth");
+    const enterprisePlan = plansBody.plans.find((p) => p.id === "enterprise");
 
-    expect(freePlan).toBeDefined();
+    expect(hobbyPlan).toBeDefined();
     expect(proPlan).toBeDefined();
+    expect(starterPlan).toBeDefined();
+    expect(growthPlan).toBeDefined();
     expect(enterprisePlan).toBeDefined();
-    expect(freePlan?.id).toBe("free");
+    expect(starterPlan?.name).toBe("Starter");
+    expect(growthPlan?.max_configs).toBe(10);
+    expect(growthPlan?.max_policies).toBe(10);
     expect(plansBody.plans.every((p) => typeof p.tenant_count === "number")).toBe(true);
   });
 });

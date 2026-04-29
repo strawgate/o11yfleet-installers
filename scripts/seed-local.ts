@@ -61,7 +61,7 @@ async function main() {
   log.info("Creating tenant...");
   const { status: ts, data: tenant } = await api<{ id: string; name: string; plan: string }>(
     "/api/admin/tenants",
-    { method: "POST", body: JSON.stringify({ name: "Local Dev", plan: "free" }) },
+    { method: "POST", body: JSON.stringify({ name: "Local Dev", plan: "starter" }) },
   );
   if (ts !== 201) {
     log.error(`Failed to create tenant: ${JSON.stringify(tenant)}`);

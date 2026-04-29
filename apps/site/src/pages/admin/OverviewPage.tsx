@@ -9,6 +9,7 @@ import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import { buildAdminAiOverviewContext } from "./ai-context-utils";
+import { normalizePlanId } from "../../shared/plans";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
@@ -26,7 +27,7 @@ export default function OverviewPage() {
   // Plan distribution
   const planCounts: Record<string, number> = {};
   for (const t of tenantList) {
-    const plan = t.plan ?? "free";
+    const plan = normalizePlanId(t.plan);
     planCounts[plan] = (planCounts[plan] ?? 0) + 1;
   }
 
@@ -67,7 +68,7 @@ export default function OverviewPage() {
             recent_tenants: recentTenants.map((tenant) => ({
               id: tenant.id,
               name: tenant.name,
-              plan: tenant.plan ?? "free",
+              plan: normalizePlanId(tenant.plan),
               max_configs: tenant["max_configs"] ?? null,
               max_agents_per_config: tenant["max_agents_per_config"] ?? null,
               created_at: tenant.created_at ?? null,
@@ -155,8 +156,8 @@ export default function OverviewPage() {
               <tr>
                 <th>Name</th>
                 <th>Plan</th>
-                <th>Config limit</th>
-                <th>Agent limit / config</th>
+                <th>Policy limit</th>
+                <th>Collector limit</th>
                 <th>Created</th>
               </tr>
             </thead>
@@ -182,7 +183,7 @@ export default function OverviewPage() {
                       <Link to={`/admin/tenants/${t.id}`}>{t.name}</Link>
                     </td>
                     <td>
-                      <PlanTag plan={t.plan ?? "free"} />
+                      <PlanTag plan={t.plan ?? "starter"} />
                     </td>
                     <td>{(t["max_configs"] as number) ?? "—"}</td>
                     <td>{(t["max_agents_per_config"] as number) ?? "—"}</td>

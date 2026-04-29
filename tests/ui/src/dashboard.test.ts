@@ -291,10 +291,15 @@ test.describe("admin operations coverage", () => {
     await mockJson(page, "/api/admin/plans", {
       plans: [
         {
-          id: "free",
-          name: "free",
-          max_configs: 5,
-          max_agents_per_config: 50000,
+          id: "starter",
+          name: "Starter",
+          audience: "organization",
+          max_users: 3,
+          max_collectors: 1000,
+          max_policies: 1,
+          history_retention: "24h",
+          supports_api: false,
+          supports_gitops: false,
           tenant_count: 1,
         },
       ],
@@ -303,9 +308,10 @@ test.describe("admin operations coverage", () => {
     await page.goto(`${UI_URL}/admin/plans?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "Plans" })).toBeVisible();
-    await expect(page.getByText("free")).toBeVisible();
+    const starterRow = page.getByRole("row", { name: /Starter/ });
+    await expect(starterRow).toBeVisible();
     await expect(page.getByRole("columnheader", { name: "Tenants" })).toBeVisible();
-    await expect(page.getByRole("cell", { name: "1" })).toBeVisible();
+    await expect(starterRow.locator("td").last()).toHaveText("1");
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });

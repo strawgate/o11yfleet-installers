@@ -18,7 +18,7 @@ A configuration group is the assignment boundary for a set of collectors. It is 
 - Elastic agent policy: enrolled agents are attached to a policy-like target.
 - Grafana Alloy Fleet Management collector group: collectors poll for remote configuration that matches their assignment.
 
-Do not casually rename this concept to `fleet` or `policy` in UI copy. Use `configuration group` when assignment semantics matter and `configuration` only where the surrounding context is already clear.
+Do not casually rename this concept to `fleet` or `policy` in operator UI copy. Use `configuration group` when assignment semantics matter and `configuration` only where the surrounding context is already clear. The pricing page is the exception: it may use `policy` as the customer-facing packaging term for a management unit that contains collector selection, rendered configuration, versioning, and rollout rules.
 
 ### Collector And Agent
 

@@ -56,16 +56,25 @@ The UI should not rely only on hidden buttons. Mutation endpoints must enforce t
 
 Plans gate both limits and capabilities:
 
-- monitor-only mode
-- managed configuration count
+- collector limit
+- policy count
+- history retention
 - team size
-- API token availability
+- API token and GitOps availability
+- rollout safety features
 - RBAC depth
 - audit export
 - SSO/SCIM
 - approval workflows
 
-Plan downgrade behavior must be explicit. A downgrade from managed config to monitor-only should preserve historical data but disable new config mutations and rollouts.
+Public pricing uses two tracks:
+
+- Individual: Hobby and Pro, UI-driven, no API keys or repo sync.
+- Organization: Starter, Growth, and Enterprise. API/GitOps automation starts at Growth.
+
+Plan downgrade behavior must be explicit. A downgrade to a tier with lower policy
+or retention limits should preserve historical data but disable new mutations
+past the new limit and expire state according to the target plan.
 
 ## Future Audit Events
 

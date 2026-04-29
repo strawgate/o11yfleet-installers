@@ -23,9 +23,9 @@ export interface AdminTenant {
   id: string;
   name: string;
   plan?: string;
-  created_at?: string;
   max_configs?: number;
   max_agents_per_config?: number;
+  created_at?: string;
   config_count?: number;
   agent_count?: number;
   connected_agents?: number;

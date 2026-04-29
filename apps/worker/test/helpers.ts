@@ -97,7 +97,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
  */
 export async function setupD1(): Promise<void> {
   await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter' CHECK(plan IN ('hobby', 'pro', 'starter', 'growth', 'enterprise')), max_configs INTEGER NOT NULL DEFAULT 1 CHECK(max_configs >= 0), max_agents_per_config INTEGER NOT NULL DEFAULT 1000 CHECK(max_agents_per_config >= 0), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
   await env.FP_DB.exec(
     `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -182,7 +182,7 @@ interface EnrollmentResult {
 export async function createTenant(name: string): Promise<TenantResult> {
   const res = await exports.default.fetch("http://localhost/api/admin/tenants", {
     method: "POST",
-    body: JSON.stringify({ name }),
+    body: JSON.stringify({ name, plan: "growth" }),
     headers: authHeaders({ "Content-Type": "application/json" }),
   });
   expect(res.status).toBe(201);

@@ -56,7 +56,7 @@ The current app implementation is the React/Vite app under `apps/site/src`. Olde
 
 **Data model**:
 
-- **Tenant**: id, name, plan (free/pro/enterprise), max_configs, max_agents_per_config, created_at, updated_at
+- **Tenant**: id, name, plan (hobby/pro/starter/growth/enterprise), max_configs, max_agents_per_config, created_at, updated_at
 - **Configuration**: id, tenant_id, name, description, current_config_hash, created_at, updated_at
 - **Config Version**: id, config_id, tenant_id, config_hash (SHA-256), r2_key, size_bytes, created_by, created_at
 - **Enrollment Token**: id, config_id, tenant_id, token_hash, label, expires_at, revoked_at, created_at
@@ -65,11 +65,11 @@ The current app implementation is the React/Vite app under `apps/site/src`. Olde
 
 **Pricing tiers** (from pricing.html — the portal must respect and display these):
 
-- Hobby: Free, 1 user, monitor-only, no managed configs, no API keys
-- Pro: $20/mo, 1 user, 3 managed configs, 1 GitHub repo, basic rollouts
-- Team Free: Free, 3 users, monitor-only
-- Business: $199/mo, 10 users, 25 configs, 3 GitHub repos, RBAC, webhooks, flow dashboards
-- Enterprise: Custom, unlimited users, SSO/SCIM, advanced RBAC, approval workflows, audit export
+- Hobby: Free, 10 collectors, 1 policy, 24h state, 1 user, no API keys or repo sync
+- Pro: $20/mo, 25 collectors, 3 policies, 7-day history, 1 user, no API keys or repo sync
+- Starter: Free, 1,000 collectors, 1 policy, 24h state, 3 users, no API keys or repo sync
+- Growth: $499/mo or $5,000/yr, 1,000 collectors plus packs, 10 policies, 30-day history, 10 users, unlimited API keys and repos, RBAC, webhooks, audit
+- Enterprise: Starts at $50k/yr, custom collectors, unlimited policies/users/API/repos, SSO/SCIM, advanced RBAC, approval workflows, audit export
 
 ---
 
@@ -251,10 +251,10 @@ Account and organization settings.
 
 - Organization name (editable)
 - Organization ID (mono, read-only, copy button)
-- Plan badge + "Current plan: Business" with "Manage plan →" link to billing
-- Plan usage: configs used/max, agents connected/max (progress bars)
+- Plan badge + "Current plan: Growth" with "Manage plan →" link to billing
+- Plan usage: policies used/max, collectors connected/max (progress bars)
 
-**API Keys** (Pro+ plans)
+**API Keys** (Growth+ plans)
 
 - List of API keys: name, prefix (last 4 chars), created, last used, status
 - "+ Create API Key" button → dialog with name, shows key once
@@ -264,7 +264,7 @@ Account and organization settings.
 
 - "Delete organization" — requires typing org name, shows warning about data loss
 
-#### 8. Team (`team.html`) — Business+ plans only
+#### 8. Team (`team.html`) — Organization plans; RBAC controls on Growth+
 
 Team member management.
 
@@ -285,7 +285,7 @@ Team member management.
 #### 9. Billing (`billing.html`)
 
 - **Current plan card**: plan name, price, billing cycle (monthly/annual toggle?), next invoice date, payment method (last 4 of card)
-- **Usage summary**: configs used/max, team members used/max, agent connections (if metered)
+- **Usage summary**: policies used/max, team members used/max, collector connections
 - **Plan comparison** (reuse the pricing page's plan cards in a smaller format with "Current" badge on active plan and "Upgrade" buttons on others)
 - **Invoice history table**: date, amount, status (paid/pending/failed), PDF download link
 - **Payment method section**: card on file (last 4, expiry), "Update payment method" button → Stripe-style card form
@@ -330,7 +330,7 @@ Platform-wide KPIs at a glance.
 
 **Stat cards row:**
 
-- Total Tenants, Total Configurations (across all tenants), Total Connected Agents (sum across all DOs), Tenants on Free/Pro/Enterprise (breakdown)
+- Total Tenants, Total Policies/Configurations (across all tenants), Total Connected Collectors/Agents (sum across all DOs), Tenants by plan (Hobby/Pro/Starter/Growth/Enterprise breakdown)
 
 **Recent tenants** (table in card):
 
@@ -346,10 +346,10 @@ Platform-wide KPIs at a glance.
 #### 3. Tenants List (`tenants.html`)
 
 - **Header**: "Tenants" + "+ Create Tenant" button
-- **Filter bar**: Search by name, filter by plan (All/Free/Pro/Enterprise)
+- **Filter bar**: Search by name, filter by plan (All/Hobby/Pro/Starter/Growth/Enterprise)
 - **Stat cards**: Total tenants, by plan breakdown
 - **Table**:
-  - Columns: Name, Plan (badge), ID (mono, truncated), Configurations, Max Configs, Max Agents/Config, Created
+  - Columns: Name, Plan (badge), ID (mono, truncated), Configurations, Policy Limit, Collector Limit, Created
   - Click row → tenant detail
   - "Step In →" button per row (opens user portal scoped to that tenant in new tab)
 
@@ -365,7 +365,7 @@ Full admin view of a single tenant.
 
 **Info cards row:**
 
-- Plan (badge), Configurations (count / max), Max Agents/Config, Created, Last Updated
+- Plan (badge), Configurations/Policies (count / max), Collector Limit, Created, Last Updated
 
 **Sections:**
 
@@ -377,7 +377,7 @@ Full admin view of a single tenant.
 **Plan Management:**
 
 - Current plan + limits
-- "Change plan" dropdown: free → pro → enterprise (updates max_configs, max_agents)
+- "Change plan" dropdown: hobby → pro → starter → growth → enterprise (updates policy and collector limits)
 - Show what changes on plan change
 
 **Danger Zone:**

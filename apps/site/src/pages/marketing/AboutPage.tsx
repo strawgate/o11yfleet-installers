@@ -76,8 +76,8 @@ export default function AboutPage() {
                 desc: "Your telemetry goes wherever you point it. We manage the fleet, not the data.",
               },
               {
-                title: "Monitor-only adoption path",
-                desc: "Start with visibility. Take over config management only when you're ready.",
+                title: "Free fleet management",
+                desc: "Start with visibility and manual deployment. Pay when governance becomes real.",
               },
               {
                 title: "Git-ready workflows",

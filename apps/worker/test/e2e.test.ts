@@ -15,7 +15,7 @@ const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
 async function setupD1() {
   await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter' CHECK(plan IN ('hobby', 'pro', 'starter', 'growth', 'enterprise')), max_configs INTEGER NOT NULL DEFAULT 1 CHECK(max_configs >= 0), max_agents_per_config INTEGER NOT NULL DEFAULT 1000 CHECK(max_agents_per_config >= 0), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
   );
   await env.FP_DB.exec(
     `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
@@ -55,7 +55,7 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     // 1. Create tenant
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "E2E Corp" }),
+      body: JSON.stringify({ name: "E2E Corp", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     expect(tenantRes.status).toBe(201);
@@ -141,7 +141,7 @@ describe("E2E Scenario #1: New enrollment", () => {
   it("enrollment token → claim → connected", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Scenario 1" }),
+      body: JSON.stringify({ name: "Scenario 1", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -378,7 +378,7 @@ describe("E2E Scenario #8: R2 dedup", () => {
   it("same YAML → deduplicated on second upload", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "S8 Corp" }),
+      body: JSON.stringify({ name: "S8 Corp", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
@@ -410,8 +410,8 @@ describe("E2E Scenario #8: R2 dedup", () => {
   });
 });
 
-describe("E2E Scenario #9: Free-tier config limits", () => {
-  it("6th config rejected on free tier", async () => {
+describe("E2E Scenario #9: Starter policy limits", () => {
+  it("second policy is rejected on Starter tier", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
       body: JSON.stringify({ name: "S9 Limited" }),
@@ -419,14 +419,12 @@ describe("E2E Scenario #9: Free-tier config limits", () => {
     });
     const tenant = await tenantRes.json<{ id: string }>();
 
-    for (let i = 0; i < 5; i++) {
-      const r = await apiFetch("http://localhost/api/v1/configurations", {
-        method: "POST",
-        body: JSON.stringify({ tenant_id: tenant.id, name: `s9-cfg-${i}` }),
-        headers: { "Content-Type": "application/json" },
-      });
-      expect(r.status).toBe(201);
-    }
+    const first = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: "s9-policy" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(first.status).toBe(201);
 
     const res = await apiFetch("http://localhost/api/v1/configurations", {
       method: "POST",

@@ -4,7 +4,13 @@
 import type { Env } from "../../index.js";
 import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
 import { buildCloudflareUsage } from "../../cloudflare-usage.js";
-import { PLAN_LIMITS, VALID_PLANS } from "../../shared/plans.js";
+import {
+  DEFAULT_PLAN,
+  PLAN_DEFINITIONS,
+  PLAN_LIMITS,
+  VALID_PLANS,
+  normalizePlan,
+} from "../../shared/plans.js";
 import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
 
@@ -122,12 +128,12 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
     return jsonError("name must be 255 characters or fewer", 400);
   }
 
-  const plan = body.plan ?? "free";
-  if (!VALID_PLANS.includes(plan)) {
+  const plan = normalizePlan(body.plan ?? DEFAULT_PLAN);
+  if (!plan) {
     return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
   }
 
-  const limits = PLAN_LIMITS[plan]!;
+  const limits = PLAN_LIMITS[plan];
 
   const id = crypto.randomUUID();
   await env.FP_DB.prepare(
@@ -209,12 +215,13 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     values.push(body.name.trim());
   }
   if (body.plan) {
-    if (!VALID_PLANS.includes(body.plan)) {
+    const plan = normalizePlan(body.plan);
+    if (!plan) {
       return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
     }
     updates.push("plan = ?");
-    values.push(body.plan);
-    const limits = PLAN_LIMITS[body.plan]!;
+    values.push(plan);
+    const limits = PLAN_LIMITS[plan];
     updates.push("max_configs = ?");
     values.push(limits.max_configs);
     updates.push("max_agents_per_config = ?");
@@ -595,7 +602,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
 // ─── Plans ──────────────────────────────────────────────────────────
 
 async function handleListPlans(env: Env): Promise<Response> {
-  const planDefs = Object.entries(PLAN_LIMITS).map(([name, v]) => ({ id: name, name, ...v }));
+  const planDefs = Object.values(PLAN_DEFINITIONS);
 
   const counts = await env.FP_DB.prepare(
     `SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan`,
@@ -603,12 +610,13 @@ async function handleListPlans(env: Env): Promise<Response> {
 
   const countMap: Record<string, number> = {};
   for (const row of counts.results) {
-    countMap[row.plan] = row.count;
+    const plan = normalizePlan(row.plan) ?? row.plan;
+    countMap[plan] = (countMap[plan] ?? 0) + row.count;
   }
 
   const plans = planDefs.map((p) => ({
     ...p,
-    tenant_count: countMap[p.name] ?? 0,
+    tenant_count: countMap[p.id] ?? 0,
   }));
 
   return Response.json({ plans });

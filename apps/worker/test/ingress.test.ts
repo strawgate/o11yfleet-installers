@@ -1,31 +1,13 @@
-import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { AgentCapabilities, encodeFrame } from "@o11yfleet/core/codec";
 import type { AgentToServer } from "@o11yfleet/core/codec";
-import { apiFetch } from "./helpers.js";
+import { apiFetch, setupD1 } from "./helpers.js";
 
 const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 
-beforeAll(async () => {
-  // Set up D1 tables
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'free', max_configs INTEGER NOT NULL DEFAULT 5, max_agents_per_config INTEGER NOT NULL DEFAULT 50000, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-});
+beforeAll(setupD1);
 
 describe("Ingress Router", () => {
   it("rejects requests without Authorization header", async () => {
@@ -137,7 +119,7 @@ describe("Ingress Router", () => {
     // Create tenant
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
-      body: JSON.stringify({ name: "Enrollment Test" }),
+      body: JSON.stringify({ name: "Enrollment Test", plan: "growth" }),
       headers: { "Content-Type": "application/json" },
     });
     const tenant = await tenantRes.json<{ id: string }>();
