@@ -13,10 +13,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-function Write-Info { param($msg) Write-Host "▸ $msg" -ForegroundColor Cyan }
-function Write-OK { param($msg) Write-Host "✓ $msg" -ForegroundColor Green }
-function Write-Warn { param($msg) Write-Host "! $msg" -ForegroundColor Yellow }
-function Write-Fail { param($msg) Write-Host "✗ $msg" -ForegroundColor Red; exit 1 }
+function Write-Info { param($msg) Write-Host "[INFO] $msg" -ForegroundColor Cyan }
+function Write-OK { param($msg) Write-Host "[OK] $msg" -ForegroundColor Green }
+function Write-Warn { param($msg) Write-Host "[WARN] $msg" -ForegroundColor Yellow }
+function Write-Fail { param($msg) Write-Host "[FAIL] $msg" -ForegroundColor Red; exit 1 }
 
 # Detect architecture
 $Arch = $env:PROCESSOR_ARCHITECTURE
@@ -31,7 +31,7 @@ $ChecksumUrl = "https://github.com/open-telemetry/opentelemetry-collector-releas
 
 Write-Host ""
 Write-Host "  O11yFleet Collector Installer" -ForegroundColor Cyan
-Write-Host "  ──────────────────────────────"
+Write-Host "  ------------------------------"
 Write-Host ""
 
 Write-Info "Detected: windows/$Arch"
@@ -55,7 +55,7 @@ if ([string]::IsNullOrEmpty($Token) -and -not $DryRun) {
 }
 
 if ($Token -and -not $Token.StartsWith("fp_enroll_")) {
-    Write-Warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?"
+    Write-Warn "Token doesn't start with fp_enroll_ -- are you sure this is an enrollment token?"
 }
 
 if ($DryRun) {
