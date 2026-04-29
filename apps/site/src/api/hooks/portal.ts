@@ -85,6 +85,13 @@ export interface TeamMember {
   [key: string]: unknown;
 }
 
+function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
+  if (Array.isArray(value)) return value;
+  const wrapped = value[key];
+  if (Array.isArray(wrapped)) return wrapped as T[];
+  throw new Error(`unwrapList expected array payload for "${key}": ${JSON.stringify(value)}`);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Query hooks                                                       */
 /* ------------------------------------------------------------------ */
@@ -99,10 +106,13 @@ export function useOverview() {
 export function useConfigurations() {
   return useQuery({
     queryKey: ["configurations"],
-    queryFn: async () => {
-      const data = await apiGet<{ configurations: Configuration[] }>("/api/v1/configurations");
-      return data.configurations;
-    },
+    queryFn: async () =>
+      unwrapList<Configuration>(
+        await apiGet<Configuration[] | { configurations: Configuration[] }>(
+          "/api/v1/configurations",
+        ),
+        "configurations",
+      ),
     refetchInterval: 10_000,
   });
 }
@@ -151,12 +161,13 @@ export function useConfigurationAgents(id: string | undefined) {
 export function useConfigurationVersions(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "versions"],
-    queryFn: async () => {
-      const data = await apiGet<{ versions: ConfigVersion[] }>(
-        `/api/v1/configurations/${id}/versions`,
-      );
-      return data.versions;
-    },
+    queryFn: async () =>
+      unwrapList<ConfigVersion>(
+        await apiGet<ConfigVersion[] | { versions: ConfigVersion[] }>(
+          `/api/v1/configurations/${id}/versions`,
+        ),
+        "versions",
+      ),
     enabled: !!id,
   });
 }
@@ -164,12 +175,13 @@ export function useConfigurationVersions(id: string | undefined) {
 export function useConfigurationTokens(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "tokens"],
-    queryFn: async () => {
-      const data = await apiGet<{ tokens: EnrollmentToken[] }>(
-        `/api/v1/configurations/${id}/enrollment-tokens`,
-      );
-      return data.tokens;
-    },
+    queryFn: async () =>
+      unwrapList<EnrollmentToken>(
+        await apiGet<EnrollmentToken[] | { tokens: EnrollmentToken[] }>(
+          `/api/v1/configurations/${id}/enrollment-tokens`,
+        ),
+        "tokens",
+      ),
     enabled: !!id,
   });
 }

@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef, type ReactNode } from "react";
+import { useEffect, useCallback, useId, useRef, type ReactNode } from "react";
 
 interface ModalProps {
   open: boolean;
@@ -14,7 +14,7 @@ const FOCUSABLE =
 export function Modal({ open, onClose, title, children, footer }: ModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const previousFocusRef = useRef<HTMLElement | null>(null);
-
+  const titleId = useId();
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === "Escape") onClose();
@@ -72,10 +72,10 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
         ref={modalRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby="modal-title"
+        aria-labelledby={titleId}
       >
         <div className="modal-head">
-          <h3 id="modal-title">{title}</h3>
+          <h3 id={titleId}>{title}</h3>
           <button className="modal-close" onClick={onClose} aria-label="Close">
             <svg
               viewBox="0 0 16 16"

@@ -1,4 +1,5 @@
 import { useAdminHealth } from "../../api/hooks/admin";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 
@@ -71,7 +72,11 @@ export default function HealthPage() {
       >
         {Object.keys(checks).length === 0 ? (
           <div className="card card-pad">
-            <p className="meta">No health checks reported.</p>
+            <EmptyState
+              icon="activity"
+              title="No health checks reported"
+              description="Service health checks will appear here when the worker reports them."
+            />
           </div>
         ) : (
           Object.entries(checks).map(([key, check]) => (

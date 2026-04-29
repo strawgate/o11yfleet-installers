@@ -1,0 +1,139 @@
+.ai-panel {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 16px;
+  margin-top: 24px;
+}
+
+.ai-panel-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.ai-panel-head h3 {
+  font-size: 16px;
+}
+
+.ai-kicker {
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 3px;
+}
+
+.ai-summary,
+.ai-empty {
+  margin-top: 10px;
+  color: var(--fg-3);
+  font-size: 13px;
+}
+
+.ai-items {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ai-item {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg-elev);
+  padding: 12px;
+}
+
+.ai-item-title,
+.ai-slot-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.ai-item-title strong,
+.ai-slot-title strong {
+  color: var(--fg);
+  font-weight: 500;
+}
+
+.ai-item p,
+.ai-slot p {
+  margin-top: 6px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+.ai-badge {
+  flex-shrink: 0;
+  border: 1px solid var(--line-2);
+  border-radius: 4px;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--fg-3);
+  text-transform: uppercase;
+}
+
+.ai-badge-notice {
+  color: var(--info);
+  border-color: color-mix(in oklch, var(--info) 35%, transparent);
+}
+
+.ai-badge-warning {
+  color: var(--warn);
+  border-color: color-mix(in oklch, var(--warn) 35%, transparent);
+}
+
+.ai-badge-critical {
+  color: var(--err);
+  border-color: color-mix(in oklch, var(--err) 40%, transparent);
+}
+
+.ai-evidence {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 9px;
+}
+
+.ai-evidence span {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 2px 7px;
+  color: var(--fg-3);
+  font-family: var(--font-mono);
+  font-size: 10.5px;
+}
+
+.ai-evidence strong {
+  color: var(--fg-2);
+  font-weight: 500;
+}
+
+.ai-action {
+  margin-top: 10px;
+}
+
+.ai-slot {
+  border-top: 1px solid var(--line);
+  margin-top: 12px;
+  padding-top: 12px;
+}
+
+.ai-slot-loading {
+  color: var(--fg-4);
+  font-family: var(--font-mono);
+  font-size: 11px;
+}
+
+@media (max-width: 720px) {
+  .ai-panel-head {
+    align-items: stretch;
+    flex-direction: column;
+  }
+}

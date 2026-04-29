@@ -6,6 +6,9 @@ import {
   useConfigurationStats,
   type Configuration,
 } from "../../api/hooks/portal";
+import { usePortalGuidance } from "../../api/hooks/ai";
+import { GuidancePanel } from "../../components/ai";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
@@ -18,15 +21,12 @@ import {
   agentUid,
   hashLabel,
 } from "../../utils/agents";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 function AgentSection({ config }: { config: Configuration }) {
   const { data: agents, isLoading, error } = useConfigurationAgents(config.id);
   const stats = useConfigurationStats(config.id);
   const [filter, setFilter] = useState("");
-
-  if (isLoading) return <LoadingSpinner />;
-  if (error) return <ErrorState error={error} />;
-
   const list = (agents ?? []).filter(
     (a) =>
       !filter ||
@@ -36,92 +36,159 @@ function AgentSection({ config }: { config: Configuration }) {
   const visible = list.slice(0, 100);
   const desiredHash =
     stats.data?.desired_config_hash ?? (config["current_config_hash"] as string | undefined);
+  const connectedCount = (agents ?? []).filter((agent) => agent.status === "connected").length;
+  const healthyCount = (agents ?? []).filter((agent) => agentIsHealthy(agent) === true).length;
+  const degradedCount = (agents ?? []).filter((agent) => agent.status === "degraded").length;
+  const guidanceRequest: AiGuidanceRequest | null =
+    agents && !isLoading
+      ? {
+          surface: "portal.agent",
+          targets: [
+            {
+              key: `agents.${config.id}.section`,
+              label: `${config.name} agents`,
+              surface: "portal.agent",
+              kind: "section",
+            },
+            {
+              key: `agents.${config.id}.table`,
+              label: `${config.name} agent table`,
+              surface: "portal.agent",
+              kind: "table",
+            },
+          ],
+          context: {
+            configuration_id: config.id,
+            configuration_name: config.name,
+            total_agents: agents.length,
+            connected_agents: connectedCount,
+            healthy_agents: healthyCount,
+            degraded_agents: degradedCount,
+            agents: agents.slice(0, 12).map((agent) => ({
+              id: agentUid(agent),
+              hostname: agentHost(agent),
+              status: agent.status ?? null,
+              last_seen: agentLastSeen(agent) ?? null,
+            })),
+          },
+        }
+      : null;
+  const guidance = usePortalGuidance(guidanceRequest);
+
+  if (isLoading) return <LoadingSpinner />;
+  if (error) return <ErrorState error={error} />;
 
   return (
-    <div className="dt-card mt-6">
-      <div className="dt-toolbar">
-        <h3>
-          {config.name} <span className="count">{list.length}</span>
-        </h3>
-        <div className="spacer" />
-        <input
-          className="input"
-          placeholder="Filter agents…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-        />
-      </div>
-      <table className="dt">
-        <thead>
-          <tr>
-            <th>Instance UID</th>
-            <th>Hostname</th>
-            <th>Status</th>
-            <th>Health</th>
-            <th>Config sync</th>
-            <th>Last seen</th>
-          </tr>
-        </thead>
-        <tbody>
-          {list.length === 0 ? (
-            <tr>
-              <td colSpan={6} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                No collectors have enrolled into this configuration group yet.
-              </td>
-            </tr>
-          ) : (
-            visible.map((a) => {
-              const uid = agentUid(a);
-              const healthy = agentIsHealthy(a);
-              const drift = agentHasDrift(a, desiredHash);
-              return (
-                <tr key={uid} className="clickable">
-                  <td className="mono-cell">
-                    <Link to={`/portal/agents/${config.id}/${uid}`}>{uid}</Link>
-                  </td>
-                  <td>{agentHost(a)}</td>
-                  <td>
-                    <span
-                      className={`tag ${
-                        a.status === "connected"
-                          ? "tag-ok"
-                          : a.status === "degraded"
-                            ? "tag-warn"
-                            : "tag-err"
-                      }`}
-                    >
-                      {a.status ?? "unknown"}
-                    </span>
-                  </td>
-                  <td>
-                    <span
-                      className={`tag ${healthy === false ? "tag-err" : healthy === true ? "tag-ok" : ""}`}
-                    >
-                      {healthy === false ? "unhealthy" : healthy === true ? "healthy" : "unknown"}
-                    </span>
-                  </td>
-                  <td>
-                    <span className={`tag ${drift ? "tag-warn" : ""}`}>
-                      {drift ? "drift" : agentCurrentHash(a) ? "in sync" : "not reported"}
-                    </span>
-                    <span className="mono-cell" style={{ marginLeft: 6 }}>
-                      {hashLabel(agentCurrentHash(a))}
-                    </span>
-                  </td>
-                  <td className="meta">{relTime(agentLastSeen(a))}</td>
-                </tr>
-              );
-            })
-          )}
-        </tbody>
-      </table>
-      {list.length > visible.length ? (
-        <div className="meta" style={{ padding: "12px 16px" }}>
-          Showing first {visible.length} collectors. Add server-side pagination before rendering the
-          full fleet.
+    <>
+      <GuidancePanel
+        title={`${config.name} agents`}
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
+      <div className="dt-card mt-6">
+        <div className="dt-toolbar">
+          <h3>
+            {config.name} <span className="count">{list.length}</span>
+          </h3>
+          <div className="spacer" />
+          <input
+            className="input"
+            placeholder="Filter agents…"
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
+          />
         </div>
-      ) : null}
-    </div>
+        <table className="dt">
+          <thead>
+            <tr>
+              <th>Instance UID</th>
+              <th>Hostname</th>
+              <th>Status</th>
+              <th>Health</th>
+              <th>Config sync</th>
+              <th>Last seen</th>
+            </tr>
+          </thead>
+          <tbody>
+            {list.length === 0 ? (
+              <tr>
+                <td colSpan={6}>
+                  <EmptyState
+                    icon="plug"
+                    title={filter ? "No agents match your filter" : "No agents connected"}
+                    description={
+                      filter
+                        ? "Clear the filter to see all collectors for this configuration."
+                        : "Enroll a collector from the configuration page to start reporting status."
+                    }
+                  >
+                    {!filter ? (
+                      <Link
+                        to={`/portal/configurations/${config.id}`}
+                        className="btn btn-primary btn-sm"
+                      >
+                        Enroll agent
+                      </Link>
+                    ) : null}
+                  </EmptyState>
+                </td>
+              </tr>
+            ) : (
+              visible.map((a) => {
+                const uid = agentUid(a);
+                const healthy = agentIsHealthy(a);
+                const drift = agentHasDrift(a, desiredHash);
+                return (
+                  <tr key={uid} className="clickable">
+                    <td className="mono-cell">
+                      <Link to={`/portal/agents/${config.id}/${uid}`}>{uid}</Link>
+                    </td>
+                    <td>{agentHost(a)}</td>
+                    <td>
+                      <span
+                        className={`tag ${
+                          a.status === "connected"
+                            ? "tag-ok"
+                            : a.status === "degraded"
+                              ? "tag-warn"
+                              : "tag-err"
+                        }`}
+                      >
+                        {a.status ?? "unknown"}
+                      </span>
+                    </td>
+                    <td>
+                      <span
+                        className={`tag ${healthy === false ? "tag-err" : healthy === true ? "tag-ok" : ""}`}
+                      >
+                        {healthy === false ? "unhealthy" : healthy === true ? "healthy" : "unknown"}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`tag ${drift ? "tag-warn" : ""}`}>
+                        {drift ? "drift" : agentCurrentHash(a) ? "in sync" : "not reported"}
+                      </span>
+                      <span className="mono-cell" style={{ marginLeft: 6 }}>
+                        {hashLabel(agentCurrentHash(a))}
+                      </span>
+                    </td>
+                    <td className="meta">{relTime(agentLastSeen(a))}</td>
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+        </table>
+        {list.length > visible.length ? (
+          <div className="meta" style={{ padding: "12px 16px" }}>
+            Showing first {visible.length} collectors. Add server-side pagination before rendering
+            the full fleet.
+          </div>
+        ) : null}
+      </div>
+    </>
   );
 }
 
@@ -147,11 +214,19 @@ export default function AgentsPage() {
       </div>
 
       {cfgList.length === 0 ? (
-        <div className="card card-pad" style={{ textAlign: "center" }}>
-          <p className="meta">No configurations yet.</p>
-          <Link to="/portal/getting-started" className="btn btn-primary btn-sm mt-2">
-            Get started
-          </Link>
+        <div className="card card-pad">
+          <EmptyState
+            icon="file"
+            title="No configurations yet"
+            description="Create a configuration first, then enroll collectors into it."
+          >
+            <Link to="/portal/configurations" className="btn btn-primary btn-sm">
+              Create configuration
+            </Link>
+            <Link to="/portal/getting-started" className="btn btn-ghost btn-sm">
+              Guided setup
+            </Link>
+          </EmptyState>
         </div>
       ) : (
         cfgList.map((c) => <AgentSection key={c.id} config={c} />)

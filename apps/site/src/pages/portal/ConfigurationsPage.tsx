@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useConfigurations, useCreateConfiguration } from "../../api/hooks/portal";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime, trunc } from "../../utils/format";
@@ -68,8 +69,16 @@ export default function ConfigurationsPage() {
           <tbody>
             {cfgList.length === 0 ? (
               <tr>
-                <td colSpan={5} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  No configurations yet. Create one to get started.
+                <td colSpan={5}>
+                  <EmptyState
+                    icon="file"
+                    title="No configurations yet"
+                    description="Create a configuration before enrolling collectors or pushing rollout updates."
+                  >
+                    <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
+                      New configuration
+                    </button>
+                  </EmptyState>
                 </td>
               </tr>
             ) : (

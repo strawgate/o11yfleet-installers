@@ -5,13 +5,18 @@ import {
   useConfigurationYaml,
   useConfigurationAgents,
   useConfigurationVersions,
+  useConfigurationTokens,
   useConfigurationStats,
+  useCreateEnrollmentToken,
   useDeleteConfiguration,
   useRolloutConfig,
 } from "../../api/hooks/portal";
+import { usePortalGuidance } from "../../api/hooks/ai";
+import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime, trunc } from "../../utils/format";
@@ -23,8 +28,12 @@ import {
   agentUid,
   hashLabel,
 } from "../../utils/agents";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
+
+const INSTALL_COMMAND = (token: string) =>
+  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token ${token}`;
 
 export default function ConfigurationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -35,30 +44,111 @@ export default function ConfigurationDetailPage() {
   const yaml = useConfigurationYaml(id);
   const agents = useConfigurationAgents(id);
   const versions = useConfigurationVersions(id);
+  const tokens = useConfigurationTokens(id);
   const stats = useConfigurationStats(id);
   const deleteConfig = useDeleteConfiguration();
+  const createEnrollmentToken = useCreateEnrollmentToken(id ?? "");
   const rollout = useRolloutConfig(id ?? "");
 
   const [activeTab, setActiveTab] = useState<Tab>("agents");
   const [deleteOpen, setDeleteOpen] = useState(false);
+  const [enrollOpen, setEnrollOpen] = useState(false);
+  const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const [rolloutOpen, setRolloutOpen] = useState(false);
 
-  if (config.isLoading) return <LoadingSpinner />;
-  if (config.error) return <ErrorState error={config.error} retry={() => void config.refetch()} />;
-
   const c = config.data;
-  if (!c) return <ErrorState error={new Error("Configuration not found")} />;
-
   const agentList = agents.data ?? [];
   const versionList = versions.data ?? [];
+  const tokenList = tokens.data ?? [];
   const connectedAgents = stats.data?.connected_agents ?? stats.data?.agents_connected ?? 0;
   const totalAgents = stats.data?.total_agents ?? agentList.length;
   const healthyAgents = stats.data?.healthy_agents ?? 0;
   const activeWebSockets = stats.data?.active_websockets;
   const desiredHash =
-    stats.data?.desired_config_hash ?? (c["current_config_hash"] as string | undefined) ?? null;
+    stats.data?.desired_config_hash ?? (c?.["current_config_hash"] as string | undefined) ?? null;
   const driftedAgents = agentList.filter((a) => agentHasDrift(a, desiredHash)).length;
+  const connectedCount = agentList.filter((agent) => agent.status === "connected").length;
+  const guidanceReady =
+    Boolean(c) &&
+    agents.isFetched &&
+    versions.isFetched &&
+    tokens.isFetched &&
+    stats.isFetched &&
+    yaml.isFetched;
+  const guidanceRequest: AiGuidanceRequest | null =
+    guidanceReady && c
+      ? {
+          surface: "portal.configuration",
+          targets: [
+            {
+              key: "configuration.page",
+              label: "Configuration detail",
+              surface: "portal.configuration",
+              kind: "page",
+            },
+            {
+              key: "configuration.agents",
+              label: "Agents metric",
+              surface: "portal.configuration",
+              kind: "metric",
+              context: { total_agents: totalAgents, connected_agents: connectedAgents },
+            },
+            {
+              key: "configuration.versions",
+              label: "Versions metric",
+              surface: "portal.configuration",
+              kind: "metric",
+              context: { versions: versionList.length },
+            },
+            {
+              key: "configuration.tokens",
+              label: "Enrollment tokens metric",
+              surface: "portal.configuration",
+              kind: "metric",
+              context: { total_active_tokens: tokenList.length },
+            },
+            {
+              key: `configuration.tab.${activeTab}`,
+              label: `${activeTab} tab`,
+              surface: "portal.configuration",
+              kind: "section",
+            },
+          ],
+          context: {
+            configuration_id: c.id,
+            configuration_name: c.name,
+            status: c.status ?? null,
+            active_tab: activeTab,
+            total_agents: totalAgents,
+            connected_agents: connectedCount,
+            agents_connected: connectedAgents,
+            healthy_agents: healthyAgents,
+            drifted_agents: driftedAgents,
+            active_websockets: activeWebSockets ?? null,
+            desired_config_hash: desiredHash,
+            versions: versionList.length,
+            total_active_tokens: tokenList.length,
+            latest_version_created_at: versionList[0]?.created_at ?? null,
+            yaml_available: Boolean(yaml.data),
+          },
+        }
+      : null;
+  const guidance = usePortalGuidance(guidanceRequest);
+  const agentInsight = guidance.data?.items.find(
+    (item) => item.target_key === "configuration.agents",
+  );
+  const versionInsight = guidance.data?.items.find(
+    (item) => item.target_key === "configuration.versions",
+  );
+  const tokenInsight = guidance.data?.items.find(
+    (item) => item.target_key === "configuration.tokens",
+  );
+
+  if (config.isLoading) return <LoadingSpinner />;
+  if (config.error) return <ErrorState error={config.error} retry={() => void config.refetch()} />;
+
+  if (!c) return <ErrorState error={new Error("Configuration not found")} />;
 
   async function handleDelete() {
     try {
@@ -77,6 +167,18 @@ export default function ConfigurationDetailPage() {
       setRolloutOpen(false);
     } catch (err) {
       toast("Rollout failed", err instanceof Error ? err.message : "Unknown error", "err");
+    }
+  }
+
+  async function handleCreateEnrollmentToken() {
+    try {
+      const result = await createEnrollmentToken.mutateAsync({ name: "configuration-enrollment" });
+      setEnrollmentToken(result.token ?? null);
+      if (result.token) {
+        toast("Enrollment token created", c!.name);
+      }
+    } catch (err) {
+      toast("Failed to create token", err instanceof Error ? err.message : "Unknown error", "err");
     }
   }
 
@@ -102,6 +204,9 @@ export default function ConfigurationDetailPage() {
           </p>
         </div>
         <div className="actions">
+          <button className="btn btn-primary" onClick={() => setEnrollOpen(true)}>
+            Enroll agent
+          </button>
           <span className={`tag tag-${c.status === "active" ? "ok" : "warn"}`}>
             {c.status ?? "unknown"}
           </span>
@@ -113,6 +218,7 @@ export default function ConfigurationDetailPage() {
         <div className="stat">
           <div className="val">{totalAgents}</div>
           <div className="label">Total collectors</div>
+          <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{connectedAgents}</div>
@@ -134,7 +240,25 @@ export default function ConfigurationDetailPage() {
           <div className="val mono-cell">{hashLabel(desiredHash)}</div>
           <div className="label">Desired config</div>
         </div>
+        <div className="stat">
+          <div className="val">{versionList.length}</div>
+          <div className="label">Versions</div>
+          <GuidanceSlot item={versionInsight} loading={guidance.isLoading} />
+        </div>
+        <div className="stat">
+          <div className="val">{tokenList.length}</div>
+          <div className="label">Tokens</div>
+          <GuidanceSlot item={tokenInsight} loading={guidance.isLoading} />
+        </div>
       </div>
+
+      <GuidancePanel
+        title="Configuration guidance"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
 
       {/* Tabs */}
       <div className="tabs mt-6">
@@ -169,8 +293,19 @@ export default function ConfigurationDetailPage() {
               <tbody>
                 {agentList.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                      No collectors have enrolled into this configuration group yet.
+                    <td colSpan={6}>
+                      <EmptyState
+                        icon="plug"
+                        title="No agents connected"
+                        description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
+                      >
+                        <button
+                          className="btn btn-primary btn-sm"
+                          onClick={() => setEnrollOpen(true)}
+                        >
+                          Enroll agent
+                        </button>
+                      </EmptyState>
                     </td>
                   </tr>
                 ) : (
@@ -247,8 +382,12 @@ export default function ConfigurationDetailPage() {
               <tbody>
                 {versionList.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                      No versions yet.
+                    <td colSpan={4}>
+                      <EmptyState
+                        icon="file"
+                        title="No versions yet"
+                        description="Upload or roll out a configuration to create the first version."
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -389,6 +528,65 @@ export default function ConfigurationDetailPage() {
       )}
 
       {/* Delete modal */}
+      <Modal
+        open={enrollOpen}
+        onClose={() => {
+          setEnrollOpen(false);
+          setEnrollmentToken(null);
+        }}
+        title="Enroll agent"
+        footer={
+          <>
+            <button
+              className="btn btn-secondary"
+              onClick={() => {
+                setEnrollOpen(false);
+                setEnrollmentToken(null);
+              }}
+            >
+              Close
+            </button>
+            {!enrollmentToken ? (
+              <button
+                className="btn btn-primary"
+                onClick={() => void handleCreateEnrollmentToken()}
+                disabled={createEnrollmentToken.isPending}
+              >
+                {createEnrollmentToken.isPending ? "Creating…" : "Create enrollment token"}
+              </button>
+            ) : null}
+          </>
+        }
+      >
+        {enrollmentToken ? (
+          <div className="command-panel">
+            <div className="banner info">
+              <div>
+                <div className="b-title">Enrollment token created</div>
+                <div className="b-body">
+                  This token will not be shown again. Copy it now or use the install command below.
+                  <div className="flex-row gap-sm mt-2">
+                    <code className="mono-cell token-value">{enrollmentToken}</code>
+                    <CopyButton value={enrollmentToken} />
+                  </div>
+                </div>
+              </div>
+            </div>
+            <pre className="code-block code-block-wrap">{INSTALL_COMMAND(enrollmentToken)}</pre>
+            <CopyButton value={INSTALL_COMMAND(enrollmentToken)} label="Copy command" />
+            <Link to="/portal/getting-started" className="btn btn-ghost btn-sm">
+              Open guided setup
+            </Link>
+          </div>
+        ) : (
+          <EmptyState
+            icon="plug"
+            title="Connect a collector"
+            description="Create a one-time enrollment token for this configuration, then run the installer on the host you want to manage."
+          />
+        )}
+      </Modal>
+
       <Modal
         open={deleteOpen}
         onClose={() => {

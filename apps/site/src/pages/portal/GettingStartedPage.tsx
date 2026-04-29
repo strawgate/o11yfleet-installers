@@ -7,11 +7,18 @@ import {
 } from "../../api/hooks/portal";
 import { useToast } from "../../components/common/Toast";
 import { CopyButton } from "../../components/common/CopyButton";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import installScriptSource from "../../../install.sh?raw";
 
 const INSTALL_SH = (token: string) =>
   `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;
+
+const DOWNLOAD_INSTALL_SH = (token: string) =>
+  `curl --proto '=https' --tlsv1.2 -fsSLO https://o11yfleet-site.pages.dev/install.sh
+chmod +x install.sh
+./install.sh --token ${token}`;
 
 const INSTALL_PS1 = (token: string) =>
   `irm https://o11yfleet.com/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token "${token}"`;
@@ -25,7 +32,9 @@ export default function GettingStartedPage() {
   const [step, setStep] = useState<Step>(1);
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [token, setToken] = useState<string>("");
-  const [installTab, setInstallTab] = useState<"quick" | "manual-ext" | "manual-sup">("quick");
+  const [installTab, setInstallTab] = useState<
+    "quick" | "download" | "script" | "windows" | "manual"
+  >("quick");
   const [connected, setConnected] = useState(false);
 
   const tokenConfigId = selectedConfigId || "__none__";
@@ -116,9 +125,15 @@ export default function GettingStartedPage() {
             should converge to the group&apos;s desired config.
           </p>
           {cfgList.length === 0 ? (
-            <p className="meta mt-6">
-              No configurations found. <Link to="/portal/configurations">Create one first.</Link>
-            </p>
+            <EmptyState
+              icon="file"
+              title="No configurations found"
+              description="Create a configuration before generating an enrollment token."
+            >
+              <Link to="/portal/configurations" className="btn btn-primary btn-sm">
+                Create configuration
+              </Link>
+            </EmptyState>
           ) : (
             <>
               <select
@@ -176,7 +191,7 @@ export default function GettingStartedPage() {
               <div className="b-title">Your enrollment token</div>
               <div className="b-body">
                 <div className="flex-row gap-sm mt-2">
-                  <code className="mono-cell">{token}</code>
+                  <code className="mono-cell token-value">{token}</code>
                   <CopyButton value={token} />
                 </div>
               </div>
@@ -188,39 +203,65 @@ export default function GettingStartedPage() {
               className={`tab${installTab === "quick" ? " active" : ""}`}
               onClick={() => setInstallTab("quick")}
             >
-              Linux / macOS
+              Pipe to bash
             </button>
             <button
-              className={`tab${installTab === "manual-ext" ? " active" : ""}`}
-              onClick={() => setInstallTab("manual-ext")}
+              className={`tab${installTab === "download" ? " active" : ""}`}
+              onClick={() => setInstallTab("download")}
+            >
+              Download script
+            </button>
+            <button
+              className={`tab${installTab === "script" ? " active" : ""}`}
+              onClick={() => setInstallTab("script")}
+            >
+              install.sh
+            </button>
+            <button
+              className={`tab${installTab === "windows" ? " active" : ""}`}
+              onClick={() => setInstallTab("windows")}
             >
               Windows
             </button>
             <button
-              className={`tab${installTab === "manual-sup" ? " active" : ""}`}
-              onClick={() => setInstallTab("manual-sup")}
+              className={`tab${installTab === "manual" ? " active" : ""}`}
+              onClick={() => setInstallTab("manual")}
             >
               Manual
             </button>
           </div>
 
           {installTab === "quick" && (
-            <div className="mt-2">
-              <pre className="code-block">{INSTALL_SH(token)}</pre>
+            <div className="command-panel mt-2">
+              <pre className="code-block code-block-wrap">{INSTALL_SH(token)}</pre>
               <CopyButton value={INSTALL_SH(token)} label="Copy command" />
             </div>
           )}
 
-          {installTab === "manual-ext" && (
-            <div className="mt-2">
-              <pre className="code-block">{INSTALL_PS1(token)}</pre>
+          {installTab === "download" && (
+            <div className="command-panel mt-2">
+              <pre className="code-block code-block-wrap">{DOWNLOAD_INSTALL_SH(token)}</pre>
+              <CopyButton value={DOWNLOAD_INSTALL_SH(token)} label="Copy command" />
+            </div>
+          )}
+
+          {installTab === "script" && (
+            <div className="command-panel mt-2">
+              <pre className="code-block code-block-wrap">{installScriptSource}</pre>
+              <CopyButton value={installScriptSource} label="Copy install.sh" />
+            </div>
+          )}
+
+          {installTab === "windows" && (
+            <div className="command-panel mt-2">
+              <pre className="code-block code-block-wrap">{INSTALL_PS1(token)}</pre>
               <CopyButton value={INSTALL_PS1(token)} label="Copy command" />
             </div>
           )}
 
-          {installTab === "manual-sup" && (
-            <div className="mt-2">
-              <pre className="code-block">
+          {installTab === "manual" && (
+            <div className="command-panel mt-2">
+              <pre className="code-block code-block-wrap">
                 {`# 1. Download the collector binary for your platform
 # 2. Create the configuration file:
 #    /etc/o11yfleet/config.yaml
@@ -231,6 +272,11 @@ export default function GettingStartedPage() {
 # 4. Start the collector:
 #    o11yfleet-collector --config /etc/o11yfleet/config.yaml`}
               </pre>
+              <CopyButton
+                value={`export O11YFLEET_TOKEN="${token}"
+o11yfleet-collector --config /etc/o11yfleet/config.yaml`}
+                label="Copy commands"
+              />
             </div>
           )}
 

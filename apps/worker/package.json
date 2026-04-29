@@ -12,10 +12,12 @@
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@ai-sdk/openai-compatible": "^2.0.41",
     "@microlabs/otel-cf-workers": "1.0.0-rc.52",
     "@o11yfleet/core": "workspace:*",
     "@o11yfleet/db": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
+    "ai": "^6.0.168",
     "yaml": "^2.8.3",
     "zod": "^3.25.76"
   },

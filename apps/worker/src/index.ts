@@ -41,8 +41,10 @@ const PRODUCTION_ORIGINS = [
 // Localhost origins (only allowed in non-production environments)
 const DEV_ORIGINS = [
   "http://localhost:3000",
+  "http://localhost:4000",
   "http://localhost:8788",
   "http://127.0.0.1:3000",
+  "http://127.0.0.1:4000",
   "http://127.0.0.1:8788",
 ];
 

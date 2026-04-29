@@ -1,6 +1,38 @@
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
+import { usePortalGuidance } from "../../api/hooks/ai";
+import { GuidancePanel } from "../../components/ai";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function BuilderPage() {
+  const guidanceRequest: AiGuidanceRequest = {
+    surface: "portal.builder",
+    targets: [
+      {
+        key: "builder.page",
+        label: "Pipeline builder",
+        surface: "portal.builder",
+        kind: "page",
+      },
+      {
+        key: "builder.editor",
+        label: "Visual editor plan",
+        surface: "portal.builder",
+        kind: "editor_selection",
+      },
+    ],
+    context: {
+      status: "prototype",
+      planned_features: [
+        "component palette",
+        "drag-and-drop wiring",
+        "inline configuration editing",
+        "real-time validation",
+        "AI-powered suggestions",
+      ],
+    },
+  };
+  const guidance = usePortalGuidance(guidanceRequest);
+
   return (
     <div className="main-wide">
       <PrototypeBanner message="Pipeline builder is a prototype. Visual editing and YAML generation coming soon." />
@@ -21,6 +53,14 @@ export default function BuilderPage() {
           real-time validation, and AI-powered suggestions.
         </p>
       </div>
+
+      <GuidancePanel
+        title="Builder next steps"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
     </div>
   );
 }

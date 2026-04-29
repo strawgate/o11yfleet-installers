@@ -3,6 +3,7 @@ import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/api/hooks/auth";
 import { useLogout } from "@/api/hooks/auth";
 import { useTenant } from "@/api/hooks/portal";
+import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Logo } from "@/components/common/Logo";
 import { useTheme } from "@/hooks/useTheme";
@@ -85,6 +86,25 @@ const USER_NAV: (NavSection | NavItem)[] = [
   { id: "settings", label: "Workspace settings", href: "/portal/settings", icon: "settings" },
 ];
 
+function navCommands(nav: (NavSection | NavItem)[]): CommandItem[] {
+  let section = "";
+  return nav.flatMap((item) => {
+    if ("sec" in item) {
+      section = item.sec;
+      return [];
+    }
+    return [
+      {
+        id: item.id,
+        label: item.label,
+        href: item.href,
+        section,
+        disabled: item.placeholder,
+      },
+    ];
+  });
+}
+
 /* ------------------------------------------------------------------ */
 /*  Components                                                        */
 /* ------------------------------------------------------------------ */
@@ -103,7 +123,13 @@ function SidebarIcon({ name }: { name: string }) {
   );
 }
 
-function SidebarNav({ nav }: { nav: (NavSection | NavItem)[] }) {
+function SidebarNav({
+  nav,
+  onNavigate,
+}: {
+  nav: (NavSection | NavItem)[];
+  onNavigate?: () => void;
+}) {
   return (
     <nav className="sidebar-nav">
       {nav.map((item, i) => {
@@ -134,6 +160,7 @@ function SidebarNav({ nav }: { nav: (NavSection | NavItem)[] }) {
             to={item.href}
             className="sidebar-link"
             end={item.href.endsWith("/overview")}
+            onClick={onNavigate}
           >
             <SidebarIcon name={item.icon} />
             <span>{item.label}</span>
@@ -236,16 +263,31 @@ function NotificationsButton() {
   );
 }
 
-function SearchBar() {
+function SidebarToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
-    <div className="search">
+    <button
+      className="icon-btn sidebar-toggle"
+      aria-label={open ? "Close navigation" : "Open navigation"}
+      aria-expanded={open}
+      onClick={onClick}
+    >
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <path d="M2.5 4h11M2.5 8h11M2.5 12h11" strokeLinecap="round" />
+      </svg>
+    </button>
+  );
+}
+
+function SearchBar({ onOpen }: { onOpen: () => void }) {
+  return (
+    <button className="search" onClick={onOpen} aria-label="Open command menu">
       <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
         <circle cx="7" cy="7" r="4.5" />
         <path d="M10.5 10.5l3 3" strokeLinecap="round" />
       </svg>
       <span>Search collectors, configs…</span>
       <span className="kbd-hint">⌘K</span>
-    </div>
+    </button>
   );
 }
 
@@ -289,11 +331,21 @@ function Breadcrumbs() {
 /*  Layout                                                            */
 /* ------------------------------------------------------------------ */
 
+function isEditableShortcutTarget(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return Boolean(
+    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'),
+  );
+}
+
 export default function PortalLayout() {
   const { user, isLoading } = useAuth();
   const tenant = useTenant(Boolean(user) && !isLoading);
+  const location = useLocation();
   const navigate = useNavigate();
   const logoutMutation = useLogout();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [commandOpen, setCommandOpen] = useState(false);
 
   const handleLogout = useCallback(() => {
     logoutMutation.mutate(undefined, {
@@ -307,6 +359,22 @@ export default function PortalLayout() {
       navigate("/login", { replace: true });
     }
   }, [isLoading, user, navigate]);
+
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [location.pathname]);
+
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
+        if (isEditableShortcutTarget(event.target)) return;
+        event.preventDefault();
+        setCommandOpen(true);
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   if (isLoading) return <LoadingSpinner />;
   if (!user) return null;
@@ -326,13 +394,13 @@ export default function PortalLayout() {
 
   return (
     <div className="app">
-      <aside className="sidebar">
+      <aside className={`sidebar${sidebarOpen ? " open" : ""}`}>
         <NavLink to="/portal/overview" className="sidebar-brand">
           <Logo />
           O11yFleet
         </NavLink>
 
-        <SidebarNav nav={USER_NAV} />
+        <SidebarNav nav={USER_NAV} onNavigate={() => setSidebarOpen(false)} />
 
         <div className="sidebar-foot">
           <div className="org-switcher">
@@ -355,16 +423,36 @@ export default function PortalLayout() {
           </div>
         </div>
       </aside>
+      {sidebarOpen ? (
+        <button
+          className="sidebar-backdrop"
+          aria-label="Close navigation"
+          onClick={() => setSidebarOpen(false)}
+          onKeyDown={(event) => {
+            if (event.key === "Escape") setSidebarOpen(false);
+          }}
+        />
+      ) : null}
 
       <header className="topbar">
+        <SidebarToggle open={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)} />
         <Breadcrumbs />
-        <SearchBar />
+        <SearchBar onOpen={() => setCommandOpen(true)} />
         <div className="topbar-right">
+          <a href="/docs/" className="topbar-docs">
+            Docs
+          </a>
           <ThemeToggle />
           <NotificationsButton />
           <ProfileDropdown userName={userName} userEmail={userEmail} onLogout={handleLogout} />
         </div>
       </header>
+      <CommandPalette
+        open={commandOpen}
+        onClose={() => setCommandOpen(false)}
+        items={navCommands(USER_NAV)}
+        placeholder="Search collectors, configs, pages..."
+      />
 
       <main className="main">
         <div className="main-wide">

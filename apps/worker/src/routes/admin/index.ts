@@ -56,7 +56,7 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
   // ─── AI Guidance ───────────────────────────────────────────
 
   if (path === "/api/admin/ai/guidance" && method === "POST") {
-    return handleAdminGuidanceRequest(request);
+    return handleAdminGuidanceRequest(request, env);
   }
 
   // ─── Tenants ────────────────────────────────────────────────

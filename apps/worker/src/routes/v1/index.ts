@@ -89,7 +89,7 @@ async function routeV1Request(
   // ─── AI Guidance ───────────────────────────────────────────
 
   if (path === "/api/v1/ai/guidance" && method === "POST") {
-    return handleTenantGuidanceRequest(request, tenantId);
+    return handleTenantGuidanceRequest(request, env, tenantId);
   }
 
   // ─── Configurations ────────────────────────────────────────

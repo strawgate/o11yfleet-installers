@@ -9,6 +9,7 @@ import {
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
@@ -92,8 +93,16 @@ function TokenSection({ config }: { config: Configuration }) {
           <tbody>
             {tokenList.length === 0 ? (
               <tr>
-                <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  No enrollment tokens.
+                <td colSpan={4}>
+                  <EmptyState
+                    icon="key"
+                    title="No enrollment tokens"
+                    description="Create a token when you are ready to connect a collector to this configuration."
+                  >
+                    <button className="btn btn-primary btn-sm" onClick={() => setCreateOpen(true)}>
+                      New token
+                    </button>
+                  </EmptyState>
                 </td>
               </tr>
             ) : (
@@ -192,8 +201,12 @@ export default function TokensPage() {
       </div>
 
       {cfgList.length === 0 ? (
-        <div className="card card-pad" style={{ textAlign: "center" }}>
-          <p className="meta">Create a configuration first to manage enrollment tokens.</p>
+        <div className="card card-pad">
+          <EmptyState
+            icon="file"
+            title="No configurations yet"
+            description="Create a configuration first to manage enrollment tokens."
+          />
         </div>
       ) : (
         cfgList.map((c) => <TokenSection key={c.id} config={c} />)

@@ -1,7 +1,8 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { env, exports } from "cloudflare:workers";
 import { authHeaders } from "./helpers.js";
 import { handleV1Request } from "../src/routes/v1/index.js";
+import { generateAiGuidance } from "../src/ai/provider.js";
 import type { AiGuidanceResponse } from "@o11yfleet/core/ai";
 
 const overviewRequest = {
@@ -91,5 +92,216 @@ describe("AI guidance routes", () => {
     expect(response.status).toBe(200);
     const body = await response.json<AiGuidanceResponse>();
     expect(body.items.some((item) => item.headline.includes("Tenants"))).toBe(true);
+  });
+
+  it("rejects invalid guidance payload shape on admin route", async () => {
+    const response = await exports.default.fetch("http://localhost/api/admin/ai/guidance", {
+      method: "POST",
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify({
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.page",
+            label: "Admin overview",
+            surface: "portal.overview",
+            kind: "page",
+          },
+        ],
+        context: {
+          total_tenants: 1,
+        },
+      }),
+    });
+
+    expect(response.status).toBe(400);
+  });
+
+  it("blocks unauthenticated admin guidance requests", async () => {
+    const response = await exports.default.fetch("http://localhost/api/admin/ai/guidance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.page",
+            label: "Admin overview",
+            surface: "admin.overview",
+            kind: "page",
+          },
+        ],
+      }),
+    });
+
+    expect(response.status).toBe(403);
+  });
+
+  it("returns a provider error when SDK mode is configured without an API key", async () => {
+    const request = new Request("http://localhost/api/v1/ai/guidance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(overviewRequest),
+    });
+    const llmEnv = { ...env, LLM_PROVIDER: "minimax", MINIMAX_API_KEY: undefined };
+    const response = await handleV1Request(request, llmEnv, new URL(request.url), "tenant-ai-test");
+
+    expect(response.status).toBe(502);
+    await expect(response.json()).resolves.toEqual({
+      error: "MINIMAX_API_KEY is required when LLM_PROVIDER uses the SDK",
+    });
+  });
+
+  it("uses the AI SDK OpenAI-compatible provider when MiniMax is configured", async () => {
+    const calls: Request[] = [];
+    const fakeFetch: typeof fetch = vi.fn(async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      calls.push(request);
+      return Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "The fleet has a connectivity gap.",
+                items: [
+                  {
+                    target_key: "overview.fleet-health",
+                    headline: "Collector connectivity needs attention",
+                    detail: "Three collectors are not connected based on the supplied counts.",
+                    severity: "warning",
+                    confidence: 0.82,
+                    evidence: [{ label: "Connected collectors", value: "7" }],
+                    action: {
+                      kind: "open_page",
+                      label: "Review agents",
+                      href: "/portal/agents",
+                    },
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      });
+    });
+
+    const response = await generateAiGuidance(overviewRequest, {
+      env: {
+        LLM_PROVIDER: "minimax",
+        LLM_MODEL: "MiniMax-M2.7",
+        LLM_BASE_URL: "https://api.minimax.test/v1",
+        MINIMAX_API_KEY: "test-key",
+      },
+      scopeLabel: "tenant:tenant-ai-test",
+      fetch: fakeFetch,
+    });
+
+    expect(calls).toHaveLength(1);
+    expect(calls[0]?.url).toBe("https://api.minimax.test/v1/chat/completions");
+    expect(calls[0]?.headers.get("Authorization")).toBe("Bearer test-key");
+    expect(response.model).toBe("MiniMax-M2.7");
+    expect(response.summary).toContain("connectivity");
+    expect(response.items[0]?.action?.kind).toBe("open_page");
+  });
+
+  it("sanitizes model-generated guidance actions to app-relative links", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async (input, init) => {
+      void new Request(input, init);
+      return Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "External links should be stripped from actions.",
+                items: [
+                  {
+                    target_key: "overview.page",
+                    headline: "External runbook suggested",
+                    detail: "The provider suggested a link outside the app.",
+                    severity: "notice",
+                    confidence: 0.5,
+                    evidence: [],
+                    action: {
+                      kind: "open_page",
+                      label: "Open runbook",
+                      href: "//example.com/runbook",
+                    },
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      });
+    });
+
+    const response = await generateAiGuidance(overviewRequest, {
+      env: {
+        LLM_PROVIDER: "minimax",
+        LLM_MODEL: "MiniMax-M2.7",
+        LLM_BASE_URL: "https://api.minimax.test/v1",
+        MINIMAX_API_KEY: "test-key",
+      },
+      scopeLabel: "tenant:tenant-ai-test",
+      fetch: fakeFetch,
+    });
+
+    expect(response.items[0]?.action).toEqual({
+      kind: "none",
+      label: "Open runbook",
+    });
+  });
+
+  it("does not emit portal-only actions for admin deterministic guidance", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.overview.page",
+            label: "Admin overview",
+            surface: "admin.overview",
+            kind: "page",
+          },
+          {
+            key: "admin.overview.metric",
+            label: "Fleet metric",
+            surface: "admin.overview",
+            kind: "metric",
+          },
+        ],
+        context: {
+          total_agents: 10,
+          connected_agents: 7,
+          healthy_agents: 6,
+        },
+      },
+      {
+        env: {},
+        scopeLabel: "admin",
+      },
+    );
+
+    expect(response.items.length).toBeGreaterThan(0);
+    expect(response.items.every((item) => item.action?.kind !== "open_page")).toBe(true);
   });
 });

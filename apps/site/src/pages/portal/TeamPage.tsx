@@ -1,4 +1,5 @@
 import { useTeam } from "../../api/hooks/portal";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
@@ -80,8 +81,12 @@ export default function TeamPage() {
           <tbody>
             {memberList.length === 0 ? (
               <tr>
-                <td colSpan={3} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  No team members found.
+                <td colSpan={3}>
+                  <EmptyState
+                    icon="users"
+                    title="No team members found"
+                    description="Team members will appear here after they are invited or provisioned."
+                  />
                 </td>
               </tr>
             ) : (

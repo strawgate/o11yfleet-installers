@@ -1,23 +1,19 @@
 import { Link } from "react-router-dom";
 import { useOverview, useConfigurations } from "../../api/hooks/portal";
+import { usePortalGuidance } from "../../api/hooks/ai";
+import { GuidancePanel, GuidanceSlot } from "../../components/ai";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
   const overview = useOverview();
   const configs = useConfigurations();
-
-  if (overview.isLoading || configs.isLoading) return <LoadingSpinner />;
-  if (overview.error)
-    return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
-  if (configs.error)
-    return <ErrorState error={configs.error} retry={() => void configs.refetch()} />;
-
   const ov = overview.data;
   const cfgList = Array.isArray(ov?.configurations) ? ov.configurations : (configs.data ?? []);
-
   const totalConfigs =
     typeof ov?.configs_count === "number"
       ? ov.configs_count
@@ -33,6 +29,62 @@ export default function OverviewPage() {
   const connectedAgents = typeof ov?.connected_agents === "number" ? ov.connected_agents : 0;
   const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
   const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
+  const guidanceRequest: AiGuidanceRequest | null =
+    overview.data && configs.data
+      ? {
+          surface: "portal.overview",
+          targets: [
+            {
+              key: "overview.page",
+              label: "Overview page",
+              surface: "portal.overview",
+              kind: "page",
+            },
+            {
+              key: "overview.configurations",
+              label: "Configurations metric",
+              surface: "portal.overview",
+              kind: "metric",
+              context: { total_configurations: totalConfigs },
+            },
+            {
+              key: "overview.agents",
+              label: "Agents metric",
+              surface: "portal.overview",
+              kind: "metric",
+              context: { total_agents: totalAgents },
+            },
+            {
+              key: "overview.recent-configurations",
+              label: "Recent configurations table",
+              surface: "portal.overview",
+              kind: "table",
+            },
+          ],
+          context: {
+            configs_count: totalConfigs,
+            total_agents: totalAgents,
+            active_rollouts: activeRollouts,
+            configurations: cfgList.slice(0, 8).map((config) => ({
+              id: config.id,
+              name: config.name,
+              status: config.status ?? null,
+              updated_at: config.updated_at ?? null,
+            })),
+          },
+        }
+      : null;
+  const guidance = usePortalGuidance(guidanceRequest);
+  const configurationInsight = guidance.data?.items.find(
+    (item) => item.target_key === "overview.configurations",
+  );
+  const agentInsight = guidance.data?.items.find((item) => item.target_key === "overview.agents");
+
+  if (overview.isLoading || configs.isLoading) return <LoadingSpinner />;
+  if (overview.error)
+    return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
+  if (configs.error)
+    return <ErrorState error={configs.error} retry={() => void configs.refetch()} />;
 
   return (
     <div className="main-wide">
@@ -55,10 +107,12 @@ export default function OverviewPage() {
         <div className="stat">
           <div className="val">{totalConfigs}</div>
           <div className="label">Configurations</div>
+          <GuidanceSlot item={configurationInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{totalAgents}</div>
           <div className="label">Total collectors</div>
+          <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{connectedAgents}</div>
@@ -74,6 +128,14 @@ export default function OverviewPage() {
           {activeRollouts === null ? <div className="delta">Not exposed by API yet</div> : null}
         </div>
       </div>
+
+      <GuidancePanel
+        title="Fleet snapshot"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
 
       <div className="dt-card mt-6">
         <div className="dt-toolbar">
@@ -96,8 +158,16 @@ export default function OverviewPage() {
           <tbody>
             {cfgList.length === 0 ? (
               <tr>
-                <td colSpan={5} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  No configurations yet. <Link to="/portal/getting-started">Get started →</Link>
+                <td colSpan={5}>
+                  <EmptyState
+                    icon="file"
+                    title="No configurations yet"
+                    description="Create a configuration to start managing collectors and rollouts."
+                  >
+                    <Link to="/portal/getting-started" className="btn btn-primary btn-sm">
+                      Get started
+                    </Link>
+                  </EmptyState>
                 </td>
               </tr>
             ) : (

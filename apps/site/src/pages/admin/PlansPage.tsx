@@ -1,4 +1,5 @@
 import { useAdminPlans } from "../../api/hooks/admin";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -30,8 +31,12 @@ export default function PlansPage() {
           <tbody>
             {planList.length === 0 ? (
               <tr>
-                <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  No plans configured.
+                <td colSpan={4}>
+                  <EmptyState
+                    icon="box"
+                    title="No plans configured"
+                    description="Plan definitions will appear here after they are seeded or configured."
+                  />
                 </td>
               </tr>
             ) : (

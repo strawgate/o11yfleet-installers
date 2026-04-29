@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAdminTenants, useCreateTenant } from "../../api/hooks/admin";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -76,10 +77,22 @@ export default function TenantsPage() {
           <tbody>
             {filtered.length === 0 ? (
               <tr>
-                <td colSpan={6} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                  {filter
-                    ? "No tenants match your filter."
-                    : "No tenants yet. Create one to get started."}
+                <td colSpan={6}>
+                  <EmptyState
+                    icon={filter ? "search" : "users"}
+                    title={filter ? "No tenants match your filter" : "No tenants yet"}
+                    description={
+                      filter
+                        ? "Try a different name or clear the filter to see all tenants."
+                        : "Create a tenant to start onboarding a workspace."
+                    }
+                  >
+                    {!filter ? (
+                      <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
+                        Create tenant
+                      </button>
+                    ) : null}
+                  </EmptyState>
                 </td>
               </tr>
             ) : (

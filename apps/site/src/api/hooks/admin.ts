@@ -43,6 +43,13 @@ export interface AdminHealth {
   [key: string]: unknown;
 }
 
+function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
+  if (Array.isArray(value)) return value;
+  const wrapped = value[key];
+  if (Array.isArray(wrapped)) return wrapped as T[];
+  throw new Error(`unwrapList expected array payload for "${key}": ${JSON.stringify(value)}`);
+}
+
 /* ------------------------------------------------------------------ */
 /*  Query hooks                                                       */
 /* ------------------------------------------------------------------ */
@@ -57,7 +64,11 @@ export function useAdminOverview() {
 export function useAdminTenants() {
   return useQuery({
     queryKey: ["admin", "tenants"],
-    queryFn: () => apiGet<AdminTenant[]>("/api/admin/tenants"),
+    queryFn: async () =>
+      unwrapList<AdminTenant>(
+        await apiGet<AdminTenant[] | { tenants: AdminTenant[] }>("/api/admin/tenants"),
+        "tenants",
+      ),
     refetchInterval: 10_000,
   });
 }
@@ -73,7 +84,13 @@ export function useAdminTenant(id: string | undefined) {
 export function useAdminTenantConfigs(id: string | undefined) {
   return useQuery({
     queryKey: ["admin", "tenant", id, "configurations"],
-    queryFn: () => apiGet<AdminTenantConfig[]>(`/api/admin/tenants/${id}/configurations`),
+    queryFn: async () =>
+      unwrapList<AdminTenantConfig>(
+        await apiGet<AdminTenantConfig[] | { configurations: AdminTenantConfig[] }>(
+          `/api/admin/tenants/${id}/configurations`,
+        ),
+        "configurations",
+      ),
     enabled: !!id,
   });
 }
@@ -81,7 +98,13 @@ export function useAdminTenantConfigs(id: string | undefined) {
 export function useAdminTenantUsers(id: string | undefined) {
   return useQuery({
     queryKey: ["admin", "tenant", id, "users"],
-    queryFn: () => apiGet<AdminTenantUser[]>(`/api/admin/tenants/${id}/users`),
+    queryFn: async () =>
+      unwrapList<AdminTenantUser>(
+        await apiGet<AdminTenantUser[] | { users: AdminTenantUser[] }>(
+          `/api/admin/tenants/${id}/users`,
+        ),
+        "users",
+      ),
     enabled: !!id,
   });
 }

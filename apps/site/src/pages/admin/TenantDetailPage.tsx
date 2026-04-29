@@ -7,13 +7,17 @@ import {
   useUpdateAdminTenant,
   useDeleteAdminTenant,
 } from "../../api/hooks/admin";
+import { useAdminGuidance } from "../../api/hooks/ai";
+import { GuidancePanel } from "../../components/ai";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "overview" | "configurations" | "users" | "settings";
 
@@ -43,14 +47,72 @@ export default function TenantDetailPage() {
     }
   }, [tenant.data, editName]);
 
-  if (tenant.isLoading) return <LoadingSpinner />;
-  if (tenant.error) return <ErrorState error={tenant.error} retry={() => void tenant.refetch()} />;
-
   const t = tenant.data;
-  if (!t) return <ErrorState error={new Error("Tenant not found")} />;
-
   const configList = configs.data ?? [];
   const userList = users.data ?? [];
+  const overviewGuidanceReady =
+    activeTab === "overview" && Boolean(t) && configs.isSuccess && users.isSuccess;
+  const guidanceRequest: AiGuidanceRequest | null =
+    overviewGuidanceReady && t
+      ? {
+          surface: "admin.tenant",
+          targets: [
+            {
+              key: "admin.tenant.page",
+              label: "Tenant detail",
+              surface: "admin.tenant",
+              kind: "page",
+            },
+            {
+              key: "admin.tenant.configurations",
+              label: "Configurations section",
+              surface: "admin.tenant",
+              kind: "section",
+            },
+            {
+              key: "admin.tenant.users",
+              label: "Users section",
+              surface: "admin.tenant",
+              kind: "section",
+            },
+            {
+              key: `admin.tenant.tab.${activeTab}`,
+              label: `${activeTab} tab`,
+              surface: "admin.tenant",
+              kind: "section",
+            },
+          ],
+          context: {
+            tenant_id: t.id,
+            tenant_name: t.name,
+            plan: t.plan ?? "free",
+            active_tab: activeTab,
+            config_count: configList.length,
+            user_count: userList.length,
+            max_configs: (t["max_configs"] as number) ?? null,
+            max_agents_per_config: (t["max_agents_per_config"] as number) ?? null,
+            created_at: t.created_at ?? null,
+            configurations: configList.slice(0, 12).map((config) => ({
+              id: config.id,
+              name: config.name,
+              status: config["status"] ?? null,
+              agents: config["agents"] ?? null,
+              updated_at: config["updated_at"] ?? null,
+            })),
+            users: userList.slice(0, 12).map((user) => ({
+              id: user.id,
+              email_domain: emailDomain(user.email),
+              role: user.role ?? "member",
+              created_at: user["created_at"] ?? null,
+            })),
+          },
+        }
+      : null;
+  const guidance = useAdminGuidance(guidanceRequest);
+
+  if (tenant.isLoading) return <LoadingSpinner />;
+  if (tenant.error) return <ErrorState error={tenant.error} retry={() => void tenant.refetch()} />;
+  if (!t) return <ErrorState error={new Error("Tenant not found")} />;
 
   async function handleSave() {
     try {
@@ -109,38 +171,47 @@ export default function TenantDetailPage() {
 
       {/* Overview tab */}
       {activeTab === "overview" && (
-        <div className="card card-pad mt-6">
-          <h3>Tenant details</h3>
-          <table className="dt mt-2">
-            <tbody>
-              <tr>
-                <td className="meta">Plan</td>
-                <td>
-                  <PlanTag plan={t.plan ?? "free"} />
-                </td>
-              </tr>
-              <tr>
-                <td className="meta">Configurations</td>
-                <td>{configList.length}</td>
-              </tr>
-              <tr>
-                <td className="meta">Users</td>
-                <td>{userList.length}</td>
-              </tr>
-              <tr>
-                <td className="meta">Created</td>
-                <td>{relTime(t.created_at)}</td>
-              </tr>
-              <tr>
-                <td className="meta">Tenant ID</td>
-                <td className="mono-cell">
-                  <span style={{ marginRight: 8 }}>{t.id}</span>
-                  <CopyButton value={t.id} />
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
+        <>
+          <div className="card card-pad mt-6">
+            <h3>Tenant details</h3>
+            <table className="dt mt-2">
+              <tbody>
+                <tr>
+                  <td className="meta">Plan</td>
+                  <td>
+                    <PlanTag plan={t.plan ?? "free"} />
+                  </td>
+                </tr>
+                <tr>
+                  <td className="meta">Configurations</td>
+                  <td>{configList.length}</td>
+                </tr>
+                <tr>
+                  <td className="meta">Users</td>
+                  <td>{userList.length}</td>
+                </tr>
+                <tr>
+                  <td className="meta">Created</td>
+                  <td>{relTime(t.created_at)}</td>
+                </tr>
+                <tr>
+                  <td className="meta">Tenant ID</td>
+                  <td className="mono-cell">
+                    <span style={{ marginRight: 8 }}>{t.id}</span>
+                    <CopyButton value={t.id} />
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+          <GuidancePanel
+            title="Tenant operations"
+            guidance={guidance.data}
+            isLoading={guidance.isLoading}
+            error={guidance.error}
+            onRefresh={() => void guidance.refetch()}
+          />
+        </>
       )}
 
       {/* Configurations tab */}
@@ -161,8 +232,12 @@ export default function TenantDetailPage() {
               <tbody>
                 {configList.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                      No configurations found.
+                    <td colSpan={4}>
+                      <EmptyState
+                        icon="file"
+                        title="No configurations found"
+                        description="This tenant does not have any managed collector configurations yet."
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -205,8 +280,12 @@ export default function TenantDetailPage() {
               <tbody>
                 {userList.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                      No users found.
+                    <td colSpan={4}>
+                      <EmptyState
+                        icon="users"
+                        title="No users found"
+                        description="Users will appear here after they join or are provisioned."
+                      />
                     </td>
                   </tr>
                 ) : (
@@ -334,4 +413,9 @@ export default function TenantDetailPage() {
       </Modal>
     </>
   );
+}
+
+function emailDomain(email: string): string {
+  const [, domain] = email.split("@");
+  return domain ? `@${domain}` : "unknown";
 }

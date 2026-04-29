@@ -1,23 +1,19 @@
 import { Link } from "react-router-dom";
 import { useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
+import { useAdminGuidance } from "../../api/hooks/ai";
+import { GuidancePanel, GuidanceSlot } from "../../components/ai";
+import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
   const overview = useAdminOverview();
   const tenants = useAdminTenants();
-
-  if (overview.isLoading || tenants.isLoading) return <LoadingSpinner />;
-  if (overview.error)
-    return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
-  if (tenants.error)
-    return <ErrorState error={tenants.error} retry={() => void tenants.refetch()} />;
-
   const ov = overview.data;
   const tenantList = tenants.data ?? [];
-
   const totalTenants = ov?.tenants ?? tenantList.length;
   const totalConfigs = (ov?.["total_configs"] as number) ?? 0;
   const totalAgents = ov?.agents ?? 0;
@@ -38,6 +34,82 @@ export default function OverviewPage() {
     })
     .slice(0, 5);
 
+  const guidanceRequest: AiGuidanceRequest | null =
+    overview.data && tenants.data
+      ? {
+          surface: "admin.overview",
+          targets: [
+            {
+              key: "admin.overview.page",
+              label: "Admin overview",
+              surface: "admin.overview",
+              kind: "page",
+            },
+            {
+              key: "admin.overview.tenants",
+              label: "Tenants metric",
+              surface: "admin.overview",
+              kind: "metric",
+            },
+            {
+              key: "admin.overview.configs",
+              label: "Configurations metric",
+              surface: "admin.overview",
+              kind: "metric",
+            },
+            {
+              key: "admin.overview.agents",
+              label: "Agents metric",
+              surface: "admin.overview",
+              kind: "metric",
+            },
+            {
+              key: "admin.overview.recent-tenants",
+              label: "Recent tenants table",
+              surface: "admin.overview",
+              kind: "table",
+            },
+          ],
+          context: {
+            total_tenants: totalTenants,
+            total_configurations: totalConfigs,
+            total_agents: totalAgents,
+            health_status: healthStatus,
+            plan_distribution: planCounts,
+            tenants_without_configs: tenantList.filter(
+              (tenant) => ((tenant["config_count"] as number) ?? 0) === 0,
+            ).length,
+            tenants_without_users: tenantList.filter(
+              (tenant) => ((tenant["user_count"] as number) ?? 0) === 0,
+            ).length,
+            recent_tenants: recentTenants.map((tenant) => ({
+              id: tenant.id,
+              name: tenant.name,
+              plan: tenant.plan ?? "free",
+              max_configs: tenant["max_configs"] ?? null,
+              max_agents_per_config: tenant["max_agents_per_config"] ?? null,
+              created_at: tenant.created_at ?? null,
+            })),
+          },
+        }
+      : null;
+  const guidance = useAdminGuidance(guidanceRequest);
+  const tenantInsight = guidance.data?.items.find(
+    (item) => item.target_key === "admin.overview.tenants",
+  );
+  const configInsight = guidance.data?.items.find(
+    (item) => item.target_key === "admin.overview.configs",
+  );
+  const agentInsight = guidance.data?.items.find(
+    (item) => item.target_key === "admin.overview.agents",
+  );
+
+  if (overview.isLoading || tenants.isLoading) return <LoadingSpinner />;
+  if (overview.error)
+    return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
+  if (tenants.error)
+    return <ErrorState error={tenants.error} retry={() => void tenants.refetch()} />;
+
   return (
     <>
       <div className="page-head">
@@ -56,14 +128,17 @@ export default function OverviewPage() {
         <div className="stat">
           <div className="val">{totalTenants}</div>
           <div className="label">Total tenants</div>
+          <GuidanceSlot item={tenantInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{totalConfigs}</div>
           <div className="label">Total configs</div>
+          <GuidanceSlot item={configInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{totalAgents}</div>
           <div className="label">Total agents</div>
+          <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">
@@ -76,6 +151,14 @@ export default function OverviewPage() {
           <div className="label">System health</div>
         </div>
       </div>
+
+      <GuidancePanel
+        title="Platform operations"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
 
       <div className="mt-6" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
         {/* Recent tenants */}
@@ -100,8 +183,16 @@ export default function OverviewPage() {
             <tbody>
               {recentTenants.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                    No tenants yet.
+                  <td colSpan={5}>
+                    <EmptyState
+                      icon="users"
+                      title="No tenants yet"
+                      description="Create a tenant to start configuring workspaces and enrollment policy."
+                    >
+                      <Link to="/admin/tenants" className="btn btn-primary btn-sm">
+                        Create tenant
+                      </Link>
+                    </EmptyState>
                   </td>
                 </tr>
               ) : (
@@ -138,8 +229,12 @@ export default function OverviewPage() {
             <tbody>
               {Object.keys(planCounts).length === 0 ? (
                 <tr>
-                  <td colSpan={2} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                    No data.
+                  <td colSpan={2}>
+                    <EmptyState
+                      icon="activity"
+                      title="No plan data"
+                      description="Plan distribution appears after tenants are created."
+                    />
                   </td>
                 </tr>
               ) : (

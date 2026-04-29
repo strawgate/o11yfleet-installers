@@ -11,6 +11,7 @@ coverage/
 apps/worker/worker-configuration.d.ts
 *.tsbuildinfo
 tmp/
-**/gen/
+**/gen/**
 **/test-results/**
 .github/workflows/
+tests/ui/playwright-report/

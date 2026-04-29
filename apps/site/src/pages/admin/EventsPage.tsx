@@ -1,4 +1,5 @@
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
+import { EmptyState } from "../../components/common/EmptyState";
 
 export default function EventsPage() {
   return (
@@ -43,9 +44,12 @@ export default function EventsPage() {
           </thead>
           <tbody>
             <tr>
-              <td colSpan={4} className="meta" style={{ textAlign: "center", padding: 32 }}>
-                No audit events recorded yet. Events will appear here once the audit integration is
-                enabled. Staff support actions should include reason, TTL, scope, and actor.
+              <td colSpan={4}>
+                <EmptyState
+                  icon="activity"
+                  title="No audit events recorded"
+                  description="Events will appear here once the audit integration is enabled. Staff support actions should include reason, TTL, scope, and actor."
+                />
               </td>
             </tr>
           </tbody>
