@@ -77,8 +77,20 @@ install_binary() {
     || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
 
   info "Verifying checksum..."
-  curl --proto '=https' --tlsv1.2 -fsSL "${url}.sha256" -o "$tmpdir/${tarball_name}.sha256" \
-    || fail "Checksum download failed from:\n  ${url}.sha256"
+  local checksums_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+  local sha256_url="${url}.sha256"
+  local expected_hash=""
+  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt"; then
+    expected_hash="$(grep " ${tarball_name}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)" \
+      || fail "Checksum for ${tarball_name} not found in checksums.txt for version $OTELCOL_VERSION"
+  elif curl --proto '=https' --tlsv1.2 -fsSL "$sha256_url" -o "$tmpdir/${tarball_name}.sha256"; then
+    info "Using legacy SHA file (checksums.txt not available for v${OTELCOL_VERSION})"
+  else
+    fail "Checksum download failed.\n  Tried checksums.txt: $checksums_url\n  Tried SHA file: $sha256_url\n  Either the version $OTELCOL_VERSION is too old, or the release assets are missing."
+  fi
+  if [ -n "$expected_hash" ]; then
+    echo "$expected_hash  $tarball_name" > "$tmpdir/${tarball_name}.sha256"
+  fi
   (cd "$tmpdir" && (sha256sum -c "${tarball_name}.sha256" 2>/dev/null || shasum -a 256 -c "${tarball_name}.sha256")) \
     || fail "Checksum verification failed — download may be corrupted"
   ok "Checksum verified"
@@ -230,7 +242,7 @@ main() {
   set -euo pipefail
 
   # ─── Defaults ──────────────────────────────────────────────────────────
-  OTELCOL_VERSION="${OTELCOL_VERSION:-0.115.0}"
+  OTELCOL_VERSION="${OTELCOL_VERSION:-0.151.0}"
   OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
   INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
   TOKEN=""
@@ -248,7 +260,7 @@ main() {
       --token=*)    TOKEN="${1#*=}"; shift ;;
       --version)
         if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-          fail "Missing value for --version. Usage: --version 0.115.0"
+          fail "Missing value for --version. Usage: --version 0.151.0"
         fi
         OTELCOL_VERSION="$2"; shift 2 ;;
       --version=*)  OTELCOL_VERSION="${1#*=}"; shift ;;
