@@ -1,9 +1,20 @@
 #!/usr/bin/env bash
 # O11yFleet Collector Installer
-# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 #
 # Installs otelcol-contrib with OpAMP extension configured to connect to O11yFleet.
 # Supports: Linux (amd64/arm64), macOS (amd64/arm64)
+
+set -euo pipefail
+
+# ─── Defaults ──────────────────────────────────────────────────────────
+OTELCOL_VERSION="${OTELCOL_VERSION:-0.151.0}"
+OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
+TOKEN=""
+UNINSTALL=false
+UPGRADE=false
+DRY_RUN=false
 
 # ─── Colors ────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -27,6 +38,7 @@ detect_platform() {
     darwin) OS="darwin" ;;
     *)      fail "Unsupported OS: $OS. Use Linux or macOS." ;;
   esac
+  info "Detected: ${OS}/${ARCH}"
 }
 
 # ─── Uninstall ─────────────────────────────────────────────────────────
@@ -56,7 +68,7 @@ check_prereqs() {
   for cmd in curl tar; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Required command not found: $cmd"
   done
-  if [ "$(id -u)" -ne 0 ]; then
+  if [ "$DRY_RUN" = false ] && [ "$(id -u)" -ne 0 ]; then
     if ! command -v sudo >/dev/null 2>&1; then
       fail "This script requires root or sudo. Run with: sudo bash -s -- --token ..."
     fi
@@ -97,6 +109,14 @@ install_binary() {
 
   info "Extracting..."
   tar -xzf "$tmpdir/$tarball_name" -C "$tmpdir"
+
+  if [ "$DRY_RUN" = true ]; then
+    if [ -f "$tmpdir/otelcol-contrib" ]; then
+      ok "Dry run: binary would be installed to $INSTALL_DIR/bin/"
+      "$tmpdir/otelcol-contrib" --version 2>/dev/null || true
+      return 0
+    fi
+  fi
 
   sudo mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
   sudo cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
@@ -170,7 +190,6 @@ install_linux_service() {
 
   info "Installing systemd service..."
 
-  # Create system user if not exists
   if ! id -u o11yfleet >/dev/null 2>&1; then
     sudo useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
   fi
@@ -239,17 +258,7 @@ PLIST
 
 # ─── Main ──────────────────────────────────────────────────────────────
 main() {
-  set -euo pipefail
-
-  # ─── Defaults ──────────────────────────────────────────────────────────
-  OTELCOL_VERSION="${OTELCOL_VERSION:-0.151.0}"
-  OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
-  INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
-  TOKEN=""
-  UNINSTALL=false
-  UPGRADE=false
-
-  # ─── Parse args ────────────────────────────────────────────────────────
+  # ─── Parse args ───────────────────────────────────────────────────────
   while [ $# -gt 0 ]; do
     case "$1" in
       --token)
@@ -277,12 +286,13 @@ main() {
         INSTALL_DIR="$2"; shift 2 ;;
       --dir=*)      INSTALL_DIR="${1#*=}"; shift ;;
       --uninstall)  UNINSTALL=true; shift ;;
+      --dry-run)    DRY_RUN=true; shift ;;
       --help|-h)
         cat <<EOF
 O11yFleet Collector Installer
 
 Usage:
-  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+  curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
   --token TOKEN       Enrollment token (required, starts with fp_enroll_)
@@ -290,6 +300,7 @@ Options:
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Install directory (default: $INSTALL_DIR)
   --uninstall         Remove O11yFleet collector and config
+  --dry-run           Download and verify only, don't install service
   -h, --help          Show this help
 EOF
         exit 0 ;;
@@ -308,17 +319,23 @@ EOF
     do_uninstall
   fi
 
-  if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required. Usage:\n  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
+  if [ -z "$TOKEN" ] && [ "$DRY_RUN" = false ]; then
+    fail "Enrollment token required. Usage:\n  curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
   fi
 
-  case "$TOKEN" in
-    fp_enroll_*) ;;
-    *) warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?" ;;
-  esac
+  if [ -n "$TOKEN" ]; then
+    case "$TOKEN" in
+      fp_enroll_*) ;;
+      *) warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?" ;;
+    esac
+  fi
+
+  if [ "$DRY_RUN" = true ]; then
+    info "Dry run mode — downloading and verifying only"
+  fi
 
   # ─── Upgrade detection ─────────────────────────────────────────────────
-  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ]; then
+  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] && [ "$DRY_RUN" = false ]; then
     UPGRADE=true
     info "Existing installation detected at $INSTALL_DIR"
     info "Upgrading existing installation..."
@@ -326,6 +343,11 @@ EOF
 
   check_prereqs
   install_binary
+
+  if [ "$DRY_RUN" = true ]; then
+    ok "Dry run complete."
+    exit 0
+  fi
 
   # ─── Instance UID persistence ──────────────────────────────────────────
   local uid_file="$INSTALL_DIR/instance-uid"
@@ -357,7 +379,7 @@ EOF
     darwin) echo "  tail -f /var/log/o11yfleet-collector.log" ;;
   esac
   info "Uninstall:"
-  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --uninstall"
+  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh | bash -s -- --uninstall"
   echo ""
 }
 

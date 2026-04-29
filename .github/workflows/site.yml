@@ -19,6 +19,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
+      - name: Sync installer from o11yfleet-installers (canonical source with CI)
+        run: |
+          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.sh -o apps/site/public/install.sh
+          chmod +x apps/site/public/install.sh
+
       - uses: pnpm/action-setup@v6
 
       - uses: actions/setup-node@v6
