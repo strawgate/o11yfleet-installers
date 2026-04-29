@@ -30,10 +30,6 @@ jobs:
           - os: macos
             runner: macos-14
             arch: arm64
-          # macOS Intel
-          - os: macos
-            runner: macos-13
-            arch: amd64
           # Windows amd64
           - os: windows
             runner: windows-2022

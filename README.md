@@ -42,7 +42,6 @@ CI runs on every push and PR (path-filtered to installers/ and workflow changes)
 - Ubuntu 24.04 (amd64)
 - macOS 15 (Apple Silicon M4)
 - macOS 14 (Apple Silicon M3)
-- macOS 13 (Intel)
 - Windows 2022 (amd64)
 
 Linux ARM64 binaries are validated via checksum verification since no standard GitHub ARM64 runner is available.
