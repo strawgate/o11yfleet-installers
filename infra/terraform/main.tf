@@ -21,10 +21,11 @@ locals {
   r2_bucket_name   = coalesce(var.r2_bucket_name, "${local.name_prefix}-configs")
   queue_name       = coalesce(var.queue_name, "${local.name_prefix}-events")
 
-  site_domain  = coalesce(var.site_domain, local.env_slug == "prod" ? var.zone_name : "${local.env_slug}.${var.zone_name}")
-  app_domain   = coalesce(var.app_domain, local.env_slug == "prod" ? "app.${var.zone_name}" : "${local.env_slug}-app.${var.zone_name}")
-  admin_domain = coalesce(var.admin_domain, local.env_slug == "prod" ? "admin.${var.zone_name}" : "${local.env_slug}-admin.${var.zone_name}")
-  api_domain   = coalesce(var.api_domain, local.env_slug == "prod" ? "api.${var.zone_name}" : "${local.env_slug}-api.${var.zone_name}")
+  site_domain     = coalesce(var.site_domain, local.env_slug == "prod" ? var.zone_name : "${local.env_slug}.${var.zone_name}")
+  app_domain      = coalesce(var.app_domain, local.env_slug == "prod" ? "app.${var.zone_name}" : "${local.env_slug}-app.${var.zone_name}")
+  admin_domain    = coalesce(var.admin_domain, local.env_slug == "prod" ? "admin.${var.zone_name}" : "${local.env_slug}-admin.${var.zone_name}")
+  api_domain      = coalesce(var.api_domain, local.env_slug == "prod" ? "api.${var.zone_name}" : "${local.env_slug}-api.${var.zone_name}")
+  api_record_name = trimsuffix(local.api_domain, ".${var.zone_name}")
 
   admin_access_allowed_emails        = distinct(compact([for email in var.admin_access_allowed_emails : trimspace(email)]))
   admin_access_allowed_email_domains = distinct(compact([for domain in var.admin_access_allowed_email_domains : trimspace(domain)]))
@@ -67,7 +68,7 @@ resource "cloudflare_queue" "events" {
 
 resource "cloudflare_record" "api" {
   zone_id         = var.cloudflare_zone_id
-  name            = local.api_domain
+  name            = local.api_record_name
   type            = "AAAA"
   content         = "100::"
   proxied         = true
