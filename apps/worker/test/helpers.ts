@@ -64,12 +64,15 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
     if (!headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${API_SECRET}`);
     }
-    if (url.includes("/api/v1/") && !headers.has("X-Tenant-Id")) {
-      const tenantId = tenantIdFromRequest(url, { ...init, headers });
-      if (!tenantId) {
-        throw new Error(`Could not derive X-Tenant-Id for ${url}`);
+    if (url.includes("/api/v1/")) {
+      const existingTenantId = headers.get("X-Tenant-Id")?.trim() ?? "";
+      if (!existingTenantId) {
+        headers.delete("X-Tenant-Id");
+        const tenantId = tenantIdFromRequest(url, { ...init, headers })?.trim() ?? "";
+        if (tenantId) {
+          headers.set("X-Tenant-Id", tenantId);
+        }
       }
-      headers.set("X-Tenant-Id", tenantId);
     }
     const response = await exports.default.fetch(url, { ...init, headers });
     if (

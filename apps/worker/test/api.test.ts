@@ -54,6 +54,22 @@ describe("API routes", () => {
     expect(body.name).toBe("production");
   });
 
+  it("derives tenant scope when test helper receives a blank tenant header", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: "Blank Header Test Corp" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const tenant = await tenantRes.json<{ id: string }>();
+
+    const response = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: "blank-header" }),
+      headers: { "Content-Type": "application/json", "X-Tenant-Id": " " },
+    });
+    expect(response.status).toBe(201);
+  });
+
   it("POST /api/v1/configurations trims and validates configuration name", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
       method: "POST",
