@@ -58,7 +58,7 @@ The production tfvars intentionally point D1/R2/Queue at the existing names so t
 
 - Pull requests validate Terraform and, once remote state is enabled, run a production plan.
 - Pushes to `main` run the same plan and apply production only when explicitly enabled.
-- Manual dispatch can plan either `staging` or `prod`; applying still runs through the `production` GitHub environment.
+- Manual dispatch can plan either `staging` or `prod`; applying is restricted to the `main` branch and still runs through the `production` GitHub environment.
 
 Repository secrets:
 
@@ -78,7 +78,9 @@ Repository variables:
 | `TERRAFORM_REMOTE_STATE_ENABLED` | Set to `true` after the state bucket exists   |
 | `TERRAFORM_APPLY_ENABLED`        | Set to `true` only after production imports   |
 
-The `production` GitHub environment should require reviewer approval. Leave
+The `production` GitHub environment should require reviewer approval when the
+GitHub plan supports it. If required reviewers are not available, restrict the
+environment to the `main` deployment branch policy and leave
 `TERRAFORM_APPLY_ENABLED` unset until the first production imports are complete
 and the plan shows no replacement for D1, R2, or Queue.
 
