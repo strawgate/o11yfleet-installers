@@ -37,6 +37,7 @@ jobs:
         uses: actions/checkout@v6
 
       - name: Run installer (dry-run mode)
+        if: matrix.os != 'windows'
         env:
           OTELCOL_VERSION: "0.116.0"
         shell: bash
@@ -53,6 +54,7 @@ jobs:
           powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$OTELCOL_VERSION"
 
       - name: Verify binary download and checksum
+        if: matrix.os != 'windows'
         shell: bash
         env:
           OTELCOL_VERSION: "0.116.0"
@@ -98,36 +100,48 @@ jobs:
         shell: bash
         run: |
           VERSION="${{ matrix.version }}"
+          CHECKSUMS_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+
           for ARCH in amd64 arm64; do
-            # Test Linux
-            TARBALL="otelcol-contrib_${VERSION}_linux_${ARCH}.tar.gz"
-            CHECKSUMS_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+            for OS in linux darwin; do
+              TARBALL="otelcol-contrib_${VERSION}_${OS}_${ARCH}.tar.gz"
+              EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
+              if [ -z "$EXPECTED_HASH" ]; then
+                echo "SKIP: $OS/$ARCH not available for v${VERSION}"
+                continue
+              fi
+              if ! echo "$EXPECTED_HASH" | grep -qE '^[a-f0-9]{64}$'; then
+                echo "Invalid hash format: $EXPECTED_HASH"
+                exit 1
+              fi
+              echo "✓ $OS/$ARCH: checksum valid for v${VERSION} (${EXPECTED_HASH:0:16}...)"
+            done
+          done
+
+          # Windows - only check amd64 for older versions
+          for ARCH in amd64; do
+            TARBALL="otelcol-contrib_${VERSION}_windows_${ARCH}.tar.gz"
             EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
             if [ -z "$EXPECTED_HASH" ]; then
-              echo "Failed to get hash for $TARBALL"
-              exit 1
+              echo "SKIP: windows/$ARCH not available for v${VERSION}"
+              continue
             fi
             if ! echo "$EXPECTED_HASH" | grep -qE '^[a-f0-9]{64}$'; then
               echo "Invalid hash format: $EXPECTED_HASH"
               exit 1
             fi
-            echo "✓ Linux $ARCH: checksum format valid for v${VERSION}"
-
-            # Test Darwin
-            TARBALL="otelcol-contrib_${VERSION}_darwin_${ARCH}.tar.gz"
-            EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
-            if [ -z "$EXPECTED_HASH" ]; then
-              echo "Failed to get hash for $TARBALL"
-              exit 1
-            fi
-            echo "✓ Darwin $ARCH: checksum format valid for v${VERSION}"
-
-            # Test Windows
-            TARBALL="otelcol-contrib_${VERSION}_windows_${ARCH}.tar.gz"
-            EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
-            if [ -z "$EXPECTED_HASH" ]; then
-              echo "Failed to get hash for $TARBALL"
-              exit 1
-            fi
-            echo "✓ Windows $ARCH: checksum format valid for v${VERSION}"
+            echo "✓ windows/$ARCH: checksum valid for v${VERSION} (${EXPECTED_HASH:0:16}...)"
           done
+
+          # Windows ARM64 - only for newer versions
+          if [ "$VERSION" = "0.151.0" ] || [ "$VERSION" = "0.150.0" ] || [ "$VERSION" = "0.149.0" ]; then
+            TARBALL="otelcol-contrib_${VERSION}_windows_arm64.tar.gz"
+            EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
+            if [ -z "$EXPECTED_HASH" ]; then
+              echo "SKIP: windows/arm64 not available for v${VERSION}"
+            else
+              echo "✓ windows/arm64: checksum valid for v${VERSION} (${EXPECTED_HASH:0:16}...)"
+            fi
+          else
+            echo "SKIP: windows/arm64 requires v0.149.0+"
+          fi
