@@ -8,6 +8,70 @@ default:
 install:
     pnpm install
 
+    # Check environment readiness
+doctor:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    FAIL=0
+
+    echo "=== o11yFleet Environment Check ==="
+
+    node --version | grep -qE "^v(2[2-9]|[3-9][0-9])\." && echo "✓ Node.js 22+" || { echo "✗ Node.js 22+ required"; FAIL=1; }
+    pnpm --version | grep -qE "^(9|[1-9][0-9])\." && echo "✓ pnpm 9+" || { echo "✗ pnpm 9+ required"; FAIL=1; }
+    just --version | grep -qE "[0-9]+\.[0-9]+" && echo "✓ just" || { echo "✗ just required"; FAIL=1; }
+    npx wrangler --version | grep -qE "^[0-9]+\." && echo "✓ wrangler" || { echo "✗ wrangler required"; FAIL=1; }
+
+    if [ -f apps/worker/.dev.vars ]; then
+        echo "✓ .dev.vars exists"
+    else
+        echo "✗ .dev.vars missing (run: cp apps/worker/.dev.vars.example apps/worker/.dev.vars)"
+        FAIL=1
+    fi
+
+    if [ -f apps/worker/.dev.vars ]; then
+        read_dev_var() {
+            awk -F= -v key="$1" '
+                /^[[:space:]]*#/ { next }
+                $1 ~ "^[[:space:]]*" key "[[:space:]]*$" {
+                    sub(/^[^=]*=/, "")
+                    gsub(/^[[:space:]]+|[[:space:]]+$/, "")
+                    print
+                    exit
+                }
+            ' apps/worker/.dev.vars
+        }
+
+        API_SECRET=$(read_dev_var API_SECRET)
+        if [ -z "$API_SECRET" ] || [[ "$API_SECRET" == dev-local* ]]; then
+            echo "✗ API_SECRET missing or placeholder — update .dev.vars with a real value"
+            FAIL=1
+        else
+            echo "✓ API_SECRET set in .dev.vars"
+        fi
+        CLAIM_SECRET=$(read_dev_var CLAIM_SECRET)
+        if [ -z "$CLAIM_SECRET" ] || [[ "$CLAIM_SECRET" == dev-local* ]]; then
+            echo "✗ CLAIM_SECRET missing or placeholder — update .dev.vars with a real value"
+            FAIL=1
+        else
+            echo "✓ CLAIM_SECRET set in .dev.vars"
+        fi
+    fi
+
+    if npx wrangler whoami &>/dev/null; then
+        echo "✓ Cloudflare authenticated"
+    else
+        echo "✗ Cloudflare not authenticated (run: npx wrangler login)"
+        FAIL=1
+    fi
+
+    echo ""
+    if [ "$FAIL" -eq 0 ]; then
+        echo "✓ Environment ready!"
+    else
+        echo "✗ Fix the issues above before continuing"
+        exit 1
+    fi
+
 # Smart changed-file check for the current branch/worktree
 check:
     pnpm tsx scripts/dev-check.ts

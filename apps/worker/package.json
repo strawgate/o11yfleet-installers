@@ -8,7 +8,7 @@
     "deploy": "wrangler deploy",
     "lint": "eslint src/ test/",
     "typecheck": "pnpm run typegen:ensure && tsc --noEmit",
-    "typegen": "wrangler types src/worker-configuration.d.ts --include-runtime false",
+    "typegen": "wrangler types src/worker-configuration.d.ts --include-runtime false --env-file .empty.env",
     "typegen:ensure": "test -f src/worker-configuration.d.ts || pnpm run typegen",
     "typegen:check": "pnpm run typegen && git -C ../.. ls-files --error-unmatch apps/worker/src/worker-configuration.d.ts >/dev/null && git -C ../.. diff --exit-code -- apps/worker/src/worker-configuration.d.ts",
     "test": "vitest run --config vitest.node.config.ts",

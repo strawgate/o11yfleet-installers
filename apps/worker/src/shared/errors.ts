@@ -21,7 +21,8 @@ export class ApiError extends Error {
 }
 
 /**
- * Parse JSON body, throwing ApiError on invalid JSON or missing fields.
+ * Parse and return the request JSON, throwing ApiError on JSON parse failures.
+ * Required-field and schema validation should happen at the call site.
  */
 export async function parseJsonBody<T>(request: Request): Promise<T> {
   return request.json<T>().catch(() => {

@@ -1,0 +1,15 @@
+# o11yFleet local development environment variables
+# Copy this file to .dev.vars and fill in your values:
+#   cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+
+# Required: API secret for bearer token auth (any long random string)
+API_SECRET=dev-local-api-secret-1234567890x
+
+# Required: Secret for HMAC-SHA256 signing of enrollment token claims
+CLAIM_SECRET=dev-local-claim-secret-12345678x
+
+# Optional: AI guidance provider settings
+# LLM_PROVIDER=minimax
+# MINIMAX_API_KEY=your-minimax-api-key
+# LLM_BASE_URL=https://api.minimax.io/v1
+# LLM_MODEL=MiniMax-M2.7
