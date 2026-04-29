@@ -99,7 +99,8 @@ jobs:
           echo "=== API smoke: create tenant ==="
           API_SECRET="${{ secrets.API_SECRET }}"
           SEED_RESP=$(curl -s -X POST "$WORKER_URL/auth/seed" \
-            -H "Content-Type: application/json")
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_SECRET")
           TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
           if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
             echo "Failed to seed: $SEED_RESP"
@@ -134,10 +135,15 @@ jobs:
           echo "✓ Created enrollment token"
 
           echo "=== API smoke: config stats (v1) ==="
-          STATS=$(curl -s "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
+          HTTP_STATUS=$(curl -s -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
             -H "Authorization: Bearer $API_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID")
-          echo "Stats: $STATS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Stats endpoint failed: HTTP $HTTP_STATUS"
+            cat /tmp/stats.json
+            exit 1
+          fi
+          echo "Stats: $(cat /tmp/stats.json)"
           echo "✓ Stats endpoint responding"
 
           echo "✓ Production smoke tests passed"

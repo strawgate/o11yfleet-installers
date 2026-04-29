@@ -280,7 +280,8 @@ jobs:
 
           echo "=== Seed demo tenant ==="
           SEED_RESP=$(curl -s -X POST "$WORKER_URL/auth/seed" \
-            -H "Content-Type: application/json")
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $API_SECRET")
           TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
           if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
             echo "Failed to seed: $SEED_RESP"

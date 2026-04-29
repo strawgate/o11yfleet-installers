@@ -900,7 +900,7 @@ These should be documented.
 ### A. No GitOps Code
 
 ```bash
-$ grep -r "github\|oauth\|webhook" apps/worker/src —include="*.ts"
+$ grep -r "github\|oauth\|webhook" apps/worker/src --include="*.ts"
 # (nothing except unrelated GitHub URLs in comments)
 $ grep -r "git" apps/web/src/pages/portal
 # (no matches)
