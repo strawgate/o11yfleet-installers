@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint-format:
+  lint-typecheck:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -40,29 +40,13 @@ jobs:
       - name: Format check
         run: pnpm prettier --check .
 
-  typecheck:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Worker typegen drift check
         run: pnpm --filter @o11yfleet/worker typegen:check
 
       - name: Type check
         run: pnpm turbo typecheck
 
-  test-core:
+  test-fast:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -81,28 +65,12 @@ jobs:
       - name: Core tests (codec, state machine, auth)
         run: pnpm --filter @o11yfleet/core test
 
-  test-site:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Site tests
         run: pnpm --filter @o11yfleet/site test
 
-  test-worker:
+  test-slow:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -119,7 +87,24 @@ jobs:
       - name: Worker tests (workerd runtime)
         run: pnpm --filter @o11yfleet/worker test:runtime
 
-  bundle-size:
+      - name: Install Playwright browser
+        run: pnpm --filter @o11yfleet/ui-tests exec playwright install --with-deps chromium
+
+      - name: Run UI tests
+        run: pnpm --filter @o11yfleet/ui-tests test:e2e
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-artifacts
+          path: |
+            tests/ui/playwright-report
+            tests/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 7
+
+  deploy-validate:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -152,45 +137,12 @@ jobs:
           echo "Bundle: $BUNDLE"
           echo "Raw size: $((RAW_SIZE / 1024)) KB"
           echo "Gzip size: $((GZIP_SIZE / 1024)) KB"
-          # Workers limit: 10MB compressed for paid, 1MB free
-          MAX_GZIP=$((3 * 1024 * 1024))  # 3MB compressed budget
+          MAX_GZIP=$((3 * 1024 * 1024))
           if [ "$GZIP_SIZE" -gt "$MAX_GZIP" ]; then
             echo "❌ Bundle exceeds 3MB compressed budget ($((GZIP_SIZE / 1024)) KB)"
             exit 1
           fi
           echo "✓ Bundle size OK"
-
-  benchmark:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Run benchmarks
-        run: pnpm tsx experiments/src/benchmark.ts 2>&1 | tee benchmark-results.txt
-
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v7
-        with:
-          name: benchmark-results
-          path: benchmark-results.txt
-          retention-days: 30
-
-  terraform:
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    steps:
-      - uses: actions/checkout@v6
 
       - name: Terraform validate
         uses: hashicorp/setup-terraform@v4
@@ -201,41 +153,8 @@ jobs:
           terraform init -backend=false
           terraform validate
 
-  test-ui:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Install Playwright browser
-        run: pnpm --filter @o11yfleet/ui-tests exec playwright install --with-deps chromium
-
-      - name: Run UI tests
-        run: pnpm --filter @o11yfleet/ui-tests test:e2e
-
-      - name: Upload Playwright artifacts
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: playwright-artifacts
-          path: |
-            tests/ui/playwright-report
-            tests/ui/test-results
-          if-no-files-found: ignore
-          retention-days: 7
-
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-site, test-worker, test-ui, bundle-size, terraform]
+    needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
@@ -316,10 +235,15 @@ jobs:
           echo "✓ Created enrollment token"
 
           echo "=== API smoke: config stats (v1) ==="
-          STATS=$(curl -s "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
+          HTTP_STATUS=$(curl -s -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
             -H "Authorization: Bearer $API_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID")
-          echo "Stats: $STATS"
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "Stats endpoint failed: HTTP $HTTP_STATUS"
+            cat /tmp/stats.json
+            exit 1
+          fi
+          echo "Stats: $(cat /tmp/stats.json)"
           echo "✓ Stats endpoint responding"
 
           echo ""
