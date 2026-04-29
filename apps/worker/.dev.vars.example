@@ -8,11 +8,12 @@ API_SECRET=dev-local-api-secret-1234567890x
 # Required: Secret for HMAC-SHA256 signing of enrollment token claims
 CLAIM_SECRET=dev-local-claim-secret-12345678x
 
-# Optional: local login seed accounts. The Worker defaults to these values when unset.
-# SEED_TENANT_USER_EMAIL=demo@o11yfleet.com
-# SEED_TENANT_USER_PASSWORD=demo-password
-# SEED_ADMIN_EMAIL=admin@o11yfleet.com
-# SEED_ADMIN_PASSWORD=admin-password
+# Required: local seed accounts used by /auth/seed
+# Dev-only placeholders; replace before using any shared or production environment.
+SEED_TENANT_USER_EMAIL=demo@o11yfleet.com
+SEED_TENANT_USER_PASSWORD=demo-change-me-dev-only
+SEED_ADMIN_EMAIL=admin@o11yfleet.com
+SEED_ADMIN_PASSWORD=admin-change-me-dev-only
 
 # Optional: AI guidance provider settings
 # LLM_PROVIDER=minimax

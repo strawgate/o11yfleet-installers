@@ -133,6 +133,20 @@ variable "worker_inherited_binding_names" {
     "SEED_TENANT_USER_EMAIL",
     "SEED_TENANT_USER_PASSWORD",
   ]
+
+  validation {
+    condition = alltrue([
+      for name in [
+        "API_SECRET",
+        "CLAIM_SECRET",
+        "SEED_ADMIN_EMAIL",
+        "SEED_ADMIN_PASSWORD",
+        "SEED_TENANT_USER_EMAIL",
+        "SEED_TENANT_USER_PASSWORD",
+      ] : contains(var.worker_inherited_binding_names, name)
+    ])
+    error_message = "worker_inherited_binding_names must include the Worker secrets listed in apps/worker/wrangler.jsonc secrets.required."
+  }
 }
 
 variable "worker_durable_object_migration_tag" {

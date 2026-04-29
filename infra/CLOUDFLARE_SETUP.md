@@ -72,6 +72,12 @@ deployed environment. Terraform-managed Worker versions inherit `API_SECRET`
 default. Provision them before Terraform Worker deployments so the uploaded
 version can inherit the secret bindings.
 
+`apps/worker/wrangler.jsonc` also declares these names under
+`secrets.required` for the base, staging, and production Worker environments.
+That makes Wrangler fail deploys/version uploads when a required secret binding
+is missing, while Terraform validates that the production Worker version keeps
+the same required inherited bindings.
+
 ```bash
 cd apps/worker
 pnpm wrangler secret put CLAIM_SECRET --env staging

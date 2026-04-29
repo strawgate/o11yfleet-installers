@@ -172,7 +172,10 @@ provisioning secret values with `wrangler secret put` until the project adopts
 Cloudflare Secrets Store or another Terraform-managed secret source. If a
 production Worker relies on additional dashboard/Wrangler-managed bindings, add
 their names to `worker_inherited_binding_names` before the first Terraform
-Worker deployment.
+Worker deployment. Terraform validates that this inherited binding list still
+contains the runtime secrets declared in `apps/worker/wrangler.jsonc`
+`secrets.required`, so deploy plans cannot accidentally drop one of the required
+secret bindings.
 
 For production, run `wrangler secret put` against the base Worker script
 identity, without `--env production`. Terraform owns the production

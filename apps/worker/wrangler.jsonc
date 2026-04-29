@@ -5,6 +5,18 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": true,
   "vars": {},
+  // Wrangler treats secrets as non-inheritable, so keep this list mirrored in
+  // each named environment below.
+  "secrets": {
+    "required": [
+      "API_SECRET",
+      "CLAIM_SECRET",
+      "SEED_ADMIN_EMAIL",
+      "SEED_ADMIN_PASSWORD",
+      "SEED_TENANT_USER_EMAIL",
+      "SEED_TENANT_USER_PASSWORD",
+    ],
+  },
   "d1_databases": [
     {
       "binding": "FP_DB",
@@ -63,6 +75,16 @@
       "vars": {
         "ENVIRONMENT": "staging",
       },
+      "secrets": {
+        "required": [
+          "API_SECRET",
+          "CLAIM_SECRET",
+          "SEED_ADMIN_EMAIL",
+          "SEED_ADMIN_PASSWORD",
+          "SEED_TENANT_USER_EMAIL",
+          "SEED_TENANT_USER_PASSWORD",
+        ],
+      },
       "observability": {
         "enabled": true,
         "head_sampling_rate": 1,
@@ -120,6 +142,16 @@
       "main": "src/instrumented.ts",
       "vars": {
         "ENVIRONMENT": "production",
+      },
+      "secrets": {
+        "required": [
+          "API_SECRET",
+          "CLAIM_SECRET",
+          "SEED_ADMIN_EMAIL",
+          "SEED_ADMIN_PASSWORD",
+          "SEED_TENANT_USER_EMAIL",
+          "SEED_TENANT_USER_PASSWORD",
+        ],
       },
       "d1_databases": [
         {
