@@ -353,7 +353,7 @@ EOF
   if [ -f "$uid_file" ]; then
     INSTANCE_UID="$(cat "$uid_file")"
   else
-    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
+    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32 | tr '[:upper:]' '[:lower:]')"
     echo "$INSTANCE_UID" | sudo tee "$uid_file" >/dev/null
   fi
 

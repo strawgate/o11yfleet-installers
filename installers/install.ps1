@@ -27,7 +27,7 @@ else { Write-Fail "Unsupported architecture: $Arch" }
 $OS = "windows"
 $Tarball = "otelcol-contrib_${Version}_${OS}_${Arch}.tar.gz"
 $Url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/${Tarball}"
-$ChecksumUrl = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+$ChecksumUrl = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/opentelemetry-collector-releases_otelcol-contrib_windows_checksums.txt"
 
 Write-Host ""
 Write-Host "  O11yFleet Collector Installer" -ForegroundColor Cyan

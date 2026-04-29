@@ -39,7 +39,7 @@ jobs:
       - name: Run installer (dry-run mode)
         if: matrix.os != 'windows'
         env:
-          OTELCOL_VERSION: "0.116.0"
+          OTELCOL_VERSION: "0.151.0"
         shell: bash
         run: |
           chmod +x installers/install.sh
@@ -49,7 +49,7 @@ jobs:
         if: matrix.os == 'windows'
         shell: pwsh
         env:
-          OTELCOL_VERSION: "0.116.0"
+          OTELCOL_VERSION: "0.151.0"
         run: |
           powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$env:OTELCOL_VERSION"
 
@@ -57,7 +57,7 @@ jobs:
         if: matrix.os != 'windows'
         shell: bash
         env:
-          OTELCOL_VERSION: "0.116.0"
+          OTELCOL_VERSION: "0.151.0"
         run: |
           chmod +x installers/install.sh
           TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
@@ -69,7 +69,7 @@ jobs:
         if: matrix.os == 'windows'
         shell: pwsh
         env:
-          OTELCOL_VERSION: "0.116.0"
+          OTELCOL_VERSION: "0.151.0"
         run: |
           $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
           powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$env:OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir $TEST_DIR
