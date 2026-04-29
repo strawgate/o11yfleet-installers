@@ -204,6 +204,60 @@ test.describe("AI guidance surfaces", () => {
     expect(runtime.errors).toEqual([]);
   });
 
+  test("admin overview hides empty guidance instead of rendering placeholder noise", async ({
+    page,
+  }) => {
+    const runtime = collectRuntimeErrors(page);
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "admin-1",
+        email: "admin@o11yfleet.com",
+        displayName: "Admin",
+        role: "admin",
+        tenantId: null,
+      },
+    });
+    await mockJson(page, "/api/admin/overview", {
+      total_tenants: 1,
+      total_configurations: 0,
+      total_agents: 0,
+      total_active_tokens: 0,
+      total_users: 1,
+    });
+    await mockJson(page, "/api/admin/health", {
+      status: "healthy",
+      checks: { worker: { status: "healthy" } },
+      timestamp: "2026-04-28T20:00:00.000Z",
+    });
+    await mockJson(page, "/api/admin/tenants", { tenants: [] });
+    let guidanceResponses = 0;
+    await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {
+      expectUniqueTargetKeys(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "No non-obvious guidance found in the provided admin.overview context.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "o11yfleet-guidance-fixture",
+          items: [],
+        }),
+      });
+      guidanceResponses += 1;
+    });
+
+    await page.goto(`${UI_URL}/admin/overview?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Admin Overview" })).toBeVisible();
+    await expect.poll(() => guidanceResponses).toBe(1);
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
+    await expect(page.getByText("No targeted guidance")).toHaveCount(0);
+    await expect(page.getByText("No non-obvious guidance")).toHaveCount(0);
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
   test("portal overview hides empty guidance instead of rendering placeholder noise", async ({
     page,
   }) => {
@@ -327,6 +381,87 @@ test.describe("AI guidance surfaces", () => {
     await expect(page.locator(".ai-panel")).toHaveCount(0);
     await expect(page.getByText("Guidance unavailable")).toHaveCount(0);
     await expect(page.getByText("Not Found")).toHaveCount(0);
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("command palette navigation still works when AI guidance is empty or unavailable", async ({
+    page,
+  }) => {
+    const runtime = collectRuntimeErrors(page);
+    let explainRequests = 0;
+    let riskRequests = 0;
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "user-1",
+        email: "demo@o11yfleet.com",
+        displayName: "Demo User",
+        role: "member",
+        tenantId: "tenant-1",
+      },
+    });
+    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockJson(page, "/api/v1/overview", {
+      tenant: { id: "tenant-1", name: "Demo Org" },
+      total_agents: 2,
+      connected_agents: 2,
+      healthy_agents: 2,
+      configs_count: 0,
+      configurations: [],
+    });
+    await mockJson(page, "/api/v1/configurations", { configurations: [] });
+    await page.route(`${API_URL}/api/v1/ai/guidance`, async (route) => {
+      const requestBody = route.request().postDataJSON() as { intent?: string };
+      if (requestBody.intent === "explain_page") {
+        explainRequests += 1;
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            summary: "No non-obvious guidance found in the provided browser context.",
+            generated_at: "2026-04-28T20:00:00.000Z",
+            model: "o11yfleet-guidance-fixture",
+          }),
+        });
+        return;
+      }
+      if (requestBody.intent === "triage_state") {
+        riskRequests += 1;
+        await route.fulfill({
+          status: 422,
+          contentType: "application/json",
+          body: JSON.stringify({ error: "Invalid AI guidance request" }),
+        });
+        return;
+      }
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "No page guidance.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "o11yfleet-guidance-fixture",
+          items: [],
+        }),
+      });
+    });
+
+    await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
+    await page.getByRole("button", { name: "Open command menu" }).click();
+    await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
+
+    await page.getByRole("option", { name: /Explain this page/ }).click();
+    await expect.poll(() => explainRequests).toBe(1);
+    await expect(page.getByText("No non-obvious guidance found")).toHaveCount(0);
+
+    await page.getByRole("option", { name: /Find operational risks/ }).click();
+    await expect.poll(() => riskRequests).toBeGreaterThanOrEqual(1);
+    await expect(page.getByText("Invalid AI guidance request")).toBeVisible();
+
+    await page.getByRole("combobox", { name: "Search collectors, configs, pages..." }).fill("age");
+    await page.getByRole("option", { name: /Agents Workspace/ }).click();
+    await expect(page).toHaveURL(/\/portal\/agents/);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });

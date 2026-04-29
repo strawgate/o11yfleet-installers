@@ -198,6 +198,7 @@ export function CommandPalette({ open, onClose, items, placeholder }: CommandPal
 
 function AiCommandResult({ state }: { state: AiCommandState }) {
   if (state.status === "idle") return null;
+  if (state.status === "success" && guidanceItems(state.guidance).length === 0) return null;
 
   return (
     <div className="border-t border-border bg-background/80 p-3">
@@ -216,7 +217,9 @@ function AiCommandResult({ state }: { state: AiCommandState }) {
 }
 
 function AiGuidancePreview({ guidance }: { guidance: AiGuidanceResponse }) {
-  const items = guidance.items.slice(0, 3);
+  const items = guidanceItems(guidance).slice(0, 3);
+
+  if (items.length === 0) return null;
 
   return (
     <div className="grid gap-2">
@@ -232,6 +235,31 @@ function AiGuidancePreview({ guidance }: { guidance: AiGuidanceResponse }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function guidanceItems(guidance: AiGuidanceResponse): AiGuidanceItem[] {
+  const items = (guidance as { items?: unknown }).items;
+  return Array.isArray(items) ? items.filter(isGuidanceItem) : [];
+}
+
+function isGuidanceItem(item: unknown): item is AiGuidanceItem {
+  if (!item || typeof item !== "object") return false;
+  const candidate = item as Partial<AiGuidanceItem>;
+  return (
+    typeof candidate.target_key === "string" &&
+    candidate.target_key.trim().length > 0 &&
+    typeof candidate.headline === "string" &&
+    candidate.headline.trim().length > 0 &&
+    typeof candidate.detail === "string" &&
+    candidate.detail.trim().length > 0 &&
+    (candidate.severity === "notice" ||
+      candidate.severity === "warning" ||
+      candidate.severity === "critical") &&
+    typeof candidate.confidence === "number" &&
+    Number.isFinite(candidate.confidence) &&
+    candidate.confidence >= 0 &&
+    candidate.confidence <= 1
   );
 }
 

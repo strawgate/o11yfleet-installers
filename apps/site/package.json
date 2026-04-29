@@ -9,7 +9,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint src/",
-    "test": "tsx --test test/*.test.mjs test/*.test.ts",
+    "test": "tsx --test test/*.test.mjs test/*.test.ts test/*.test.tsx",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

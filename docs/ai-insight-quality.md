@@ -32,6 +32,8 @@ when paired with evidence such as:
   and `critical` only for severe impact or an explicit threshold crossing.
 - Actions must stay inside the app and should be omitted when no safe action is obvious.
 - Empty model output should not produce a noisy empty AI card.
+- Empty model output in command surfaces should stay visually silent so search and
+  navigation remain the primary path.
 
 ## Candidate Layer
 
