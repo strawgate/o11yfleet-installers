@@ -9,7 +9,7 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 - Split Cloudflare Pages projects and custom domains for marketing, app, and admin.
 - Optional Cloudflare Access application and policy for the admin hostname.
 
-Wrangler still deploys Worker code and Pages assets. Terraform owns the resources those deploys target.
+Wrangler still deploys Worker code and Pages assets. Terraform owns the resources those deploys target. Terraform intentionally ignores Pages `deployment_configs` because those contain Pages Functions runtime defaults and secrets managed by Cloudflare/Wrangler deploys.
 
 ## Target Layout
 

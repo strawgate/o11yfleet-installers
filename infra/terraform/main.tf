@@ -88,6 +88,12 @@ resource "cloudflare_pages_project" "pages" {
   account_id        = var.cloudflare_account_id
   name              = each.value.name
   production_branch = var.production_branch
+
+  lifecycle {
+    # Wrangler and Cloudflare manage Pages runtime defaults and secrets; avoid
+    # Terraform rolling those deployment settings back during resource updates.
+    ignore_changes = [deployment_configs]
+  }
 }
 
 resource "cloudflare_pages_domain" "pages" {
