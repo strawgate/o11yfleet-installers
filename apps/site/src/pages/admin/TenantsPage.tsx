@@ -68,8 +68,8 @@ export default function TenantsPage() {
             <tr>
               <th>Name</th>
               <th>Plan</th>
-              <th>Configs</th>
-              <th>Agents</th>
+              <th>Config limit</th>
+              <th>Agent limit / config</th>
               <th>Created</th>
               <th />
             </tr>

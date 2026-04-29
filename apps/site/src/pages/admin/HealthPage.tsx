@@ -57,8 +57,8 @@ export default function HealthPage() {
       <div className="admin-callout mt-6">
         <strong>Health plane split</strong>
         <p>
-          D1, R2, Durable Objects, Queues, Analytics Engine, and Worker/API health can be degraded
-          independently from customer collector health. Keep paging and UI labels explicit.
+          D1, R2, Durable Objects, Queues, and Worker/API health can be degraded independently from
+          customer collector health. Keep paging and UI labels explicit.
         </p>
       </div>
 

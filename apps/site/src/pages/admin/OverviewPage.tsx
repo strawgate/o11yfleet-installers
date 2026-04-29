@@ -152,8 +152,8 @@ export default function OverviewPage() {
               <tr>
                 <th>Name</th>
                 <th>Plan</th>
-                <th>Max configs</th>
-                <th>Max agents</th>
+                <th>Config limit</th>
+                <th>Agent limit / config</th>
                 <th>Created</th>
               </tr>
             </thead>

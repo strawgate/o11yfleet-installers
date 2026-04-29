@@ -255,7 +255,7 @@ function SearchBar({ onOpen }: { onOpen: () => void }) {
         <circle cx="7" cy="7" r="4.5" />
         <path d="M10.5 10.5l3 3" strokeLinecap="round" />
       </svg>
-      <span>Search tenants, users…</span>
+      <span>Search pages…</span>
       <span className="kbd-hint">⌘K</span>
     </button>
   );
@@ -278,10 +278,13 @@ function Breadcrumbs() {
     <div className="crumbs">
       {segments.map((seg, i) => {
         const label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const isIdSegment = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+          seg,
+        );
         if (i === segments.length - 1) {
           return (
             <span key={seg} className="current">
-              {label}
+              {isIdSegment ? "Detail" : label}
             </span>
           );
         }
@@ -394,7 +397,7 @@ export default function AdminLayout() {
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
         items={navCommands(ADMIN_NAV)}
-        placeholder="Search tenants, users, pages..."
+        placeholder="Search pages..."
       />
 
       <main className="main">

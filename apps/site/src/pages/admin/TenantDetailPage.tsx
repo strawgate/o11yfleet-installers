@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate, Link, useSearchParams } from "react-router-dom";
 import {
   useAdminTenant,
   useAdminTenantConfigs,
@@ -27,9 +27,14 @@ import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "overview" | "configurations" | "users" | "settings";
 
+const TAB_KEYS = ["overview", "configurations", "users", "settings"] as const;
+const isTab = (value: string | null): value is Tab =>
+  value !== null && (TAB_KEYS as readonly string[]).includes(value);
+
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
   const tenant = useAdminTenant(id);
@@ -38,11 +43,16 @@ export default function TenantDetailPage() {
   const updateTenant = useUpdateAdminTenant(id!);
   const deleteTenant = useDeleteAdminTenant(id!);
 
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
+  const tabParam = searchParams.get("tab");
+  const [activeTab, setActiveTab] = useState<Tab>(isTab(tabParam) ? tabParam : "overview");
   const [editName, setEditName] = useState("");
   const [editPlan, setEditPlan] = useState("free");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+
+  useEffect(() => {
+    setActiveTab(isTab(tabParam) ? tabParam : "overview");
+  }, [tabParam]);
 
   useEffect(() => {
     if (tenant.data?.name && !editName) {
@@ -127,6 +137,11 @@ export default function TenantDetailPage() {
     { key: "settings", label: "Settings" },
   ];
 
+  function handleTabChange(tab: Tab) {
+    setActiveTab(tab);
+    setSearchParams(tab === "overview" ? {} : { tab });
+  }
+
   return (
     <>
       <div className="page-head">
@@ -149,7 +164,7 @@ export default function TenantDetailPage() {
           <button
             key={tab.key}
             className={`tab${activeTab === tab.key ? " active" : ""}`}
-            onClick={() => setActiveTab(tab.key)}
+            onClick={() => handleTabChange(tab.key)}
           >
             {tab.label}
           </button>

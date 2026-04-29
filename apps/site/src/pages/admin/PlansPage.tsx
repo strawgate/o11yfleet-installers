@@ -24,7 +24,7 @@ export default function PlansPage() {
             <tr>
               <th>Name</th>
               <th>Max configs</th>
-              <th>Max agents</th>
+              <th>Agent limit / config</th>
               <th>Price</th>
             </tr>
           </thead>
