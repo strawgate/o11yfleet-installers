@@ -19,27 +19,18 @@ jobs:
           - os: linux
             runner: ubuntu-24.04
             arch: amd64
-            shell: bash
-          # Linux arm64
-          - os: linux
-            runner: ubuntu-24.04-arm
-            arch: arm64
-            shell: bash
           # macOS Apple Silicon (M1-M4)
           - os: macos
             runner: macos-15
             arch: arm64
-            shell: bash
           # macOS Intel
           - os: macos
             runner: macos-13
             arch: amd64
-            shell: bash
           # Windows amd64
           - os: windows
-            runner: windows-2025
+            runner: windows-2022
             arch: amd64
-            shell: pwsh
 
     steps:
       - name: Checkout
@@ -48,34 +39,40 @@ jobs:
       - name: Run installer (dry-run mode)
         env:
           OTELCOL_VERSION: "0.116.0"
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$OTELCOL_VERSION"
-          else
-            chmod +x installers/install.sh
-            ./installers/install.sh --dry-run --version "$OTELCOL_VERSION"
-          fi
+          chmod +x installers/install.sh
+          ./installers/install.sh --dry-run --version "$OTELCOL_VERSION"
 
-      - name: Verify binary download and checksum
+      - name: Run Windows installer (dry-run mode)
+        if: matrix.os == 'windows'
+        shell: pwsh
         env:
           OTELCOL_VERSION: "0.116.0"
-        shell: ${{ matrix.shell }}
         run: |
-          if [ "${{ matrix.os }}" = "windows" ]; then
-            $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
-            powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir "$TEST_DIR"
-            if (Test-Path "$TEST_DIR\bin\otelcol-contrib.exe") {
-              Write-Host "Binary is executable"
-            }
-            Remove-Item -Recurse -Force "$TEST_DIR" -ErrorAction SilentlyContinue
-          else
-            chmod +x installers/install.sh
-            TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
-            sudo ./installers/install.sh --version "$OTELCOL_VERSION" --token "fp_enroll_test_dry_run_token" --dir "$TEST_DIR"
-            find /tmp -name "otelcol-contrib" -type f 2>/dev/null | head -1 | xargs -I{} test -x {} && echo "Binary is executable"
-            sudo rm -rf "$TEST_DIR" 2>/dev/null || true
-          fi
+          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -DryRun -Version "$OTELCOL_VERSION"
+
+      - name: Verify binary download and checksum
+        shell: bash
+        env:
+          OTELCOL_VERSION: "0.116.0"
+        run: |
+          chmod +x installers/install.sh
+          TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
+          sudo ./installers/install.sh --version "$OTELCOL_VERSION" --token "fp_enroll_test_dry_run_token" --dir "$TEST_DIR"
+          find /tmp -name "otelcol-contrib" -type f 2>/dev/null | head -1 | xargs -I{} test -x {} && echo "Binary is executable"
+          sudo rm -rf "$TEST_DIR" 2>/dev/null || true
+
+      - name: Verify Windows binary download and checksum
+        if: matrix.os == 'windows'
+        shell: pwsh
+        env:
+          OTELCOL_VERSION: "0.116.0"
+        run: |
+          $TEST_DIR = "$env:TEMP\o11y-test-$(Get-Random)"
+          powershell -ExecutionPolicy Bypass -File installers/install.ps1 -Version "$OTELCOL_VERSION" -Token "fp_enroll_test_dry_run_token" -InstallDir $TEST_DIR
+          if (Test-Path "$TEST_DIR\bin\otelcol-contrib.exe") { Write-Host "Binary exists" }
+          Remove-Item -Recurse -Force $TEST_DIR -ErrorAction SilentlyContinue
 
   shellcheck:
     name: ShellCheck install.sh
