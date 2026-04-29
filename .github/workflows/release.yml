@@ -49,6 +49,17 @@ jobs:
     if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubuntu-latest
     environment: production
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
+      TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
     steps:
       - uses: actions/checkout@v6
 
@@ -64,21 +75,29 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Deploy worker to production
-        uses: cloudflare/wrangler-action@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/worker
-          command: deploy --env=""
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Check Terraform remote state configuration
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test -n "$TF_STATE_ENDPOINT"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
+
+      - name: Check production imports
+        run: just tf-check-prod-imports prod
+
+      - name: Deploy worker to production with Terraform
+        run: just tf-apply-worker prod
 
       - name: Run D1 migrations
-        uses: cloudflare/wrangler-action@v3
-        with:
-          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          workingDirectory: apps/worker
-          command: d1 migrations apply FP_DB --remote
+        run: pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply FP_DB --remote
 
       - name: Smoke test production
         run: |

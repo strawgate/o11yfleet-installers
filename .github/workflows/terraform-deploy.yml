@@ -45,6 +45,7 @@ env:
   AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
   AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
   CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
 
 jobs:
   validate:
@@ -64,7 +65,15 @@ jobs:
 
   plan:
     needs: [validate]
-    if: ${{ vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true' }}
+    if: >-
+      ${{
+        vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true' &&
+        (
+          github.event_name == 'pull_request' ||
+          vars.TERRAFORM_PROVIDER_V5_STATE_READY == 'true' ||
+          github.event_name == 'workflow_dispatch'
+        )
+      }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -94,14 +103,22 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
 
       - name: Terraform plan
-        run: just tf-plan ${{ steps.target.outputs.env }}
+        run: |
+          if [ "$TERRAFORM_PROVIDER_V5_STATE_READY" != "true" ]; then
+            just tf-plan-empty-state ${{ steps.target.outputs.env }}
+          else
+            just tf-plan ${{ steps.target.outputs.env }}
+          fi
 
   apply:
     needs: [plan]
     if: >-
       ${{
-        (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_APPLY_ENABLED == 'true') ||
-        (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply && vars.TERRAFORM_APPLY_ENABLED == 'true')
+        vars.TERRAFORM_PROVIDER_V5_STATE_READY == 'true' &&
+        (
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_APPLY_ENABLED == 'true') ||
+          (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply && vars.TERRAFORM_APPLY_ENABLED == 'true')
+        )
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -123,6 +140,10 @@ jobs:
           else
             echo "env=prod" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Check production imports
+        if: ${{ steps.target.outputs.env == 'prod' }}
+        run: just tf-check-prod-imports prod
 
       - name: Terraform apply
         run: just tf-apply ${{ steps.target.outputs.env }}

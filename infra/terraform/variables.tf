@@ -59,8 +59,101 @@ variable "pages_functions_compatibility_date" {
 
 variable "worker_script_name" {
   type        = string
-  description = "Cloudflare Worker script name. Wrangler still deploys this script; Terraform owns DNS and route binding."
+  description = "Cloudflare Worker script name. Terraform owns the script identity, API route, queue consumer, and optionally code deployments."
   default     = "o11yfleet-worker"
+}
+
+variable "worker_subdomain_enabled" {
+  type        = bool
+  description = "Whether the Worker is available on the workers.dev subdomain."
+  default     = true
+}
+
+variable "worker_subdomain_previews_enabled" {
+  type        = bool
+  description = "Whether Worker preview URLs are enabled on workers.dev."
+  default     = true
+}
+
+variable "manage_worker_deployment" {
+  type        = bool
+  description = "When true, Terraform uploads a Worker version from worker_bundle_path and rolls deployment traffic to it."
+  default     = false
+}
+
+variable "worker_bundle_path" {
+  type        = string
+  description = "Path to the Wrangler-built Worker module that Terraform uploads when manage_worker_deployment is true."
+  default     = null
+}
+
+variable "worker_bundle_module_name" {
+  type        = string
+  description = "Module name Terraform sends to Cloudflare for the Worker bundle. Defaults to basename(worker_bundle_path)."
+  default     = null
+}
+
+variable "worker_bundle_content_type" {
+  type        = string
+  description = "Content type for the main Worker module uploaded by Terraform."
+  default     = "application/javascript+module"
+}
+
+variable "worker_compatibility_date" {
+  type        = string
+  description = "Compatibility date Terraform applies to Worker versions."
+  default     = "2026-04-29"
+
+  validation {
+    condition     = can(regex("^\\d{4}-\\d{2}-\\d{2}$", var.worker_compatibility_date))
+    error_message = "worker_compatibility_date must use YYYY-MM-DD format."
+  }
+}
+
+variable "worker_compatibility_flags" {
+  type        = set(string)
+  description = "Compatibility flags Terraform applies to Worker versions."
+  default     = ["nodejs_compat"]
+}
+
+variable "worker_analytics_engine_dataset" {
+  type        = string
+  description = "Analytics Engine dataset bound to FP_ANALYTICS in Terraform-managed Worker versions."
+  default     = "fp_analytics"
+}
+
+variable "worker_inherited_binding_names" {
+  type        = set(string)
+  description = "Existing Worker bindings to inherit from the latest deployed version, primarily secrets that should not be stored in Terraform state."
+  default     = ["API_SECRET", "CLAIM_SECRET"]
+}
+
+variable "worker_durable_object_migration_tag" {
+  type        = string
+  description = "Durable Object migration tag applied to Terraform-managed Worker versions."
+  default     = "v1"
+}
+
+variable "worker_queue_consumer_batch_size" {
+  type        = number
+  description = "Maximum number of messages delivered to the Worker queue consumer per batch."
+  default     = 100
+
+  validation {
+    condition     = var.worker_queue_consumer_batch_size >= 1 && var.worker_queue_consumer_batch_size <= 100
+    error_message = "worker_queue_consumer_batch_size must be between 1 and 100."
+  }
+}
+
+variable "worker_queue_consumer_max_wait_time_ms" {
+  type        = number
+  description = "Maximum time the queue waits for a batch to fill before invoking the Worker, in milliseconds."
+  default     = 5000
+
+  validation {
+    condition     = var.worker_queue_consumer_max_wait_time_ms >= 0 && var.worker_queue_consumer_max_wait_time_ms <= 60000
+    error_message = "worker_queue_consumer_max_wait_time_ms must be between 0 and 60000."
+  }
 }
 
 variable "d1_database_name" {
@@ -176,5 +269,12 @@ check "admin_access_has_identity_rule" {
       length(local.admin_access_allowed_email_domains) > 0
     )
     error_message = "enable_admin_access requires admin_access_allowed_emails or admin_access_allowed_email_domains."
+  }
+}
+
+check "worker_deployment_has_bundle" {
+  assert {
+    condition     = !var.manage_worker_deployment || try(length(trimspace(var.worker_bundle_path)) > 0, false)
+    error_message = "manage_worker_deployment requires worker_bundle_path."
   }
 }

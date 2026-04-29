@@ -1,5 +1,5 @@
 output "d1_database_id" {
-  value       = cloudflare_d1_database.fleet.id
+  value       = cloudflare_d1_database.fleet.uuid
   description = "D1 database ID for Wrangler FP_DB binding."
 }
 
@@ -19,18 +19,28 @@ output "r2_bucket_id" {
 }
 
 output "queue_name" {
-  value       = cloudflare_queue.events.name
+  value       = cloudflare_queue.events.queue_name
   description = "Queue name for Wrangler FP_EVENTS producer and consumer bindings."
 }
 
 output "queue_id" {
-  value       = cloudflare_queue.events.id
+  value       = cloudflare_queue.events.queue_id
   description = "Queue Terraform/provider ID."
 }
 
 output "api_domain" {
   value       = local.api_domain
   description = "API hostname routed to the Worker."
+}
+
+output "worker_name" {
+  value       = cloudflare_worker.fleet.name
+  description = "Worker script identity managed by Terraform."
+}
+
+output "worker_deployment_id" {
+  value       = var.manage_worker_deployment ? cloudflare_workers_deployment.fleet[0].id : null
+  description = "Active Terraform-managed Worker deployment ID when manage_worker_deployment is enabled."
 }
 
 output "pages_projects" {

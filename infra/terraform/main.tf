@@ -4,7 +4,7 @@ terraform {
   required_providers {
     cloudflare = {
       source  = "cloudflare/cloudflare"
-      version = "~> 4.52"
+      version = "~> 5.19"
     }
   }
 
@@ -49,37 +49,168 @@ locals {
     for key, project in local.pages_projects : key => project
     if contains(var.pages_custom_domains_to_attach, key)
   }
+
+  worker_environment_name   = local.env_slug == "prod" ? "production" : local.env_slug
+  worker_bundle_module_name = coalesce(var.worker_bundle_module_name, var.worker_bundle_path == null ? "index.js" : basename(var.worker_bundle_path))
+
+  worker_resource_bindings = [
+    {
+      name        = "FP_DB"
+      type        = "d1"
+      database_id = cloudflare_d1_database.fleet.uuid
+    },
+    {
+      name        = "FP_CONFIGS"
+      type        = "r2_bucket"
+      bucket_name = cloudflare_r2_bucket.configs.name
+    },
+    {
+      name       = "FP_EVENTS"
+      type       = "queue"
+      queue_name = cloudflare_queue.events.queue_name
+    },
+    {
+      name        = "CONFIG_DO"
+      type        = "durable_object_namespace"
+      class_name  = "ConfigDurableObject"
+      script_name = cloudflare_worker.fleet.name
+    },
+    {
+      name = "ENVIRONMENT"
+      type = "plain_text"
+      text = local.worker_environment_name
+    },
+    {
+      name    = "FP_ANALYTICS"
+      type    = "analytics_engine"
+      dataset = var.worker_analytics_engine_dataset
+    },
+  ]
+
+  worker_inherited_bindings = [
+    for name in var.worker_inherited_binding_names : {
+      name       = name
+      type       = "inherit"
+      version_id = "latest"
+    }
+  ]
 }
 
 resource "cloudflare_d1_database" "fleet" {
   account_id = var.cloudflare_account_id
   name       = local.d1_database_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "cloudflare_r2_bucket" "configs" {
   account_id = var.cloudflare_account_id
   name       = local.r2_bucket_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "cloudflare_queue" "events" {
   account_id = var.cloudflare_account_id
-  name       = local.queue_name
+  queue_name = local.queue_name
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
-resource "cloudflare_record" "api" {
-  zone_id         = var.cloudflare_zone_id
-  name            = local.api_record_name
-  type            = "AAAA"
-  content         = "100::"
-  proxied         = true
-  allow_overwrite = true
-  comment         = "Routes ${local.api_domain} to the ${var.worker_script_name} Worker"
+resource "cloudflare_dns_record" "api" {
+  zone_id = var.cloudflare_zone_id
+  name    = local.api_record_name
+  type    = "AAAA"
+  content = "100::"
+  ttl     = 1
+  proxied = true
+  comment = "Routes ${local.api_domain} to the ${var.worker_script_name} Worker"
+}
+
+resource "cloudflare_worker" "fleet" {
+  account_id = var.cloudflare_account_id
+  name       = var.worker_script_name
+
+  subdomain = {
+    enabled          = var.worker_subdomain_enabled
+    previews_enabled = var.worker_subdomain_previews_enabled
+  }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "cloudflare_workers_route" "api" {
-  zone_id     = var.cloudflare_zone_id
-  pattern     = "${local.api_domain}/*"
-  script_name = var.worker_script_name
+  zone_id = var.cloudflare_zone_id
+  pattern = "${local.api_domain}/*"
+  script  = cloudflare_worker.fleet.name
+}
+
+resource "cloudflare_worker_version" "fleet" {
+  count = var.manage_worker_deployment ? 1 : 0
+
+  account_id          = var.cloudflare_account_id
+  worker_id           = cloudflare_worker.fleet.id
+  compatibility_date  = var.worker_compatibility_date
+  compatibility_flags = var.worker_compatibility_flags
+  main_module         = local.worker_bundle_module_name
+
+  modules = [
+    {
+      name         = local.worker_bundle_module_name
+      content_type = var.worker_bundle_content_type
+      content_file = var.worker_bundle_path
+    }
+  ]
+
+  bindings = concat(local.worker_resource_bindings, local.worker_inherited_bindings)
+
+  migrations = {
+    new_tag            = var.worker_durable_object_migration_tag
+    new_sqlite_classes = ["ConfigDurableObject"]
+  }
+
+  annotations = {
+    workers_message = "Terraform-managed o11yFleet Worker version"
+  }
+}
+
+resource "cloudflare_workers_deployment" "fleet" {
+  count = var.manage_worker_deployment ? 1 : 0
+
+  account_id  = var.cloudflare_account_id
+  script_name = cloudflare_worker.fleet.name
+  strategy    = "percentage"
+
+  versions = [
+    {
+      version_id = cloudflare_worker_version.fleet[0].id
+      percentage = 100
+    }
+  ]
+
+  annotations = {
+    workers_message = "Terraform-managed o11yFleet Worker deployment"
+  }
+}
+
+resource "cloudflare_queue_consumer" "events" {
+  account_id  = var.cloudflare_account_id
+  queue_id    = cloudflare_queue.events.queue_id
+  type        = "worker"
+  script_name = cloudflare_worker.fleet.name
+
+  settings = {
+    batch_size       = var.worker_queue_consumer_batch_size
+    max_wait_time_ms = var.worker_queue_consumer_max_wait_time_ms
+  }
 }
 
 resource "cloudflare_pages_project" "pages" {
@@ -89,8 +220,8 @@ resource "cloudflare_pages_project" "pages" {
   name              = each.value.name
   production_branch = var.production_branch
 
-  deployment_configs {
-    production {
+  deployment_configs = {
+    production = {
       always_use_latest_compatibility_date = false
       compatibility_date                   = var.pages_functions_compatibility_date
       compatibility_flags                  = []
@@ -101,10 +232,9 @@ resource "cloudflare_pages_project" "pages" {
       kv_namespaces                        = {}
       r2_buckets                           = {}
       secrets                              = {}
-      usage_model                          = "bundled"
     }
 
-    preview {
+    preview = {
       always_use_latest_compatibility_date = false
       compatibility_date                   = var.pages_functions_compatibility_date
       compatibility_flags                  = []
@@ -115,7 +245,6 @@ resource "cloudflare_pages_project" "pages" {
       kv_namespaces                        = {}
       r2_buckets                           = {}
       secrets                              = {}
-      usage_model                          = "bundled"
     }
   }
 }
@@ -125,7 +254,7 @@ resource "cloudflare_pages_domain" "pages" {
 
   account_id   = var.cloudflare_account_id
   project_name = cloudflare_pages_project.pages[each.key].name
-  domain       = each.value.domain
+  name         = each.value.domain
 }
 
 resource "cloudflare_zero_trust_access_application" "admin" {
@@ -140,32 +269,36 @@ resource "cloudflare_zero_trust_access_application" "admin" {
   http_only_cookie_attribute = true
   same_site_cookie_attribute = "lax"
 
-  destinations {
-    type = "public"
-    uri  = local.admin_domain
-  }
-}
-
-resource "cloudflare_zero_trust_access_policy" "admin_allow" {
-  count = var.enable_admin_access ? 1 : 0
-
-  zone_id        = var.cloudflare_zone_id
-  application_id = cloudflare_zero_trust_access_application.admin[0].id
-  name           = "${local.name_prefix} admin allow"
-  decision       = "allow"
-  precedence     = 1
-
-  dynamic "include" {
-    for_each = length(local.admin_access_allowed_emails) > 0 ? [1] : []
-    content {
-      email = local.admin_access_allowed_emails
+  destinations = [
+    {
+      type = "public"
+      uri  = local.admin_domain
     }
-  }
+  ]
 
-  dynamic "include" {
-    for_each = length(local.admin_access_allowed_email_domains) > 0 ? [1] : []
-    content {
-      email_domain = local.admin_access_allowed_email_domains
+  policies = [
+    {
+      name       = "${local.name_prefix} admin allow"
+      decision   = "allow"
+      precedence = 1
+      include = concat(
+        [
+          for email in local.admin_access_allowed_emails : {
+            email = {
+              email = email
+            }
+            email_domain = null
+          }
+        ],
+        [
+          for domain in local.admin_access_allowed_email_domains : {
+            email = null
+            email_domain = {
+              domain = domain
+            }
+          }
+        ],
+      )
     }
-  }
+  ]
 }

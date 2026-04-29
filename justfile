@@ -201,6 +201,40 @@ bundle-size:
     GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
     echo "Raw: $((RAW / 1024)) KB  |  Gzip: $((GZ / 1024)) KB"
 
+# Build the Worker bundle that Terraform uploads.
+worker-bundle out="apps/worker/dist":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    REPO_ROOT="$(pwd)"
+    OUT_DIR="$(node -e 'const path = require("node:path"); const root = path.resolve(process.argv[1]); const out = path.resolve(root, process.argv[2]); if (out === root || !out.startsWith(root + path.sep)) process.exit(1); process.stdout.write(out)' "$REPO_ROOT" "{{out}}")" || {
+        printf 'worker-bundle out must stay under %s: %s\n' "$REPO_ROOT" "{{out}}" >&2
+        exit 1
+    }
+    rm -rf "$OUT_DIR"
+    mkdir -p "$OUT_DIR"
+    cd apps/worker
+    pnpm exec wrangler deploy --env="" --dry-run --outdir "$OUT_DIR" >&2
+    BUNDLES=()
+    while IFS= read -r bundle; do
+        BUNDLES+=("$bundle")
+    done < <(find "$OUT_DIR" -type f \( -name '*.js' -o -name '*.mjs' \) | sort)
+    if [ "${#BUNDLES[@]}" -eq 0 ]; then
+        echo "No Worker bundle found under {{out}}"
+        exit 1
+    fi
+    if [ "${#BUNDLES[@]}" -ne 1 ]; then
+        printf 'Expected exactly one Worker entry bundle, found %s\n' "${#BUNDLES[@]}" >&2
+        printf ' - %s\n' "${BUNDLES[@]}" >&2
+        exit 1
+    fi
+    BUNDLE="${BUNDLES[0]}"
+    GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
+    if [ "$GZ" -gt $((3 * 1024 * 1024)) ]; then
+        printf 'Worker bundle exceeds 3MB compressed budget: %s bytes\n' "$GZ" >&2
+        exit 1
+    fi
+    echo "$BUNDLE"
+
 # Run property-based tests only
 test-properties:
     pnpm --filter @o11yfleet/core vitest run test/state-machine-properties.test.ts
@@ -299,14 +333,102 @@ tf-validate: tf-init
     cd infra/terraform && TF_DATA_DIR=.terraform/validate terraform validate
 
 # Terraform plan for an environment tfvars file against remote state.
-tf-plan env="staging": (tf-init-remote env)
-    cd infra/terraform && terraform plan -var-file=envs/{{env}}.tfvars
+tf-plan env="staging" refresh="true": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    refresh_arg=()
+    if [ "{{refresh}}" = "false" ]; then
+        refresh_arg=(-refresh=false)
+    fi
+    cd infra/terraform
+    terraform plan "${refresh_arg[@]}" -var-file=envs/{{env}}.tfvars
+
+# Terraform plan for PR validation while remote state is still provider-v4 shaped.
+tf-plan-empty-state env="staging":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmp="$(mktemp -d)"
+    trap 'rm -rf "$tmp"' EXIT
+    cp -R infra/terraform/. "$tmp/"
+    perl -0pi -e 's/\n\s*backend\s+"s3"\s*\{[^{}]*\}\s*/\n/s or die "backend block not found\n"' "$tmp/main.tf"
+    cd "$tmp"
+    terraform init -backend=false
+    terraform plan -refresh=false -var-file=envs/{{env}}.tfvars
+
+# Verify production imports are in remote state before enabling v5 apply paths.
+tf-check-prod-imports env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd infra/terraform
+    # These production resources must be adopted before cutover; split Pages
+    # projects/domains may still be created by Terraform during rollout.
+    required=(
+        cloudflare_d1_database.fleet
+        cloudflare_r2_bucket.configs
+        cloudflare_queue.events
+        cloudflare_dns_record.api
+        cloudflare_worker.fleet
+        cloudflare_workers_route.api
+        cloudflare_queue_consumer.events
+    )
+    missing=()
+    for resource in "${required[@]}"; do
+        if ! terraform state show "$resource" >/dev/null 2>&1; then
+            missing+=("$resource")
+        fi
+    done
+    if [ "${#missing[@]}" -ne 0 ]; then
+        printf 'Missing required imported resources in %s remote state:\n' "{{env}}" >&2
+        printf ' - %s\n' "${missing[@]}" >&2
+        printf 'Import these before setting TERRAFORM_PROVIDER_V5_STATE_READY=true.\n' >&2
+        exit 1
+    fi
 
 # Terraform apply for an environment tfvars file against remote state.
 tf-apply env="prod": (tf-init-remote env)
     cd infra/terraform && terraform apply -var-file=envs/{{env}}.tfvars -auto-approve
 
-# Deploy to staging
+# Terraform plan that includes the Worker code bundle and deployment rollout.
+tf-plan-worker env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BUNDLE_PATH="$(just --quiet worker-bundle)"
+    if [ -z "$BUNDLE_PATH" ]; then
+        echo "worker-bundle did not emit a bundle path" >&2
+        exit 1
+    fi
+    if [ ! -f "$BUNDLE_PATH" ]; then
+        printf 'Worker bundle path does not exist: %s\n' "$BUNDLE_PATH" >&2
+        exit 1
+    fi
+    cd infra/terraform
+    terraform plan \
+        -var-file=envs/{{env}}.tfvars \
+        -var=manage_worker_deployment=true \
+        -var="worker_bundle_path=$BUNDLE_PATH"
+
+# Terraform apply that includes the Worker code bundle and deployment rollout.
+tf-apply-worker env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BUNDLE_PATH="$(just --quiet worker-bundle)"
+    if [ -z "$BUNDLE_PATH" ]; then
+        echo "worker-bundle did not emit a bundle path" >&2
+        exit 1
+    fi
+    if [ ! -f "$BUNDLE_PATH" ]; then
+        printf 'Worker bundle path does not exist: %s\n' "$BUNDLE_PATH" >&2
+        exit 1
+    fi
+    cd infra/terraform
+    terraform apply \
+        -var-file=envs/{{env}}.tfvars \
+        -var=manage_worker_deployment=true \
+        -var="worker_bundle_path=$BUNDLE_PATH" \
+        -auto-approve
+
+# Legacy staging deploy path. Move this to tf-apply-worker staging after staging
+# remote state imports mirror the production Terraform-managed Worker rollout.
 deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
 # ─── Full CI Pipeline ────────────────────────────────────────────────

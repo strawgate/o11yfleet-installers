@@ -5,11 +5,15 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 - D1 database for tenants, auth, configuration metadata, and enrollment tokens.
 - R2 bucket for configuration YAML blobs.
 - Queue for fleet events.
-- DNS record and Worker route for the API hostname.
+- Worker identity, Worker route, queue consumer, and the production Worker version/deployment.
+- DNS record for the API hostname.
 - Split Cloudflare Pages projects and custom domains for marketing, app, and admin.
 - Optional Cloudflare Access application and policy for the admin hostname.
 
-Wrangler still deploys Worker code and Pages assets. Terraform owns the resources those deploys target, including Pages deployment configuration. Add Pages Functions bindings, environment variables, compatibility settings, and secrets to Terraform instead of configuring them with Wrangler or the Cloudflare dashboard.
+Wrangler still builds the Worker bundle and uploads Pages assets. Terraform owns
+the resources those deploys target, including Worker bindings, Worker rollout,
+Queue consumer settings, and Pages deployment configuration. Add runtime
+configuration to Terraform unless it is a secret that must stay out of state.
 
 ## Target Layout
 
@@ -48,6 +52,7 @@ export AWS_SECRET_ACCESS_KEY=...
 ```bash
 just tf-plan staging
 just tf-plan prod
+just tf-plan-worker prod
 ```
 
 The production tfvars intentionally point D1/R2/Queue at the existing names so those data-bearing resources can be imported instead of recreated. They also attach all three Pages custom domains now that the deployment workflows publish to the split site/app/admin projects.
@@ -70,19 +75,33 @@ Repository secrets:
 
 Repository variables:
 
-| Variable                         | Purpose                                       |
-| -------------------------------- | --------------------------------------------- |
-| `TF_STATE_BUCKET`                | R2 bucket that stores Terraform state         |
-| `TF_STATE_ENDPOINT`              | R2 S3 endpoint URL for the Cloudflare account |
-| `TF_STATE_REGION`                | Optional; defaults to `auto`                  |
-| `TERRAFORM_REMOTE_STATE_ENABLED` | Set to `true` after the state bucket exists   |
-| `TERRAFORM_APPLY_ENABLED`        | Set to `true` only after production imports   |
+| Variable                            | Purpose                                                                   |
+| ----------------------------------- | ------------------------------------------------------------------------- |
+| `TF_STATE_BUCKET`                   | R2 bucket that stores Terraform state                                     |
+| `TF_STATE_ENDPOINT`                 | R2 S3 endpoint URL for the Cloudflare account                             |
+| `TF_STATE_REGION`                   | Optional; defaults to `auto`                                              |
+| `TERRAFORM_REMOTE_STATE_ENABLED`    | Set to `true` after the state bucket exists                               |
+| `TERRAFORM_PROVIDER_V5_STATE_READY` | Set to `true` after the remote state is migrated/imported for provider v5 |
+| `TERRAFORM_APPLY_ENABLED`           | Set to `true` only after production imports                               |
 
 The `production` GitHub environment should require reviewer approval when the
 GitHub plan supports it. If required reviewers are not available, restrict the
 environment to the `main` deployment branch policy and leave
 `TERRAFORM_APPLY_ENABLED` unset until the first production imports are complete
 and the plan shows no replacement for D1, R2, or Queue.
+
+Provider v5 cannot refresh every provider v4 state shape directly. Leave
+`TERRAFORM_PROVIDER_V5_STATE_READY` unset while this migration PR is under
+review. Pull requests use a backend-disabled empty-state plan in that state so
+they still validate provider schema without decoding v4 state. Pushes and
+production Worker releases require the variable to be `true` after the state
+migration and new imports below are complete.
+
+Do not set `TERRAFORM_PROVIDER_V5_STATE_READY=true` until the production Worker
+identity and data-bearing resources are already imported into remote state. The
+production apply and release workflows run `just tf-check-prod-imports prod` as
+a preflight so an accidentally enabled flag fails before Terraform can attempt a
+Worker rollout.
 
 ## Adopting Existing Production Resources
 
@@ -100,35 +119,72 @@ terraform import \
   "$CLOUDFLARE_ACCOUNT_ID/192ca9ca-bd47-4bd2-9321-fcdf62d9cf05"
 ```
 
-For Terraform 1.5+ import-block-based adoption, copy `imports/prod.tf.example` to `imports.prod.tf`, replace placeholder DNS and route IDs, run a production plan against remote state, then delete `imports.prod.tf` after the imports are recorded. Do not commit a live `imports.prod.tf`; import blocks are evaluated during every plan.
+For Terraform 1.5+ import-block-based adoption, copy `imports/prod.tf.example`
+to `imports.prod.tf`, replace every placeholder ID, run a production plan
+against remote state, then delete `imports.prod.tf` after the imports are
+recorded. Do not commit a live `imports.prod.tf`; import blocks are evaluated
+during every plan.
 
 Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, Queue, and Access IDs before importing those resources. After imports, run:
 
 ```bash
 terraform plan -var-file=envs/prod.tfvars
+just tf-check-prod-imports prod
 ```
 
-The plan should show no replacement for D1, R2, or Queue. If it wants to replace a data-bearing resource, stop and fix the import or name override first.
+The plan should show no replacement for D1, R2, Queue, the Worker, or the Queue
+consumer. If it wants to replace a data-bearing resource or recreate the Worker
+identity, stop and fix the import or name override first.
 
 ## Wrangler Boundary
 
-`apps/worker/wrangler.jsonc` still deploys Worker code and declares runtime bindings. Terraform owns the API DNS record and Worker route, so Wrangler deploys must not declare custom `routes`.
+`apps/worker/wrangler.jsonc` is now local-dev and bundling metadata. Terraform
+owns the production Worker identity, route, queue consumer, bindings, version,
+and deployment rollout, so production deploys should use `just tf-apply-worker
+prod` instead of `wrangler deploy`.
 
-Terraform provider `4.52.x` can manage a Worker script with D1, R2, Queue, and Analytics Engine bindings through [`cloudflare_workers_script`](https://registry.terraform.io/providers/cloudflare/cloudflare/4.52.5/docs/resources/workers_script), but it does not expose the Durable Object binding block needed for `CONFIG_DO` or a Queue consumer resource. Do not partially migrate Worker script ownership on provider 4.x; that would make Terraform overwrite a Worker version without the complete runtime contract.
+The Worker migration uses provider 5.x resources:
 
-The full Worker migration should first move this stack to the provider 5.x resources:
+- `cloudflare_worker` for the script identity and `workers.dev` subdomain settings.
+- `cloudflare_worker_version` for code modules, compatibility date/flags, Durable Object migrations, and bindings.
+- `cloudflare_workers_deployment` for the active version rollout.
+- `cloudflare_queue_consumer` for the `fp-events` consumer settings.
 
-- [`cloudflare_worker`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/worker) for the script identity and `workers.dev` subdomain settings.
-- [`cloudflare_worker_version`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/worker_version) for code modules, compatibility date/flags, Durable Object migrations, and all bindings.
-- [`cloudflare_workers_deployment`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/workers_deployment) for the active version rollout.
-- [`cloudflare_queue_consumer`](https://registry.terraform.io/providers/cloudflare/cloudflare/5.17.0/docs/resources/queue_consumer) for the `fp-events` consumer settings.
+`manage_worker_deployment` defaults to `false` so normal Terraform validation and
+control-plane plans do not need a built bundle. `just tf-plan-worker prod` and
+`just tf-apply-worker prod` build `apps/worker/dist` with Wrangler, then pass the
+bundle path to Terraform with `manage_worker_deployment=true`.
 
-After that migration, Wrangler should only build the Worker bundle that Terraform uploads, or be removed from production Worker deploys entirely.
+Keep `worker_compatibility_date` in sync with `apps/worker/wrangler.jsonc`.
+Wrangler performs the dry-run bundle build and Terraform uploads the resulting
+module, so both tools should use the same compatibility date and flags. Bump
+the date only after testing the Worker against the new Cloudflare runtime
+behavior.
+
+`worker_durable_object_migration_tag` is the Worker Durable Object migration
+tag Terraform sends with new Worker versions. Change it only when the Durable
+Object migration list changes, such as adding, renaming, or deleting Durable
+Object classes.
+
+Terraform-managed Worker versions inherit `API_SECRET` and `CLAIM_SECRET` from
+the latest deployed Worker version by default. Keep provisioning secret values
+with `wrangler secret put` until the project adopts Cloudflare Secrets Store or
+another Terraform-managed secret source. If a production Worker relies on
+additional dashboard/Wrangler-managed bindings, add their names to
+`worker_inherited_binding_names` before the first Terraform Worker deployment.
+If the Worker is ever destroyed outside Terraform and there is no latest version
+to inherit from, recover by redeploying a temporary Wrangler version with the
+required secrets or by moving those secrets to a Terraform-managed secret
+source before running `tf-apply-worker` again.
 
 Cloudflare Pages uses Wrangler only for asset uploads. Terraform owns Pages
 project settings and both production and preview `deployment_configs`. If Pages
 Functions later need bindings or secrets, add them to this Terraform stack so a
 plan can show the full runtime config drift.
+
+The `deploy-staging` just recipe still uses Wrangler directly. Treat it as the
+legacy staging path until staging remote state imports mirror production and the
+staging Worker rollout can use `tf-apply-worker staging`.
 
 ## Admin Access
 

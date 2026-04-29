@@ -54,6 +54,7 @@ Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
 - **Zone > DNS > Edit** (for managing DNS records)
 - **Zone > Zone > Read**
 - **Account > Workers Scripts > Edit**
+- **Account > Workers Tail > Read**
 - **Account > D1 > Edit**
 - **Account > R2 > Edit**
 - **Account > Queues > Edit**
@@ -64,7 +65,12 @@ Zone resources: Include all zones in account.
 
 ## Worker Runtime Secrets
 
-Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars` as plaintext Worker configuration. Provision these as Worker secrets for each deployed environment:
+Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars`
+as plaintext Worker configuration. Provision these as Worker secrets for each
+deployed environment. Terraform-managed Worker versions inherit `API_SECRET`
+and `CLAIM_SECRET` from the latest deployed version by default; add optional
+secret binding names to `worker_inherited_binding_names` before Terraform Worker
+deployments if production depends on them.
 
 ```bash
 cd apps/worker
@@ -85,7 +91,10 @@ pnpm wrangler secret put SEED_ADMIN_PASSWORD --env production
 
 ## Analytics Engine
 
-`apps/worker/wrangler.jsonc` binds `FP_ANALYTICS` to the `fp_analytics` dataset in staging and production. Cloudflare creates Workers Analytics Engine datasets automatically on the first write after a Worker binding is deployed, so there is no separate dataset resource to create in Terraform.
+Terraform binds `FP_ANALYTICS` to the `fp_analytics` dataset for
+Terraform-managed Worker versions. Cloudflare creates Workers Analytics Engine
+datasets automatically on the first write after a Worker binding is deployed,
+so there is no separate dataset resource to create in Terraform.
 
 To verify after deployment:
 

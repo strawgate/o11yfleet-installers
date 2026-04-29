@@ -1,7 +1,7 @@
 # Copy this file to infra/terraform/imports.prod.tf only during a production
 # adoption run, then delete it after the imports have landed in remote state.
-# Keep placeholder IDs out of committed .tf files; Terraform evaluates import
-# blocks during plan.
+# Replace every placeholder before use. Keep placeholder IDs out of committed
+# .tf files; Terraform evaluates import blocks during plan.
 
 import {
   to = cloudflare_d1_database.fleet
@@ -15,7 +15,12 @@ import {
 
 import {
   to = cloudflare_queue.events
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/fp-events"
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/<fp-events-queue-id>"
+}
+
+import {
+  to = cloudflare_worker.fleet
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
 }
 
 import {
@@ -36,13 +41,18 @@ import {
 # Fill these IDs from the Cloudflare dashboard or cf-terraforming before use.
 
 import {
-  to = cloudflare_record.api
+  to = cloudflare_dns_record.api
   id = "2650adcd696a6e400201a68323e90c5e/<api-dns-record-id>"
 }
 
 import {
   to = cloudflare_workers_route.api
   id = "2650adcd696a6e400201a68323e90c5e/<api-worker-route-id>"
+}
+
+import {
+  to = cloudflare_queue_consumer.events
+  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/<fp-events-queue-id>/<fp-events-consumer-id>"
 }
 
 import {

@@ -157,10 +157,10 @@ jobs:
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9"
-      - run: |
-          cd infra/terraform
-          terraform init -backend=false
-          terraform validate
+
+      - uses: taiki-e/install-action@just
+
+      - run: just tf-validate
 
   deploy-staging:
     needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
