@@ -17,8 +17,11 @@ OpAMP (Open Agent Management Protocol) fleet management built on Cloudflare Work
 
 ```bash
 just dev         # Start worker locally
+just dev-up      # Start worker + apps/site, migrate, seed
+just check       # Changed-file-aware local check
+just ci-fast     # Fast local CI gate
 just setup       # Migrate, seed, and show fleet status
-just ui          # Start web UI
+just ui          # Start apps/site UI
 just test        # Run all tests
 just test-core   # Core package only (fast)
 just test-worker # Worker tests (workerd runtime)

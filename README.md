@@ -8,8 +8,7 @@ OpAMP (Open Agent Management Protocol) fleet management built on Cloudflare's ed
 o11yfleet/
 ├── apps/
 │   ├── worker/        # Cloudflare Worker (API + OpAMP ingress + Durable Objects)
-│   ├── web/           # React management UI (Vite + React Router + TanStack Query)
-│   └── site/          # Static marketing site (Cloudflare Pages)
+│   └── site/          # React app: marketing site, user portal, admin console
 ├── packages/
 │   ├── core/          # Pure TypeScript (OpAMP codec, state machine, auth)
 │   ├── db/            # D1 migrations and schema
@@ -42,20 +41,17 @@ $EDITOR apps/worker/.dev.vars
 # Check environment readiness
 just doctor
 
-# Start worker locally (wrangler dev)
-just dev
-
-# In another terminal: migrate, seed, show fleet status
-just setup
-
-# Start web UI locally (separate terminal)
-just ui
+# Start worker + apps/site, run migrations, and seed local data
+just dev-up
 
 # Run tests
+just check         # Changed-file-aware local check
+just ci-fast       # Fast pre-PR gate
 just test          # All tests
 just test-core     # Core package only (fast)
 just test-worker   # Worker tests (workerd runtime)
-just test-e2e      # E2E tests (requires just dev running)
+just smoke-local   # API + OpAMP lifecycle smoke test
+just test-ui       # Browser UI tests
 ```
 
 ## Key Technologies
@@ -82,20 +78,28 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 
 ## Commands
 
-| Command                | Description                              |
-| ---------------------- | ---------------------------------------- |
-| `just dev`             | Start worker locally                     |
-| `just ui`              | Start web UI                             |
-| `just setup`           | Migrate, seed, and show fleet status     |
-| `just lint`            | Lint all packages                        |
-| `just typecheck`       | Type check all packages                  |
-| `just test`            | Run all tests                            |
-| `just bench`           | Run benchmarks                           |
-| `just load-test-smoke` | Quick load test (10 agents, 15s)         |
-| `just load-test`       | Load test (configurable agents/duration) |
-| `just bundle-size`     | Check worker bundle size                 |
-| `just deploy-staging`  | Deploy to staging                        |
-| `just tf-validate`     | Validate Terraform                       |
+| Command                       | Description                              |
+| ----------------------------- | ---------------------------------------- |
+| `just dev-up`                 | Start worker + apps/site, migrate, seed  |
+| `just dev-reset`              | Re-run local migrations and reset seed   |
+| `just dev`                    | Start only the Worker                    |
+| `just ui`                     | Start only apps/site                     |
+| `just setup`                  | Migrate, seed, and show fleet status     |
+| `just check`                  | Changed-file-aware local check           |
+| `just check-json`             | Print changed-file check plan as JSON    |
+| `just ci-fast`                | Fast local CI gate                       |
+| `just ci-pr`                  | Reproduce required PR checks locally     |
+| `just reproduce-check <name>` | Run one named GitHub check locally       |
+| `just lint`                   | Lint all packages                        |
+| `just typecheck`              | Type check all packages                  |
+| `just test`                   | Run all tests                            |
+| `just smoke-local`            | Local API + OpAMP lifecycle smoke test   |
+| `just bench`                  | Run benchmarks                           |
+| `just load-test-smoke`        | Quick load test (10 agents, 15s)         |
+| `just load-test`              | Load test (configurable agents/duration) |
+| `just bundle-size`            | Check worker bundle size                 |
+| `just deploy-staging`         | Deploy to staging                        |
+| `just tf-validate`            | Validate Terraform                       |
 
 ## CI Pipeline
 
@@ -107,7 +111,8 @@ See [docs/architecture.md](docs/architecture.md) for detailed architecture docum
 - **terraform** — Terraform validation
 - **deploy-staging** — Deploy to staging with smoke tests
 
-See [.github/workflows/ci.yml](.github/workflows/ci.yml) for full pipeline.
+See the GitHub Actions workflow at [.github/workflows/ci.yml](.github/workflows/ci.yml) and
+[docs/dev-loop.md](docs/dev-loop.md) for local check-name mappings.
 
 ## Environment Variables
 

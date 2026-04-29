@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { buildPlan, changedFileDiffFilter, chunkFiles } from "./dev-check.ts";
+import {
+  buildPlan,
+  buildSteps,
+  changedFileDiffFilter,
+  chunkFiles,
+  formatDuration,
+  parseOptions,
+} from "./dev-check.ts";
 
 test("plans the full fast suite for root config changes", () => {
   const plan = buildPlan(["package.json"]);
@@ -84,4 +91,32 @@ test("chunks large format file lists for prettier", () => {
   );
   assert.equal(chunks.flat().length, files.length);
   assert.equal(chunks.flat()[1_200], "file-1200.ts");
+});
+
+test("builds ordered check steps with human reasons", () => {
+  const plan = buildPlan(["scripts/dev-check.ts", "apps/worker/src/routes/auth.ts"]);
+  const steps = buildSteps(plan);
+
+  assert.deepEqual(
+    steps.map((step) => step.id),
+    ["format-1", "scripts-lint", "fast-suite", "api-docs", "worker-runtime"],
+  );
+  assert.match(steps[0]?.reason ?? "", /2 changed files/);
+});
+
+test("formats check durations for logs", () => {
+  assert.equal(formatDuration(999), "999ms");
+  assert.equal(formatDuration(1_250), "1.3s");
+});
+
+test("requires a concrete --since revision", () => {
+  assert.throws(() => parseOptions(["--since"]), /--since requires/);
+  assert.throws(() => parseOptions(["--since", "--json"]), /--since requires/);
+  assert.equal(parseOptions(["--since", "origin/main"]).since, "origin/main");
+});
+
+test("rejects conflicting changed-file modes", () => {
+  assert.throws(() => parseOptions(["--all", "--staged"]), /mutually exclusive/);
+  assert.throws(() => parseOptions(["--all", "--since", "origin/main"]), /mutually exclusive/);
+  assert.throws(() => parseOptions(["--staged", "--since", "origin/main"]), /mutually exclusive/);
 });

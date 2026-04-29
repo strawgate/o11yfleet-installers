@@ -7,7 +7,7 @@
     "lint:scripts": "eslint scripts/",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
-    "test:dev-check": "tsx --test scripts/dev-check.test.ts",
+    "test:dev-check": "tsx --test scripts/dev-check.test.ts scripts/with-local-env.test.ts",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .",
     "prepare": "husky"

@@ -73,8 +73,12 @@ doctor:
     fi
 
 # Smart changed-file check for the current branch/worktree
-check:
-    pnpm tsx scripts/dev-check.ts
+check *args:
+    pnpm tsx scripts/dev-check.ts {{args}}
+
+# Show the changed-file check plan as JSON without running commands
+check-json *args:
+    pnpm tsx scripts/dev-check.ts --json {{args}}
 
 # Smart staged-file check used by pre-commit
 check-staged:
@@ -114,6 +118,56 @@ test:
 # Run all fast CI checks
 ci: typegen-check check-all lint-scripts test-dev-check docs-api-check fmt-check
 
+# Local equivalent of the fast pre-PR gate
+ci-fast: ci
+
+# Local equivalent of the required PR checks, including slow browser/runtime coverage
+ci-pr:
+    just reproduce-check lint-typecheck
+    just reproduce-check test-fast
+    just reproduce-check test-slow
+    just reproduce-check deploy-validate
+    just reproduce-check terraform-plan
+
+# Reproduce a named GitHub check locally
+reproduce-check check:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{check}}" in
+      lint-typecheck)
+        pnpm turbo lint
+        pnpm lint:scripts
+        pnpm test:dev-check
+        pnpm prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .
+        pnpm --filter @o11yfleet/worker typegen:check
+        pnpm turbo typecheck
+        ;;
+      test-fast)
+        pnpm --filter @o11yfleet/core test
+        pnpm --filter @o11yfleet/site test
+        ;;
+      test-slow)
+        pnpm --filter @o11yfleet/worker test:runtime
+        pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
+        pnpm --filter @o11yfleet/ui-tests test:e2e
+        ;;
+      deploy-validate)
+        just worker-bundle
+        just tf-validate
+        ;;
+      terraform-validate)
+        just tf-validate
+        ;;
+      terraform-plan)
+        just tf-plan-empty-state prod
+        ;;
+      *)
+        printf 'Unknown check: %s\n' "{{check}}" >&2
+        printf 'Known checks: lint-typecheck, test-fast, test-slow, deploy-validate, terraform-validate, terraform-plan\n' >&2
+        exit 2
+        ;;
+    esac
+
 # Format code
 fmt:
     pnpm prettier --write .
@@ -134,6 +188,20 @@ dev:
 ui:
     cd apps/site && pnpm dev
 
+# Start worker + site, wait for health, migrate, and seed local data
+dev-up:
+    pnpm tsx scripts/dev-up.ts
+
+# Same as dev-up, but force-reset local seed data
+dev-up-reset:
+    pnpm tsx scripts/dev-up.ts --reset
+
+# Reset local D1 and seed data while just dev is already running
+dev-reset: db-migrate seed-reset
+    @echo "Local dev reset complete."
+    @echo "Worker: http://localhost:8787"
+    @echo "Site:   http://127.0.0.1:3000"
+
 # Generate protobuf types
 proto-gen:
     cd packages/core && pnpm buf generate
@@ -144,32 +212,32 @@ db-migrate:
 
 # Seed local dev environment (creates tenant, config, enrollment token)
 seed:
-    npx tsx scripts/seed-local.ts
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/seed-local.ts
 
 # Re-seed (destroys and recreates local dev state)
 seed-reset:
-    npx tsx scripts/seed-local.ts --reset
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/seed-local.ts --reset
 
 # Start a fake OTel Collector (connects to local worker via OpAMP)
 collector name="fake-collector":
-    npx tsx scripts/fake-collector.ts --name {{name}}
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/fake-collector.ts --name {{name}}
 
 # Start multiple fake collectors
 collectors count="3":
     #!/usr/bin/env bash
     for i in $(seq 1 {{count}}); do
-        npx tsx scripts/fake-collector.ts --name "collector-$i" &
+        pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/fake-collector.ts --name "collector-$i" &
     done
     echo "Started {{count}} collectors. Press Ctrl+C to stop all."
     wait
 
 # Upload a YAML config and roll it out to connected agents
 push-config file="configs/basic-otlp.yaml":
-    npx tsx scripts/push-config.ts {{file}}
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/push-config.ts {{file}}
 
 # Show fleet status (agents, configs, stats)
 fleet:
-    npx tsx scripts/show-fleet.ts
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/show-fleet.ts
 
 # Health check
 healthz:
@@ -253,7 +321,10 @@ test-runtime:
 
 # Smoke test (single agent lifecycle, requires `just dev` running)
 smoke-test:
-    pnpm --filter @o11yfleet/load-test smoke
+    pnpm tsx scripts/with-local-env.ts -- pnpm --filter @o11yfleet/load-test smoke
+
+# Alias for local end-to-end smoke test
+smoke-local: smoke-test
 
 # Load test (default: 50 agents, requires `just dev` running)
 load-test agents="50" ramp="10" steady="30":
