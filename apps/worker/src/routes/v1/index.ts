@@ -101,6 +101,14 @@ async function routeV1Request(
     return handleListVersions(env, tenantId, versionsGetMatch[1]!);
   }
 
+  // GET /api/v1/configurations/:id/version-diff-latest-previous
+  const versionDiffMatch = path.match(
+    /^\/api\/v1\/configurations\/([^/]+)\/version-diff-latest-previous$/,
+  );
+  if (versionDiffMatch && method === "GET") {
+    return handleLatestVersionDiff(env, tenantId, versionDiffMatch[1]!);
+  }
+
   // GET /api/v1/configurations/:id/yaml — current YAML content from R2
   const yamlMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/yaml$/);
   if (yamlMatch && method === "GET") {
@@ -141,6 +149,13 @@ async function routeV1Request(
   const statsMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/stats$/);
   if (statsMatch && method === "GET") {
     return handleGetStats(env, tenantId, statsMatch[1]!);
+  }
+
+  const rolloutSummaryMatch = path.match(
+    /^\/api\/v1\/configurations\/([^/]+)\/rollout-cohort-summary$/,
+  );
+  if (rolloutSummaryMatch && method === "GET") {
+    return handleRolloutCohortSummary(env, tenantId, rolloutSummaryMatch[1]!);
   }
 
   // ─── Rollout ───────────────────────────────────────────────
@@ -379,14 +394,77 @@ async function handleListVersions(env: Env, tenantId: string, configId: string):
 
   const result = await env.FP_DB.prepare(
     `SELECT id, config_id, config_hash, r2_key, size_bytes, created_by, created_at
-     FROM config_versions WHERE config_id = ? ORDER BY created_at DESC`,
+     FROM config_versions WHERE config_id = ? ORDER BY created_at DESC, rowid DESC`,
   )
     .bind(configId)
-    .all();
+    .all<{
+      id: string;
+      config_id: string;
+      config_hash: string;
+      r2_key: string;
+      size_bytes: number;
+      created_by: string | null;
+      created_at: string;
+    }>();
+
+  const versions = result.results.map((version, index) => ({
+    ...version,
+    version: result.results.length - index,
+  }));
 
   return Response.json({
-    versions: result.results,
+    versions,
     current_config_hash: config["current_config_hash"],
+  });
+}
+
+async function handleLatestVersionDiff(
+  env: Env,
+  tenantId: string,
+  configId: string,
+): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const result = await env.FP_DB.prepare(
+    `SELECT id, config_hash, r2_key, size_bytes, created_at
+     FROM config_versions WHERE config_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 2`,
+  )
+    .bind(configId)
+    .all<{
+      id: string;
+      config_hash: string;
+      r2_key: string;
+      size_bytes: number;
+      created_at: string;
+    }>();
+
+  const [latest, previous] = result.results;
+  if (!latest || !previous) {
+    return Response.json({
+      available: false,
+      reason: "At least two versions are required for a latest-vs-previous diff.",
+      versions_seen: result.results.length,
+    });
+  }
+
+  const [latestYaml, previousYaml] = await Promise.all([
+    getR2Text(env, latest.r2_key),
+    getR2Text(env, previous.r2_key),
+  ]);
+  if (latestYaml === null || previousYaml === null) {
+    return Response.json({
+      available: false,
+      reason: "One or more version YAML blobs are missing from storage.",
+      versions_seen: result.results.length,
+    });
+  }
+
+  return Response.json({
+    available: true,
+    latest: versionSummary(latest),
+    previous: versionSummary(previous),
+    diff: summarizeTextDiff(previousYaml, latestYaml),
   });
 }
 
@@ -522,6 +600,69 @@ async function handleGetStats(env: Env, tenantId: string, configId: string): Pro
   return stub.fetch(new Request("http://internal/stats"));
 }
 
+async function handleRolloutCohortSummary(
+  env: Env,
+  tenantId: string,
+  configId: string,
+): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  let agentsResponse: Response;
+  let statsResponse: Response;
+  try {
+    [agentsResponse, statsResponse] = await Promise.all([
+      stub.fetch(new Request("http://internal/agents")),
+      stub.fetch(new Request("http://internal/stats")),
+    ]);
+  } catch (error) {
+    console.error("rollout cohort summary DO fetch threw", error);
+    return jsonError("Rollout cohort summary unavailable", 502);
+  }
+  const failedResponse = await failedDoResponse([
+    ["agents", agentsResponse],
+    ["stats", statsResponse],
+  ]);
+  if (failedResponse) {
+    console.error("rollout cohort summary DO fetch failed", failedResponse);
+    return jsonError("Rollout cohort summary unavailable", 502);
+  }
+  const agentsPayload = (await agentsResponse.json()) as unknown;
+  const stats = (await statsResponse.json()) as Record<string, unknown>;
+  const agents = Array.isArray(agentsPayload)
+    ? agentsPayload
+    : Array.isArray((agentsPayload as { agents?: unknown }).agents)
+      ? ((agentsPayload as { agents: Array<Record<string, unknown>> }).agents ?? [])
+      : [];
+  const desiredHash =
+    stringValue(stats["desired_config_hash"]) ?? stringValue(config["current_config_hash"]);
+  const connected = agents.filter((agent) => stringValue(agent["status"]) === "connected").length;
+  const healthy = agents.filter((agent) => booleanLike(agent["healthy"]) === true).length;
+  const drifted = desiredHash
+    ? agents.filter((agent) => {
+        const current = stringValue(agent["current_config_hash"]);
+        return current !== null && current !== desiredHash;
+      }).length
+    : 0;
+
+  return Response.json({
+    total_agents: agents.length,
+    connected_agents: connected,
+    healthy_agents: healthy,
+    drifted_agents: drifted,
+    desired_config_hash: desiredHash,
+    status_counts: countByStringField(agents, "status"),
+    current_hash_counts: topCounts(
+      agents
+        .map((agent) => stringValue(agent["current_config_hash"]))
+        .filter((value): value is string => Boolean(value)),
+      5,
+    ),
+  });
+}
+
 // ─── Rollout Handler ────────────────────────────────────────────────
 
 async function handleRollout(
@@ -554,6 +695,136 @@ async function handleRollout(
       headers: { "Content-Type": "application/json" },
     }),
   );
+}
+
+async function getR2Text(env: Env, r2Key: string): Promise<string | null> {
+  const object = await env.FP_CONFIGS.get(r2Key);
+  return object ? object.text() : null;
+}
+
+async function failedDoResponse(responses: Array<[string, Response]>) {
+  for (const [name, response] of responses) {
+    if (!response.ok) {
+      return {
+        name,
+        status: response.status,
+        body: await response.text().catch(() => "<unreadable>"),
+      };
+    }
+  }
+  return null;
+}
+
+function versionSummary(version: {
+  id: string;
+  config_hash: string;
+  size_bytes: number;
+  created_at: string;
+}) {
+  return {
+    id: version.id,
+    config_hash: version.config_hash,
+    size_bytes: version.size_bytes,
+    created_at: version.created_at,
+  };
+}
+
+function summarizeTextDiff(previous: string, latest: string) {
+  const previousLines = previous.split(/\r?\n/);
+  const latestLines = latest.split(/\r?\n/);
+  const { addedLines, removedLines } = orderedLineDiffCounts(previousLines, latestLines);
+
+  return {
+    previous_line_count: previousLines.length,
+    latest_line_count: latestLines.length,
+    line_count_delta: latestLines.length - previousLines.length,
+    size_bytes_delta:
+      new TextEncoder().encode(latest).byteLength - new TextEncoder().encode(previous).byteLength,
+    added_lines: addedLines,
+    removed_lines: removedLines,
+  };
+}
+
+function orderedLineDiffCounts(previousLines: string[], latestLines: string[]) {
+  const prefixLength = commonPrefixLength(previousLines, latestLines);
+  const suffixLength = commonSuffixLength(previousLines, latestLines, prefixLength);
+  const previousMiddle = previousLines.slice(prefixLength, previousLines.length - suffixLength);
+  const latestMiddle = latestLines.slice(prefixLength, latestLines.length - suffixLength);
+  const commonMiddleLines = longestCommonSubsequenceLength(previousMiddle, latestMiddle);
+  return {
+    addedLines: latestMiddle.length - commonMiddleLines,
+    removedLines: previousMiddle.length - commonMiddleLines,
+  };
+}
+
+function commonPrefixLength(left: string[], right: string[]) {
+  const max = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < max && left[index] === right[index]) index += 1;
+  return index;
+}
+
+function commonSuffixLength(left: string[], right: string[], prefixLength: number) {
+  const max = Math.min(left.length, right.length) - prefixLength;
+  let count = 0;
+  while (count < max && left[left.length - 1 - count] === right[right.length - 1 - count]) {
+    count += 1;
+  }
+  return count;
+}
+
+function longestCommonSubsequenceLength(left: string[], right: string[]): number {
+  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
+  let previous = new Uint32Array(shorter.length + 1);
+  let current = new Uint32Array(shorter.length + 1);
+
+  for (let i = 1; i <= longer.length; i += 1) {
+    const longerLine = longer[i - 1];
+    for (let j = 1; j <= shorter.length; j += 1) {
+      const shorterLine = shorter[j - 1];
+      current[j] =
+        longerLine === shorterLine
+          ? (previous[j - 1] ?? 0) + 1
+          : Math.max(previous[j] ?? 0, current[j - 1] ?? 0);
+    }
+    [previous, current] = [current, previous];
+  }
+
+  return previous[shorter.length] ?? 0;
+}
+
+function stringValue(value: unknown): string | null {
+  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
+}
+
+function booleanLike(value: unknown): boolean | null {
+  if (typeof value === "boolean") return value;
+  if (typeof value === "number") return value === 1 ? true : value === 0 ? false : null;
+  return null;
+}
+
+function countByStringField(rows: Array<Record<string, unknown>>, field: string) {
+  return Object.fromEntries(
+    [
+      ...rows.reduce<Map<string, number>>((counts, row) => {
+        const value = stringValue(row[field]) ?? "unknown";
+        counts.set(value, (counts.get(value) ?? 0) + 1);
+        return counts;
+      }, new Map()),
+    ].sort((a, b) => b[1] - a[1]),
+  );
+}
+
+function topCounts(values: string[], limit: number) {
+  return [
+    ...values.reduce<Map<string, number>>((counts, value) => {
+      counts.set(value, (counts.get(value) ?? 0) + 1);
+      return counts;
+    }, new Map()),
+  ]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([value, count]) => ({ value, count }));
 }
 
 // ─── Overview (aggregate stats) ─────────────────────────────────────

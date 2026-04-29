@@ -24,6 +24,7 @@ const ICONS: Record<string, string> = {
   support:
     '<path d="M8 2.5a5.5 5.5 0 0 0-5.5 5.5v2.5A1.5 1.5 0 0 0 4 12h1V7H3.5"/><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5v2.5A1.5 1.5 0 0 1 12 12h-1V7h1.5"/><path d="M11 12c0 1-1.2 1.8-3 1.8H6.5"/>',
   card: '<rect x="2" y="4" width="12" height="9" rx="1.4"/><path d="M2 7h12"/>',
+  code: '<path d="M6 4L3 8l3 4M10 4l3 4-3 4M8.5 3.5l-1 9"/>',
   database:
     '<ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9"/><path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>',
   tag: '<path d="M2 8V3a1 1 0 0 1 1-1h5l6 6-6 6-6-6z"/><circle cx="5.5" cy="5.5" r="0.8" fill="currentColor"/>',
@@ -49,6 +50,7 @@ const ADMIN_NAV: (NavSection | NavItem)[] = [
   { id: "overview", label: "Overview", href: "/admin/overview", icon: "home" },
   { id: "tenants", label: "Tenants", href: "/admin/tenants", icon: "building" },
   { id: "health", label: "System health", href: "/admin/health", icon: "activity" },
+  { id: "api", label: "API reference", href: "/admin/api", icon: "code" },
   { id: "usage", label: "Usage & spend", href: "/admin/usage", icon: "card" },
   { id: "support", label: "Support", href: "/admin/support", icon: "support" },
   { id: "do-viewer", label: "DO viewer", href: "/admin/do-viewer", icon: "database" },

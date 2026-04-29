@@ -4,13 +4,14 @@ import ts from "typescript";
 const routeFiles = [
   "apps/worker/src/routes/auth.ts",
   "apps/worker/src/routes/v1/index.ts",
-  "apps/worker/src/routes/admin/index.ts",
 ] as const;
+const adminRouteFiles = ["apps/worker/src/routes/admin/index.ts"] as const;
 
 const docsFiles = [
   "apps/site/public/docs/api/authentication.html",
   "apps/site/public/docs/api/endpoints.html",
 ] as const;
+const adminPortalFiles = ["apps/site/src/pages/admin/ApiReferencePage.tsx"] as const;
 
 const legacyScanFiles = [
   ...docsFiles,
@@ -81,18 +82,44 @@ for (const file of routeFiles) {
     expectedRoutes.add(route);
   }
 }
+const expectedAdminRoutes = new Set<string>();
+for (const file of adminRouteFiles) {
+  for (const route of extractRoutes(file)) {
+    expectedAdminRoutes.add(route);
+  }
+}
 
 const docsText = docsFiles.map((file) => fs.readFileSync(file, "utf8")).join("\n");
 const normalizedDocs = normalizePath(docsText);
+const adminPortalText = adminPortalFiles.map((file) => fs.readFileSync(file, "utf8")).join("\n");
+const normalizedAdminPortal = normalizePath(adminPortalText);
 const failures: string[] = [];
 
 for (const route of [...expectedRoutes].sort()) {
   if (!normalizedDocs.includes(route)) {
-    failures.push(`API docs do not mention implemented route: ${route}`);
+    failures.push(`Public API docs do not mention implemented route: ${route}`);
+  }
+}
+
+for (const route of [...expectedAdminRoutes].sort()) {
+  if (!normalizedAdminPortal.includes(route)) {
+    failures.push(`Admin portal API reference does not mention implemented route: ${route}`);
   }
 }
 
 const docsWithoutHtmlLinks = docsText.replace(/\s(?:href|src)="[^"]*"/g, "");
+const publicAdminApiPattern = /\/api\/admin(?:\/[a-z0-9:_/-]*)?/gi;
+const publicAdminMatches = [...docsWithoutHtmlLinks.matchAll(publicAdminApiPattern)].map(
+  (match) => match[0],
+);
+if (publicAdminMatches.length > 0) {
+  failures.push(
+    `Public docs mention admin API routes that should live only in the admin portal: ${[
+      ...new Set(publicAdminMatches.map(normalizePath)),
+    ].join(", ")}`,
+  );
+}
+
 const legacyPublicApiPattern = /\/api\/(?!v1(?:\/|\b)|admin(?:\/|\b))[a-z][a-z0-9/-]*/gi;
 const legacyMatches = [...docsWithoutHtmlLinks.matchAll(legacyPublicApiPattern)].map(
   (match) => match[0],
@@ -130,5 +157,5 @@ if (failures.length > 0) {
 }
 
 console.log(
-  `API docs cover ${expectedRoutes.size} current route paths and no deprecated public /api routes.`,
+  `Public API docs cover ${expectedRoutes.size} routes; admin portal covers ${expectedAdminRoutes.size} admin routes.`,
 );

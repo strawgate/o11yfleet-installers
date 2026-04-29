@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   aiGuidanceRequestSchema,
   aiGuidanceResponseSchema,
+  analyzeConfigCopilotYaml,
   analyzeGuidanceCandidates,
 } from "../src/ai/index.js";
 
@@ -613,6 +614,223 @@ describe("ai insight candidates", () => {
       expect.arrayContaining([
         expect.objectContaining({ signal: "admin_tenant_capacity_pressure" }),
       ]),
+    );
+  });
+
+  it("does not emit configuration YAML guidance for ambient triage", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.configuration",
+        intent: "triage_state",
+        targets: [
+          {
+            key: "configuration.yaml",
+            label: "YAML",
+            surface: "portal.configuration",
+            kind: "editor_selection",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/configurations/config-1",
+          yaml: {
+            label: "Current YAML",
+            content:
+              "receivers:\n  otlp: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n",
+            truncated: false,
+          },
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("explains current configuration YAML only for explicit copilot requests", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.configuration",
+        intent: "explain_page",
+        targets: [
+          {
+            key: "configuration.yaml",
+            label: "YAML",
+            surface: "portal.configuration",
+            kind: "editor_selection",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/configurations/config-1",
+          yaml: {
+            label: "Current YAML",
+            content:
+              "receivers:\n  otlp: {}\nprocessors:\n  batch: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [debug]\n",
+            truncated: false,
+          },
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          signal: "configuration_yaml_explain",
+          item: expect.objectContaining({
+            target_key: "configuration.yaml",
+            headline: "YAML defines 1 service pipeline",
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("blocks draft config changes when parser-backed safety gates fail", () => {
+    const analysis = analyzeConfigCopilotYaml(
+      {
+        label: "Current YAML",
+        content:
+          "receivers:\n  otlp: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\nexporters:\n  debug: {}\nheaders:\n  api_key: inline-secret\n",
+        truncated: false,
+      },
+      "draft_config_change",
+    );
+
+    expect(analysis.safe_for_draft).toBe(false);
+    expect(analysis.blockers.map((blocker) => blocker.code).sort()).toEqual([
+      "inline_secret_detected",
+      "unknown_top_level_section",
+    ]);
+
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.configuration",
+        intent: "draft_config_change",
+        targets: [
+          {
+            key: "configuration.yaml",
+            label: "YAML",
+            surface: "portal.configuration",
+            kind: "editor_selection",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/configurations/config-1",
+          yaml: {
+            label: "Current YAML",
+            content: analysis.yaml_present
+              ? "receivers:\n  otlp: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\nexporters:\n  debug: {}\nheaders:\n  api_key: inline-secret\n"
+              : "",
+            truncated: false,
+          },
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates[0]).toMatchObject({
+      signal: "configuration_draft_blocked",
+      item: {
+        target_key: "configuration.yaml",
+        headline: "Draft change blocked by YAML safety gate",
+      },
+    });
+    expect(candidates[0]?.item.detail).not.toContain("inline-secret");
+  });
+
+  it("does not block draft config changes for secret references", () => {
+    const apiKeyRef = "$" + "{env:API_KEY:default-key}";
+    const authTokenRef = "$" + "{AUTH_TOKEN:default-token}";
+    const passwordRef = "$" + "{PASSWORD}";
+    const bearerTokenRef = "$" + "BEARER_TOKEN";
+    const analysis = analyzeConfigCopilotYaml(
+      {
+        label: "Current YAML",
+        content: `receivers:
+  otlp: {}
+exporters:
+  otlphttp:
+    endpoint: https://collector.example.com/path#fragment
+    headers:
+      api_key: ${apiKeyRef}
+      authorization: "Bearer ${authTokenRef}"
+      password: ${passwordRef}
+      bearer_token: ${bearerTokenRef}
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [otlphttp]
+`,
+        truncated: false,
+      },
+      "draft_config_change",
+    );
+
+    expect(analysis.blockers.map((blocker) => blocker.code)).not.toContain(
+      "inline_secret_detected",
+    );
+  });
+
+  it("caps blocked draft guidance detail to the response schema limit", () => {
+    const content = Array.from(
+      { length: 60 },
+      (_, index) => `custom_section_${index}_🚀:\n  enabled: true\n`,
+    ).join("");
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.configuration",
+        intent: "draft_config_change",
+        targets: [
+          {
+            key: "configuration.yaml",
+            label: "YAML",
+            surface: "portal.configuration",
+            kind: "editor_selection",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/configurations/config-1",
+          yaml: {
+            label: "Current YAML",
+            content,
+            truncated: false,
+          },
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates[0]?.signal).toBe("configuration_draft_blocked");
+    expect(candidates[0]?.item.detail.length).toBeLessThanOrEqual(800);
+    expect(candidates[0]?.item.detail).toContain("Additional blockers omitted.");
+    expect(candidates[0]?.item.detail).not.toMatch(/[\uD800-\uDBFF]$/);
+    expect(() =>
+      aiGuidanceResponseSchema.parse({
+        summary: "Draft change blocked by YAML safety gate",
+        generated_at: "2026-04-29T00:00:00.000Z",
+        items: [candidates[0]!.item],
+      }),
+    ).not.toThrow();
+  });
+
+  it("blocks draft config changes when YAML is not a top-level mapping", () => {
+    const analysis = analyzeConfigCopilotYaml(
+      {
+        label: "Current YAML",
+        content: "- not-a-mapping\n",
+        truncated: false,
+      },
+      "draft_config_change",
+    );
+
+    expect(analysis.safe_for_draft).toBe(false);
+    expect(analysis.blockers.map((blocker) => blocker.code)).toContain(
+      "collector_yaml_not_mapping",
     );
   });
 });

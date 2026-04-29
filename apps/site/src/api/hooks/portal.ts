@@ -50,6 +50,7 @@ export interface Agent {
 export interface ConfigVersion {
   id: string;
   version: number;
+  config_hash?: string;
   created_at?: string;
   [key: string]: unknown;
 }
@@ -69,6 +70,42 @@ export interface ConfigStats {
   desired_config_hash?: string | null;
   active_websockets?: number;
   [key: string]: unknown;
+}
+
+export interface ConfigurationVersionDiff {
+  available: boolean;
+  reason?: string;
+  versions_seen?: number;
+  latest?: {
+    id: string;
+    config_hash: string;
+    size_bytes: number;
+    created_at: string;
+  };
+  previous?: {
+    id: string;
+    config_hash: string;
+    size_bytes: number;
+    created_at: string;
+  };
+  diff?: {
+    previous_line_count: number;
+    latest_line_count: number;
+    line_count_delta: number;
+    size_bytes_delta: number;
+    added_lines: number;
+    removed_lines: number;
+  };
+}
+
+export interface RolloutCohortSummary {
+  total_agents: number;
+  connected_agents: number;
+  healthy_agents: number;
+  drifted_agents: number;
+  desired_config_hash: string | null;
+  status_counts: Record<string, number>;
+  current_hash_counts: Array<{ value: string; count: number }>;
 }
 
 export interface Tenant {
@@ -192,6 +229,16 @@ export function useConfigurationStats(id: string | undefined) {
     queryFn: () => apiGet<ConfigStats>(`/api/v1/configurations/${id}/stats`),
     enabled: !!id,
   });
+}
+
+export function fetchConfigurationVersionDiff(id: string): Promise<ConfigurationVersionDiff> {
+  return apiGet<ConfigurationVersionDiff>(
+    `/api/v1/configurations/${id}/version-diff-latest-previous`,
+  );
+}
+
+export function fetchRolloutCohortSummary(id: string): Promise<RolloutCohortSummary> {
+  return apiGet<RolloutCohortSummary>(`/api/v1/configurations/${id}/rollout-cohort-summary`);
 }
 
 export function useTenant(enabled = true) {

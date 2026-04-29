@@ -93,4 +93,206 @@ describe("v1 configuration lifecycle", () => {
     expect(deleteBRes.status).toBe(204);
     expect(await env.FP_CONFIGS.get(uploadA.r2Key)).toBeNull();
   });
+
+  it("serves compact latest-vs-previous version diff for copilot light fetches", async () => {
+    const tenant = await createTenant(`V1 Version Diff ${crypto.randomUUID()}`);
+
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ name: "diff-target" }),
+      headers: v1Headers(tenant.id, { "Content-Type": "application/json" }),
+    });
+    expect(configRes.status).toBe(201);
+    const config = await configRes.json<{ id: string }>();
+
+    const first = `receivers:\n  otlp: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n`;
+    const second = `receivers:\n  otlp: {}\nprocessors:\n  batch: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [debug]\n`;
+
+    const uploadFirst = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: first,
+        headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+      },
+    );
+    expect(uploadFirst.status).toBe(201);
+    const firstVersion = await uploadFirst.json<{ hash: string }>();
+    const uploadSecond = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: second,
+        headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+      },
+    );
+    expect(uploadSecond.status).toBe(201);
+    const secondVersion = await uploadSecond.json<{ hash: string }>();
+
+    const diffRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/version-diff-latest-previous`,
+      { headers: v1Headers(tenant.id) },
+    );
+    expect(diffRes.status).toBe(200);
+    const diff = await diffRes.json<{
+      available: boolean;
+      latest: { config_hash: string };
+      previous: { config_hash: string };
+      diff: { added_lines: number; removed_lines: number; size_bytes_delta: number };
+    }>();
+    expect(diff.available).toBe(true);
+    expect(diff.latest.config_hash).toBe(secondVersion.hash);
+    expect(diff.previous.config_hash).toBe(firstVersion.hash);
+    expect(diff.diff.added_lines).toBeGreaterThan(0);
+    expect(diff.diff.size_bytes_delta).toBeGreaterThan(0);
+  });
+
+  it("counts reordered version lines as ordered diff changes", async () => {
+    const tenant = await createTenant(`V1 Version Reorder Diff ${crypto.randomUUID()}`);
+
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ name: "reorder-diff-target" }),
+      headers: v1Headers(tenant.id, { "Content-Type": "application/json" }),
+    });
+    expect(configRes.status).toBe(201);
+    const config = await configRes.json<{ id: string }>();
+
+    const first = `receivers:\n  otlp: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n`;
+    const reordered = `exporters:\n  debug: {}\nreceivers:\n  otlp: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n`;
+
+    const uploadFirst = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: first,
+        headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+      },
+    );
+    expect(uploadFirst.status).toBe(201);
+    const uploadSecond = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: reordered,
+        headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+      },
+    );
+    expect(uploadSecond.status).toBe(201);
+
+    const diffRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/version-diff-latest-previous`,
+      { headers: v1Headers(tenant.id) },
+    );
+    expect(diffRes.status).toBe(200);
+    const diff = await diffRes.json<{
+      available: boolean;
+      diff: { added_lines: number; removed_lines: number; line_count_delta: number };
+    }>();
+    expect(diff.available).toBe(true);
+    expect(diff.diff.line_count_delta).toBe(0);
+    expect(diff.diff.added_lines).toBeGreaterThan(0);
+    expect(diff.diff.removed_lines).toBeGreaterThan(0);
+  });
+
+  it("lists versions with newest-first version ordinals", async () => {
+    const tenant = await createTenant(`V1 Version Ordinals ${crypto.randomUUID()}`);
+
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ name: "version-ordinal-target" }),
+      headers: v1Headers(tenant.id, { "Content-Type": "application/json" }),
+    });
+    expect(configRes.status).toBe(201);
+    const config = await configRes.json<{ id: string }>();
+
+    await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "receivers:\n  otlp: {}\n# first\n",
+      headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+    });
+    await apiFetch(`http://localhost/api/v1/configurations/${config.id}/versions`, {
+      method: "POST",
+      body: "receivers:\n  otlp: {}\n# second\n",
+      headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+    });
+
+    const versionsRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        headers: v1Headers(tenant.id),
+      },
+    );
+    expect(versionsRes.status).toBe(200);
+    const body = await versionsRes.json<{
+      versions: Array<{ version: number; config_hash: string }>;
+      current_config_hash: string;
+    }>();
+    expect(body.versions.map((version) => version.version)).toEqual([2, 1]);
+    expect(body.versions[0]?.config_hash).toBe(body.current_config_hash);
+  });
+
+  it("reports version diff unavailable when only one version exists", async () => {
+    const tenant = await createTenant(`V1 Single Version Diff ${crypto.randomUUID()}`);
+
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ name: "single-version-diff-target" }),
+      headers: v1Headers(tenant.id, { "Content-Type": "application/json" }),
+    });
+    expect(configRes.status).toBe(201);
+    const config = await configRes.json<{ id: string }>();
+
+    const uploadRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/versions`,
+      {
+        method: "POST",
+        body: "receivers:\n  otlp: {}\n",
+        headers: v1Headers(tenant.id, { "Content-Type": "text/yaml" }),
+      },
+    );
+    expect(uploadRes.status).toBe(201);
+
+    const diffRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/version-diff-latest-previous`,
+      { headers: v1Headers(tenant.id) },
+    );
+    expect(diffRes.status).toBe(200);
+    const diff = await diffRes.json<{
+      available: boolean;
+      versions_seen: number;
+      reason: string;
+    }>();
+    expect(diff.available).toBe(false);
+    expect(diff.versions_seen).toBe(1);
+    expect(diff.reason).toContain("At least two versions");
+  });
+
+  it("serves rollout cohort summary for explicit copilot light fetches", async () => {
+    const tenant = await createTenant(`V1 Rollout Summary ${crypto.randomUUID()}`);
+
+    const configRes = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ name: "rollout-target" }),
+      headers: v1Headers(tenant.id, { "Content-Type": "application/json" }),
+    });
+    expect(configRes.status).toBe(201);
+    const config = await configRes.json<{ id: string }>();
+
+    const summaryRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/rollout-cohort-summary`,
+      { headers: v1Headers(tenant.id) },
+    );
+    expect(summaryRes.status).toBe(200);
+    const summary = await summaryRes.json<{
+      total_agents: number;
+      connected_agents: number;
+      drifted_agents: number;
+      status_counts: Record<string, number>;
+    }>();
+    expect(summary.total_agents).toBe(0);
+    expect(summary.connected_agents).toBe(0);
+    expect(summary.drifted_agents).toBe(0);
+    expect(summary.status_counts).toEqual({});
+  });
 });

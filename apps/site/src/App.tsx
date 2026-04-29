@@ -143,6 +143,10 @@ const UsagePage = lazyPage(() => import("./pages/admin/UsagePage"), "Usage");
 const SupportPage = lazyPage(() => import("./pages/admin/SupportPage"), "Support");
 const DOViewerPage = lazyPage(() => import("./pages/admin/DOViewerPage"), "Durable Object Viewer");
 const PlansPage = lazyPage(() => import("./pages/admin/PlansPage"), "Plans");
+const AdminApiReferencePage = lazyPage(
+  () => import("./pages/admin/ApiReferencePage"),
+  "Admin API Reference",
+);
 
 /* ------------------------------------------------------------------ */
 /*  404 page                                                           */
@@ -222,6 +226,7 @@ export function App() {
                     <Route path="tenants" element={<TenantsPage />} />
                     <Route path="tenants/:id" element={<TenantDetailPage />} />
                     <Route path="health" element={<HealthPage />} />
+                    <Route path="api" element={<AdminApiReferencePage />} />
                     <Route path="usage" element={<UsagePage />} />
                     <Route path="support" element={<SupportPage />} />
                     <Route path="do-viewer" element={<DOViewerPage />} />

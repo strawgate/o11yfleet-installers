@@ -232,8 +232,12 @@ test.describe("AI guidance surfaces", () => {
     });
     await mockJson(page, "/api/admin/tenants", { tenants: [] });
     let guidanceResponses = 0;
+    const guidanceRequestCounts = new Map<string, number>();
     await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {
-      expectUniqueTargetKeys(route.request().postDataJSON());
+      const requestBody = route.request().postDataJSON();
+      expectUniqueTargetKeys(requestBody);
+      const requestKey = JSON.stringify(requestBody);
+      guidanceRequestCounts.set(requestKey, (guidanceRequestCounts.get(requestKey) ?? 0) + 1);
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -250,7 +254,8 @@ test.describe("AI guidance surfaces", () => {
     await page.goto(`${UI_URL}/admin/overview?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "Admin Overview" })).toBeVisible();
-    await expect.poll(() => guidanceResponses).toBe(1);
+    await expect.poll(() => guidanceResponses).toBeGreaterThanOrEqual(1);
+    expect([...guidanceRequestCounts.values()].every((count) => count === 1)).toBe(true);
     await expect(page.locator(".ai-panel")).toHaveCount(0);
     await expect(page.getByText("No targeted guidance")).toHaveCount(0);
     await expect(page.getByText("No non-obvious guidance")).toHaveCount(0);
@@ -650,6 +655,177 @@ test.describe("AI guidance surfaces", () => {
     await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
     await expect(page.getByText("Configuration guidance from test data.")).toBeVisible();
     await expect(page.locator(".ai-panel").getByText("Collector count is stable")).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("configuration detail sends YAML only for explicit copilot actions", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    let explainRequestSeen = false;
+    let versionDiffRequestSeen = false;
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "user-1",
+        email: "demo@o11yfleet.com",
+        displayName: "Demo User",
+        role: "member",
+        tenantId: "tenant-1",
+      },
+    });
+    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockJson(page, "/api/v1/configurations/config-1", {
+      id: "config-1",
+      name: "prod-collectors",
+      status: "active",
+      current_config_hash: "cfg-current",
+      updated_at: "2026-04-28T20:00:00.000Z",
+    });
+    await mockText(
+      page,
+      "/api/v1/configurations/config-1/yaml",
+      "receivers:\n  otlp: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n",
+    );
+    await mockJson(page, "/api/v1/configurations/config-1/agents", { agents: [] });
+    await mockJson(page, "/api/v1/configurations/config-1/versions", {
+      versions: [
+        { id: "version-2", version: 2, created_at: "2026-04-28T21:00:00.000Z" },
+        { id: "version-1", version: 1, created_at: "2026-04-28T20:00:00.000Z" },
+      ],
+    });
+    await mockJson(page, "/api/v1/configurations/config-1/version-diff-latest-previous", {
+      available: true,
+      latest: {
+        id: "version-2",
+        config_hash: "cfg-current",
+        size_bytes: 180,
+        created_at: "2026-04-28T21:00:00.000Z",
+      },
+      previous: {
+        id: "version-1",
+        config_hash: "cfg-previous",
+        size_bytes: 120,
+        created_at: "2026-04-28T20:00:00.000Z",
+      },
+      diff: {
+        previous_line_count: 8,
+        latest_line_count: 11,
+        line_count_delta: 3,
+        size_bytes_delta: 60,
+        added_lines: 3,
+        removed_lines: 0,
+      },
+    });
+    await mockJson(page, "/api/v1/configurations/config-1/enrollment-tokens", { tokens: [] });
+    await mockJson(page, "/api/v1/configurations/config-1/stats", { agents_connected: 0 });
+    await page.route(`${API_URL}/api/v1/ai/guidance`, async (route) => {
+      const requestBody = route.request().postDataJSON() as {
+        intent?: string;
+        page_context?: {
+          yaml?: { content?: string };
+          light_fetches?: Array<{ key: string }>;
+          tables?: Array<{ key: string }>;
+        };
+        targets?: Array<{ key: string }>;
+      };
+      expectUniqueTargetKeys(requestBody);
+      if (requestBody.intent === "explain_page") {
+        explainRequestSeen = true;
+        expect(requestBody.page_context?.yaml?.content).toContain("receivers:");
+        expect(requestBody.targets).toEqual(
+          expect.arrayContaining([expect.objectContaining({ key: "configuration.yaml" })]),
+        );
+        expect(requestBody.targets?.map((target) => target.key)).not.toContain(
+          "configuration.versions",
+        );
+        expect(requestBody.targets?.map((target) => target.key)).not.toContain(
+          "configuration.rollout",
+        );
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            summary: "Parser-backed YAML explanation.",
+            generated_at: "2026-04-28T20:00:00.000Z",
+            model: "o11yfleet-guidance-fixture",
+            items: [
+              {
+                target_key: "configuration.yaml",
+                headline: "YAML defines one logs pipeline",
+                detail: "The explicit copilot request included YAML context.",
+                severity: "notice",
+                confidence: 0.8,
+                evidence: [{ label: "Signals", value: "logs" }],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      if (requestBody.intent === "summarize_table") {
+        versionDiffRequestSeen = true;
+        expect(requestBody.page_context?.yaml).toBeUndefined();
+        expect(requestBody.page_context?.tables?.map((table) => table.key)).toEqual(["versions"]);
+        expect(requestBody.page_context?.light_fetches).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({ key: "configuration.version_diff_latest_previous" }),
+          ]),
+        );
+        expect(requestBody.targets).toEqual(
+          expect.arrayContaining([expect.objectContaining({ key: "configuration.versions" })]),
+        );
+        expect(requestBody.targets?.map((target) => target.key)).not.toContain(
+          "configuration.yaml",
+        );
+        expect(requestBody.targets?.map((target) => target.key)).not.toContain(
+          "configuration.rollout",
+        );
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({
+            summary: "Version diff summary.",
+            generated_at: "2026-04-28T20:00:00.000Z",
+            model: "o11yfleet-guidance-fixture",
+            items: [
+              {
+                target_key: "configuration.versions",
+                headline: "Latest version added three lines",
+                detail: "The explicit copilot request used compact diff metadata.",
+                severity: "notice",
+                confidence: 0.8,
+                evidence: [{ label: "Added lines", value: "3" }],
+              },
+            ],
+          }),
+        });
+        return;
+      }
+      expect(requestBody.page_context?.yaml).toBeUndefined();
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "No ambient YAML guidance.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "o11yfleet-guidance-fixture",
+          items: [],
+        }),
+      });
+    });
+
+    await page.goto(`${UI_URL}/portal/configurations/config-1?api=${encodeURIComponent(API_URL)}`);
+    await page.getByRole("button", { name: "YAML" }).click();
+    await page.getByRole("button", { name: "Explain YAML" }).click();
+
+    await expect.poll(() => explainRequestSeen).toBe(true);
+    await expect(page.getByText("Parser-backed YAML explanation.")).toBeVisible();
+    await expect(page.getByText("YAML defines one logs pipeline")).toBeVisible();
+    await page.getByRole("button", { name: "Versions" }).click();
+    await page.getByRole("button", { name: "Summarize latest diff" }).click();
+
+    await expect.poll(() => versionDiffRequestSeen).toBe(true);
+    await expect(page.getByText("Version diff summary.")).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });

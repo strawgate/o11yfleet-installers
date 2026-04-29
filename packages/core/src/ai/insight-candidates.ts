@@ -5,6 +5,7 @@ import type {
   AiGuidanceRequest,
   AiGuidanceTarget,
 } from "./guidance.js";
+import { analyzeConfigCopilotYaml } from "./config-copilot.js";
 
 export type AiInsightEvidenceLevel = "count_only" | "policy_threshold" | "correlated" | "baseline";
 
@@ -23,6 +24,7 @@ const criticalConnectivityGapRatio = 0.5;
 const warningHealthGapRatio = 0.25;
 const offlineClusterMinAgents = 3;
 const minAdminCohortSize = 5;
+const maxGuidanceDetailLength = 800;
 
 export function analyzeGuidanceCandidates(
   input: AiGuidanceRequest,
@@ -163,11 +165,105 @@ export function analyzeGuidanceCandidates(
   }
 
   candidates.push(...clusterCandidates);
+  if (input.surface === "portal.configuration") {
+    candidates.push(...deriveConfigurationCopilotCandidates(input, sectionTarget.key));
+  }
   if (options.scopeLabel === "admin") {
     candidates.push(...deriveAdminCandidates(input, pageTarget.key, sectionTarget.key));
   }
 
   return candidates.slice(0, 12);
+}
+
+function deriveConfigurationCopilotCandidates(
+  input: AiGuidanceRequest,
+  fallbackTargetKey: string,
+): AiInsightCandidate[] {
+  if (input.intent !== "explain_page" && input.intent !== "draft_config_change") return [];
+
+  const yamlTarget =
+    input.targets.find((target) => target.key.includes("yaml")) ??
+    targetFor(input, "editor_selection") ??
+    input.targets.find((target) => target.kind === "section") ??
+    input.targets[0];
+  const targetKey = yamlTarget?.key ?? fallbackTargetKey;
+  const analysis = analyzeConfigCopilotYaml(input.page_context?.yaml, input.intent);
+
+  if (input.intent === "draft_config_change" && analysis.blockers.length > 0) {
+    return [
+      {
+        signal: "configuration_draft_blocked",
+        evidence_level: "policy_threshold",
+        rationale:
+          "Draft configuration changes are fail-closed when deterministic parser and safety gates find blockers.",
+        item: {
+          target_key: targetKey,
+          headline: "Draft change blocked by YAML safety gate",
+          detail: cappedGuidanceDetail(analysis.blockers.map((blocker) => blocker.message)),
+          severity: "warning",
+          confidence: 0.86,
+          evidence: [
+            evidence("Draft safe", "no", "parser-backed safety gate"),
+            evidence("Blockers", analysis.blockers.length, "parser-backed safety gate"),
+          ],
+          action: { kind: "none", label: "Fix YAML before drafting" },
+        },
+      },
+    ];
+  }
+
+  if (input.intent !== "explain_page" || !analysis.yaml_present) return [];
+
+  const severity = analysis.blockers.length > 0 ? "warning" : "notice";
+  return [
+    {
+      signal: "configuration_yaml_explain",
+      evidence_level: "correlated",
+      rationale:
+        "This is an explicit configuration copilot explanation grounded in parser output, not ambient guidance for every valid YAML file.",
+      item: {
+        target_key: targetKey,
+        headline:
+          analysis.pipeline_count > 0
+            ? `YAML defines ${analysis.pipeline_count} service pipeline${analysis.pipeline_count === 1 ? "" : "s"}`
+            : "YAML needs review before graph-based editing",
+        detail:
+          analysis.summary ??
+          "The collector YAML could not be summarized into the visual pipeline model.",
+        severity,
+        confidence: analysis.safe_for_draft ? 0.78 : 0.68,
+        evidence: [
+          evidence("Import confidence", analysis.import_confidence, "collector parser"),
+          evidence(
+            "Signals",
+            analysis.signals.length > 0 ? analysis.signals.join(", ") : "none",
+            "collector parser",
+          ),
+          evidence(
+            "Draft safe",
+            analysis.safe_for_draft ? "yes" : "no",
+            "parser-backed safety gate",
+          ),
+        ],
+        action: analysis.safe_for_draft
+          ? { kind: "propose_config_change", label: "Ask for a draft" }
+          : { kind: "none", label: "Resolve YAML blockers" },
+      },
+    },
+  ];
+}
+
+function cappedGuidanceDetail(messages: string[]): string {
+  const detail = messages.join(" ");
+  if (detail.length <= maxGuidanceDetailLength) return detail;
+
+  const suffix = " Additional blockers omitted.";
+  let head = "";
+  for (const character of detail) {
+    if (head.length + character.length > maxGuidanceDetailLength - suffix.length) break;
+    head += character;
+  }
+  return `${head.trimEnd()}${suffix}`;
 }
 
 function deriveAdminCandidates(

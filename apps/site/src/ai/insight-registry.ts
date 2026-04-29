@@ -66,6 +66,16 @@ export const insightSurfaces = {
       label: "Versions metric",
       kind: "metric",
     },
+    rollout: {
+      key: "configuration.rollout",
+      label: "Rollout section",
+      kind: "section",
+    },
+    yaml: {
+      key: "configuration.yaml",
+      label: "YAML editor",
+      kind: "editor_selection",
+    },
     tokens: {
       key: "configuration.tokens",
       label: "Enrollment tokens metric",

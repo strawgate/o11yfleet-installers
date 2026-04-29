@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   useConfiguration,
@@ -10,6 +10,8 @@ import {
   useCreateEnrollmentToken,
   useDeleteConfiguration,
   useRolloutConfig,
+  fetchConfigurationVersionDiff,
+  fetchRolloutCohortSummary,
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
@@ -37,12 +39,14 @@ import {
 } from "../../ai/insight-registry";
 import {
   buildBrowserPageContext,
+  includedFetch,
   pageDetail,
   pageMetric,
   pageTable,
   pageYaml,
+  unavailableFetch,
 } from "../../ai/page-context";
-import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
+import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
 
@@ -71,6 +75,9 @@ export default function ConfigurationDetailPage() {
   const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const [rolloutOpen, setRolloutOpen] = useState(false);
+  const [copilotRequest, setCopilotRequest] = useState<AiGuidanceRequest | null>(null);
+  const [copilotTitle, setCopilotTitle] = useState("Configuration copilot");
+  const latestCopilotRunRef = useRef(0);
 
   const c = config.data;
   const agentList = agents.data ?? [];
@@ -92,8 +99,10 @@ export default function ConfigurationDetailPage() {
     stats.isFetched &&
     (!hasConfigContent || yaml.isFetched);
   const insightSurface = insightSurfaces.portalConfiguration;
-  const pageContext =
-    guidanceReady && c
+  const buildConfigurationPageContext = (
+    options: { includeYaml?: boolean; lightFetches?: AiLightFetch[] } = {},
+  ) =>
+    c
       ? buildBrowserPageContext({
           title: `Configuration: ${c.name}`,
           active_tab: activeTab,
@@ -120,52 +129,114 @@ export default function ConfigurationDetailPage() {
             ),
           ],
           tables: [
-            pageTable(
-              "agents",
-              "Collectors",
-              agentList.slice(0, 20).map((agent) => ({
-                id: agentUid(agent),
-                hostname: agentHost(agent),
-                status: agent.status ?? null,
-                health: agentIsHealthy(agent),
-                drift: agentHasDrift(agent, desiredHash),
-                last_seen: agentLastSeen(agent) ?? null,
-              })),
-              { totalRows: agentList.length },
-            ),
-            pageTable(
-              "versions",
-              "Versions",
-              versionList.slice(0, 10).map((version) => ({
-                id: version.id,
-                hash: (version["config_hash"] as string | undefined) ?? null,
-                created_at: version.created_at,
-                size_bytes: (version["size_bytes"] as number | undefined) ?? null,
-              })),
-              { totalRows: versionList.length },
-            ),
+            ...(activeTab === "agents"
+              ? [
+                  pageTable(
+                    "agents",
+                    "Collectors",
+                    agentList.slice(0, 20).map((agent) => ({
+                      id: agentUid(agent),
+                      hostname: agentHost(agent),
+                      status: agent.status ?? null,
+                      health: agentIsHealthy(agent),
+                      drift: agentHasDrift(agent, desiredHash),
+                      last_seen: agentLastSeen(agent) ?? null,
+                    })),
+                    { totalRows: agentList.length },
+                  ),
+                ]
+              : []),
+            ...(activeTab === "versions"
+              ? [
+                  pageTable(
+                    "versions",
+                    "Versions",
+                    versionList.slice(0, 10).map((version) => ({
+                      id: version.id,
+                      version: version.version,
+                      hash: (version["config_hash"] as string | undefined) ?? null,
+                      created_at: version.created_at,
+                      size_bytes: (version["size_bytes"] as number | undefined) ?? null,
+                    })),
+                    { totalRows: versionList.length },
+                  ),
+                ]
+              : []),
           ],
-          yaml: yaml.data ? pageYaml("Current configuration YAML", yaml.data) : undefined,
+          yaml:
+            options.includeYaml && yaml.data
+              ? pageYaml("Current configuration YAML", yaml.data)
+              : undefined,
+          light_fetches: options.lightFetches ?? [],
         })
       : null;
+  const pageContext = guidanceReady && c ? buildConfigurationPageContext() : null;
+  const buildConfigurationTargets = (options: { includeCopilotTargets?: boolean } = {}) => {
+    const targets = [insightTarget(insightSurface, insightSurface.targets.page)];
+    const addActiveTabTarget = () => {
+      if (activeTab === "agents") {
+        targets.push(
+          insightTarget(insightSurface, insightSurface.targets.agents, {
+            total_agents: totalAgents,
+            connected_agents: connectedAgents,
+          }),
+        );
+      } else if (activeTab === "versions") {
+        targets.push(
+          insightTarget(insightSurface, insightSurface.targets.versions, {
+            versions: versionList.length,
+          }),
+        );
+      } else if (activeTab === "rollout") {
+        targets.push(
+          insightTarget(insightSurface, insightSurface.targets.rollout, {
+            desired_config_hash: desiredHash,
+            drifted_agents: driftedAgents,
+          }),
+        );
+      } else if (activeTab === "yaml") {
+        targets.push(
+          insightTarget(insightSurface, insightSurface.targets.yaml, {
+            yaml_available: Boolean(yaml.data),
+            yaml_truncated: yaml.data
+              ? pageYaml("Current configuration YAML", yaml.data).truncated
+              : false,
+          }),
+        );
+      } else if (activeTab === "settings") {
+        targets.push(
+          insightTarget(insightSurface, insightSurface.targets.tokens, {
+            total_active_tokens: tokenList.length,
+          }),
+        );
+      }
+    };
+
+    if (options.includeCopilotTargets) {
+      addActiveTabTarget();
+    } else {
+      targets.push(
+        insightTarget(insightSurface, insightSurface.targets.agents, {
+          total_agents: totalAgents,
+          connected_agents: connectedAgents,
+        }),
+        insightTarget(insightSurface, insightSurface.targets.versions, {
+          versions: versionList.length,
+        }),
+        insightTarget(insightSurface, insightSurface.targets.tokens, {
+          total_active_tokens: tokenList.length,
+        }),
+      );
+    }
+
+    targets.push(tabInsightTarget(insightSurface, "configuration.tab", activeTab));
+    return targets;
+  };
   const guidanceRequest: AiGuidanceRequest | null =
     guidanceReady && c && pageContext
       ? buildInsightRequest(
           insightSurface,
-          [
-            insightTarget(insightSurface, insightSurface.targets.page),
-            insightTarget(insightSurface, insightSurface.targets.agents, {
-              total_agents: totalAgents,
-              connected_agents: connectedAgents,
-            }),
-            insightTarget(insightSurface, insightSurface.targets.versions, {
-              versions: versionList.length,
-            }),
-            insightTarget(insightSurface, insightSurface.targets.tokens, {
-              total_active_tokens: tokenList.length,
-            }),
-            tabInsightTarget(insightSurface, "configuration.tab", activeTab),
-          ],
+          buildConfigurationTargets(),
           {
             configuration_id: c.id,
             configuration_name: c.name,
@@ -184,15 +255,13 @@ export default function ConfigurationDetailPage() {
             yaml_available: Boolean(yaml.data),
           },
           {
-            intent:
-              activeTab === "yaml" || activeTab === "rollout" || activeTab === "versions"
-                ? "draft_config_change"
-                : "triage_state",
+            intent: "triage_state",
             pageContext,
           },
         )
       : null;
   const guidance = usePortalGuidance(guidanceRequest);
+  const copilot = usePortalGuidance(copilotRequest, { enabled: copilotRequest !== null });
   const agentInsight = guidance.data?.items.find(
     (item) => item.target_key === "configuration.agents",
   );
@@ -202,6 +271,12 @@ export default function ConfigurationDetailPage() {
   const tokenInsight = guidance.data?.items.find(
     (item) => item.target_key === "configuration.tokens",
   );
+
+  useEffect(() => {
+    latestCopilotRunRef.current += 1;
+    setCopilotRequest(null);
+    setCopilotTitle("Configuration copilot");
+  }, [activeTab]);
 
   if (config.isLoading) return <LoadingSpinner />;
   if (config.error) return <ErrorState error={config.error} retry={() => void config.refetch()} />;
@@ -241,6 +316,89 @@ export default function ConfigurationDetailPage() {
       }
     } catch (err) {
       toast("Failed to create token", err instanceof Error ? err.message : "Unknown error", "err");
+    }
+  }
+
+  async function runCopilot(
+    title: string,
+    intent: AiGuidanceIntent,
+    userPrompt: string,
+    lightFetchMode?: "version-diff" | "rollout-summary",
+  ) {
+    const runId = latestCopilotRunRef.current + 1;
+    latestCopilotRunRef.current = runId;
+    setCopilotRequest(null);
+    setCopilotTitle("Configuration copilot");
+    if (!c || !guidanceReady) {
+      toast("Copilot unavailable", "Configuration context is still loading.", "err");
+      return;
+    }
+    const lightFetches = await loadCopilotLightFetches(lightFetchMode);
+    if (latestCopilotRunRef.current !== runId) return;
+    const includeYaml = intent === "explain_page" || intent === "draft_config_change";
+    const copilotPageContext = buildConfigurationPageContext({
+      includeYaml,
+      lightFetches,
+    });
+    if (!copilotPageContext) {
+      toast("Copilot unavailable", "Configuration context is not available.", "err");
+      return;
+    }
+    if (latestCopilotRunRef.current !== runId) return;
+    setCopilotTitle(title);
+    setCopilotRequest(
+      buildInsightRequest(
+        insightSurface,
+        buildConfigurationTargets({ includeCopilotTargets: true }),
+        {
+          configuration_id: c.id,
+          configuration_name: c.name,
+          active_tab: activeTab,
+          desired_config_hash: desiredHash,
+          yaml_available: Boolean(yaml.data),
+        },
+        {
+          intent,
+          pageContext: copilotPageContext,
+          userPrompt,
+        },
+      ),
+    );
+  }
+
+  async function loadCopilotLightFetches(
+    mode?: "version-diff" | "rollout-summary",
+  ): Promise<AiLightFetch[]> {
+    if (!id || !mode) return [];
+    try {
+      if (mode === "version-diff") {
+        return [
+          includedFetch(
+            "configuration.version_diff_latest_previous",
+            "Latest versus previous configuration version",
+            await fetchConfigurationVersionDiff(id),
+          ),
+        ];
+      }
+      return [
+        includedFetch(
+          "configuration.rollout_cohort_summary",
+          "Rollout cohort summary",
+          await fetchRolloutCohortSummary(id),
+        ),
+      ];
+    } catch (err) {
+      return [
+        unavailableFetch(
+          mode === "version-diff"
+            ? "configuration.version_diff_latest_previous"
+            : "configuration.rollout_cohort_summary",
+          mode === "version-diff"
+            ? "Latest versus previous configuration version"
+            : "Rollout cohort summary",
+          err instanceof Error ? err.message : "Light fetch failed",
+        ),
+      ];
     }
   }
 
@@ -321,6 +479,15 @@ export default function ConfigurationDetailPage() {
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
       />
+      {copilotRequest ? (
+        <GuidancePanel
+          title={copilotTitle}
+          guidance={copilot.data}
+          isLoading={copilot.isLoading}
+          error={copilot.error}
+          onRefresh={() => void copilot.refetch()}
+        />
+      ) : null}
 
       {/* Tabs */}
       <div className="tabs mt-6">
@@ -428,50 +595,74 @@ export default function ConfigurationDetailPage() {
       )}
 
       {activeTab === "versions" && (
-        <div className="dt-card">
-          {versions.isLoading ? (
-            <LoadingSpinner />
-          ) : (
-            <table className="dt">
-              <thead>
-                <tr>
-                  <th>Config hash</th>
-                  <th>Version</th>
-                  <th>Created</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {versionList.length === 0 ? (
+        <>
+          <div className="flex-row justify-between mb-4">
+            <div>
+              <h3>Versions</h3>
+              <p className="meta mt-2">
+                Compare the latest uploaded YAML against the previous immutable version.
+              </p>
+            </div>
+            <button
+              className="btn btn-secondary"
+              onClick={() =>
+                void runCopilot(
+                  "Version diff copilot",
+                  "summarize_table",
+                  "Summarize the latest configuration version diff. Use only the provided light fetch and visible version table.",
+                  "version-diff",
+                )
+              }
+              disabled={versions.isLoading || versionList.length < 2 || copilot.isLoading}
+            >
+              Summarize latest diff
+            </button>
+          </div>
+          <div className="dt-card">
+            {versions.isLoading ? (
+              <LoadingSpinner />
+            ) : (
+              <table className="dt">
+                <thead>
                   <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        icon="file"
-                        title="No versions yet"
-                        description="Upload or roll out a configuration to create the first version."
-                      />
-                    </td>
+                    <th>Config hash</th>
+                    <th>Version</th>
+                    <th>Created</th>
+                    <th>Status</th>
                   </tr>
-                ) : (
-                  versionList.map((v, i) => (
-                    <tr key={v.id}>
-                      <td className="mono-cell">{trunc(v.id, 12)}</td>
-                      <td>{v.version}</td>
-                      <td className="meta">{relTime(v.created_at)}</td>
-                      <td>
-                        {i === 0 ? (
-                          <span className="tag tag-ok">current</span>
-                        ) : (
-                          <span className="tag">previous</span>
-                        )}
+                </thead>
+                <tbody>
+                  {versionList.length === 0 ? (
+                    <tr>
+                      <td colSpan={4}>
+                        <EmptyState
+                          icon="file"
+                          title="No versions yet"
+                          description="Upload or roll out a configuration to create the first version."
+                        />
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
+                  ) : (
+                    versionList.map((v, i) => (
+                      <tr key={v.id}>
+                        <td className="mono-cell">{trunc(v.config_hash ?? v.id, 12)}</td>
+                        <td>{v.version}</td>
+                        <td className="meta">{relTime(v.created_at)}</td>
+                        <td>
+                          {i === 0 ? (
+                            <span className="tag tag-ok">current</span>
+                          ) : (
+                            <span className="tag">previous</span>
+                          )}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
       )}
 
       {activeTab === "rollout" && (
@@ -490,6 +681,20 @@ export default function ConfigurationDetailPage() {
               </div>
             </div>
           </div>
+          <button
+            className="btn btn-secondary mt-6"
+            onClick={() =>
+              void runCopilot(
+                "Rollout risk copilot",
+                "triage_state",
+                "Check rollout risk using the visible rollout state and explicit rollout cohort summary. Do not claim historical regression.",
+                "rollout-summary",
+              )
+            }
+            disabled={stats.isLoading || agents.isLoading || copilot.isLoading}
+          >
+            Check rollout risk
+          </button>
           <button
             className="btn btn-primary mt-6"
             onClick={() => setRolloutOpen(true)}
@@ -548,7 +753,35 @@ export default function ConfigurationDetailPage() {
                 config behavior; this page currently shows desired YAML from the control plane.
               </p>
             </div>
-            <CopyButton value={yaml.data ?? ""} label="Copy YAML" />
+            <div className="actions">
+              <button
+                className="btn btn-secondary"
+                onClick={() =>
+                  void runCopilot(
+                    "YAML explanation copilot",
+                    "explain_page",
+                    "Explain the current Collector YAML from parser-backed context. Do not suggest edits unless the safety gate allows it.",
+                  )
+                }
+                disabled={!yaml.data || yaml.isLoading || Boolean(yaml.error) || copilot.isLoading}
+              >
+                Explain YAML
+              </button>
+              <button
+                className="btn btn-secondary"
+                onClick={() =>
+                  void runCopilot(
+                    "Draft safety copilot",
+                    "draft_config_change",
+                    "Check whether this YAML is safe for draft config changes. If blocked, explain the deterministic safety gate reason.",
+                  )
+                }
+                disabled={!yaml.data || yaml.isLoading || Boolean(yaml.error) || copilot.isLoading}
+              >
+                Check draft safety
+              </button>
+              <CopyButton value={yaml.data ?? ""} label="Copy YAML" />
+            </div>
           </div>
           {yaml.isLoading ? (
             <LoadingSpinner />
