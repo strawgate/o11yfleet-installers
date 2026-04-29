@@ -72,6 +72,25 @@ jobs:
       - name: Core tests (codec, state machine, auth)
         run: pnpm --filter @o11yfleet/core test
 
+  test-site:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Site tests
+        run: pnpm --filter @o11yfleet/site test
+
   test-worker:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -207,7 +226,7 @@ jobs:
           retention-days: 7
 
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-worker, test-ui, bundle-size, terraform]
+    needs: [lint-format, typecheck, test-core, test-site, test-worker, test-ui, bundle-size, terraform]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

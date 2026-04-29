@@ -52,4 +52,10 @@ jobs:
             echo "Site health check failed: $STATUS"
             exit 1
           fi
+          PORTAL_HTML=$(curl -fsS https://o11yfleet-site.pages.dev/portal/overview)
+          echo "$PORTAL_HTML" | grep 'id="root"' >/dev/null
+          if echo "$PORTAL_HTML" | grep -E 'Prototype|AI-powered insights are coming soon|portal-shared\.css' >/dev/null; then
+            echo "Portal route served stale prototype HTML"
+            exit 1
+          fi
           echo "✓ Site deployed and responding"

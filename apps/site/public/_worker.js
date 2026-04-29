@@ -7,6 +7,26 @@
 const STATIC_ASSET_RE =
   /\.(js|css|png|jpg|jpeg|gif|svg|ico|woff2?|ttf|eot|map|webp|avif|json|txt|xml|webmanifest)$/;
 
+function shouldServeAssetDirectly(pathname) {
+  if (STATIC_ASSET_RE.test(pathname)) return true;
+  if (pathname === "/install.sh" || pathname === "/install.ps1" || pathname === "/_headers") {
+    return true;
+  }
+  return pathname === "/docs" || pathname.startsWith("/docs/");
+}
+
+async function serveSpaIndex(request, env) {
+  const url = new URL(request.url);
+  const rootReq = new Request(new URL("/", url.origin), {
+    method: "GET",
+    headers: request.headers,
+  });
+  const rootRes = await env.ASSETS.fetch(rootReq);
+  const res = new Response(rootRes.body, rootRes);
+  res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
+  return res;
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -35,52 +55,13 @@ export default {
     }
 
     // Static assets (JS, CSS, images, fonts) — serve directly with long cache
-    if (STATIC_ASSET_RE.test(url.pathname)) {
+    if (shouldServeAssetDirectly(url.pathname)) {
       return env.ASSETS.fetch(request);
     }
 
-    // Known non-HTML files from public/ (install scripts, _headers, etc.)
-    if (
-      url.pathname === "/install.sh" ||
-      url.pathname === "/install.ps1" ||
-      url.pathname === "/_headers"
-    ) {
-      return env.ASSETS.fetch(request);
-    }
-
-    // SPA fallback — serve index.html for client-side routing.
-    //
-    // CF Pages' ASSETS binding runs its own redirect rules (.html → clean URL).
-    // Fetching "/index.html" returns a 308→"/" redirect instead of content.
-    // For non-existent paths, ASSETS returns a 308→"/" redirect (SPA behavior).
-    //
-    // To avoid redirect loops, we try the original request first. If ASSETS
-    // returns a redirect or 404, we fetch the raw asset content using a
-    // new Request to "/" that strips any problematic request properties.
-    const assetRes = await env.ASSETS.fetch(request);
-
-    if (assetRes.ok) {
-      // ASSETS returned actual content — set no-cache and return
-      const res = new Response(assetRes.body, assetRes);
-      res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
-      return res;
-    }
-
-    // For redirects/404s: build a completely fresh GET request for "/"
-    // to retrieve index.html without triggering further redirects
-    const rootReq = new Request(new URL("/", url.origin), {
-      method: "GET",
-      headers: {},
-    });
-    const rootRes = await env.ASSETS.fetch(rootReq);
-
-    if (rootRes.ok) {
-      const res = new Response(rootRes.body, rootRes);
-      res.headers.set("Cache-Control", "no-cache, max-age=0, must-revalidate");
-      return res;
-    }
-
-    // Last resort: return whatever ASSETS gave us
-    return assetRes;
+    // SPA routes must always serve the current React index. Cloudflare Pages can
+    // keep old clean-route HTML assets addressable after deploys, so fetching the
+    // original path first can resurrect removed prototype pages.
+    return serveSpaIndex(request, env);
   },
 };
