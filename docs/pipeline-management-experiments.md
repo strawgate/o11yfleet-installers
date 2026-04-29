@@ -28,13 +28,13 @@ Useful outcome: the UI can provide immediate feedback while users drag component
 
 Risk: graph validation is necessary but not sufficient. It cannot prove that a component-specific field is valid for a collector distribution or version.
 
-## Experiment 3 Candidate: YAML To Graph
+## Experiment 3: YAML To Graph
 
 Question: how much existing collector YAML can be visualized losslessly?
 
-Status: not implemented in this PR. This should be a focused fanout because it needs real-world YAML fixtures and a clear fallback policy.
+Result: basic Collector configs can now seed the graph model. `parseCollectorYamlToGraph()` reads `receivers`, `processors`, `exporters`, and `service.pipelines`, then derives graph components, signal-specific wires, import confidence, warnings, and preserved raw sidecar sections.
 
-Candidate approach:
+Implemented approach:
 
 - Parse known collector shape into sections: `receivers`, `processors`, `exporters`, `service.pipelines`.
 - Create one component per section key.
@@ -42,4 +42,6 @@ Candidate approach:
 - Preserve unknown top-level sections as raw YAML sidecars.
 - Mark generated graph as complete, partial, or raw-only.
 
-Success bar: basic OTel examples should round-trip without losing collector YAML semantics.
+Useful outcome: uploaded configs and agent-reported effective configs can use the same importer before we build separate UI flows.
+
+Risk: multiple pipelines for the same signal, connectors, extensions, and distribution-specific component schema still need deeper collector-aware handling.

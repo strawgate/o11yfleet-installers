@@ -1,5 +1,7 @@
+import { readFileSync } from "node:fs";
 import {
   PIPELINE_EXAMPLES,
+  parseCollectorYamlToGraph,
   renderCollectorYaml,
   summarizePipelineGraph,
   validatePipelineGraph,
@@ -47,10 +49,23 @@ printValidation("Experiment 2: validation catches impossible wiring", {
   wires: [{ from: "e1", to: "r1", signal: "metrics" }],
 });
 
+const sampleYaml = readFileSync(new URL("../../configs/basic-otlp.yaml", import.meta.url), "utf8");
+const imported = parseCollectorYamlToGraph(sampleYaml, {
+  id: "basic-otlp",
+  label: "Basic OTLP",
+});
+
+console.log("\nExperiment 3: existing collector YAML -> graph model");
+console.log("---------------------------------------------------");
+console.log(summarizePipelineGraph(imported.graph));
+console.log(`confidence: ${imported.confidence}`);
+console.log(`warnings: ${imported.warnings.length}`);
+
 console.log("\nExperiment notes");
 console.log("----------------");
 console.log("- A graph-first model can support visual builder, agent visualizer, and YAML output.");
 console.log("- Dotted and indexed config paths must be expanded before YAML generation.");
+console.log("- Existing collector configs can now seed the same graph model used by the builder.");
 console.log(
   "- Real OTel validation still needs collector-aware schema checks after this foundation.",
 );

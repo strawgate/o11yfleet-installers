@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
 import {
   PIPELINE_EXAMPLES,
   deriveSignalPipelines,
   expandPipelineConfig,
+  parseCollectorYamlToGraph,
   renderCollectorYaml,
   summarizePipelineGraph,
   validatePipelineGraph,
@@ -221,6 +223,128 @@ describe("pipeline model", () => {
     });
 
     expect(yaml).toContain("service:\n  pipelines: {}");
+  });
+
+  it("imports basic collector YAML into a complete graph", () => {
+    const yaml = readFileSync(new URL("../../../configs/basic-otlp.yaml", import.meta.url), "utf8");
+
+    const result = parseCollectorYamlToGraph(yaml, {
+      id: "basic-otlp",
+      label: "Basic OTLP",
+    });
+
+    expect(result.confidence).toBe("complete");
+    expect(result.warnings).toEqual([]);
+    expect(result.rawSections).toEqual({});
+    expect(result.graph.components.map((component) => component.name)).toEqual([
+      "otlp",
+      "batch",
+      "debug",
+    ]);
+    expect(deriveSignalPipelines(result.graph)).toEqual([
+      {
+        signal: "logs",
+        receivers: ["otlp"],
+        processors: ["batch"],
+        exporters: ["debug"],
+      },
+      {
+        signal: "metrics",
+        receivers: ["otlp"],
+        processors: ["batch"],
+        exporters: ["debug"],
+      },
+      {
+        signal: "traces",
+        receivers: ["otlp"],
+        processors: ["batch"],
+        exporters: ["debug"],
+      },
+    ]);
+    expect(validatePipelineGraph(result.graph).ok).toBe(true);
+  });
+
+  it("imports richer collector YAML as partial when non-graph sections are preserved", () => {
+    const yaml = readFileSync(
+      new URL("../../../configs/full-pipeline.yaml", import.meta.url),
+      "utf8",
+    );
+
+    const result = parseCollectorYamlToGraph(yaml);
+
+    expect(result.confidence).toBe("partial");
+    expect(result.rawSections).toHaveProperty("service.telemetry");
+    expect(result.graph.components).toHaveLength(10);
+    expect(result.graph.components.map((component) => component.name)).toEqual([
+      "otlp",
+      "prometheus",
+      "hostmetrics",
+      "batch",
+      "memory_limiter",
+      "filter",
+      "tail_sampling",
+      "otlp",
+      "otlphttp",
+      "prometheus",
+    ]);
+    expect(deriveSignalPipelines(result.graph)).toContainEqual({
+      signal: "traces",
+      receivers: ["otlp"],
+      processors: ["memory_limiter", "filter", "tail_sampling", "batch"],
+      exporters: ["otlp", "otlphttp"],
+    });
+    expect(validatePipelineGraph(result.graph).ok).toBe(true);
+  });
+
+  it("keeps unvisualizable collector YAML as raw-only", () => {
+    const result = parseCollectorYamlToGraph(`
+extensions:
+  health_check: {}
+service:
+  extensions: [health_check]
+`);
+
+    expect(result.confidence).toBe("raw-only");
+    expect(result.graph.components).toEqual([]);
+    expect(result.graph.wires).toEqual([]);
+    expect(result.rawSections).toEqual({
+      extensions: { health_check: {} },
+      service: { extensions: ["health_check"] },
+    });
+    expect(result.warnings.map((warning) => warning.code)).toContain("collector_pipelines_missing");
+  });
+
+  it("keeps malformed collector YAML as raw-only instead of throwing", () => {
+    const result = parseCollectorYamlToGraph(`
+receivers:
+  otlp: [
+`);
+
+    expect(result.confidence).toBe("raw-only");
+    expect(result.graph.components).toEqual([]);
+    expect(result.warnings.map((warning) => warning.code)).toContain("collector_yaml_parse_error");
+  });
+
+  it("keeps generated component ids unique when collector names slug the same way", () => {
+    const result = parseCollectorYamlToGraph(`
+receivers:
+  otlp/http: {}
+  otlp-http: {}
+exporters:
+  debug: {}
+service:
+  pipelines:
+    logs:
+      receivers: [otlp/http, otlp-http]
+      exporters: [debug]
+`);
+
+    expect(result.graph.components.map((component) => component.id)).toEqual([
+      "r-otlp-http",
+      "r-otlp-http-2",
+      "e-debug",
+    ]);
+    expect(validatePipelineGraph(result.graph).ok).toBe(true);
   });
 
   it("summarizes graphs for experiments and future UI status copy", () => {

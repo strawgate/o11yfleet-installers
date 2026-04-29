@@ -65,6 +65,7 @@ This PR includes two deliberately small experiments:
 
 1. Graph to YAML: `@o11yfleet/core/pipeline` can derive `service.pipelines` from a graph and render collector YAML from component config.
 2. Validation: the graph validator catches invalid role edges, unsupported signal edges, duplicate YAML section names, missing endpoints, and missing receiver/exporter coverage.
+3. YAML to graph: `parseCollectorYamlToGraph()` imports existing Collector YAML into graph components and signal-specific wires, with `complete`, `partial`, or `raw-only` confidence.
 
 Run them with:
 
@@ -78,7 +79,7 @@ Good next fanout groups:
 
 - React builder prototype: convert the zip builder into React components using `@o11yfleet/core/pipeline`.
 - Read-only visualizer: add agent detail pipeline view backed by example/effective config data, clearly marked when data is simulated.
-- YAML parser experiment: evaluate graph extraction from existing collector YAML and define which YAML patterns are visualizable.
+- Agent config import: connect uploaded and agent-reported Collector YAML to the graph importer, clearly surfacing partial/raw-only confidence.
 - Validation strategy: research collector component schemas, `otelcol --dry-run` options, and how other fleet tools validate config.
 - Rollout UX: design rollout progress, pause/resume, rollback, failure handling, and audit requirements.
 - Insight UX: define evidence contracts for AI suggestions and decide which suggestions can become draft patches.

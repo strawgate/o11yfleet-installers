@@ -42,6 +42,21 @@ export interface PipelineGraph {
   wires: PipelineWire[];
 }
 
+export type PipelineImportConfidence = "complete" | "partial" | "raw-only";
+
+export interface PipelineImportWarning {
+  code: string;
+  message: string;
+  path?: string;
+}
+
+export interface CollectorYamlImportResult {
+  graph: PipelineGraph;
+  confidence: PipelineImportConfidence;
+  warnings: PipelineImportWarning[];
+  rawSections: PipelineConfigObject;
+}
+
 export interface SignalPipeline {
   signal: PipelineSignal;
   receivers: string[];
