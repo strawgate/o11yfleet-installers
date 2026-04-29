@@ -182,6 +182,10 @@ setup: db-migrate seed fleet
 bench:
     pnpm tsx experiments/src/benchmark.ts
 
+# Run pipeline-management model experiments
+pipeline-experiment:
+    pnpm tsx experiments/src/pipeline-management.ts
+
 # Run benchmark and save results to file
 bench-save:
     pnpm tsx experiments/src/benchmark.ts 2>&1 | tee experiments/benchmark-results.txt

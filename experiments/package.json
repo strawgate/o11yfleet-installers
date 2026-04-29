@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "bench": "npx tsx src/benchmark.ts"
+    "bench": "npx tsx src/benchmark.ts",
+    "pipeline": "npx tsx src/pipeline-management.ts"
   },
   "dependencies": {
     "@o11yfleet/core": "workspace:*"
