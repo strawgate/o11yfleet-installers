@@ -8,6 +8,29 @@ default:
 install:
     pnpm install
 
+# Smart changed-file check for the current branch/worktree
+check:
+    pnpm tsx scripts/dev-check.ts
+
+# Smart staged-file check used by pre-commit
+check-staged:
+    pnpm tsx scripts/dev-check.ts --staged
+
+# Run the same gate that Husky uses before commits
+precommit: check-staged
+
+# Check generated Worker types are current
+typegen-check:
+    pnpm --filter @o11yfleet/worker typegen:check
+
+# Test local dev-loop scripts
+test-dev-check:
+    pnpm test:dev-check
+
+# Fast full check: lint, typecheck, and unit tests
+check-all:
+    pnpm turbo lint typecheck test
+
 # Lint all packages
 lint:
     pnpm turbo lint
@@ -16,12 +39,12 @@ lint:
 typecheck:
     pnpm turbo typecheck
 
-# Run all tests
+# Run fast unit tests
 test:
     pnpm turbo test
 
-# Run all CI checks
-ci: lint typecheck test docs-api-check fmt-check
+# Run all fast CI checks
+ci: typegen-check check-all test-dev-check docs-api-check fmt-check
 
 # Format code
 fmt:
@@ -29,7 +52,7 @@ fmt:
 
 # Check formatting
 fmt-check:
-    pnpm prettier --check .
+    pnpm prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .
 
 # Check API docs against current worker routes
 docs-api-check:
@@ -114,9 +137,13 @@ test-properties:
 test-core:
     pnpm --filter @o11yfleet/core test
 
-# Run worker tests only (workerd runtime)
+# Run worker unit tests only (fast, no workerd)
 test-worker:
     pnpm --filter @o11yfleet/worker test
+
+# Run worker runtime tests only (workerd/Cloudflare runtime)
+test-runtime:
+    pnpm --filter @o11yfleet/worker test:runtime
 
 # Smoke test (single agent lifecycle, requires `just dev` running)
 smoke-test:
@@ -159,8 +186,8 @@ deploy-staging:
     cd apps/worker && pnpm wrangler deploy --env staging
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
-# Run the full CI pipeline locally (lint + typecheck + unit tests)
-ci-full: lint typecheck test
+# Run the extended local gate, including workerd and browser tests
+ci-full: ci test-runtime test-ui
     @echo "✓ CI pipeline passed"
 
 # ─── CLI ─────────────────────────────────────────────────────────────

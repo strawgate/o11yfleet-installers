@@ -50,6 +50,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Worker typegen drift check
+        run: pnpm --filter @o11yfleet/worker typegen:check
+
       - name: Type check
         run: pnpm turbo typecheck
 
@@ -108,7 +111,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Worker tests (workerd runtime)
-        run: pnpm --filter @o11yfleet/worker test
+        run: pnpm --filter @o11yfleet/worker test:runtime
 
   bundle-size:
     runs-on: ubuntu-latest

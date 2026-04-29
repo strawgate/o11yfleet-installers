@@ -7,9 +7,13 @@
     "dev": "wrangler dev",
     "deploy": "wrangler deploy",
     "lint": "eslint src/ test/",
-    "typecheck": "wrangler types && tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "typecheck": "pnpm run typegen:ensure && tsc --noEmit",
+    "typegen": "wrangler types src/worker-configuration.d.ts --include-runtime false",
+    "typegen:ensure": "test -f src/worker-configuration.d.ts || pnpm run typegen",
+    "typegen:check": "pnpm run typegen && git -C ../.. ls-files --error-unmatch apps/worker/src/worker-configuration.d.ts >/dev/null && git -C ../.. diff --exit-code -- apps/worker/src/worker-configuration.d.ts",
+    "test": "vitest run --config vitest.node.config.ts",
+    "test:runtime": "vitest run --config vitest.config.ts",
+    "test:watch": "vitest --config vitest.node.config.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^2.0.41",

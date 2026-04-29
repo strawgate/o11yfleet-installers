@@ -8,7 +8,7 @@ coverage/
 *.tfstate
 *.tfstate.backup
 .terraform.lock.hcl
-apps/worker/worker-configuration.d.ts
+apps/worker/src/worker-configuration.d.ts
 *.tsbuildinfo
 tmp/
 **/gen/**

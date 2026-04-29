@@ -6,8 +6,9 @@
     "lint": "turbo lint",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
+    "test:dev-check": "tsx --test scripts/dev-check.test.ts",
     "fmt": "prettier --write .",
-    "fmt:check": "prettier --check .",
+    "fmt:check": "prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .",
     "prepare": "husky"
   },
   "devDependencies": {
