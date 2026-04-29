@@ -3,12 +3,6 @@
   "main": "src/index.ts",
   "compatibility_date": "2026-04-26",
   "compatibility_flags": ["nodejs_compat"],
-  "routes": [
-    {
-      "pattern": "api.o11yfleet.com/*",
-      "zone_name": "o11yfleet.com",
-    },
-  ],
   "workers_dev": true,
   "vars": {},
   "d1_databases": [
@@ -60,7 +54,6 @@
   "env": {
     "staging": {
       "main": "src/instrumented.ts",
-      "routes": [],
       "vars": {
         "ENVIRONMENT": "staging",
       },

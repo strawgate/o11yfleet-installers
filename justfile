@@ -190,7 +190,7 @@ bench-save:
 bundle-size:
     #!/usr/bin/env bash
     cd apps/worker
-    npx wrangler deploy --dry-run --outdir dist 2>&1 | tail -5 || true
+    npx wrangler deploy --env="" --dry-run --outdir dist 2>&1 | tail -5 || true
     BUNDLE=$(find dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
     if [ -z "$BUNDLE" ]; then echo "⚠ No bundle found"; exit 0; fi
     RAW=$(wc -c < "$BUNDLE" | tr -d ' ')

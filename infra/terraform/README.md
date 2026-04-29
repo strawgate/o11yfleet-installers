@@ -110,7 +110,7 @@ The plan should show no replacement for D1, R2, or Queue. If it wants to replace
 
 ## Wrangler Boundary
 
-`apps/worker/wrangler.jsonc` still deploys Worker code and declares runtime bindings. Once Terraform has imported and owns the API route, remove the route declaration from Wrangler in the same rollout that applies this stack. Until then, do not apply both managers against the same route without checking the plan.
+`apps/worker/wrangler.jsonc` still deploys Worker code and declares runtime bindings. Terraform owns the API DNS record and Worker route, so Wrangler deploys must not declare custom `routes`.
 
 Cloudflare Pages uses Wrangler only for asset uploads. Terraform owns Pages
 project settings and both production and preview `deployment_configs`. If Pages
