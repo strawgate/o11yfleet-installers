@@ -125,7 +125,14 @@ variable "worker_analytics_engine_dataset" {
 variable "worker_inherited_binding_names" {
   type        = set(string)
   description = "Existing Worker bindings to inherit from the latest deployed version, primarily secrets that should not be stored in Terraform state."
-  default     = ["API_SECRET", "CLAIM_SECRET"]
+  default = [
+    "API_SECRET",
+    "CLAIM_SECRET",
+    "SEED_ADMIN_EMAIL",
+    "SEED_ADMIN_PASSWORD",
+    "SEED_TENANT_USER_EMAIL",
+    "SEED_TENANT_USER_PASSWORD",
+  ]
 }
 
 variable "worker_durable_object_migration_tag" {

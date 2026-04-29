@@ -68,9 +68,9 @@ Zone resources: Include all zones in account.
 Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars`
 as plaintext Worker configuration. Provision these as Worker secrets for each
 deployed environment. Terraform-managed Worker versions inherit `API_SECRET`
-and `CLAIM_SECRET` from the latest deployed version by default; add optional
-secret binding names to `worker_inherited_binding_names` before Terraform Worker
-deployments if production depends on them.
+`CLAIM_SECRET`, and seed-account secrets from the latest deployed version by
+default. Provision them before Terraform Worker deployments so the uploaded
+version can inherit the secret bindings.
 
 ```bash
 cd apps/worker
@@ -81,12 +81,14 @@ pnpm wrangler secret put SEED_TENANT_USER_PASSWORD --env staging
 pnpm wrangler secret put SEED_ADMIN_EMAIL --env staging
 pnpm wrangler secret put SEED_ADMIN_PASSWORD --env staging
 
-pnpm wrangler secret put CLAIM_SECRET --env production
-pnpm wrangler secret put API_SECRET --env production
-pnpm wrangler secret put SEED_TENANT_USER_EMAIL --env production
-pnpm wrangler secret put SEED_TENANT_USER_PASSWORD --env production
-pnpm wrangler secret put SEED_ADMIN_EMAIL --env production
-pnpm wrangler secret put SEED_ADMIN_PASSWORD --env production
+# Production Worker deploys are Terraform-managed and use the base
+# o11yfleet-worker script identity, not Wrangler's -production script.
+pnpm wrangler secret put CLAIM_SECRET
+pnpm wrangler secret put API_SECRET
+pnpm wrangler secret put SEED_TENANT_USER_EMAIL
+pnpm wrangler secret put SEED_TENANT_USER_PASSWORD
+pnpm wrangler secret put SEED_ADMIN_EMAIL
+pnpm wrangler secret put SEED_ADMIN_PASSWORD
 ```
 
 ## Analytics Engine

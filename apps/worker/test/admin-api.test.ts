@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { apiFetch, setupD1 } from "./helpers.js";
+import { API_SECRET, apiFetch, setupD1 } from "./helpers.js";
 
 beforeAll(async () => {
   await setupD1();
@@ -19,6 +19,24 @@ beforeAll(async () => {
 });
 
 describe("admin API routes", () => {
+  it("sets secure cross-site cookies for HTTPS login even without an environment binding", async () => {
+    await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${API_SECRET}` },
+    });
+
+    const response = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://o11yfleet.com" },
+      body: JSON.stringify({ email: "admin@o11yfleet.com", password: "admin-password" }),
+    });
+
+    expect(response.status).toBe(200);
+    const cookie = response.headers.get("Set-Cookie") ?? "";
+    expect(cookie).toContain("Secure");
+    expect(cookie).toContain("SameSite=None");
+  });
+
   it("rejects admin route access without bearer token", async () => {
     const response = await exports.default.fetch("http://localhost/api/admin/health");
 

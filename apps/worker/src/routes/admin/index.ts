@@ -80,7 +80,7 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   const tenantImpersonateMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/impersonate$/);
   if (tenantImpersonateMatch && method === "POST") {
-    return handleImpersonateTenant(env, tenantImpersonateMatch[1]!);
+    return handleImpersonateTenant(request, env, tenantImpersonateMatch[1]!);
   }
 
   const configDOTablesMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/tables$/);
@@ -652,7 +652,11 @@ async function handleAdminOverview(env: Env): Promise<Response> {
 
 // ─── Tenant Impersonation ────────────────────────────────────────────
 
-async function handleImpersonateTenant(env: Env, tenantId: string): Promise<Response> {
+async function handleImpersonateTenant(
+  request: Request,
+  env: Env,
+  tenantId: string,
+): Promise<Response> {
   const tenant = await env.FP_DB.prepare(`SELECT id, name FROM tenants WHERE id = ?`)
     .bind(tenantId)
     .first<{ id: string; name: string }>();
@@ -724,6 +728,6 @@ async function handleImpersonateTenant(env: Env, tenantId: string): Promise<Resp
         isImpersonation: true,
       },
     },
-    { headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env) } },
+    { headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env, request) } },
   );
 }

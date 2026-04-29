@@ -166,12 +166,18 @@ tag Terraform sends with new Worker versions. Change it only when the Durable
 Object migration list changes, such as adding, renaming, or deleting Durable
 Object classes.
 
-Terraform-managed Worker versions inherit `API_SECRET` and `CLAIM_SECRET` from
-the latest deployed Worker version by default. Keep provisioning secret values
-with `wrangler secret put` until the project adopts Cloudflare Secrets Store or
-another Terraform-managed secret source. If a production Worker relies on
-additional dashboard/Wrangler-managed bindings, add their names to
-`worker_inherited_binding_names` before the first Terraform Worker deployment.
+Terraform-managed Worker versions inherit `API_SECRET`, `CLAIM_SECRET`, and
+seed-account secrets from the latest deployed Worker version by default. Keep
+provisioning secret values with `wrangler secret put` until the project adopts
+Cloudflare Secrets Store or another Terraform-managed secret source. If a
+production Worker relies on additional dashboard/Wrangler-managed bindings, add
+their names to `worker_inherited_binding_names` before the first Terraform
+Worker deployment.
+
+For production, run `wrangler secret put` against the base Worker script
+identity, without `--env production`. Terraform owns the production
+`o11yfleet-worker` script; Wrangler's `--env production` targets a separate
+Wrangler environment script and is not the source Terraform inherits from.
 If the Worker is ever destroyed outside Terraform and there is no latest version
 to inherit from, recover by redeploying a temporary Wrangler version with the
 required secrets or by moving those secrets to a Terraform-managed secret

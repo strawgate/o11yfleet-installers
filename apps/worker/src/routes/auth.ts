@@ -178,7 +178,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
       },
     },
     {
-      headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env) },
+      headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env, request) },
     },
   );
 }
@@ -190,7 +190,10 @@ async function handleLogout(request: Request, env: Env): Promise<Response> {
   if (sessionId) {
     await env.FP_DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
   }
-  return Response.json({ ok: true }, { headers: { "Set-Cookie": clearSessionCookie(env) } });
+  return Response.json(
+    { ok: true },
+    { headers: { "Set-Cookie": clearSessionCookie(env, request) } },
+  );
 }
 
 // ─── GET /auth/me ───────────────────────────────────────────────────
