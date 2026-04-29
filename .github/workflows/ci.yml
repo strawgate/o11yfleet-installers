@@ -127,19 +127,28 @@ jobs:
 
       - name: "Check bundle size (Workers limit: 10MB compressed)"
         run: |
-          BUNDLE=$(find apps/worker/dist -name '*.js' -o -name '*.mjs' 2>/dev/null | head -1)
-          if [ -z "$BUNDLE" ]; then
+          MAX_GZIP=0
+          MAX_BUNDLE=""
+          MAX_RAW=0
+          for BUNDLE in $(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null); do
+            RAW=$(wc -c < "$BUNDLE" | tr -d ' ')
+            GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
+            echo "Bundle: $BUNDLE  Raw: $((RAW / 1024)) KB  Gzip: $((GZ / 1024)) KB"
+            if [ "$GZ" -gt "$MAX_GZIP" ]; then
+              MAX_GZIP=$GZ
+              MAX_BUNDLE=$BUNDLE
+              MAX_RAW=$RAW
+            fi
+          done
+          if [ -z "$MAX_BUNDLE" ]; then
             echo "⚠ No bundle found — skipping size check"
             exit 0
           fi
-          RAW_SIZE=$(wc -c < "$BUNDLE" | tr -d ' ')
-          GZIP_SIZE=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
-          echo "Bundle: $BUNDLE"
-          echo "Raw size: $((RAW_SIZE / 1024)) KB"
-          echo "Gzip size: $((GZIP_SIZE / 1024)) KB"
-          MAX_GZIP=$((3 * 1024 * 1024))
-          if [ "$GZIP_SIZE" -gt "$MAX_GZIP" ]; then
-            echo "❌ Bundle exceeds 3MB compressed budget ($((GZIP_SIZE / 1024)) KB)"
+          echo ""
+          echo "Largest bundle: $MAX_BUNDLE"
+          echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
+          if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
+            echo "❌ Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
             exit 1
           fi
           echo "✓ Bundle size OK"

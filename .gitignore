@@ -28,3 +28,6 @@ O11yFleet.zip
 .playwright-cli/
 O11yFleet-update.zip
 *.tsbuildinfo
+
+# Agent scratch directory
+.codex/

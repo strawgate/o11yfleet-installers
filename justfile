@@ -17,7 +17,7 @@ doctor:
     echo "=== o11yFleet Environment Check ==="
 
     node --version | grep -qE "^v(2[2-9]|[3-9][0-9])\." && echo "✓ Node.js 22+" || { echo "✗ Node.js 22+ required"; FAIL=1; }
-    pnpm --version | grep -qE "^[89]\." && echo "✓ pnpm 9+" || { echo "✗ pnpm 9+ required"; FAIL=1; }
+    pnpm --version | grep -qE "^(9|[1-9][0-9])\." && echo "✓ pnpm 9+" || { echo "✗ pnpm 9+ required"; FAIL=1; }
     just --version | grep -qE "[0-9]+\.[0-9]+" && echo "✓ just" || { echo "✗ just required"; FAIL=1; }
     npx wrangler --version | grep -qE "^[0-9]+\." && echo "✓ wrangler" || { echo "✗ wrangler required"; FAIL=1; }
 
@@ -29,17 +29,19 @@ doctor:
     fi
 
     if [ -f apps/worker/.dev.vars ]; then
-        if grep -q "API_SECRET=dev-local" apps/worker/.dev.vars 2>/dev/null; then
-            echo "✗ .dev.vars has placeholder values — update with real secrets"
+        API_SECRET=$(grep "^API_SECRET=" apps/worker/.dev.vars 2>/dev/null | cut -d'=' -f2- | tr -d ' ')
+        if [ -z "$API_SECRET" ] || [ "$API_SECRET" = "dev-local" ]; then
+            echo "✗ API_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
-        elif grep -q "API_SECRET=" apps/worker/.dev.vars 2>/dev/null; then
+        else
             echo "✓ API_SECRET set in .dev.vars"
         fi
-        if grep -q "CLAIM_SECRET=" apps/worker/.dev.vars 2>/dev/null; then
-            echo "✓ CLAIM_SECRET set in .dev.vars"
-        else
-            echo "✗ CLAIM_SECRET missing from .dev.vars"
+        CLAIM_SECRET=$(grep "^CLAIM_SECRET=" apps/worker/.dev.vars 2>/dev/null | cut -d'=' -f2- | tr -d ' ')
+        if [ -z "$CLAIM_SECRET" ]; then
+            echo "✗ CLAIM_SECRET missing or empty — update .dev.vars with a real value"
             FAIL=1
+        else
+            echo "✓ CLAIM_SECRET set in .dev.vars"
         fi
     fi
 
