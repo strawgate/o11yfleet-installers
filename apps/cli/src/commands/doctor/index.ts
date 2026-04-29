@@ -150,7 +150,7 @@ async function checkApiAuth(): Promise<DoctorResult> {
 
 function printResult(result: DoctorResult): void {
   const c = output.chalkInstance;
-  let icon: string;
+  let icon = c.gray("?");
 
   switch (result.status) {
     case "pass":
