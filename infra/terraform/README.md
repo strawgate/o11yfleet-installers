@@ -9,7 +9,7 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 - Split Cloudflare Pages projects and custom domains for marketing, app, and admin.
 - Optional Cloudflare Access application and policy for the admin hostname.
 
-Wrangler still deploys Worker code and Pages assets. Terraform owns the resources those deploys target. Terraform intentionally ignores Pages `deployment_configs` because those contain Pages Functions runtime defaults and secrets managed by Cloudflare/Wrangler deploys.
+Wrangler still deploys Worker code and Pages assets. Terraform owns the resources those deploys target, including Pages deployment configuration. Add Pages Functions bindings, environment variables, compatibility settings, and secrets to Terraform instead of configuring them with Wrangler or the Cloudflare dashboard.
 
 ## Target Layout
 
@@ -111,6 +111,11 @@ The plan should show no replacement for D1, R2, or Queue. If it wants to replace
 ## Wrangler Boundary
 
 `apps/worker/wrangler.jsonc` still deploys Worker code and declares runtime bindings. Once Terraform has imported and owns the API route, remove the route declaration from Wrangler in the same rollout that applies this stack. Until then, do not apply both managers against the same route without checking the plan.
+
+Cloudflare Pages uses Wrangler only for asset uploads. Terraform owns Pages
+project settings and both production and preview `deployment_configs`. If Pages
+Functions later need bindings or secrets, add them to this Terraform stack so a
+plan can show the full runtime config drift.
 
 ## Admin Access
 

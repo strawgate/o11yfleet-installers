@@ -46,6 +46,17 @@ variable "production_branch" {
   default     = "main"
 }
 
+variable "pages_functions_compatibility_date" {
+  type        = string
+  description = "Compatibility date Terraform applies to Pages Functions production and preview deployment configs."
+  default     = "2026-04-26"
+
+  validation {
+    condition     = can(regex("^\\d{4}-\\d{2}-\\d{2}$", var.pages_functions_compatibility_date))
+    error_message = "pages_functions_compatibility_date must use YYYY-MM-DD format."
+  }
+}
+
 variable "worker_script_name" {
   type        = string
   description = "Cloudflare Worker script name. Wrangler still deploys this script; Terraform owns DNS and route binding."

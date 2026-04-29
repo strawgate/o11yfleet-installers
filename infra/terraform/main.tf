@@ -89,10 +89,34 @@ resource "cloudflare_pages_project" "pages" {
   name              = each.value.name
   production_branch = var.production_branch
 
-  lifecycle {
-    # Wrangler and Cloudflare manage Pages runtime defaults and secrets; avoid
-    # Terraform rolling those deployment settings back during resource updates.
-    ignore_changes = [deployment_configs]
+  deployment_configs {
+    production {
+      always_use_latest_compatibility_date = false
+      compatibility_date                   = var.pages_functions_compatibility_date
+      compatibility_flags                  = []
+      d1_databases                         = {}
+      durable_object_namespaces            = {}
+      environment_variables                = {}
+      fail_open                            = false
+      kv_namespaces                        = {}
+      r2_buckets                           = {}
+      secrets                              = {}
+      usage_model                          = "bundled"
+    }
+
+    preview {
+      always_use_latest_compatibility_date = false
+      compatibility_date                   = var.pages_functions_compatibility_date
+      compatibility_flags                  = []
+      d1_databases                         = {}
+      durable_object_namespaces            = {}
+      environment_variables                = {}
+      fail_open                            = false
+      kv_namespaces                        = {}
+      r2_buckets                           = {}
+      secrets                              = {}
+      usage_model                          = "bundled"
+    }
   }
 }
 
