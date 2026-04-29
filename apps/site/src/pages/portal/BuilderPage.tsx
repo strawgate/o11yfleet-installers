@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel } from "../../components/ai";
@@ -7,11 +8,13 @@ import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 import {
   PIPELINE_EXAMPLES,
   PIPELINE_SIGNALS,
+  parseCollectorYamlToGraph,
   renderCollectorYaml,
   summarizePipelineGraph,
   validatePipelineGraph,
 } from "@o11yfleet/core/pipeline";
 import type {
+  CollectorYamlImportResult,
   PipelineComponentRole,
   PipelineGraph,
   PipelineSignal,
@@ -51,13 +54,17 @@ function signalLabel(signal: PipelineSignal): string {
 export default function BuilderPage() {
   const [mode, setMode] = useState<BuilderMode>("split");
   const [exampleId, setExampleId] = useState(DEFAULT_EXAMPLE_ID);
+  const [yamlInput, setYamlInput] = useState("");
+  const [importResult, setImportResult] = useState<CollectorYamlImportResult | null>(null);
 
   const insightSurface = insightSurfaces.portalBuilder;
   const exampleEntries = Object.entries(PIPELINE_EXAMPLES);
   const selectedExampleId = PIPELINE_EXAMPLES[exampleId]
     ? exampleId
     : (exampleEntries[0]?.[0] ?? EMPTY_PIPELINE_GRAPH.id);
-  const graph = PIPELINE_EXAMPLES[selectedExampleId] ?? EMPTY_PIPELINE_GRAPH;
+  const exampleGraph = PIPELINE_EXAMPLES[selectedExampleId] ?? EMPTY_PIPELINE_GRAPH;
+  const graph = importResult?.graph ?? exampleGraph;
+  const rawSectionEntries = importResult ? Object.entries(importResult.rawSections) : [];
   const validation = useMemo(() => validatePipelineGraph(graph), [graph]);
   const yamlPreview = useMemo(() => renderCollectorYaml(graph), [graph]);
   const componentsById = useMemo(
@@ -86,7 +93,9 @@ export default function BuilderPage() {
       status: "prototype",
       draft_source: "in-memory example model",
       selected_mode: mode,
-      selected_example: graph.label,
+      selected_example: importResult ? "Imported Collector YAML" : graph.label,
+      import_confidence: importResult?.confidence,
+      import_warning_count: importResult?.warnings.length ?? 0,
       pipeline_summary: summarizePipelineGraph(graph),
       validation_ok: validation.ok,
       warnings: validation.warnings.map((item) => item.message),
@@ -94,6 +103,20 @@ export default function BuilderPage() {
     },
   );
   const guidance = usePortalGuidance(guidanceRequest);
+
+  function handleImportYaml() {
+    const result = parseCollectorYamlToGraph(yamlInput, {
+      id: "builder-import",
+      label: "Imported Collector YAML",
+    });
+    setImportResult(result);
+    setMode("split");
+  }
+
+  function handleExampleChange(nextExampleId: string) {
+    setExampleId(nextExampleId);
+    setImportResult(null);
+  }
 
   return (
     <div className="main-wide pipeline-builder-page">
@@ -130,7 +153,7 @@ export default function BuilderPage() {
             id="builder-example"
             className="input"
             value={selectedExampleId}
-            onChange={(event) => setExampleId(event.target.value)}
+            onChange={(event) => handleExampleChange(event.target.value)}
           >
             {exampleEntries.length === 0 ? (
               <option value={EMPTY_PIPELINE_GRAPH.id}>No examples configured</option>
@@ -143,6 +166,83 @@ export default function BuilderPage() {
           </select>
         </div>
       </div>
+
+      <section className="card card-pad mt-6 pipe-import-panel">
+        <div className="pipe-panel-head">
+          <div>
+            <h3>Paste Collector YAML</h3>
+            <p className="meta mt-2">
+              Import a Collector config into the visual model and review anything that stays raw.
+            </p>
+          </div>
+          {importResult ? (
+            <span
+              className={`tag ${importResult.confidence === "complete" ? "tag-ok" : "tag-warn"}`}
+            >
+              {importResult.confidence}
+            </span>
+          ) : (
+            <span className="tag">optional</span>
+          )}
+        </div>
+
+        <textarea
+          className="textarea pipe-yaml-input mt-4"
+          value={yamlInput}
+          onChange={(event) => setYamlInput(event.target.value)}
+          placeholder="receivers:\n  otlp:\n    protocols:\n      grpc: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]"
+        />
+
+        <div className="pipe-import-actions mt-3">
+          <button
+            type="button"
+            className="btn"
+            onClick={handleImportYaml}
+            disabled={yamlInput.trim().length === 0}
+          >
+            Import YAML
+          </button>
+          {importResult ? (
+            <button type="button" className="btn btn-ghost" onClick={() => setImportResult(null)}>
+              Back to selected example
+            </button>
+          ) : null}
+        </div>
+
+        {importResult ? (
+          <div className="pipe-import-summary mt-4">
+            {importResult.warnings.length === 0 ? (
+              <div className="banner ok">
+                <div>
+                  <div className="b-title">Import is fully visualized</div>
+                  <div className="b-body">Every imported section is represented in the graph.</div>
+                </div>
+              </div>
+            ) : (
+              importResult.warnings.map((warning, index) => (
+                <div key={`import-warning-${index}-${warning.code}`} className="banner warn mt-2">
+                  <div>
+                    <div className="b-title">Import warning: {warning.code}</div>
+                    <div className="b-body">
+                      {warning.path ? `${warning.path}: ` : ""}
+                      {warning.message}
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+
+            {rawSectionEntries.length > 0 ? (
+              <details className="pipe-raw-sections mt-3">
+                <summary>Preserved raw sections ({rawSectionEntries.length})</summary>
+                <pre className="code-block mt-3">
+                  {JSON.stringify(importResult.rawSections, null, 2)}
+                </pre>
+              </details>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
 
       <div className="pipe-layout mt-6" data-mode={mode}>
         {mode !== "yaml" ? (
@@ -212,7 +312,10 @@ export default function BuilderPage() {
           <section className="card card-pad pipe-panel">
             <div className="pipe-panel-head">
               <h3>Generated YAML</h3>
-              <span className="tag">artifact preview</span>
+              <div className="pipe-panel-actions">
+                <span className="tag">artifact preview</span>
+                <CopyButton value={yamlPreview} label="copy YAML" />
+              </div>
             </div>
             <pre className="code-block mt-4 pipe-yaml">{yamlPreview}</pre>
           </section>

@@ -863,6 +863,31 @@
   color: var(--fg-3);
   font-size: 12px;
 }
+.pipe-yaml-input {
+  min-height: 180px;
+}
+.pipe-import-actions,
+.pipe-panel-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.pipe-import-summary .banner:first-child {
+  margin-top: 0;
+}
+.pipe-raw-sections {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+  padding: 12px 14px;
+}
+.pipe-raw-sections summary {
+  cursor: pointer;
+  color: var(--fg-2);
+  font-size: 13px;
+  font-weight: 500;
+}
 .pipe-layout {
   display: grid;
   gap: 16px;
