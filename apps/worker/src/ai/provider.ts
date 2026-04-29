@@ -61,7 +61,9 @@ export async function generateAiGuidance(
       temperature: 0.2,
       maxOutputTokens: 1600,
     });
-    const output = sanitizeModelOutput(modelOutputSchema.parse(parseModelJson(result.text)));
+    const output = sanitizeModelOutput(
+      validateModelOutputTargets(modelOutputSchema.parse(parseModelJson(result.text)), input),
+    );
 
     return aiGuidanceResponseSchema.parse({
       ...output,
@@ -69,6 +71,9 @@ export async function generateAiGuidance(
       model,
     });
   } catch (err) {
+    if (err instanceof AiProviderError) {
+      throw err;
+    }
     console.error("AI guidance provider failed:", err);
     throw new AiProviderError("AI guidance provider failed");
   }
@@ -149,6 +154,20 @@ function sanitizeModelOutput(output: Pick<AiGuidanceResponse, "summary" | "items
       };
     }),
   };
+}
+
+function validateModelOutputTargets(
+  output: Pick<AiGuidanceResponse, "summary" | "items">,
+  input: AiGuidanceRequest,
+) {
+  const allowedTargetKeys = new Set(input.targets.map((target) => target.key));
+  const invalidItem = output.items.find((item) => !allowedTargetKeys.has(item.target_key));
+  if (invalidItem) {
+    throw new AiProviderError(
+      `AI guidance provider returned unknown target: ${invalidItem.target_key}`,
+    );
+  }
+  return output;
 }
 
 function buildDeterministicGuidance(

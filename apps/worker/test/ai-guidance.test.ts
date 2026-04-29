@@ -337,6 +337,105 @@ describe("AI guidance routes", () => {
     });
   });
 
+  it("keeps candidate insights and no-insight constraints in model prompts", async () => {
+    const calls: Request[] = [];
+    const fakeFetch: typeof fetch = vi.fn(async (input, init) => {
+      const request = input instanceof Request ? input : new Request(input, init);
+      calls.push(request);
+      return Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "No non-obvious guidance in supplied context.",
+                items: [],
+              }),
+            },
+          },
+        ],
+      });
+    });
+
+    const response = await generateAiGuidance(overviewRequest, {
+      env: {
+        LLM_PROVIDER: "minimax",
+        LLM_MODEL: "MiniMax-M2.7",
+        LLM_BASE_URL: "https://api.minimax.test/v1",
+        MINIMAX_API_KEY: "test-key",
+      },
+      scopeLabel: "tenant:tenant-ai-test",
+      fetch: fakeFetch,
+    });
+
+    expect(response.items).toEqual([]);
+    expect(calls).toHaveLength(1);
+    const requestBody = (await calls[0]!.json()) as {
+      messages?: Array<{ role?: string; content?: string }>;
+    };
+    const prompt = requestBody.messages?.find((message) => message.role === "user")?.content ?? "";
+    expect(prompt).toContain('"candidate_insights"');
+    expect(prompt).toContain(
+      "If there is no non-obvious useful insight, return an empty items array.",
+    );
+    expect(prompt).toContain("Use only target_key values from the supplied targets.");
+  });
+
+  it("rejects model output that targets slots outside the request", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "Model suggested an invalid target.",
+                items: [
+                  {
+                    target_key: "overview.unknown-target",
+                    headline: "Invalid target",
+                    detail: "This item should not be placed in the UI.",
+                    severity: "notice",
+                    confidence: 0.5,
+                    evidence: [],
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      generateAiGuidance(overviewRequest, {
+        env: {
+          LLM_PROVIDER: "minimax",
+          LLM_MODEL: "MiniMax-M2.7",
+          LLM_BASE_URL: "https://api.minimax.test/v1",
+          MINIMAX_API_KEY: "test-key",
+        },
+        scopeLabel: "tenant:tenant-ai-test",
+        fetch: fakeFetch,
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      message: "AI guidance provider returned unknown target: overview.unknown-target",
+    });
+  });
+
   it("does not emit portal-only actions for admin deterministic guidance", async () => {
     const response = await generateAiGuidance(
       {

@@ -196,6 +196,12 @@ describe("ai insight candidates", () => {
       surface: "portal.overview" as const,
       kind: "metric" as const,
     },
+    {
+      key: "overview.agents-table",
+      label: "Agents table",
+      surface: "portal.overview" as const,
+      kind: "table" as const,
+    },
   ];
 
   it("does not promote moderate raw count gaps without better evidence", () => {
@@ -270,5 +276,162 @@ describe("ai insight candidates", () => {
     expect(candidates).toHaveLength(1);
     expect(candidates[0]?.signal).toBe("tenant_setup_gap");
     expect(candidates[0]?.item.detail).toContain("onboarding/setup gap");
+  });
+
+  it("promotes clustered offline collectors sharing a config hash", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets,
+        context: {},
+        page_context: {
+          route: "/portal/overview",
+          metrics: [
+            { key: "total_agents", label: "Total collectors", value: 10 },
+            { key: "connected_agents", label: "Connected collectors", value: 4 },
+          ],
+          tables: [
+            {
+              key: "agents",
+              label: "Agents",
+              columns: ["id", "desired_config_hash", "status"],
+              rows: [
+                { id: "a1", desired_config_hash: "cfg-1234567890abcdef", status: "offline" },
+                {
+                  id: "a2",
+                  desired_config_hash: "cfg-1234567890abcdef",
+                  status: "disconnected",
+                },
+                { id: "a3", desired_config_hash: "cfg-1234567890abcdef", status: "offline" },
+                { id: "a4", desired_config_hash: "cfg-other", status: "connected" },
+              ],
+              total_rows: 4,
+            },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    const cluster = candidates.find(
+      (candidate) => candidate.signal === "offline_cluster_by_config",
+    );
+    expect(cluster).toMatchObject({
+      evidence_level: "correlated",
+      item: {
+        target_key: "overview.agents-table",
+        severity: "critical",
+      },
+    });
+    expect(cluster?.item.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Offline in cluster", value: "3/3" }),
+      ]),
+    );
+    expect(candidates.some((candidate) => candidate.signal === "connectivity_gap")).toBe(false);
+  });
+
+  it("prefers the larger offline cluster when ratios tie", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets,
+        context: {},
+        page_context: {
+          route: "/portal/overview",
+          tables: [
+            {
+              key: "agents",
+              label: "Agents",
+              columns: ["id", "desired_config_hash", "status"],
+              rows: [
+                { id: "a1", desired_config_hash: "cfg-small", status: "offline" },
+                { id: "a2", desired_config_hash: "cfg-small", status: "offline" },
+                { id: "a3", desired_config_hash: "cfg-small", status: "offline" },
+                { id: "b1", desired_config_hash: "cfg-large", status: "offline" },
+                { id: "b2", desired_config_hash: "cfg-large", status: "offline" },
+                { id: "b3", desired_config_hash: "cfg-large", status: "offline" },
+                { id: "b4", desired_config_hash: "cfg-large", status: "offline" },
+              ],
+              total_rows: 7,
+            },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    const cluster = candidates.find(
+      (candidate) => candidate.signal === "offline_cluster_by_config",
+    );
+    expect(cluster?.item.evidence).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ label: "Cluster config hash", value: "cfg-large" }),
+        expect.objectContaining({ label: "Offline in cluster", value: "4/4" }),
+      ]),
+    );
+  });
+
+  it("does not cluster generic configuration labels as hashes", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets,
+        context: {},
+        page_context: {
+          route: "/portal/overview",
+          tables: [
+            {
+              key: "agents",
+              label: "Agents",
+              columns: ["id", "configuration", "status"],
+              rows: [
+                { id: "a1", configuration: "production", status: "offline" },
+                { id: "a2", configuration: "production", status: "offline" },
+                { id: "a3", configuration: "production", status: "offline" },
+              ],
+              total_rows: 3,
+            },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual([]);
+  });
+
+  it("does not promote scattered offline rows as a cluster", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets,
+        context: {
+          total_agents: 8,
+          connected_agents: 7,
+          healthy_agents: 7,
+        },
+        page_context: {
+          route: "/portal/overview",
+          tables: [
+            {
+              key: "agents",
+              label: "Agents",
+              columns: ["id", "desired_config_hash", "status"],
+              rows: [
+                { id: "a1", desired_config_hash: "cfg-a", status: "offline" },
+                { id: "a2", desired_config_hash: "cfg-b", status: "connected" },
+                { id: "a3", desired_config_hash: "cfg-c", status: "offline" },
+                { id: "a4", desired_config_hash: "cfg-d", status: "connected" },
+              ],
+              total_rows: 4,
+            },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual([]);
   });
 });
