@@ -22,6 +22,7 @@ export interface AnalyzeGuidanceCandidatesOptions {
 const criticalConnectivityGapRatio = 0.5;
 const warningHealthGapRatio = 0.25;
 const offlineClusterMinAgents = 3;
+const minAdminCohortSize = 5;
 
 export function analyzeGuidanceCandidates(
   input: AiGuidanceRequest,
@@ -162,8 +163,167 @@ export function analyzeGuidanceCandidates(
   }
 
   candidates.push(...clusterCandidates);
+  if (options.scopeLabel === "admin") {
+    candidates.push(...deriveAdminCandidates(input, pageTarget.key, sectionTarget.key));
+  }
 
   return candidates.slice(0, 12);
+}
+
+function deriveAdminCandidates(
+  input: AiGuidanceRequest,
+  pageTargetKey: string,
+  sectionTargetKey: string,
+): AiInsightCandidate[] {
+  const candidates: AiInsightCandidate[] = [];
+  const planRates = arrayFromContext(input.context, "plan_zero_state_rates")
+    .map((row) => ({
+      plan: stringValue(row["plan"]),
+      tenantCount: numberValue(row["tenant_count"]),
+      zeroConfigRate: numberValue(row["zero_config_rate"]),
+      zeroUserRate: numberValue(row["zero_user_rate"]),
+    }))
+    .filter(
+      (row) =>
+        row.plan !== "" && row.tenantCount >= minAdminCohortSize && row.zeroConfigRate >= 0.5,
+    )
+    .sort((a, b) => b.zeroConfigRate - a.zeroConfigRate);
+
+  const onboardingGapRatio = numberFromRequest(input, "onboarding_gap_ratio");
+  const worstPlan = planRates[0];
+  if (onboardingGapRatio !== null && onboardingGapRatio >= 0.35 && worstPlan) {
+    candidates.push({
+      signal: "admin_onboarding_gap_by_plan",
+      evidence_level: "policy_threshold",
+      rationale:
+        "Admin onboarding guidance is based on plan-cohort ratios and an explicit zero-configuration threshold.",
+      item: {
+        target_key: sectionTargetKey,
+        headline: `Onboarding gap concentrated in ${worstPlan.plan}`,
+        detail:
+          "This plan cohort has a high share of tenants without configurations. Focus on first-configuration onboarding before treating this as runtime fleet health.",
+        severity: worstPlan.zeroConfigRate >= 0.7 ? "critical" : "warning",
+        confidence: 0.74,
+        evidence: [
+          evidence("Overall zero-config rate", `${Math.round(onboardingGapRatio * 100)}%`, "admin"),
+          evidence("Plan cohort", worstPlan.plan, "admin"),
+          evidence("Cohort size", worstPlan.tenantCount, "admin"),
+          evidence(
+            "Plan zero-config rate",
+            `${Math.round(worstPlan.zeroConfigRate * 100)}%`,
+            "policy threshold",
+          ),
+          evidence("Plan zero-user rate", `${Math.round(worstPlan.zeroUserRate * 100)}%`, "admin"),
+        ],
+        action: { kind: "open_page", label: "Review tenants", href: "/admin/tenants" },
+      },
+    });
+  }
+
+  const utilizationRows = arrayFromContext(input.context, "tenant_limit_utilization");
+  const measuredUtilization = utilizationRows
+    .map((row) => numberValue(row["config_limit_utilization_ratio"]))
+    .filter((value) => value > 0);
+  const nearLimit = measuredUtilization.filter((value) => value >= 0.85).length;
+  if (
+    measuredUtilization.length >= minAdminCohortSize &&
+    nearLimit / measuredUtilization.length >= 0.3
+  ) {
+    candidates.push({
+      signal: "admin_capacity_pressure_by_limit",
+      evidence_level: "policy_threshold",
+      rationale:
+        "Capacity pressure is normalized by tenant configuration limits, not by absolute tenant counts.",
+      item: {
+        target_key: pageTargetKey,
+        headline: "Tenants are nearing configuration limits",
+        detail:
+          "A meaningful share of measured tenants is at or above 85% of configuration capacity. Review plan limits before additional onboarding creates friction.",
+        severity: nearLimit / measuredUtilization.length >= 0.5 ? "critical" : "warning",
+        confidence: 0.72,
+        evidence: [
+          evidence("Tenants near limit", `${nearLimit}/${measuredUtilization.length}`, "admin"),
+          evidence(
+            "Near-limit share",
+            `${Math.round((nearLimit / measuredUtilization.length) * 100)}%`,
+            "policy threshold",
+          ),
+        ],
+        action: { kind: "open_page", label: "Review tenant limits", href: "/admin/tenants" },
+      },
+    });
+  }
+
+  const tenantConfigConcentration = numberFromRequest(
+    input,
+    "tenant_config_concentration_top3_ratio",
+  );
+  const totalConfigurations = numberFromRequest(input, "total_configurations");
+  if (
+    tenantConfigConcentration !== null &&
+    totalConfigurations !== null &&
+    totalConfigurations >= 20 &&
+    tenantConfigConcentration >= 0.65
+  ) {
+    candidates.push({
+      signal: "admin_cross_tenant_concentration",
+      evidence_level: "correlated",
+      rationale:
+        "Configuration ownership concentration is a blast-radius risk when enough configurations exist to make the ratio meaningful.",
+      item: {
+        target_key: sectionTargetKey,
+        headline: "Configurations are concentrated across few tenants",
+        detail:
+          "A small tenant group owns most configurations. Validate isolation, support readiness, and rollout safeguards for concentrated impact.",
+        severity: tenantConfigConcentration >= 0.8 ? "critical" : "warning",
+        confidence: 0.7,
+        evidence: [
+          evidence(
+            "Top-3 configuration share",
+            `${Math.round(tenantConfigConcentration * 100)}%`,
+            "admin aggregate",
+          ),
+          evidence("Total configurations", totalConfigurations, "admin aggregate"),
+        ],
+        action: { kind: "open_page", label: "Review tenant mix", href: "/admin/tenants" },
+      },
+    });
+  }
+
+  const tenantUtilization = numberFromRequest(input, "config_limit_utilization");
+  const tenantConfigLimit = numberFromRequest(input, "max_configs");
+  if (
+    tenantConfigLimit !== null &&
+    tenantConfigLimit >= 5 &&
+    tenantUtilization !== null &&
+    tenantUtilization >= 0.85
+  ) {
+    candidates.push({
+      signal: "admin_tenant_capacity_pressure",
+      evidence_level: "policy_threshold",
+      rationale:
+        "Tenant-detail capacity pressure is normalized by the tenant's explicit configuration limit.",
+      item: {
+        target_key: pageTargetKey,
+        headline: "Tenant is near its configuration limit",
+        detail:
+          "This tenant is close to the configured maximum number of configurations. Review limits or consolidate before adding more workloads.",
+        severity: tenantUtilization >= 0.95 ? "critical" : "warning",
+        confidence: 0.76,
+        evidence: [
+          evidence(
+            "Config limit utilization",
+            `${Math.round(tenantUtilization * 100)}%`,
+            "policy threshold",
+          ),
+          evidence("Configured limit", tenantConfigLimit, "admin"),
+        ],
+        action: { kind: "open_page", label: "Open tenant settings", href: "/admin/tenants" },
+      },
+    });
+  }
+
+  return candidates;
 }
 
 export function candidatesToGuidanceItems(candidates: AiInsightCandidate[]): AiGuidanceItem[] {
@@ -193,6 +353,25 @@ function numberFromRequest(input: AiGuidanceRequest, key: string): number | null
 function numberFromContext(context: Record<string, unknown>, key: string): number | null {
   const value = context[key];
   return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function arrayFromContext(
+  context: Record<string, unknown>,
+  key: string,
+): Array<Record<string, unknown>> {
+  const value = context[key];
+  if (!Array.isArray(value)) return [];
+  return value.filter((row): row is Record<string, unknown> =>
+    Boolean(row && typeof row === "object"),
+  );
+}
+
+function numberValue(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === "string" ? value : "";
 }
 
 function numberFromPageContext(input: AiGuidanceRequest, key: string): number | null {

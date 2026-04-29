@@ -8,6 +8,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
+import { buildAdminAiOverviewContext } from "./ai-context-utils";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
@@ -36,6 +37,7 @@ export default function OverviewPage() {
       return db.localeCompare(da);
     })
     .slice(0, 5);
+  const adminAiContext = buildAdminAiOverviewContext(tenantList, totalTenants, totalConfigs);
 
   const insightSurface = insightSurfaces.adminOverview;
   const guidanceRequest: AiGuidanceRequest | null =
@@ -61,6 +63,7 @@ export default function OverviewPage() {
             tenants_without_users: tenantList.filter(
               (tenant) => ((tenant["user_count"] as number) ?? 0) === 0,
             ).length,
+            ...adminAiContext,
             recent_tenants: recentTenants.map((tenant) => ({
               id: tenant.id,
               name: tenant.name,

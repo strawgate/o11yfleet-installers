@@ -434,4 +434,185 @@ describe("ai insight candidates", () => {
 
     expect(candidates).toEqual([]);
   });
+
+  it("promotes admin onboarding gaps only for meaningful plan cohorts", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+          {
+            key: "admin.overview.tenants",
+            label: "Tenants",
+            surface: "admin.overview",
+            kind: "section",
+          },
+        ],
+        context: {
+          total_tenants: 12,
+          total_configurations: 8,
+          onboarding_gap_ratio: 0.5,
+          plan_zero_state_rates: [
+            { plan: "pro", tenant_count: 6, zero_config_rate: 0.67, zero_user_rate: 0.17 },
+            { plan: "free", tenant_count: 6, zero_config_rate: 0.33, zero_user_rate: 0 },
+          ],
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([expect.objectContaining({ signal: "admin_onboarding_gap_by_plan" })]),
+    );
+  });
+
+  it("suppresses admin onboarding gaps for tiny plan cohorts", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+        ],
+        context: {
+          total_tenants: 4,
+          total_configurations: 1,
+          onboarding_gap_ratio: 0.75,
+          plan_zero_state_rates: [
+            { plan: "enterprise", tenant_count: 2, zero_config_rate: 1, zero_user_rate: 0 },
+          ],
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(
+      candidates.some((candidate) => candidate.signal === "admin_onboarding_gap_by_plan"),
+    ).toBe(false);
+  });
+
+  it("promotes admin capacity pressure only when normalized by tenant limits", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+        ],
+        context: {
+          total_tenants: 10,
+          total_configurations: 50,
+          tenant_limit_utilization: [
+            { plan: "pro", config_limit_utilization_ratio: 0.9 },
+            { plan: "pro", config_limit_utilization_ratio: 0.88 },
+            { plan: "pro", config_limit_utilization_ratio: 0.92 },
+            { plan: "pro", config_limit_utilization_ratio: 0.4 },
+            { plan: "pro", config_limit_utilization_ratio: 0.6 },
+          ],
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ signal: "admin_capacity_pressure_by_limit" }),
+      ]),
+    );
+  });
+
+  it("suppresses admin capacity pressure when the measured cohort is small", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+        ],
+        context: {
+          total_tenants: 3,
+          total_configurations: 12,
+          tenant_limit_utilization: [
+            { plan: "pro", config_limit_utilization_ratio: 0.95 },
+            { plan: "pro", config_limit_utilization_ratio: 0.95 },
+          ],
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(
+      candidates.some((candidate) => candidate.signal === "admin_capacity_pressure_by_limit"),
+    ).toBe(false);
+  });
+
+  it("promotes cross-tenant concentration only with enough configurations", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+          {
+            key: "admin.overview.configs",
+            label: "Configurations",
+            surface: "admin.overview",
+            kind: "section",
+          },
+        ],
+        context: {
+          total_tenants: 12,
+          total_configurations: 40,
+          tenant_config_concentration_top3_ratio: 0.7,
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ signal: "admin_cross_tenant_concentration" }),
+      ]),
+    );
+  });
+
+  it("suppresses cross-tenant concentration on small fleets", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          { key: "admin.overview.page", label: "Admin", surface: "admin.overview", kind: "page" },
+        ],
+        context: {
+          total_tenants: 3,
+          total_configurations: 6,
+          tenant_config_concentration_top3_ratio: 1,
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(
+      candidates.some((candidate) => candidate.signal === "admin_cross_tenant_concentration"),
+    ).toBe(false);
+  });
+
+  it("promotes tenant detail capacity pressure from explicit limits", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.tenant",
+        targets: [
+          { key: "admin.tenant.page", label: "Tenant", surface: "admin.tenant", kind: "page" },
+        ],
+        context: {
+          config_count: 9,
+          max_configs: 10,
+          config_limit_utilization: 0.9,
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ signal: "admin_tenant_capacity_pressure" }),
+      ]),
+    );
+  });
 });

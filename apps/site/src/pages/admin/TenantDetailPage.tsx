@@ -24,6 +24,7 @@ import {
   insightTarget,
   tabInsightTarget,
 } from "../../ai/insight-registry";
+import { emailDomain } from "./ai-context-utils";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "overview" | "configurations" | "users" | "settings";
@@ -89,6 +90,10 @@ export default function TenantDetailPage() {
             config_count: configList.length,
             user_count: userList.length,
             max_configs: (t["max_configs"] as number) ?? null,
+            config_limit_utilization:
+              typeof t["max_configs"] === "number" && t["max_configs"] > 0
+                ? configList.length / t["max_configs"]
+                : null,
             max_agents_per_config: (t["max_agents_per_config"] as number) ?? null,
             created_at: t.created_at ?? null,
             configurations: configList.slice(0, 12).map((config) => ({
@@ -434,9 +439,4 @@ export default function TenantDetailPage() {
       </Modal>
     </>
   );
-}
-
-function emailDomain(email: string): string {
-  const [, domain] = email.split("@");
-  return domain ? `@${domain}` : "unknown";
 }
