@@ -287,5 +287,5 @@ async function handleSeed(env: Env): Promise<Response> {
     results.push(`Updated admin user password: ${adminEmail}`);
   }
 
-  return Response.json({ seeded: results });
+  return Response.json({ seeded: results, tenantId: tenant.id });
 }
