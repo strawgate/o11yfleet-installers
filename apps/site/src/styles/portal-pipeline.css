@@ -143,10 +143,6 @@
 .pipe-node:hover {
   border-color: var(--line-strong);
 }
-.pipe-node[data-selected="1"] {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
-}
 .pipe-node .name {
   font-family: var(--font-mono);
   font-weight: 500;
@@ -837,4 +833,67 @@
 .btn-danger-solid:hover {
   background: oklch(0.62 0.18 24);
   border-color: oklch(0.62 0.18 24);
+}
+
+/* ---------- React builder groundwork ---------- */
+.pipe-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.pipe-segmented {
+  display: inline-flex;
+  gap: 4px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 4px;
+  background: var(--surface);
+}
+.pipe-segmented .btn[aria-pressed="true"] {
+  background: var(--accent-soft);
+  border-color: var(--accent-line);
+  color: var(--fg);
+}
+.pipe-select-row {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  color: var(--fg-3);
+  font-size: 12px;
+}
+.pipe-layout {
+  display: grid;
+  gap: 16px;
+  grid-template-columns: 1fr;
+}
+.pipe-layout[data-mode="split"] {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.pipe-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pipe-yaml {
+  max-height: 560px;
+  overflow: auto;
+}
+.pipe-wire-list .b-body {
+  font-family: var(--font-mono);
+  overflow-wrap: anywhere;
+}
+.pipe-validation-strip .pipe-issues .banner:first-child {
+  margin-top: 0;
+}
+
+@media (max-width: 900px) {
+  .pipe-layout[data-mode="split"] {
+    grid-template-columns: 1fr;
+  }
+  .pipe-stage {
+    grid-template-columns: 1fr;
+  }
 }

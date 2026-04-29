@@ -66,6 +66,9 @@ This PR includes two deliberately small experiments:
 1. Graph to YAML: `@o11yfleet/core/pipeline` can derive `service.pipelines` from a graph and render collector YAML from component config.
 2. Validation: the graph validator catches invalid role edges, unsupported signal edges, duplicate YAML section names, missing endpoints, and missing receiver/exporter coverage.
 3. YAML to graph: `parseCollectorYamlToGraph()` imports existing Collector YAML into graph components and signal-specific wires, with `complete`, `partial`, or `raw-only` confidence.
+4. Builder shell: the portal builder now exposes Visual, Split, and YAML review modes over in-memory example graphs. This is intentionally not draft persistence yet; it gives the next fanout a concrete interaction surface to test before choosing a canvas library or backend draft contract.
+
+The importer also flags valid Collector sections that are preserved but not visualized, including `extensions`, `connectors`, and `service.extensions`. Those warnings should remain visible in future import UX so users understand when the graph is a partial projection of YAML.
 
 Run them with:
 

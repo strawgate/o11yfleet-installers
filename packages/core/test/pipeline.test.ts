@@ -137,6 +137,27 @@ describe("pipeline model", () => {
     expect(validation.errors.map((error) => error.code)).toContain("pipeline_topology_error");
   });
 
+  it("marks wires with missing endpoints as invalid", () => {
+    const missingEndpoint: PipelineGraph = {
+      id: "missing-endpoint",
+      label: "Missing endpoint",
+      components: [
+        { id: "r1", role: "receiver", type: "otlp", name: "otlp", signals: ["logs"], config: {} },
+      ],
+      wires: [{ from: "r1", to: "missing", signal: "logs" }],
+    };
+
+    const validation = validatePipelineGraph(missingEndpoint);
+
+    expect(validation.ok).toBe(false);
+    expect(validation.errors).toContainEqual(
+      expect.objectContaining({
+        code: "wire_missing_endpoint",
+        message: "Wire r1 -> missing references a missing component.",
+      }),
+    );
+  });
+
   it("marks crossed receiver and exporter processor wires as invalid", () => {
     const crossed: PipelineGraph = {
       id: "crossed",
@@ -311,7 +332,26 @@ service:
       extensions: { health_check: {} },
       service: { extensions: ["health_check"] },
     });
-    expect(result.warnings.map((warning) => warning.code)).toContain("collector_pipelines_missing");
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          code: "collector_pipelines_missing",
+          path: "service.pipelines",
+        }),
+        expect.objectContaining({
+          code: "collector_extensions_not_visualized",
+          message:
+            "extensions are valid Collector sections but are not represented in the current visual graph model.",
+          path: "extensions",
+        }),
+        expect.objectContaining({
+          code: "collector_service_extensions_not_visualized",
+          message:
+            "service.extensions is preserved as raw YAML and is not represented in the visual graph model.",
+          path: "service.extensions",
+        }),
+      ]),
+    );
   });
 
   it("keeps malformed collector YAML as raw-only instead of throwing", () => {

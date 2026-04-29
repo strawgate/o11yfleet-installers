@@ -353,6 +353,13 @@ function extractRawSections(
 
   for (const [key, value] of Object.entries(root)) {
     if (GRAPH_TOP_LEVEL_SECTIONS.has(key)) continue;
+    if (key === "connectors" || key === "extensions") {
+      warnings.push({
+        code: `collector_${key}_not_visualized`,
+        message: `${key} are valid Collector sections but are not represented in the current visual graph model.`,
+        path: key,
+      });
+    }
     rawSections[key] = toConfigValue(value, key, warnings);
   }
 
@@ -364,6 +371,14 @@ function extractRawSections(
         .map(([key, value]) => [key, toConfigValue(value, `service.${key}`, warnings)]),
     );
     if (Object.keys(serviceSidecar).length > 0) rawSections["service"] = serviceSidecar;
+    if (serviceSidecar["extensions"]) {
+      warnings.push({
+        code: "collector_service_extensions_not_visualized",
+        message:
+          "service.extensions is preserved as raw YAML and is not represented in the visual graph model.",
+        path: "service.extensions",
+      });
+    }
   }
 
   return rawSections;
