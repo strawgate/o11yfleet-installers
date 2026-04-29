@@ -16,7 +16,7 @@
     "react-dom": "^19.1.0",
     "react-router": "^7.6.2",
     "react-router-dom": "^7.6.2",
-    "@tanstack/react-query": "^5.80.6"
+    "@tanstack/react-query": "^5.100.6"
   },
   "devDependencies": {
     "@types/react": "^19.1.6",
