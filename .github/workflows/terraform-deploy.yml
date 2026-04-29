@@ -1,0 +1,128 @@
+name: Terraform Deploy
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/terraform-deploy.yml"
+      - "infra/terraform/**"
+      - "justfile"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/terraform-deploy.yml"
+      - "infra/terraform/**"
+      - "justfile"
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: "Terraform environment to plan or apply"
+        required: true
+        default: "prod"
+        type: choice
+        options:
+          - staging
+          - prod
+      apply:
+        description: "Apply after planning"
+        required: true
+        default: false
+        type: boolean
+
+concurrency:
+  group: terraform-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
+  TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Validate Terraform
+        run: just tf-validate
+
+  plan:
+    needs: [validate]
+    if: ${{ vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Select environment
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "env=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=prod" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check remote state configuration
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test -n "$TF_STATE_ENDPOINT"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$CLOUDFLARE_API_TOKEN"
+
+      - name: Terraform plan
+        run: just tf-plan ${{ steps.target.outputs.env }}
+
+  apply:
+    needs: [plan]
+    if: >-
+      ${{
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_APPLY_ENABLED == 'true') ||
+        (github.event_name == 'workflow_dispatch' && inputs.apply)
+      }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: production
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Select environment
+        id: target
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "env=${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "env=prod" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Terraform apply
+        run: just tf-apply ${{ steps.target.outputs.env }}

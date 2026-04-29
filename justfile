@@ -181,9 +181,62 @@ playwright-install:
 
 # ─── Infrastructure ──────────────────────────────────────────────────
 
+# Terraform init without backend access; enough for validation.
+tf-init:
+    cd infra/terraform && TF_DATA_DIR=.terraform/validate terraform init -backend=false
+
+# Terraform init against the shared remote state backend.
+tf-init-remote env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET to the R2 state bucket name}"
+    : "${TF_STATE_ENDPOINT:?Set TF_STATE_ENDPOINT to the R2 S3 endpoint URL}"
+    : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID to the R2 access key ID}"
+    : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY to the R2 secret access key}"
+    cd infra/terraform
+    shared_backend_args=(
+        -backend-config="bucket=${TF_STATE_BUCKET}"
+        -backend-config="key=o11yfleet/{{env}}/terraform.tfstate"
+        -backend-config="region=${TF_STATE_REGION:-auto}"
+        -backend-config="skip_credentials_validation=true"
+        -backend-config="skip_metadata_api_check=true"
+        -backend-config="skip_region_validation=true"
+    )
+    modern_backend_args=(
+        -backend-config="endpoints={s3=\"${TF_STATE_ENDPOINT}\"}"
+        -backend-config="skip_requesting_account_id=true"
+        -backend-config="skip_s3_checksum=true"
+        -backend-config="use_path_style=true"
+    )
+    legacy_backend_args=(
+        -backend-config="endpoint=${TF_STATE_ENDPOINT}"
+        -backend-config="force_path_style=true"
+    )
+    set +e
+    init_output=$(terraform init -reconfigure "${shared_backend_args[@]}" "${modern_backend_args[@]}" 2>&1)
+    init_status=$?
+    set -e
+    printf '%s\n' "$init_output"
+    if [ "$init_status" -eq 0 ]; then
+        exit 0
+    fi
+    if grep -q "not expected for the selected backend type" <<< "$init_output"; then
+        terraform init -reconfigure "${shared_backend_args[@]}" "${legacy_backend_args[@]}"
+        exit 0
+    fi
+    exit "$init_status"
+
 # Terraform validate
-tf-validate:
-    cd infra/terraform && terraform validate
+tf-validate: tf-init
+    cd infra/terraform && TF_DATA_DIR=.terraform/validate terraform validate
+
+# Terraform plan for an environment tfvars file against remote state.
+tf-plan env="staging": (tf-init-remote env)
+    cd infra/terraform && terraform plan -var-file=envs/{{env}}.tfvars
+
+# Terraform apply for an environment tfvars file against remote state.
+tf-apply env="prod": (tf-init-remote env)
+    cd infra/terraform && terraform apply -var-file=envs/{{env}}.tfvars -auto-approve
 
 # Deploy to staging
 deploy-staging:

@@ -1,8 +1,15 @@
 # Cloudflare Deployment Setup
 
-## DNS Records Needed
+Terraform is the target source of truth for stable Cloudflare resources. See
+[`terraform/README.md`](terraform/README.md) for the current stack, import
+sequence, and rollout guardrails.
 
-Add these DNS records in the [Cloudflare Dashboard](https://dash.cloudflare.com/417e8c0fd8f1a64e9f2c4845afa6dc56) for zone `o11yfleet.com`:
+This file records the existing production resources that predate Terraform
+ownership.
+
+## Existing DNS Records
+
+These records currently exist in the [Cloudflare Dashboard](https://dash.cloudflare.com/417e8c0fd8f1a64e9f2c4845afa6dc56) for zone `o11yfleet.com` and should be imported before Terraform manages them:
 
 ### Worker API
 
@@ -14,13 +21,20 @@ This routes `api.o11yfleet.com` → Worker (`o11yfleet-worker`).
 
 ### Site (Cloudflare Pages custom domains)
 
-Add these as **Custom Domains** in Pages > o11yfleet-site > Custom domains:
+Current custom domains in Pages > o11yfleet-site > Custom domains:
 
 - `o11yfleet.com` — marketing site
 - `app.o11yfleet.com` — user portal (root redirects to `/portal/overview`)
 - `admin.o11yfleet.com` — admin portal (root redirects to `/admin/overview`)
 
-Pages auto-creates CNAME records when you add custom domains.
+The Terraform target splits these into separate Pages projects:
+
+- `o11yfleet-site` -> `o11yfleet.com`
+- `o11yfleet-app` -> `app.o11yfleet.com`
+- `o11yfleet-admin` -> `admin.o11yfleet.com`
+
+Do not move the custom domains until the new Pages projects are provisioned and
+the deployment workflow is ready to publish to them.
 
 ## GitHub Secrets
 
@@ -42,6 +56,7 @@ Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
 - **Account > R2 > Edit**
 - **Account > Queues > Edit**
 - **Account > Cloudflare Pages > Edit**
+- **Account > Access: Apps and Policies > Edit** (for admin Access)
 
 Zone resources: Include all zones in account.
 
