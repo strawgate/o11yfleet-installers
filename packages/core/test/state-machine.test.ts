@@ -426,7 +426,9 @@ describe("Effective Config Processing", () => {
 
     const result = processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
-    expect(result.newState.effective_config_hash).toBeTruthy();
+    expect(result.newState.effective_config_hash).toBe(
+      "a9d8ad161fac5160417a2aec6a96fa89f571ba8de8b5d250c0d72ba30abf6384",
+    );
     expect(result.newState.effective_config_body).toBe(yamlBody);
     const effEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_EFFECTIVE_REPORTED);
     expect(effEvent).toBeDefined();

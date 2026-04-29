@@ -42,6 +42,11 @@
       },
     ],
   },
+  // Daily reconciliation fallback. Normal liveness is handled by WebSocket
+  // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+  "triggers": {
+    "crons": ["17 3 * * *"],
+  },
   "migrations": [
     {
       "tag": "v1",
@@ -99,6 +104,11 @@
           },
         ],
       },
+      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
+      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      "triggers": {
+        "crons": ["17 3 * * *"],
+      },
       "analytics_engine_datasets": [
         {
           "binding": "FP_ANALYTICS",
@@ -147,6 +157,11 @@
             "class_name": "ConfigDurableObject",
           },
         ],
+      },
+      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
+      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      "triggers": {
+        "crons": ["17 3 * * *"],
       },
       "analytics_engine_datasets": [
         {

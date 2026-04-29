@@ -90,6 +90,62 @@ const INTERNAL_HEADERS = [
   "x-fp-codec",
 ];
 
+const CRON_SWEEP_CONCURRENCY = 100;
+const CRON_SWEEP_TIMEOUT_MS = 2_000;
+
+async function withTimeout<T>(
+  start: (signal: AbortSignal) => Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    timer = setTimeout(() => {
+      controller.abort(message);
+    }, timeoutMs);
+    return await start(controller.signal);
+  } catch (err) {
+    if (controller.signal.aborted) {
+      throw new Error(message);
+    }
+    throw err;
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+): Promise<PromiseSettledResult<R>[]> {
+  const indexedItems = items.map((item, index) => ({ item, index }));
+  const results: PromiseSettledResult<R>[] = new Array(items.length);
+  let nextIndex = 0;
+
+  const workerCount = Math.min(concurrency, indexedItems.length);
+  await Promise.all(
+    Array.from({ length: workerCount }, async () => {
+      while (true) {
+        const task = indexedItems[nextIndex];
+        nextIndex += 1;
+        if (!task) break;
+
+        try {
+          results[task.index] = { status: "fulfilled", value: await mapper(task.item, task.index) };
+        } catch (reason) {
+          results[task.index] = { status: "rejected", reason };
+        }
+      }
+    }),
+  );
+
+  return results;
+}
+
 function addCorsHeaders(resp: Response, request: Request, env: Env): Response {
   const corsResp = new Response(resp.body, resp);
   const corsHeaders = getCorsHeaders(request, env);
@@ -149,6 +205,60 @@ export default {
 
   async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
     await handleQueueBatch(batch, env as unknown as { FP_ANALYTICS: AnalyticsEngineDataset });
+  },
+
+  /** Daily stale-agent audit. This is rare reconciliation for missed close/error events. */
+  async scheduled(
+    _controller: ScheduledController,
+    env: Env,
+    _ctx: ExecutionContext,
+  ): Promise<void> {
+    const configs = await env.FP_DB.prepare(`SELECT id, tenant_id FROM configurations`).all<{
+      id: string;
+      tenant_id: string;
+    }>();
+
+    if (!configs.results?.length) return;
+
+    const results = await mapWithConcurrency(
+      configs.results,
+      CRON_SWEEP_CONCURRENCY,
+      async (config) => {
+        const doName = `${config.tenant_id}:${config.id}`;
+        const doId = env.CONFIG_DO.idFromName(doName);
+        const stub = env.CONFIG_DO.get(doId);
+        const resp = await withTimeout(
+          (signal) =>
+            stub.fetch(
+              new Request("http://do/command/sweep", {
+                method: "POST",
+                headers: {
+                  "x-fp-tenant-id": config.tenant_id,
+                  "x-fp-config-id": config.id,
+                },
+                signal,
+              }),
+            ),
+          CRON_SWEEP_TIMEOUT_MS,
+          `[cron] sweep timed out for ${doName}`,
+        );
+        if (!resp.ok) {
+          throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status}`);
+        }
+        return resp.json<{ swept: number }>();
+      },
+    );
+
+    const swept = results
+      .filter((r): r is PromiseFulfilledResult<{ swept: number }> => r.status === "fulfilled")
+      .reduce((sum, r) => sum + r.value.swept, 0);
+    const failed = results.filter((r) => r.status === "rejected").length;
+
+    if (swept > 0 || failed > 0) {
+      console.warn(
+        `[cron] sweep complete: ${swept} stale agents across ${configs.results.length} configs (${failed} failures)`,
+      );
+    }
   },
 };
 

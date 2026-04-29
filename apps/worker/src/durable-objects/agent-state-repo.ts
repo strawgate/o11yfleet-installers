@@ -8,6 +8,10 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 
+// ─── Event buffer lifecycle constants ───────────────────────────────
+const MAX_PENDING_EVENTS = 10_000;
+const EVENT_TTL_SECONDS = 3600; // 1 hour
+
 /**
  * Initialize all tables in DO-local SQLite.
  */
@@ -24,7 +28,6 @@ export function initSchema(sql: SqlStorage): void {
       last_error TEXT NOT NULL DEFAULT '',
       current_config_hash TEXT,
       effective_config_hash TEXT,
-      effective_config_body TEXT,
       last_seen_at INTEGER NOT NULL DEFAULT 0,
       connected_at INTEGER NOT NULL DEFAULT 0,
       agent_description TEXT,
@@ -33,11 +36,27 @@ export function initSchema(sql: SqlStorage): void {
       rate_window_count INTEGER NOT NULL DEFAULT 0
     )
   `);
+  // Deduplicated config snapshots — one row per unique effective config hash.
+  // Agents reference by hash only; the body lives here once.
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS config_snapshots (
+      hash TEXT PRIMARY KEY,
+      body TEXT NOT NULL
+    )
+  `);
   sql.exec(`
     CREATE TABLE IF NOT EXISTS do_config (
       id INTEGER PRIMARY KEY CHECK (id = 1),
       desired_config_hash TEXT,
-      desired_config_content TEXT
+      desired_config_content TEXT,
+      last_sweep_at INTEGER NOT NULL DEFAULT 0,
+      last_sweep_stale_count INTEGER NOT NULL DEFAULT 0,
+      last_sweep_active_socket_count INTEGER NOT NULL DEFAULT 0,
+      last_sweep_duration_ms INTEGER NOT NULL DEFAULT 0,
+      last_stale_sweep_at INTEGER NOT NULL DEFAULT 0,
+      total_sweeps INTEGER NOT NULL DEFAULT 0,
+      total_stale_swept INTEGER NOT NULL DEFAULT 0,
+      sweeps_with_stale INTEGER NOT NULL DEFAULT 0
     )
   `);
   // Buffered events — written synchronously on the hot path (~µs),
@@ -45,6 +64,7 @@ export function initSchema(sql: SqlStorage): void {
   sql.exec(`
     CREATE TABLE IF NOT EXISTS pending_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
       payload TEXT NOT NULL
     )
   `);
@@ -55,6 +75,50 @@ export function initSchema(sql: SqlStorage): void {
   sql.exec(
     `CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`,
   );
+  // Migrate existing DO-local schemas forward.
+  migrateSchema(sql);
+}
+
+/** Idempotent schema migrations for existing DOs. */
+function migrateSchema(sql: SqlStorage): void {
+  const cols = sql.exec(`PRAGMA table_info(do_config)`).toArray();
+  const addDoConfigColumn = (name: string): void => {
+    if (!cols.some((c) => c["name"] === name)) {
+      sql.exec(`ALTER TABLE do_config ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+    }
+  };
+  // Migration 1: add stale sweep tracking columns to do_config
+  for (const column of [
+    "last_sweep_at",
+    "last_sweep_stale_count",
+    "last_sweep_active_socket_count",
+    "last_sweep_duration_ms",
+    "last_stale_sweep_at",
+    "total_sweeps",
+    "total_stale_swept",
+    "sweeps_with_stale",
+  ]) {
+    addDoConfigColumn(column);
+  }
+  // Migration 2: add created_at column to pending_events
+  const eventCols = sql.exec(`PRAGMA table_info(pending_events)`).toArray();
+  if (!eventCols.some((c) => c["name"] === "created_at")) {
+    sql.exec(`ALTER TABLE pending_events ADD COLUMN created_at INTEGER`);
+    sql.exec(`UPDATE pending_events SET created_at = unixepoch() WHERE created_at IS NULL`);
+  }
+  // Migration 3: add config_snapshots table (CREATE IF NOT EXISTS handles this)
+  // Migration 4: migrate legacy effective_config_body values into config_snapshots.
+  const agentCols = sql.exec(`PRAGMA table_info(agents)`).toArray();
+  if (agentCols.some((c) => c["name"] === "effective_config_body")) {
+    // Move existing bodies to config_snapshots.
+    sql.exec(`
+      INSERT OR IGNORE INTO config_snapshots (hash, body)
+      SELECT effective_config_hash, effective_config_body
+      FROM agents
+      WHERE effective_config_hash IS NOT NULL AND effective_config_body IS NOT NULL
+    `);
+    // Leave the legacy column in place for rollback compatibility. New reads use config_snapshots.
+  }
 }
 
 // ─── Config State ───────────────────────────────────────────────────
@@ -131,6 +195,7 @@ export function loadAgentState(
   const row = sql.exec(`SELECT * FROM agents WHERE instance_uid = ?`, instanceUid).toArray()[0];
 
   if (row) {
+    const effectiveHash = (row["effective_config_hash"] as string) ?? null;
     return {
       instance_uid: hexToUint8Array(row["instance_uid"] as string),
       tenant_id: row["tenant_id"] as string,
@@ -144,8 +209,10 @@ export function loadAgentState(
         ? hexToUint8Array(row["current_config_hash"] as string)
         : null,
       desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
-      effective_config_hash: (row["effective_config_hash"] as string) ?? null,
-      effective_config_body: (row["effective_config_body"] as string) ?? null,
+      effective_config_hash: effectiveHash,
+      // Hot path only needs the hash for change detection. The body is written
+      // to config_snapshots when newly reported, but not loaded on every heartbeat.
+      effective_config_body: null,
       last_seen_at: row["last_seen_at"] as number,
       connected_at: row["connected_at"] as number,
       agent_description: row["agent_description"] as string | null,
@@ -181,9 +248,18 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
   const uid = uint8ToHex(state.instance_uid);
   const configHash = state.current_config_hash ? uint8ToHex(state.current_config_hash) : null;
 
+  // Deduplicate effective config body into config_snapshots table
+  if (state.effective_config_hash && state.effective_config_body) {
+    sql.exec(
+      `INSERT OR IGNORE INTO config_snapshots (hash, body) VALUES (?, ?)`,
+      state.effective_config_hash,
+      state.effective_config_body,
+    );
+  }
+
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, effective_config_body, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
@@ -192,7 +268,6 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        last_error = excluded.last_error,
        current_config_hash = excluded.current_config_hash,
        effective_config_hash = COALESCE(excluded.effective_config_hash, agents.effective_config_hash),
-       effective_config_body = COALESCE(excluded.effective_config_body, agents.effective_config_body),
        last_seen_at = excluded.last_seen_at,
        connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
@@ -207,7 +282,6 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     state.last_error,
     configHash,
     state.effective_config_hash,
-    state.effective_config_body,
     state.last_seen_at,
     state.connected_at,
     state.agent_description,
@@ -269,7 +343,33 @@ export function getStats(sql: SqlStorage): {
  * List agents (most recently seen first).
  */
 export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknown>[] {
-  return sql.exec(`SELECT * FROM agents ORDER BY last_seen_at DESC LIMIT ?`, limit).toArray();
+  return sql
+    .exec(
+      `SELECT
+        a.instance_uid,
+        a.tenant_id,
+        a.config_id,
+        a.sequence_num,
+        a.generation,
+        a.healthy,
+        a.status,
+        a.last_error,
+        a.current_config_hash,
+        a.effective_config_hash,
+        cs.body AS effective_config_body,
+        a.last_seen_at,
+        a.connected_at,
+        a.agent_description,
+        a.capabilities,
+        a.rate_window_start,
+        a.rate_window_count
+       FROM agents a
+       LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash
+       ORDER BY a.last_seen_at DESC
+       LIMIT ?`,
+      limit,
+    )
+    .toArray();
 }
 
 // ─── Stale Agent Detection ──────────────────────────────────────────
@@ -284,35 +384,89 @@ export interface StaleAgent {
   config_id: string;
 }
 
-export function sweepStaleAgents(sql: SqlStorage, staleThresholdMs: number): StaleAgent[] {
+export function sweepStaleAgents(
+  sql: SqlStorage,
+  staleThresholdMs: number,
+  activeInstanceUids = new Set<string>(),
+): StaleAgent[] {
   const cutoff = Date.now() - staleThresholdMs;
-  const stale = sql
+  const candidates = sql
     .exec(
-      `UPDATE agents SET status = 'disconnected'
-       WHERE status != 'disconnected' AND last_seen_at > 0 AND last_seen_at < ?
-       RETURNING instance_uid, tenant_id, config_id`,
+      `SELECT instance_uid, tenant_id, config_id
+       FROM agents
+       WHERE status != 'disconnected' AND last_seen_at > 0 AND last_seen_at < ?`,
       cutoff,
     )
-    .toArray();
-  return stale.map((r) => ({
+    .toArray()
+    .filter((r) => !activeInstanceUids.has(r["instance_uid"] as string));
+
+  const stale = candidates.map((r) => ({
     instance_uid: r["instance_uid"] as string,
     tenant_id: r["tenant_id"] as string,
     config_id: r["config_id"] as string,
   }));
+
+  for (let i = 0; i < stale.length; i += 250) {
+    const chunk = stale.slice(i, i + 250);
+    const placeholders = chunk.map(() => "?").join(",");
+    sql.exec(
+      `UPDATE agents SET status = 'disconnected' WHERE instance_uid IN (${placeholders})`,
+      ...chunk.map((agent) => agent.instance_uid),
+    );
+  }
+
+  return stale;
 }
 
 // ─── Event Buffer ───────────────────────────────────────────────────
 // Events are written to SQLite synchronously (~µs) on the hot path,
 // then drained in batches by the alarm handler. Zero async on hot path.
+//
+// Lifecycle: events have a 1-hour TTL and a 10K row hard cap.
+// Overflow is trimmed on write; expired events are pruned each alarm tick.
 
 /**
  * Buffer events into SQLite for later batch delivery.
  * Synchronous — adds ~1µs per event to the hot path.
  */
 export function bufferEvents(sql: SqlStorage, events: unknown[]): void {
+  if (events.length === 0) return;
   for (const event of events) {
-    sql.exec(`INSERT INTO pending_events (payload) VALUES (?)`, JSON.stringify(event));
+    sql.exec(
+      `INSERT INTO pending_events (created_at, payload) VALUES (unixepoch(), ?)`,
+      JSON.stringify(event),
+    );
   }
+  trimOverflowEvents(sql);
+}
+
+function trimOverflowEvents(sql: SqlStorage): number {
+  const count = sql.exec(`SELECT COUNT(*) as c FROM pending_events`).one()["c"] as number;
+  if (count <= MAX_PENDING_EVENTS) return 0;
+
+  return sql
+    .exec(
+      `DELETE FROM pending_events WHERE id NOT IN (
+        SELECT id FROM pending_events ORDER BY id DESC LIMIT ?
+      ) RETURNING id`,
+      MAX_PENDING_EVENTS,
+    )
+    .toArray().length;
+}
+
+/**
+ * Prune expired and overflow events. Called at the start of each alarm tick.
+ * Returns the number of events pruned.
+ */
+export function pruneEvents(sql: SqlStorage): number {
+  // 1. Drop events older than TTL
+  const ttlCutoff = Math.floor(Date.now() / 1000) - EVENT_TTL_SECONDS;
+  const expired = sql
+    .exec(`DELETE FROM pending_events WHERE created_at < ? RETURNING id`, ttlCutoff)
+    .toArray().length;
+
+  // 2. Drop overflow (keep newest MAX_PENDING_EVENTS rows)
+  return expired + trimOverflowEvents(sql);
 }
 
 /**
@@ -321,7 +475,7 @@ export function bufferEvents(sql: SqlStorage, events: unknown[]): void {
  */
 export function peekBufferedEvents(
   sql: SqlStorage,
-  limit = 1000,
+  limit = 500,
 ): { events: unknown[]; ids: number[] } {
   const rows = sql
     .exec(`SELECT id, payload FROM pending_events ORDER BY id LIMIT ?`, limit)
@@ -341,4 +495,84 @@ export function deleteBufferedEvents(sql: SqlStorage, ids: number[]): void {
   if (ids.length === 0) return;
   const placeholders = ids.map(() => "?").join(",");
   sql.exec(`DELETE FROM pending_events WHERE id IN (${placeholders})`, ...ids);
+}
+
+/**
+ * Count pending events (for alarm scheduling decisions).
+ */
+export function countPendingEvents(sql: SqlStorage): number {
+  return sql.exec(`SELECT COUNT(*) as c FROM pending_events`).one()["c"] as number;
+}
+
+// ─── Alarm Sweep Tracking ───────────────────────────────────────────
+
+export interface SweepResult {
+  staleCount: number;
+  activeSocketCount: number;
+  durationMs: number;
+}
+
+export interface SweepStats {
+  last_sweep_at: number;
+  last_sweep_stale_count: number;
+  last_sweep_active_socket_count: number;
+  last_sweep_duration_ms: number;
+  last_stale_sweep_at: number;
+  total_sweeps: number;
+  total_stale_swept: number;
+  sweeps_with_stale: number;
+}
+
+/**
+ * Record that a stale sweep just completed.
+ */
+export function recordSweep(sql: SqlStorage, result: SweepResult): void {
+  const sweptAt = Date.now();
+  sql.exec(
+    `UPDATE do_config SET
+      last_sweep_at = ?,
+      last_sweep_stale_count = ?,
+      last_sweep_active_socket_count = ?,
+      last_sweep_duration_ms = ?,
+      last_stale_sweep_at = CASE WHEN ? > 0 THEN ? ELSE last_stale_sweep_at END,
+      total_sweeps = total_sweeps + 1,
+      total_stale_swept = total_stale_swept + ?,
+      sweeps_with_stale = sweeps_with_stale + ?
+     WHERE id = 1`,
+    sweptAt,
+    result.staleCount,
+    result.activeSocketCount,
+    result.durationMs,
+    result.staleCount,
+    sweptAt,
+    result.staleCount,
+    result.staleCount > 0 ? 1 : 0,
+  );
+}
+
+export function getSweepStats(sql: SqlStorage): SweepStats {
+  const row = sql
+    .exec(
+      `SELECT
+        last_sweep_at,
+        last_sweep_stale_count,
+        last_sweep_active_socket_count,
+        last_sweep_duration_ms,
+        last_stale_sweep_at,
+        total_sweeps,
+        total_stale_swept,
+        sweeps_with_stale
+       FROM do_config WHERE id = 1`,
+    )
+    .one();
+  return {
+    last_sweep_at: row["last_sweep_at"] as number,
+    last_sweep_stale_count: row["last_sweep_stale_count"] as number,
+    last_sweep_active_socket_count: row["last_sweep_active_socket_count"] as number,
+    last_sweep_duration_ms: row["last_sweep_duration_ms"] as number,
+    last_stale_sweep_at: row["last_stale_sweep_at"] as number,
+    total_sweeps: row["total_sweeps"] as number,
+    total_stale_swept: row["total_stale_swept"] as number,
+    sweeps_with_stale: row["sweeps_with_stale"] as number,
+  };
 }

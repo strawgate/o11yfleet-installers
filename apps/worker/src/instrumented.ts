@@ -23,8 +23,15 @@ const resolveConfig = (env: any, _trigger: any) => {
   };
 };
 
-// Auto-instrumented handler: fetch, queue, D1, R2, DO bindings
-export default instrument(handler, resolveConfig);
+// Auto-instrumented handler: fetch, D1, R2, DO bindings.
+// Preserve non-fetch module handlers explicitly; production uses this entrypoint,
+// so cron and queue handlers must be present here too.
+const instrumentedHandler = instrument(handler, resolveConfig);
+export default {
+  ...instrumentedHandler,
+  queue: handler.queue,
+  scheduled: handler.scheduled,
+};
 
 // Auto-instrumented DO: traces fetch() calls to the DO
 const InstrumentedConfigDO = instrumentDO(ConfigDurableObject, resolveConfig);
