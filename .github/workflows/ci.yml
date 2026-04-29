@@ -173,27 +173,8 @@ jobs:
           terraform init -backend=false
           terraform validate
 
-  test-web:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Web app tests
-        run: pnpm --filter @o11yfleet/web test
-
   deploy-staging:
-    needs: [lint-format, typecheck, test-core, test-worker, test-web, bundle-size, terraform]
+    needs: [lint-format, typecheck, test-core, test-worker, bundle-size, terraform]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'

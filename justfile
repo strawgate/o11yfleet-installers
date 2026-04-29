@@ -41,7 +41,7 @@ dev:
 
 # Dev mode — start management UI
 ui:
-    cd apps/web && pnpm dev
+    cd apps/site && pnpm dev
 
 # Generate protobuf types
 proto-gen:

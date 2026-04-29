@@ -36,7 +36,6 @@ just bench       # Run benchmarks
 | `packages/test-utils/` | Shared test utilities                             |
 | `apps/worker/`         | Cloudflare Worker (API + OpAMP + DO)              |
 | `apps/site/`           | React/Vite marketing site, user portal, admin UI  |
-| `apps/web/`            | Legacy React management UI                        |
 
 ## Project-Specific Rules
 
