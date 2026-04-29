@@ -36,7 +36,14 @@ import { RemoteConfigStatuses, ServerErrorResponseType } from "./types.js";
 // ─── Decode: protobuf binary → internal types ─────────────────────
 
 export function decodeAgentToServerProto(buf: ArrayBuffer): AgentToServer {
-  const pb = fromBinary(AgentToServerSchema, new Uint8Array(buf));
+  // Strip opamp-go varint header (0x00) if present.
+  // The opamp-go library prepends a single 0x00 byte before the protobuf payload.
+  // See: https://github.com/open-telemetry/opamp-go/blob/main/internal/wsmessage.go
+  let data = new Uint8Array(buf);
+  if (data.length > 0 && data[0] === 0x00) {
+    data = data.subarray(1);
+  }
+  const pb = fromBinary(AgentToServerSchema, data);
   return pbAgentToServerToInternal(pb);
 }
 
@@ -150,8 +157,13 @@ function pbAnyValueToInternal(pb: PbAnyValue | undefined): AnyValue {
 
 export function encodeServerToAgentProto(msg: ServerToAgent): ArrayBuffer {
   const pb = internalToServerToAgentPb(msg);
-  const bytes = toBinary(ServerToAgentSchema, pb);
-  return bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+  const payload = toBinary(ServerToAgentSchema, pb);
+  // Prepend opamp-go varint header (0x00) for wire compatibility.
+  // See: https://github.com/open-telemetry/opamp-go/blob/main/internal/wsmessage.go
+  const result = new Uint8Array(1 + payload.length);
+  result[0] = 0x00; // varint-encoded header value 0
+  result.set(payload, 1);
+  return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
 }
 
 function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
@@ -160,6 +172,14 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
     flags: BigInt(msg.flags),
     capabilities: BigInt(msg.capabilities),
   });
+
+  if (
+    msg.heart_beat_interval !== null &&
+    msg.heart_beat_interval !== undefined &&
+    msg.heart_beat_interval > 0
+  ) {
+    pb.heartBeatInterval = BigInt(msg.heart_beat_interval);
+  }
 
   if (msg.agent_identification) {
     pb.agentIdentification = create(AgentIdentificationSchema, {
@@ -214,12 +234,36 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
 /**
  * Detect whether a binary WebSocket message is protobuf or our custom JSON format.
  *
- * Our JSON format uses a 4-byte big-endian length prefix. For any payload under 16MB
- * the first byte is always 0x00. Standard protobuf never starts with 0x00 because
- * the first byte is a field tag (minimum 0x08 for field 1, varint type).
+ * Three wire formats exist:
+ *   1. Our JSON framing: [4-byte BE length][JSON starting with '{']
+ *   2. opamp-go protobuf: [0x00 varint header][protobuf] — used by real OTel Collectors
+ *   3. Raw protobuf (no header): first byte is a field tag (≥ 0x08)
+ *
+ * Detection: if the first byte is NOT 0x00, it's raw protobuf (case 3).
+ * If the first byte IS 0x00, we disambiguate cases 1 vs 2 by looking at
+ * the byte after the header:
+ *   - opamp-go: byte[1] is a protobuf field tag (0x08–0x7A range)
+ *   - JSON framing: bytes[0..3] are a 32-bit BE length, bytes[4] is '{' (0x7B)
  */
 export function isProtobufFrame(buf: ArrayBuffer): boolean {
   if (buf.byteLength === 0) return false;
-  const first = new Uint8Array(buf)[0];
-  return first !== 0x00;
+  const bytes = new Uint8Array(buf);
+  const first = bytes[0];
+
+  // Raw protobuf: first byte is a field tag (never 0x00 in valid proto3)
+  if (first !== 0x00) return true;
+
+  // First byte is 0x00 — could be opamp-go header or JSON framing length prefix.
+  // opamp-go header: single 0x00 varint, then protobuf (byte[1] is a field tag, 0x08+)
+  // JSON framing: 4-byte BE length, then JSON payload starting with '{'
+  if (buf.byteLength >= 5) {
+    // JSON framing: byte[4] should be '{' (0x7B) for any valid JSON object
+    if (bytes[4] === 0x7b) return false;
+  }
+
+  // If byte[1] looks like a protobuf field tag, treat as opamp-go format
+  if (buf.byteLength >= 2 && bytes[1]! >= 0x08) return true;
+
+  // Default: assume JSON framing
+  return false;
 }

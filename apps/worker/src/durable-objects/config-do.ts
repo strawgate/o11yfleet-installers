@@ -4,14 +4,14 @@ import {
   encodeServerToAgent,
   detectCodecFormat,
   ServerCapabilities,
+  ServerErrorResponseType,
 } from "@o11yfleet/core/codec";
-import type { CodecFormat } from "@o11yfleet/core/codec";
+import type { CodecFormat, ServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
-import type { AnyFleetEvent } from "@o11yfleet/core/events";
+import { FleetEventType } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
-import { FleetEventType } from "@o11yfleet/core/events";
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
@@ -31,6 +31,9 @@ import {
   saveDesiredConfig,
   checkRateLimit,
   sweepStaleAgents,
+  bufferEvents,
+  peekBufferedEvents,
+  deleteBufferedEvents,
 } from "./agent-state-repo.js";
 
 export interface ConfigDOEnv {
@@ -79,28 +82,49 @@ const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_AGENTS_PER_CONFIG = 50_000;
 
 // Stale agent detection: agents not seen for this long are marked disconnected.
-// Default: 3× heartbeat interval (heartbeats expected every 30s → 90s threshold).
-const STALE_AGENT_THRESHOLD_MS = 90_000;
-// How often the alarm fires to sweep stale agents (60s).
+// With zero-wake model, this only applies to agents whose SQLite last_seen_at
+// is old AND no longer have an active WebSocket. The primary liveness signal is
+// the auto-response ping/pong timestamp checked directly on sockets.
+const STALE_AGENT_THRESHOLD_MS = 3_600_000 * 3; // 3 hours (3× heartbeat interval)
+// How often the alarm fires (60s) — lightweight: zombie check + event drain.
 const STALE_SWEEP_INTERVAL_MS = 60_000;
+// Zombie threshold: disabled — we rely on webSocketClose() for clean disconnects
+// and the stale agent sweep (STALE_AGENT_THRESHOLD_MS) for silent deaths.
+// getWebSocketAutoResponseTimestamp() is unreliable at scale (returns null for
+// hibernated sockets), so we don't use it for liveness detection.
+// const ZOMBIE_THRESHOLD_MS = 120_000;
 
 // Config Durable Object — per tenant:config stateful actor for OpAMP agent management
 // Uses WebSocket Hibernation API with DO alarm for stale agent detection.
 //
-// Design: ZERO meaningful instance state. All mutable data lives in DO-local
-// SQLite (sync, ~µs per query). This makes the DO fully hibernation-proof —
-// no async rehydration needed on wake-up.
+// Design: Minimal instance state — all reads go through DO-local SQLite
+// (sync, ~µs per query). This makes the DO fully hibernation-safe.
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private initialized = false;
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
+    // Zero-cost keepalive: the runtime auto-replies "pong" to text "ping"
+    // frames WITHOUT waking the DO. This keeps the Cloudflare edge alive
+    // so OpAMP heartbeats can be infrequent (10 min) for health reporting only.
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair("ping", "pong"));
   }
 
   private ensureInit(): void {
     if (this.initialized) return;
     initSchema(this.ctx.storage.sql);
     this.initialized = true;
+  }
+
+  /** Get desired config from SQLite (~µs). */
+  private getDesiredConfig(): { hash: string | null; content: string | null } {
+    return loadDesiredConfig(this.ctx.storage.sql);
+  }
+
+  /** Get encoded config bytes from SQLite + TextEncoder. */
+  private getConfigBytes(): Uint8Array | null {
+    const config = this.getDesiredConfig();
+    return config.content ? new TextEncoder().encode(config.content) : null;
   }
 
   /** Schedule the stale-agent sweep alarm if not already set. */
@@ -218,19 +242,21 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           };
           const assignmentToken = await signClaim(claim, this.env.CLAIM_SECRET);
 
-          // Send enrollment_complete text frame with assignment claim.
-          // Both JSON and protobuf clients receive this so they can reconnect.
-          // (Standard OpAMP has no enrollment concept — this is our extension.)
-          ws.send(
-            JSON.stringify({
-              type: "enrollment_complete",
-              instance_uid: attachment.instance_uid,
-              assignment_claim: assignmentToken,
-            }),
-          );
+          // Send enrollment_complete text frame to JSON clients only.
+          // Real OpAMP clients (protobuf) don't understand this custom extension
+          // and would fail trying to parse it as protobuf.
+          if (codec === "json") {
+            ws.send(
+              JSON.stringify({
+                type: "enrollment_complete",
+                instance_uid: attachment.instance_uid,
+                assignment_claim: assignmentToken,
+              }),
+            );
+          }
 
-          // Emit enrollment event
-          await this.emitEvents([
+          // Buffer enrollment event to SQLite (sync, ~µs). Alarm drains in batches.
+          bufferEvents(this.ctx.storage.sql, [
             {
               type: FleetEventType.AGENT_ENROLLED,
               tenant_id: attachment.tenant_id,
@@ -256,13 +282,33 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     // Rate limit — atomic check-and-increment in SQLite
     if (checkRateLimit(this.ctx.storage.sql, attachment.instance_uid, MAX_MESSAGES_PER_MINUTE)) {
+      // Send a proper OpAMP error response with RetryInfo before closing
+      try {
+        const retryDelayNs = BigInt(30_000_000_000); // 30 seconds
+        const errorResponse: ServerToAgent = {
+          instance_uid: hexToUint8Array(attachment.instance_uid),
+          flags: 0,
+          capabilities:
+            ServerCapabilities.AcceptsStatus |
+            ServerCapabilities.OffersRemoteConfig |
+            ServerCapabilities.AcceptsEffectiveConfig,
+          error_response: {
+            type: ServerErrorResponseType.Unavailable,
+            error_message: "Rate limit exceeded — retry after 30s",
+            retry_info: { retry_after_nanoseconds: retryDelayNs },
+          },
+        };
+        ws.send(encodeServerToAgent(errorResponse, codec));
+      } catch {
+        // Best-effort — socket may already be broken
+      }
       ws.close(4029, "Rate limit exceeded");
       return;
     }
 
-    // Load config from SQLite (sync, ~µs)
-    const config = loadDesiredConfig(this.ctx.storage.sql);
-    const configBytes = config.content ? new TextEncoder().encode(config.content) : null;
+    // Load config from SQLite (~µs)
+    const config = this.getDesiredConfig();
+    const configBytes = this.getConfigBytes();
 
     const span = startWsMessageSpan(
       attachment.instance_uid,
@@ -288,9 +334,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         saveAgentState(this.ctx.storage.sql, result.newState);
       }
 
+      // Buffer events to SQLite (sync, ~µs). Alarm drains in batches.
       if (result.events.length > 0) {
         span.setAttribute("opamp.events_emitted", result.events.length);
-        await this.emitEvents(result.events);
+        bufferEvents(this.ctx.storage.sql, result.events);
       }
 
       if (result.response) {
@@ -301,7 +348,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       }
     } catch (err) {
       recordSpanError(span, err);
-      throw err;
+      console.error(`[ws.message] error for ${attachment.instance_uid}:`, err);
+      // Close this connection gracefully — never propagate errors out of
+      // webSocketMessage() because an unhandled throw can crash the entire DO,
+      // killing ALL WebSocket connections (not just this one).
+      try {
+        ws.close(1011, "Internal error");
+      } catch {
+        // Socket may already be closed
+      }
     } finally {
       span.end();
     }
@@ -314,7 +369,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     const span = startWsLifecycleSpan("close", attachment.instance_uid);
     try {
-      const config = loadDesiredConfig(this.ctx.storage.sql);
+      const config = this.getDesiredConfig();
       const state = loadAgentState(
         this.ctx.storage.sql,
         attachment.instance_uid,
@@ -326,7 +381,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (state.status === "disconnected") {
         return;
       }
-      await this.emitEvents([
+      bufferEvents(this.ctx.storage.sql, [
         {
           type: FleetEventType.AGENT_DISCONNECTED,
           tenant_id: attachment.tenant_id,
@@ -350,7 +405,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     try {
       if (attachment) {
         markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
-        await this.emitEvents([
+        bufferEvents(this.ctx.storage.sql, [
           {
             type: FleetEventType.AGENT_DISCONNECTED,
             tenant_id: attachment.tenant_id,
@@ -371,34 +426,68 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  // ─── Stale Agent Alarm ────────────────────────────────────────────
+  // ─── Alarm: Stale Sweep + Event Drain ───────────────────────────────
+  //
+  // Zero-wake model: ping/pong auto-response keeps connections alive without
+  // waking the DO. The alarm handles stale agent cleanup and event draining.
 
   override async alarm(): Promise<void> {
     this.ensureInit();
 
+    const now = Date.now();
+    const sockets = this.ctx.getWebSockets();
+
+    // 1. Zombie detection — DISABLED.
+    //    getWebSocketAutoResponseTimestamp() returns null for hibernated sockets
+    //    at scale, causing false-positive kills. Instead we rely on:
+    //    - webSocketClose() for clean disconnects (instant)
+    //    - Stale agent sweep below for silent deaths (STALE_AGENT_THRESHOLD_MS)
+    //    - Ping/pong auto-response keeps Cloudflare edge alive (zero DO cost)
+
+    // 2. Sweep agents in SQLite that have no active WebSocket AND haven't been
+    //    seen for a long time (fallback for any edge case where webSocketClose
+    //    didn't fire). This is rare — the zombie check above catches most cases.
     const staleUids = sweepStaleAgents(this.ctx.storage.sql, STALE_AGENT_THRESHOLD_MS);
-
-    // Emit disconnect events for stale agents
     if (staleUids.length > 0) {
-      const events: AnyFleetEvent[] = staleUids.map((agent) => ({
-        type: FleetEventType.AGENT_DISCONNECTED as const,
-        tenant_id: agent.tenant_id,
-        config_id: agent.config_id,
-        instance_uid: agent.instance_uid,
-        timestamp: Date.now(),
-        reason: "stale_timeout",
-      }));
-
-      await this.emitEvents(events);
+      console.warn(`[alarm] swept ${staleUids.length} stale agents from SQLite`);
+      bufferEvents(
+        this.ctx.storage.sql,
+        staleUids.map((agent) => ({
+          type: FleetEventType.AGENT_DISCONNECTED as const,
+          tenant_id: agent.tenant_id,
+          config_id: agent.config_id,
+          instance_uid: agent.instance_uid,
+          timestamp: now,
+          reason: "stale_timeout",
+        })),
+      );
     }
 
-    // Reschedule if there are still active (non-disconnected) agents
-    const activeCount = this.ctx.storage.sql
-      .exec(`SELECT COUNT(*) as count FROM agents WHERE status != 'disconnected'`)
+    // 3. Drain buffered events → queue in one batch per alarm tick.
+    //    Peek first, delete only after successful delivery to avoid data loss.
+    const { events: pending, ids: pendingIds } = peekBufferedEvents(this.ctx.storage.sql, 100);
+    if (pending.length > 0) {
+      try {
+        await this.env.FP_EVENTS.sendBatch(pending.map((event) => ({ body: event })));
+        deleteBufferedEvents(this.ctx.storage.sql, pendingIds);
+      } catch (err) {
+        console.error(`[alarm] sendBatch failed (${pending.length} events), will retry:`, err);
+      }
+    }
+
+    // 4. Reschedule
+    const aliveSocketCount = this.ctx.getWebSockets().length;
+    const pendingCount = this.ctx.storage.sql
+      .exec(`SELECT COUNT(*) as count FROM pending_events`)
       .one()["count"] as number;
 
-    if (activeCount > 0 || this.ctx.getWebSockets().length > 0) {
-      await this.ctx.storage.setAlarm(Date.now() + STALE_SWEEP_INTERVAL_MS);
+    console.warn(
+      `[alarm] ws=${sockets.length} alive=${aliveSocketCount} stale=${staleUids.length} pending_events=${pendingCount} drained=${pending.length}`,
+    );
+
+    if (aliveSocketCount > 0 || pendingCount > 0) {
+      const nextInterval = pendingCount > 0 ? 5_000 : STALE_SWEEP_INTERVAL_MS;
+      await this.ctx.storage.setAlarm(Date.now() + nextInterval);
     }
   }
 
@@ -472,29 +561,19 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   private handleGetStats(): Response {
     const stats = getStats(this.ctx.storage.sql);
-    const config = loadDesiredConfig(this.ctx.storage.sql);
+    const config = this.getDesiredConfig();
+    const wsCount = this.ctx.getWebSockets().length;
     return Response.json({
       total_agents: stats.total,
-      connected_agents: stats.connected,
+      connected_agents: wsCount, // authoritative: live WebSocket count, not SQL
       healthy_agents: stats.healthy,
       desired_config_hash: config.hash,
-      active_websockets: this.ctx.getWebSockets().length,
+      active_websockets: wsCount,
     });
   }
 
   private handleGetAgents(): Response {
     const agents = listAgents(this.ctx.storage.sql);
     return Response.json({ agents });
-  }
-
-  // ─── Event Emission ───────────────────────────────────────────────
-
-  private async emitEvents(events: AnyFleetEvent[]): Promise<void> {
-    try {
-      // Send each event independently so a single failure doesn't drop the rest
-      await Promise.allSettled(events.map((event) => this.env.FP_EVENTS.send(event)));
-    } catch {
-      // Queue failure should not break WS handling
-    }
   }
 }

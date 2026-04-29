@@ -28,20 +28,22 @@ describe("Cost Guardrails", () => {
     last_error: "",
     current_config_hash: null,
     desired_config_hash: null,
+    effective_config_hash: null,
+    effective_config_body: null,
     capabilities: AgentCapabilities.ReportsStatus,
     last_seen_at: Date.now(),
     connected_at: Date.now(),
     agent_description: null,
   };
 
-  it("no-op heartbeat: shouldPersist is false (no D1 write)", () => {
+  it("heartbeat always persists sequence_num + last_seen_at (DO SQLite is ~µs)", () => {
     const result = processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
     });
-    expect(result.shouldPersist).toBe(false);
+    expect(result.shouldPersist).toBe(true);
   });
 
   it("no-op heartbeat: zero events emitted (no queue cost)", () => {

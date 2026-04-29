@@ -32,13 +32,6 @@ extensions:
     capabilities:
       reports_effective_config: true
       reports_health: true
-      reports_own_metrics: false
-      reports_remote_config: true
-      accepts_remote_config: true
-      accepts_restart_command: false
-      accepts_opamp_connection_settings: false
-      accepts_other_connection_settings: false
-      accepts_packages: false
 
 # Minimal collector config — o11yfleet can push a different one via OpAMP
 receivers:

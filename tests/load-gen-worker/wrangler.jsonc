@@ -1,0 +1,29 @@
+{
+  "name": "o11yfleet-loadgen",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-04-26",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "vars": {},
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "LOAD_GEN_DO",
+        "class_name": "LoadGenDO",
+      },
+    ],
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_classes": ["LoadGenDO"],
+    },
+  ],
+  "env": {
+    "staging": {
+      "vars": {
+        "ENVIRONMENT": "staging",
+      },
+    },
+  },
+}

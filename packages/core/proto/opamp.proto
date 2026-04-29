@@ -46,6 +46,8 @@ message ServerToAgent {
   uint64 capabilities = 7;
   AgentIdentification agent_identification = 8;
   // fields 9-11: Beta/Development features (not implemented)
+  // Recommended minimum interval in nanoseconds between AgentToServer messages.
+  uint64 heart_beat_interval = 12;
 }
 
 message AgentDescription {

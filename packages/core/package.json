@@ -9,6 +9,8 @@
     ".": "./src/index.ts",
     "./ai": "./src/ai/index.ts",
     "./codec": "./src/codec/index.ts",
+    "./codec/gen/opamp_pb": "./src/codec/gen/opamp_pb.ts",
+    "./codec/gen/anyvalue_pb": "./src/codec/gen/anyvalue_pb.ts",
     "./state-machine": "./src/state-machine/index.ts",
     "./auth": "./src/auth/index.ts",
     "./pipeline": "./src/pipeline/index.ts",

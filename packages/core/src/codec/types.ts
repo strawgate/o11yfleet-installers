@@ -19,6 +19,8 @@ export interface ServerToAgent {
   flags: number;
   capabilities: number;
   agent_identification?: AgentIdentification;
+  /** Recommended heartbeat interval in nanoseconds (OpAMP spec field 12). */
+  heart_beat_interval?: number;
 }
 
 export interface AgentDescription {

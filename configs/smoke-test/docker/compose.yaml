@@ -1,0 +1,22 @@
+# Docker Compose for running real OTel Collectors against o11yfleet.
+#
+# The otelcol-contrib image is distroless (no shell, no curl), so
+# enrollment and config generation are handled by launch-collectors.sh
+# on the host. This compose file just mounts the generated config.
+#
+# Usage:
+#   just collectors-docker 5           # recommended
+#   # Or manually:
+#   ./configs/smoke-test/docker/launch-collectors.sh 5
+
+services:
+  collector:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:0.123.0
+    command: ["--config", "/etc/otelcol-contrib/config.yaml"]
+    volumes:
+      - ./.generated-config.yaml:/etc/otelcol-contrib/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    restart: unless-stopped
+    deploy:
+      replicas: ${FP_COLLECTORS:-3}

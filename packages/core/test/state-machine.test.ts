@@ -17,6 +17,8 @@ function makeDefaultState(overrides: Partial<AgentState> = {}): AgentState {
     last_error: "",
     current_config_hash: null,
     desired_config_hash: null,
+    effective_config_hash: null,
+    effective_config_body: null,
     last_seen_at: 0,
     connected_at: 0,
     agent_description: null,
@@ -74,7 +76,9 @@ describe("state-machine/processFrame", () => {
     };
 
     const result = processFrame(state, msg);
-    expect(result.shouldPersist).toBe(false);
+    // Always persists: sequence_num + last_seen_at must be saved to prevent
+    // false sequence gaps on the next heartbeat.
+    expect(result.shouldPersist).toBe(true);
     expect(result.events).toHaveLength(0);
     expect(result.response).not.toBeNull();
   });
@@ -278,7 +282,7 @@ describe("state-machine/processFrame", () => {
 
     const result = processFrame(state, msg);
     expect(result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED)).toBeUndefined();
-    expect(result.shouldPersist).toBe(false);
+    expect(result.shouldPersist).toBe(true);
   });
 
   it("updates agent description — persists", () => {
@@ -390,5 +394,139 @@ describe("Config Content Delivery", () => {
 
     const result = processFrame(state, msg, new TextEncoder().encode("should not appear"));
     expect(result.response?.remote_config).toBeUndefined();
+  });
+});
+
+// ========================
+// Effective Config Processing
+// ========================
+describe("Effective Config Processing", () => {
+  it("stores effective config when reported", () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+    });
+    const yamlBody = "receivers:\n  otlp:\n    protocols:\n      grpc:";
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.ReportsEffectiveConfig,
+      flags: 0,
+      effective_config: {
+        config_map: {
+          config_map: {
+            "": {
+              body: new TextEncoder().encode(yamlBody),
+              content_type: "text/yaml",
+            },
+          },
+        },
+      },
+    };
+
+    const result = processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.newState.effective_config_hash).toBeTruthy();
+    expect(result.newState.effective_config_body).toBe(yamlBody);
+    const effEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_EFFECTIVE_REPORTED);
+    expect(effEvent).toBeDefined();
+  });
+
+  it("does not persist when effective config unchanged", () => {
+    const yamlBody = "receivers:\n  otlp:";
+    // Pre-compute the hash by running once
+    const firstState = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: AgentCapabilities.ReportsEffectiveConfig,
+    });
+    const firstMsg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.ReportsEffectiveConfig,
+      flags: 0,
+      effective_config: {
+        config_map: {
+          config_map: {
+            "": {
+              body: new TextEncoder().encode(yamlBody),
+              content_type: "text/yaml",
+            },
+          },
+        },
+      },
+    };
+    const firstResult = processFrame(firstState, firstMsg);
+    const hash = firstResult.newState.effective_config_hash;
+
+    // Second call with same effective config — should not persist
+    const secondState = makeDefaultState({
+      sequence_num: 2,
+      connected_at: Date.now(),
+      effective_config_hash: hash,
+      effective_config_body: yamlBody,
+      capabilities: AgentCapabilities.ReportsEffectiveConfig,
+    });
+    const secondMsg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 3,
+      capabilities: AgentCapabilities.ReportsEffectiveConfig,
+      flags: 0,
+      effective_config: {
+        config_map: {
+          config_map: {
+            "": {
+              body: new TextEncoder().encode(yamlBody),
+              content_type: "text/yaml",
+            },
+          },
+        },
+      },
+    };
+    const secondResult = processFrame(secondState, secondMsg);
+    expect(secondResult.shouldPersist).toBe(true);
+    expect(secondResult.events).toHaveLength(0);
+  });
+});
+
+// ========================
+// RequestInstanceUid Flag
+// ========================
+describe("RequestInstanceUid", () => {
+  it("assigns new instance UID when RequestInstanceUid flag is set", () => {
+    const state = makeDefaultState({
+      sequence_num: 0,
+      connected_at: 0,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 1, // RequestInstanceUid
+    };
+
+    const result = processFrame(state, msg);
+    expect(result.response).toBeDefined();
+    expect(result.response!.agent_identification).toBeDefined();
+    expect(result.response!.agent_identification!.new_instance_uid).toHaveLength(16);
+    // Ensure it's actually random (not all zeros)
+    const allZero = result.response!.agent_identification!.new_instance_uid.every((b) => b === 0);
+    expect(allZero).toBe(false);
+  });
+
+  it("does not assign UID when flag is not set", () => {
+    const state = makeDefaultState({
+      sequence_num: 0,
+      connected_at: 0,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 0,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+
+    const result = processFrame(state, msg);
+    expect(result.response!.agent_identification).toBeUndefined();
   });
 });

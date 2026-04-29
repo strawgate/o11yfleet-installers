@@ -29,12 +29,8 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file opamp.proto.
  */
-export const file_opamp: GenFile =
-  /*@__PURE__*/
-  fileDesc(
-    "CgtvcGFtcC5wcm90bxILb3BhbXAucHJvdG8i9wIKDUFnZW50VG9TZXJ2ZXISFAoMaW5zdGFuY2VfdWlkGAEgASgMEhQKDHNlcXVlbmNlX251bRgCIAEoBBI4ChFhZ2VudF9kZXNjcmlwdGlvbhgDIAEoCzIdLm9wYW1wLnByb3RvLkFnZW50RGVzY3JpcHRpb24SFAoMY2FwYWJpbGl0aWVzGAQgASgEEiwKBmhlYWx0aBgFIAEoCzIcLm9wYW1wLnByb3RvLkNvbXBvbmVudEhlYWx0aBI2ChBlZmZlY3RpdmVfY29uZmlnGAYgASgLMhwub3BhbXAucHJvdG8uRWZmZWN0aXZlQ29uZmlnEj0KFHJlbW90ZV9jb25maWdfc3RhdHVzGAcgASgLMh8ub3BhbXAucHJvdG8uUmVtb3RlQ29uZmlnU3RhdHVzEjYKEGFnZW50X2Rpc2Nvbm5lY3QYCSABKAsyHC5vcGFtcC5wcm90by5BZ2VudERpc2Nvbm5lY3QSDQoFZmxhZ3MYCiABKAQi+wEKDVNlcnZlclRvQWdlbnQSFAoMaW5zdGFuY2VfdWlkGAEgASgMEjgKDmVycm9yX3Jlc3BvbnNlGAIgASgLMiAub3BhbXAucHJvdG8uU2VydmVyRXJyb3JSZXNwb25zZRI1Cg1yZW1vdGVfY29uZmlnGAMgASgLMh4ub3BhbXAucHJvdG8uQWdlbnRSZW1vdGVDb25maWcSDQoFZmxhZ3MYBiABKAQSFAoMY2FwYWJpbGl0aWVzGAcgASgEEj4KFGFnZW50X2lkZW50aWZpY2F0aW9uGAggASgLMiAub3BhbXAucHJvdG8uQWdlbnRJZGVudGlmaWNhdGlvbiKEAQoQQWdlbnREZXNjcmlwdGlvbhI1ChZpZGVudGlmeWluZ19hdHRyaWJ1dGVzGAEgAygLMhUub3BhbXAucHJvdG8uS2V5VmFsdWUSOQoabm9uX2lkZW50aWZ5aW5nX2F0dHJpYnV0ZXMYAiADKAsyFS5vcGFtcC5wcm90by5LZXlWYWx1ZSKwAgoPQ29tcG9uZW50SGVhbHRoEg8KB2hlYWx0aHkYASABKAgSHAoUc3RhcnRfdGltZV91bml4X25hbm8YAiABKAYSEgoKbGFzdF9lcnJvchgDIAEoCRIOCgZzdGF0dXMYBCABKAkSHQoVc3RhdHVzX3RpbWVfdW5peF9uYW5vGAUgASgGElIKFGNvbXBvbmVudF9oZWFsdGhfbWFwGAYgAygLMjQub3BhbXAucHJvdG8uQ29tcG9uZW50SGVhbHRoLkNvbXBvbmVudEhlYWx0aE1hcEVudHJ5GlcKF0NvbXBvbmVudEhlYWx0aE1hcEVudHJ5EgsKA2tleRgBIAEoCRIrCgV2YWx1ZRgCIAEoCzIcLm9wYW1wLnByb3RvLkNvbXBvbmVudEhlYWx0aDoCOAEiQgoPRWZmZWN0aXZlQ29uZmlnEi8KCmNvbmZpZ19tYXAYASABKAsyGy5vcGFtcC5wcm90by5BZ2VudENvbmZpZ01hcCKgAQoOQWdlbnRDb25maWdNYXASPgoKY29uZmlnX21hcBgBIAMoCzIqLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnTWFwLkNvbmZpZ01hcEVudHJ5Gk4KDkNvbmZpZ01hcEVudHJ5EgsKA2tleRgBIAEoCRIrCgV2YWx1ZRgCIAEoCzIcLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnRmlsZToCOAEiNQoPQWdlbnRDb25maWdGaWxlEgwKBGJvZHkYASABKAwSFAoMY29udGVudF90eXBlGAIgASgJIn8KElJlbW90ZUNvbmZpZ1N0YXR1cxIfChdsYXN0X3JlbW90ZV9jb25maWdfaGFzaBgBIAEoDBIxCgZzdGF0dXMYAiABKA4yIS5vcGFtcC5wcm90by5SZW1vdGVDb25maWdTdGF0dXNlcxIVCg1lcnJvcl9tZXNzYWdlGAMgASgJIlUKEUFnZW50UmVtb3RlQ29uZmlnEisKBmNvbmZpZxgBIAEoCzIbLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnTWFwEhMKC2NvbmZpZ19oYXNoGAIgASgMIowBChNTZXJ2ZXJFcnJvclJlc3BvbnNlEjIKBHR5cGUYASABKA4yJC5vcGFtcC5wcm90by5TZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZRIVCg1lcnJvcl9tZXNzYWdlGAIgASgJEioKCnJldHJ5X2luZm8YAyABKAsyFi5vcGFtcC5wcm90by5SZXRyeUluZm8iLAoJUmV0cnlJbmZvEh8KF3JldHJ5X2FmdGVyX25hbm9zZWNvbmRzGAEgASgEIi8KE0FnZW50SWRlbnRpZmljYXRpb24SGAoQbmV3X2luc3RhbmNlX3VpZBgBIAEoDCIRCg9BZ2VudERpc2Nvbm5lY3QqnAEKFFJlbW90ZUNvbmZpZ1N0YXR1c2VzEh4KGlJlbW90ZUNvbmZpZ1N0YXR1c2VzX1VOU0VUEAASIAocUmVtb3RlQ29uZmlnU3RhdHVzZXNfQVBQTElFRBABEiEKHVJlbW90ZUNvbmZpZ1N0YXR1c2VzX0FQUExZSU5HEAISHwobUmVtb3RlQ29uZmlnU3RhdHVzZXNfRkFJTEVEEAMqjwEKF1NlcnZlckVycm9yUmVzcG9uc2VUeXBlEiMKH1NlcnZlckVycm9yUmVzcG9uc2VUeXBlX1Vua25vd24QABImCiJTZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZV9CYWRSZXF1ZXN0EAESJwojU2VydmVyRXJyb3JSZXNwb25zZVR5cGVfVW5hdmFpbGFibGUQAmIGcHJvdG8z",
-    [file_anyvalue],
-  );
+export const file_opamp: GenFile = /*@__PURE__*/
+  fileDesc("CgtvcGFtcC5wcm90bxILb3BhbXAucHJvdG8i9wIKDUFnZW50VG9TZXJ2ZXISFAoMaW5zdGFuY2VfdWlkGAEgASgMEhQKDHNlcXVlbmNlX251bRgCIAEoBBI4ChFhZ2VudF9kZXNjcmlwdGlvbhgDIAEoCzIdLm9wYW1wLnByb3RvLkFnZW50RGVzY3JpcHRpb24SFAoMY2FwYWJpbGl0aWVzGAQgASgEEiwKBmhlYWx0aBgFIAEoCzIcLm9wYW1wLnByb3RvLkNvbXBvbmVudEhlYWx0aBI2ChBlZmZlY3RpdmVfY29uZmlnGAYgASgLMhwub3BhbXAucHJvdG8uRWZmZWN0aXZlQ29uZmlnEj0KFHJlbW90ZV9jb25maWdfc3RhdHVzGAcgASgLMh8ub3BhbXAucHJvdG8uUmVtb3RlQ29uZmlnU3RhdHVzEjYKEGFnZW50X2Rpc2Nvbm5lY3QYCSABKAsyHC5vcGFtcC5wcm90by5BZ2VudERpc2Nvbm5lY3QSDQoFZmxhZ3MYCiABKAQimAIKDVNlcnZlclRvQWdlbnQSFAoMaW5zdGFuY2VfdWlkGAEgASgMEjgKDmVycm9yX3Jlc3BvbnNlGAIgASgLMiAub3BhbXAucHJvdG8uU2VydmVyRXJyb3JSZXNwb25zZRI1Cg1yZW1vdGVfY29uZmlnGAMgASgLMh4ub3BhbXAucHJvdG8uQWdlbnRSZW1vdGVDb25maWcSDQoFZmxhZ3MYBiABKAQSFAoMY2FwYWJpbGl0aWVzGAcgASgEEj4KFGFnZW50X2lkZW50aWZpY2F0aW9uGAggASgLMiAub3BhbXAucHJvdG8uQWdlbnRJZGVudGlmaWNhdGlvbhIbChNoZWFydF9iZWF0X2ludGVydmFsGAwgASgEIoQBChBBZ2VudERlc2NyaXB0aW9uEjUKFmlkZW50aWZ5aW5nX2F0dHJpYnV0ZXMYASADKAsyFS5vcGFtcC5wcm90by5LZXlWYWx1ZRI5Chpub25faWRlbnRpZnlpbmdfYXR0cmlidXRlcxgCIAMoCzIVLm9wYW1wLnByb3RvLktleVZhbHVlIrACCg9Db21wb25lbnRIZWFsdGgSDwoHaGVhbHRoeRgBIAEoCBIcChRzdGFydF90aW1lX3VuaXhfbmFubxgCIAEoBhISCgpsYXN0X2Vycm9yGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIdChVzdGF0dXNfdGltZV91bml4X25hbm8YBSABKAYSUgoUY29tcG9uZW50X2hlYWx0aF9tYXAYBiADKAsyNC5vcGFtcC5wcm90by5Db21wb25lbnRIZWFsdGguQ29tcG9uZW50SGVhbHRoTWFwRW50cnkaVwoXQ29tcG9uZW50SGVhbHRoTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQ29tcG9uZW50SGVhbHRoOgI4ASJCCg9FZmZlY3RpdmVDb25maWcSLwoKY29uZmlnX21hcBgBIAEoCzIbLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnTWFwIqABCg5BZ2VudENvbmZpZ01hcBI+Cgpjb25maWdfbWFwGAEgAygLMioub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXAuQ29uZmlnTWFwRW50cnkaTgoOQ29uZmlnTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQWdlbnRDb25maWdGaWxlOgI4ASI1Cg9BZ2VudENvbmZpZ0ZpbGUSDAoEYm9keRgBIAEoDBIUCgxjb250ZW50X3R5cGUYAiABKAkifwoSUmVtb3RlQ29uZmlnU3RhdHVzEh8KF2xhc3RfcmVtb3RlX2NvbmZpZ19oYXNoGAEgASgMEjEKBnN0YXR1cxgCIAEoDjIhLm9wYW1wLnByb3RvLlJlbW90ZUNvbmZpZ1N0YXR1c2VzEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiVQoRQWdlbnRSZW1vdGVDb25maWcSKwoGY29uZmlnGAEgASgLMhsub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXASEwoLY29uZmlnX2hhc2gYAiABKAwijAEKE1NlcnZlckVycm9yUmVzcG9uc2USMgoEdHlwZRgBIAEoDjIkLm9wYW1wLnByb3RvLlNlcnZlckVycm9yUmVzcG9uc2VUeXBlEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSKgoKcmV0cnlfaW5mbxgDIAEoCzIWLm9wYW1wLnByb3RvLlJldHJ5SW5mbyIsCglSZXRyeUluZm8SHwoXcmV0cnlfYWZ0ZXJfbmFub3NlY29uZHMYASABKAQiLwoTQWdlbnRJZGVudGlmaWNhdGlvbhIYChBuZXdfaW5zdGFuY2VfdWlkGAEgASgMIhEKD0FnZW50RGlzY29ubmVjdCqcAQoUUmVtb3RlQ29uZmlnU3RhdHVzZXMSHgoaUmVtb3RlQ29uZmlnU3RhdHVzZXNfVU5TRVQQABIgChxSZW1vdGVDb25maWdTdGF0dXNlc19BUFBMSUVEEAESIQodUmVtb3RlQ29uZmlnU3RhdHVzZXNfQVBQTFlJTkcQAhIfChtSZW1vdGVDb25maWdTdGF0dXNlc19GQUlMRUQQAyqPAQoXU2VydmVyRXJyb3JSZXNwb25zZVR5cGUSIwofU2VydmVyRXJyb3JSZXNwb25zZVR5cGVfVW5rbm93bhAAEiYKIlNlcnZlckVycm9yUmVzcG9uc2VUeXBlX0JhZFJlcXVlc3QQARInCiNTZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZV9VbmF2YWlsYWJsZRACYgZwcm90bzM", [file_anyvalue]);
 
 /**
  * @generated from message opamp.proto.AgentToServer
@@ -94,8 +90,7 @@ export type AgentToServer = Message<"opamp.proto.AgentToServer"> & {
  * Describes the message opamp.proto.AgentToServer.
  * Use `create(AgentToServerSchema)` to create a new message.
  */
-export const AgentToServerSchema: GenMessage<AgentToServer> =
-  /*@__PURE__*/
+export const AgentToServerSchema: GenMessage<AgentToServer> = /*@__PURE__*/
   messageDesc(file_opamp, 0);
 
 /**
@@ -131,19 +126,24 @@ export type ServerToAgent = Message<"opamp.proto.ServerToAgent"> & {
   capabilities: bigint;
 
   /**
-   * fields 9-11: Beta/Development features (not implemented)
-   *
    * @generated from field: opamp.proto.AgentIdentification agent_identification = 8;
    */
   agentIdentification?: AgentIdentification | undefined;
+
+  /**
+   * fields 9-11: Beta/Development features (not implemented)
+   * Recommended minimum interval in nanoseconds between AgentToServer messages.
+   *
+   * @generated from field: uint64 heart_beat_interval = 12;
+   */
+  heartBeatInterval: bigint;
 };
 
 /**
  * Describes the message opamp.proto.ServerToAgent.
  * Use `create(ServerToAgentSchema)` to create a new message.
  */
-export const ServerToAgentSchema: GenMessage<ServerToAgent> =
-  /*@__PURE__*/
+export const ServerToAgentSchema: GenMessage<ServerToAgent> = /*@__PURE__*/
   messageDesc(file_opamp, 1);
 
 /**
@@ -165,8 +165,7 @@ export type AgentDescription = Message<"opamp.proto.AgentDescription"> & {
  * Describes the message opamp.proto.AgentDescription.
  * Use `create(AgentDescriptionSchema)` to create a new message.
  */
-export const AgentDescriptionSchema: GenMessage<AgentDescription> =
-  /*@__PURE__*/
+export const AgentDescriptionSchema: GenMessage<AgentDescription> = /*@__PURE__*/
   messageDesc(file_opamp, 2);
 
 /**
@@ -208,8 +207,7 @@ export type ComponentHealth = Message<"opamp.proto.ComponentHealth"> & {
  * Describes the message opamp.proto.ComponentHealth.
  * Use `create(ComponentHealthSchema)` to create a new message.
  */
-export const ComponentHealthSchema: GenMessage<ComponentHealth> =
-  /*@__PURE__*/
+export const ComponentHealthSchema: GenMessage<ComponentHealth> = /*@__PURE__*/
   messageDesc(file_opamp, 3);
 
 /**
@@ -226,8 +224,7 @@ export type EffectiveConfig = Message<"opamp.proto.EffectiveConfig"> & {
  * Describes the message opamp.proto.EffectiveConfig.
  * Use `create(EffectiveConfigSchema)` to create a new message.
  */
-export const EffectiveConfigSchema: GenMessage<EffectiveConfig> =
-  /*@__PURE__*/
+export const EffectiveConfigSchema: GenMessage<EffectiveConfig> = /*@__PURE__*/
   messageDesc(file_opamp, 4);
 
 /**
@@ -244,8 +241,7 @@ export type AgentConfigMap = Message<"opamp.proto.AgentConfigMap"> & {
  * Describes the message opamp.proto.AgentConfigMap.
  * Use `create(AgentConfigMapSchema)` to create a new message.
  */
-export const AgentConfigMapSchema: GenMessage<AgentConfigMap> =
-  /*@__PURE__*/
+export const AgentConfigMapSchema: GenMessage<AgentConfigMap> = /*@__PURE__*/
   messageDesc(file_opamp, 5);
 
 /**
@@ -267,8 +263,7 @@ export type AgentConfigFile = Message<"opamp.proto.AgentConfigFile"> & {
  * Describes the message opamp.proto.AgentConfigFile.
  * Use `create(AgentConfigFileSchema)` to create a new message.
  */
-export const AgentConfigFileSchema: GenMessage<AgentConfigFile> =
-  /*@__PURE__*/
+export const AgentConfigFileSchema: GenMessage<AgentConfigFile> = /*@__PURE__*/
   messageDesc(file_opamp, 6);
 
 /**
@@ -295,8 +290,7 @@ export type RemoteConfigStatus = Message<"opamp.proto.RemoteConfigStatus"> & {
  * Describes the message opamp.proto.RemoteConfigStatus.
  * Use `create(RemoteConfigStatusSchema)` to create a new message.
  */
-export const RemoteConfigStatusSchema: GenMessage<RemoteConfigStatus> =
-  /*@__PURE__*/
+export const RemoteConfigStatusSchema: GenMessage<RemoteConfigStatus> = /*@__PURE__*/
   messageDesc(file_opamp, 7);
 
 /**
@@ -318,8 +312,7 @@ export type AgentRemoteConfig = Message<"opamp.proto.AgentRemoteConfig"> & {
  * Describes the message opamp.proto.AgentRemoteConfig.
  * Use `create(AgentRemoteConfigSchema)` to create a new message.
  */
-export const AgentRemoteConfigSchema: GenMessage<AgentRemoteConfig> =
-  /*@__PURE__*/
+export const AgentRemoteConfigSchema: GenMessage<AgentRemoteConfig> = /*@__PURE__*/
   messageDesc(file_opamp, 8);
 
 /**
@@ -346,8 +339,7 @@ export type ServerErrorResponse = Message<"opamp.proto.ServerErrorResponse"> & {
  * Describes the message opamp.proto.ServerErrorResponse.
  * Use `create(ServerErrorResponseSchema)` to create a new message.
  */
-export const ServerErrorResponseSchema: GenMessage<ServerErrorResponse> =
-  /*@__PURE__*/
+export const ServerErrorResponseSchema: GenMessage<ServerErrorResponse> = /*@__PURE__*/
   messageDesc(file_opamp, 9);
 
 /**
@@ -364,7 +356,8 @@ export type RetryInfo = Message<"opamp.proto.RetryInfo"> & {
  * Describes the message opamp.proto.RetryInfo.
  * Use `create(RetryInfoSchema)` to create a new message.
  */
-export const RetryInfoSchema: GenMessage<RetryInfo> = /*@__PURE__*/ messageDesc(file_opamp, 10);
+export const RetryInfoSchema: GenMessage<RetryInfo> = /*@__PURE__*/
+  messageDesc(file_opamp, 10);
 
 /**
  * @generated from message opamp.proto.AgentIdentification
@@ -380,21 +373,20 @@ export type AgentIdentification = Message<"opamp.proto.AgentIdentification"> & {
  * Describes the message opamp.proto.AgentIdentification.
  * Use `create(AgentIdentificationSchema)` to create a new message.
  */
-export const AgentIdentificationSchema: GenMessage<AgentIdentification> =
-  /*@__PURE__*/
+export const AgentIdentificationSchema: GenMessage<AgentIdentification> = /*@__PURE__*/
   messageDesc(file_opamp, 11);
 
 /**
  * @generated from message opamp.proto.AgentDisconnect
  */
-export type AgentDisconnect = Message<"opamp.proto.AgentDisconnect"> & {};
+export type AgentDisconnect = Message<"opamp.proto.AgentDisconnect"> & {
+};
 
 /**
  * Describes the message opamp.proto.AgentDisconnect.
  * Use `create(AgentDisconnectSchema)` to create a new message.
  */
-export const AgentDisconnectSchema: GenMessage<AgentDisconnect> =
-  /*@__PURE__*/
+export const AgentDisconnectSchema: GenMessage<AgentDisconnect> = /*@__PURE__*/
   messageDesc(file_opamp, 12);
 
 /**
@@ -425,8 +417,7 @@ export enum RemoteConfigStatuses {
 /**
  * Describes the enum opamp.proto.RemoteConfigStatuses.
  */
-export const RemoteConfigStatusesSchema: GenEnum<RemoteConfigStatuses> =
-  /*@__PURE__*/
+export const RemoteConfigStatusesSchema: GenEnum<RemoteConfigStatuses> = /*@__PURE__*/
   enumDesc(file_opamp, 0);
 
 /**
@@ -452,6 +443,6 @@ export enum ServerErrorResponseType {
 /**
  * Describes the enum opamp.proto.ServerErrorResponseType.
  */
-export const ServerErrorResponseTypeSchema: GenEnum<ServerErrorResponseType> =
-  /*@__PURE__*/
+export const ServerErrorResponseTypeSchema: GenEnum<ServerErrorResponseType> = /*@__PURE__*/
   enumDesc(file_opamp, 1);
+

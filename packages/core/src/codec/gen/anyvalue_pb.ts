@@ -25,11 +25,8 @@ import type { Message } from "@bufbuild/protobuf";
 /**
  * Describes the file anyvalue.proto.
  */
-export const file_anyvalue: GenFile =
-  /*@__PURE__*/
-  fileDesc(
-    "Cg5hbnl2YWx1ZS5wcm90bxILb3BhbXAucHJvdG8i6AEKCEFueVZhbHVlEhYKDHN0cmluZ192YWx1ZRgBIAEoCUgAEhQKCmJvb2xfdmFsdWUYAiABKAhIABITCglpbnRfdmFsdWUYAyABKANIABIWCgxkb3VibGVfdmFsdWUYBCABKAFIABIuCgthcnJheV92YWx1ZRgFIAEoCzIXLm9wYW1wLnByb3RvLkFycmF5VmFsdWVIABIxCgxrdmxpc3RfdmFsdWUYBiABKAsyGS5vcGFtcC5wcm90by5LZXlWYWx1ZUxpc3RIABIVCgtieXRlc192YWx1ZRgHIAEoDEgAQgcKBXZhbHVlIjMKCkFycmF5VmFsdWUSJQoGdmFsdWVzGAEgAygLMhUub3BhbXAucHJvdG8uQW55VmFsdWUiNQoMS2V5VmFsdWVMaXN0EiUKBnZhbHVlcxgBIAMoCzIVLm9wYW1wLnByb3RvLktleVZhbHVlIj0KCEtleVZhbHVlEgsKA2tleRgBIAEoCRIkCgV2YWx1ZRgCIAEoCzIVLm9wYW1wLnByb3RvLkFueVZhbHVlYgZwcm90bzM",
-  );
+export const file_anyvalue: GenFile = /*@__PURE__*/
+  fileDesc("Cg5hbnl2YWx1ZS5wcm90bxILb3BhbXAucHJvdG8i6AEKCEFueVZhbHVlEhYKDHN0cmluZ192YWx1ZRgBIAEoCUgAEhQKCmJvb2xfdmFsdWUYAiABKAhIABITCglpbnRfdmFsdWUYAyABKANIABIWCgxkb3VibGVfdmFsdWUYBCABKAFIABIuCgthcnJheV92YWx1ZRgFIAEoCzIXLm9wYW1wLnByb3RvLkFycmF5VmFsdWVIABIxCgxrdmxpc3RfdmFsdWUYBiABKAsyGS5vcGFtcC5wcm90by5LZXlWYWx1ZUxpc3RIABIVCgtieXRlc192YWx1ZRgHIAEoDEgAQgcKBXZhbHVlIjMKCkFycmF5VmFsdWUSJQoGdmFsdWVzGAEgAygLMhUub3BhbXAucHJvdG8uQW55VmFsdWUiNQoMS2V5VmFsdWVMaXN0EiUKBnZhbHVlcxgBIAMoCzIVLm9wYW1wLnByb3RvLktleVZhbHVlIj0KCEtleVZhbHVlEgsKA2tleRgBIAEoCRIkCgV2YWx1ZRgCIAEoCzIVLm9wYW1wLnByb3RvLkFueVZhbHVlYgZwcm90bzM");
 
 /**
  * @generated from message opamp.proto.AnyValue
@@ -38,64 +35,57 @@ export type AnyValue = Message<"opamp.proto.AnyValue"> & {
   /**
    * @generated from oneof opamp.proto.AnyValue.value
    */
-  value:
-    | {
-        /**
-         * @generated from field: string string_value = 1;
-         */
-        value: string;
-        case: "stringValue";
-      }
-    | {
-        /**
-         * @generated from field: bool bool_value = 2;
-         */
-        value: boolean;
-        case: "boolValue";
-      }
-    | {
-        /**
-         * @generated from field: int64 int_value = 3;
-         */
-        value: bigint;
-        case: "intValue";
-      }
-    | {
-        /**
-         * @generated from field: double double_value = 4;
-         */
-        value: number;
-        case: "doubleValue";
-      }
-    | {
-        /**
-         * @generated from field: opamp.proto.ArrayValue array_value = 5;
-         */
-        value: ArrayValue;
-        case: "arrayValue";
-      }
-    | {
-        /**
-         * @generated from field: opamp.proto.KeyValueList kvlist_value = 6;
-         */
-        value: KeyValueList;
-        case: "kvlistValue";
-      }
-    | {
-        /**
-         * @generated from field: bytes bytes_value = 7;
-         */
-        value: Uint8Array;
-        case: "bytesValue";
-      }
-    | { case: undefined; value?: undefined };
+  value: {
+    /**
+     * @generated from field: string string_value = 1;
+     */
+    value: string;
+    case: "stringValue";
+  } | {
+    /**
+     * @generated from field: bool bool_value = 2;
+     */
+    value: boolean;
+    case: "boolValue";
+  } | {
+    /**
+     * @generated from field: int64 int_value = 3;
+     */
+    value: bigint;
+    case: "intValue";
+  } | {
+    /**
+     * @generated from field: double double_value = 4;
+     */
+    value: number;
+    case: "doubleValue";
+  } | {
+    /**
+     * @generated from field: opamp.proto.ArrayValue array_value = 5;
+     */
+    value: ArrayValue;
+    case: "arrayValue";
+  } | {
+    /**
+     * @generated from field: opamp.proto.KeyValueList kvlist_value = 6;
+     */
+    value: KeyValueList;
+    case: "kvlistValue";
+  } | {
+    /**
+     * @generated from field: bytes bytes_value = 7;
+     */
+    value: Uint8Array;
+    case: "bytesValue";
+  } | { case: undefined; value?: undefined };
 };
 
 /**
  * Describes the message opamp.proto.AnyValue.
  * Use `create(AnyValueSchema)` to create a new message.
  */
-export const AnyValueSchema: GenMessage<AnyValue> = /*@__PURE__*/ messageDesc(file_anyvalue, 0);
+export const AnyValueSchema: GenMessage<AnyValue> = /*@__PURE__*/
+  messageDesc(file_anyvalue, 0);
 
 /**
  * @generated from message opamp.proto.ArrayValue
@@ -111,7 +101,8 @@ export type ArrayValue = Message<"opamp.proto.ArrayValue"> & {
  * Describes the message opamp.proto.ArrayValue.
  * Use `create(ArrayValueSchema)` to create a new message.
  */
-export const ArrayValueSchema: GenMessage<ArrayValue> = /*@__PURE__*/ messageDesc(file_anyvalue, 1);
+export const ArrayValueSchema: GenMessage<ArrayValue> = /*@__PURE__*/
+  messageDesc(file_anyvalue, 1);
 
 /**
  * @generated from message opamp.proto.KeyValueList
@@ -127,8 +118,7 @@ export type KeyValueList = Message<"opamp.proto.KeyValueList"> & {
  * Describes the message opamp.proto.KeyValueList.
  * Use `create(KeyValueListSchema)` to create a new message.
  */
-export const KeyValueListSchema: GenMessage<KeyValueList> =
-  /*@__PURE__*/
+export const KeyValueListSchema: GenMessage<KeyValueList> = /*@__PURE__*/
   messageDesc(file_anyvalue, 2);
 
 /**
@@ -150,4 +140,6 @@ export type KeyValue = Message<"opamp.proto.KeyValue"> & {
  * Describes the message opamp.proto.KeyValue.
  * Use `create(KeyValueSchema)` to create a new message.
  */
-export const KeyValueSchema: GenMessage<KeyValue> = /*@__PURE__*/ messageDesc(file_anyvalue, 3);
+export const KeyValueSchema: GenMessage<KeyValue> = /*@__PURE__*/
+  messageDesc(file_anyvalue, 3);
+

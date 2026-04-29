@@ -53,9 +53,14 @@
   // Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
   "env": {
     "staging": {
-      "main": "src/instrumented.ts",
+      "main": "src/index.ts",
+      "routes": [],
       "vars": {
         "ENVIRONMENT": "staging",
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
       },
       "d1_databases": [
         {

@@ -23,6 +23,8 @@ export function initSchema(sql: SqlStorage): void {
       status TEXT NOT NULL DEFAULT 'unknown',
       last_error TEXT NOT NULL DEFAULT '',
       current_config_hash TEXT,
+      effective_config_hash TEXT,
+      effective_config_body TEXT,
       last_seen_at INTEGER NOT NULL DEFAULT 0,
       connected_at INTEGER NOT NULL DEFAULT 0,
       agent_description TEXT,
@@ -36,6 +38,14 @@ export function initSchema(sql: SqlStorage): void {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       desired_config_hash TEXT,
       desired_config_content TEXT
+    )
+  `);
+  // Buffered events — written synchronously on the hot path (~µs),
+  // drained in batches by the alarm handler (no async on hot path).
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS pending_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      payload TEXT NOT NULL
     )
   `);
   // Ensure singleton row exists
@@ -134,6 +144,8 @@ export function loadAgentState(
         ? hexToUint8Array(row["current_config_hash"] as string)
         : null,
       desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
+      effective_config_hash: (row["effective_config_hash"] as string) ?? null,
+      effective_config_body: (row["effective_config_body"] as string) ?? null,
       last_seen_at: row["last_seen_at"] as number,
       connected_at: row["connected_at"] as number,
       agent_description: row["agent_description"] as string | null,
@@ -153,6 +165,8 @@ export function loadAgentState(
     last_error: "",
     current_config_hash: null,
     desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
+    effective_config_hash: null,
+    effective_config_body: null,
     last_seen_at: 0,
     connected_at: 0,
     agent_description: null,
@@ -168,8 +182,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
   const configHash = state.current_config_hash ? uint8ToHex(state.current_config_hash) : null;
 
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, effective_config_body, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
@@ -177,6 +191,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        status = excluded.status,
        last_error = excluded.last_error,
        current_config_hash = excluded.current_config_hash,
+       effective_config_hash = COALESCE(excluded.effective_config_hash, agents.effective_config_hash),
+       effective_config_body = COALESCE(excluded.effective_config_body, agents.effective_config_body),
        last_seen_at = excluded.last_seen_at,
        connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
@@ -190,6 +206,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     state.status,
     state.last_error,
     configHash,
+    state.effective_config_hash,
+    state.effective_config_body,
     state.last_seen_at,
     state.connected_at,
     state.agent_description,
@@ -234,8 +252,8 @@ export function getStats(sql: SqlStorage): {
     .exec(
       `SELECT
         COUNT(*) as total,
-        SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END) as connected,
-        SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END) as healthy
+        SUM(CASE WHEN status != 'disconnected' AND connected_at > 0 THEN 1 ELSE 0 END) as connected,
+        SUM(CASE WHEN healthy = 1 AND status != 'disconnected' THEN 1 ELSE 0 END) as healthy
       FROM agents`,
     )
     .one();
@@ -281,4 +299,46 @@ export function sweepStaleAgents(sql: SqlStorage, staleThresholdMs: number): Sta
     tenant_id: r["tenant_id"] as string,
     config_id: r["config_id"] as string,
   }));
+}
+
+// ─── Event Buffer ───────────────────────────────────────────────────
+// Events are written to SQLite synchronously (~µs) on the hot path,
+// then drained in batches by the alarm handler. Zero async on hot path.
+
+/**
+ * Buffer events into SQLite for later batch delivery.
+ * Synchronous — adds ~1µs per event to the hot path.
+ */
+export function bufferEvents(sql: SqlStorage, events: unknown[]): void {
+  for (const event of events) {
+    sql.exec(`INSERT INTO pending_events (payload) VALUES (?)`, JSON.stringify(event));
+  }
+}
+
+/**
+ * Read up to `limit` buffered events from SQLite without deleting them.
+ * Returns parsed event payloads and the row IDs for later deletion.
+ */
+export function peekBufferedEvents(
+  sql: SqlStorage,
+  limit = 1000,
+): { events: unknown[]; ids: number[] } {
+  const rows = sql
+    .exec(`SELECT id, payload FROM pending_events ORDER BY id LIMIT ?`, limit)
+    .toArray();
+  if (rows.length === 0) return { events: [], ids: [] };
+
+  return {
+    events: rows.map((r) => JSON.parse(r["payload"] as string)),
+    ids: rows.map((r) => r["id"] as number),
+  };
+}
+
+/**
+ * Delete specific buffered events by ID after successful delivery.
+ */
+export function deleteBufferedEvents(sql: SqlStorage, ids: number[]): void {
+  if (ids.length === 0) return;
+  const placeholders = ids.map(() => "?").join(",");
+  sql.exec(`DELETE FROM pending_events WHERE id IN (${placeholders})`, ...ids);
 }

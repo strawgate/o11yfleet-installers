@@ -14,6 +14,8 @@ export interface AgentState {
   last_error: string;
   current_config_hash: Uint8Array | null;
   desired_config_hash: Uint8Array | null;
+  effective_config_hash: string | null;
+  effective_config_body: string | null;
   last_seen_at: number;
   connected_at: number;
   agent_description: string | null;

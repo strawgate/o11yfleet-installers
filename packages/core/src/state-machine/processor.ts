@@ -8,6 +8,7 @@ import {
   ServerToAgentFlags,
   RemoteConfigStatuses,
   AgentCapabilities,
+  AgentToServerFlags,
 } from "../codec/types.js";
 import { FleetEventType } from "../events.js";
 import type { AnyFleetEvent } from "../events.js";
@@ -23,10 +24,26 @@ function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   return true;
 }
 
+/** Simple FNV-1a hash for effective config change detection (not crypto). */
+function simpleHash(input: string): string {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < input.length; i++) {
+    h ^= input.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16).padStart(8, "0");
+}
+
+/** Default recommended heartbeat interval: 1 hour (in nanoseconds).
+ *  Liveness is handled by WebSocket auto-response ping/pong at zero DO cost.
+ *  Heartbeats exist only for periodic state reconciliation — not keepalive. */
+export const DEFAULT_HEARTBEAT_INTERVAL_NS = 3_600_000_000_000; // 1 hour in ns
+
 export function processFrame(
   state: AgentState,
   msg: AgentToServer,
   configContentBytes?: Uint8Array | null,
+  heartbeatIntervalNs?: number,
 ): ProcessResult {
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
@@ -35,7 +52,7 @@ export function processFrame(
   // Clone state
   const newState: AgentState = { ...state, last_seen_at: now };
 
-  // Build base response
+  // Build base response — always include heartbeat interval per OpAMP spec
   const response: ServerToAgent = {
     instance_uid: msg.instance_uid,
     flags: ServerToAgentFlags.Unspecified,
@@ -43,6 +60,7 @@ export function processFrame(
       ServerCapabilities.AcceptsStatus |
       ServerCapabilities.OffersRemoteConfig |
       ServerCapabilities.AcceptsEffectiveConfig,
+    heart_beat_interval: heartbeatIntervalNs ?? DEFAULT_HEARTBEAT_INTERVAL_NS,
   };
 
   // Check for sequence gap
@@ -56,6 +74,12 @@ export function processFrame(
   }
 
   newState.sequence_num = msg.sequence_num;
+
+  // Persist sequence_num so the next message sees the correct expected
+  // sequence. With 1-hour heartbeats this is ~1 write/hour/agent.
+  // NOTE: liveness detection uses WebSocket auto-response timestamps
+  // (checked in the alarm handler), NOT last_seen_at in SQLite.
+  shouldPersist = true;
 
   // Handle disconnect
   if (msg.agent_disconnect) {
@@ -130,6 +154,38 @@ export function processFrame(
     }
   }
 
+  // Process effective config — store the agent's actual running config for fleet visibility
+  if (msg.effective_config?.config_map?.config_map) {
+    const configMap = msg.effective_config.config_map.config_map;
+    // Use the default "" key (standard single-config) or first available key
+    const entry = configMap[""] ?? Object.values(configMap)[0];
+    if (entry) {
+      const body = new TextDecoder().decode(entry.body);
+      // Simple hash for change detection — use first 16 chars of hex-encoded content hash
+      const hashInput = `${entry.content_type}:${body}`;
+      const hashHex = simpleHash(hashInput);
+      if (hashHex !== state.effective_config_hash) {
+        newState.effective_config_hash = hashHex;
+        newState.effective_config_body = body;
+        shouldPersist = true;
+        events.push({
+          type: FleetEventType.CONFIG_EFFECTIVE_REPORTED,
+          tenant_id: state.tenant_id,
+          config_id: state.config_id,
+          instance_uid: uint8ToHex(state.instance_uid),
+          timestamp: now,
+          effective_config_hash: hashHex,
+        });
+      }
+    }
+  }
+
+  // Handle RequestInstanceUid flag — assign new UID per OpAMP spec
+  if ((msg.flags & AgentToServerFlags.RequestInstanceUid) !== 0) {
+    const newUid = crypto.getRandomValues(new Uint8Array(16));
+    response.agent_identification = { new_instance_uid: newUid };
+  }
+
   // Process remote config status
   if (msg.remote_config_status) {
     const hash = msg.remote_config_status.last_remote_config_hash;
@@ -181,9 +237,6 @@ export function processFrame(
       config_hash: newState.desired_config_hash,
     };
   }
-
-  // Pure heartbeat (no health change, no config status, no description) — no persist
-  // shouldPersist remains false if nothing above triggered
 
   return { newState, response, events, shouldPersist };
 }

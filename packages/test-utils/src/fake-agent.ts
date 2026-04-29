@@ -24,6 +24,10 @@ export interface FakeAgentOptions {
   instanceUid?: Uint8Array;
   /** Agent name for identifying_attributes. Defaults to "fake-agent". */
   name?: string;
+  /** Enable auto-heartbeat based on server-directed interval. Defaults to false. */
+  autoHeartbeat?: boolean;
+  /** Callback invoked on each auto-heartbeat (for monitoring). */
+  onAutoHeartbeat?: () => void;
 }
 
 export interface EnrollmentResult {
@@ -40,6 +44,8 @@ export class FakeOpampAgent {
   private enrollmentToken?: string;
   private assignmentClaim?: string;
   private agentName: string;
+  private autoHeartbeatEnabled: boolean;
+  private onAutoHeartbeat?: () => void;
 
   // Binary (OpAMP) message queue
   private messageQueue: ServerToAgent[] = [];
@@ -52,12 +58,28 @@ export class FakeOpampAgent {
   // Enrollment result (populated after successful enrollment)
   private _enrollment: EnrollmentResult | null = null;
 
+  // Auto-heartbeat timer (driven by server-directed heart_beat_interval)
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  /** Server-directed heartbeat interval in milliseconds. */
+  private _serverHeartbeatMs: number | null = null;
+
+  // WebSocket keepalive: sends text "ping" frames for Cloudflare auto-response
+  private keepaliveTimer: ReturnType<typeof setInterval> | null = null;
+  private static readonly KEEPALIVE_INTERVAL_MS = 30_000; // 30s
+
+  // Close event tracking for diagnostics
+  private _lastCloseCode: number | null = null;
+  private _lastCloseReason: string | null = null;
+  private _disconnectedAt: number | null = null;
+
   constructor(opts: FakeAgentOptions) {
     this.endpoint = opts.endpoint;
     this.enrollmentToken = opts.enrollmentToken;
     this.assignmentClaim = opts.assignmentClaim;
     this.agentName = opts.name ?? "fake-agent";
     this.instanceUid = opts.instanceUid ?? crypto.getRandomValues(new Uint8Array(16));
+    this.autoHeartbeatEnabled = opts.autoHeartbeat ?? false;
+    this.onAutoHeartbeat = opts.onAutoHeartbeat;
   }
 
   /**
@@ -79,12 +101,18 @@ export class FakeOpampAgent {
       }
       this.ws.binaryType = "arraybuffer";
 
-      this.ws.onopen = () => resolve();
+      this.ws.onopen = () => {
+        this.startKeepalive();
+        resolve();
+      };
       this.ws.onerror = (e) => reject(e);
 
       this.ws.onmessage = (event) => {
-        // Text frames = enrollment messages
+        // Text frames = enrollment messages or keepalive pongs
         if (typeof event.data === "string") {
+          // Ignore keepalive "pong" auto-responses
+          if (event.data === "pong") return;
+
           const textWaiter = this.textWaiters.shift();
           if (textWaiter) {
             textWaiter(event.data);
@@ -104,12 +132,22 @@ export class FakeOpampAgent {
         if (!data) return;
 
         const msg = decodeFrame<ServerToAgent>(data as ArrayBuffer);
+
+        // Process server-directed heartbeat interval
+        this.processHeartbeatInterval(msg);
+
         const waiter = this.waiters.shift();
         if (waiter) {
           waiter(msg);
         } else {
           this.messageQueue.push(msg);
         }
+      };
+
+      this.ws.onclose = (event) => {
+        this._lastCloseCode = event.code;
+        this._lastCloseReason = event.reason;
+        this._disconnectedAt = Date.now();
       };
     });
   }
@@ -275,6 +313,16 @@ export class FakeOpampAgent {
   }
 
   close(): void {
+    // Stop keepalive and auto-heartbeat timers
+    if (this.keepaliveTimer) {
+      clearInterval(this.keepaliveTimer);
+      this.keepaliveTimer = null;
+    }
+    if (this.heartbeatTimer) {
+      clearTimeout(this.heartbeatTimer);
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
     // Reject any pending waiters so tests don't hang
     const pendingWaiters = this.waiters.splice(0);
     for (const waiter of pendingWaiters) {
@@ -310,9 +358,110 @@ export class FakeOpampAgent {
     return this.sequenceNum;
   }
 
+  /** Server-directed heartbeat interval in milliseconds, if received. */
+  get serverHeartbeatMs(): number | null {
+    return this._serverHeartbeatMs;
+  }
+
+  /** Close code from the last disconnect, if any. */
+  get lastCloseCode(): number | null {
+    return this._lastCloseCode;
+  }
+
+  /** Close reason from the last disconnect, if any. */
+  get lastCloseReason(): string | null {
+    return this._lastCloseReason;
+  }
+
+  /** Timestamp (ms) when the connection was last lost, if any. */
+  get disconnectedAt(): number | null {
+    return this._disconnectedAt;
+  }
+
   /** Update the stored assignment claim (e.g. after enrollment). */
   setAssignmentClaim(claim: string): void {
     this.assignmentClaim = claim;
+  }
+
+  /**
+   * Process server-directed heart_beat_interval from a ServerToAgent message.
+   * If autoHeartbeat is enabled, starts a heartbeat loop.
+   *
+   * Strategy: send the FIRST heartbeat quickly (within 30s) with random jitter
+   * to avoid thundering herd, then switch to the server-directed interval.
+   * This prevents Cloudflare edge idle timeout (~100s) from killing connections
+   * during long enrollment ramps.
+   */
+  private processHeartbeatInterval(msg: ServerToAgent): void {
+    if (
+      msg.heart_beat_interval === null ||
+      msg.heart_beat_interval === undefined ||
+      msg.heart_beat_interval <= 0
+    )
+      return;
+
+    const intervalMs = Math.floor(msg.heart_beat_interval / 1_000_000);
+    if (intervalMs <= 0 || intervalMs === this._serverHeartbeatMs) return;
+
+    this._serverHeartbeatMs = intervalMs;
+
+    if (!this.autoHeartbeatEnabled) return;
+
+    // Don't restart if already running
+    if (this.heartbeatTimer) return;
+
+    // First heartbeat: random jitter 5-30s to avoid thundering herd
+    const firstDelay = 5_000 + Math.floor(Math.random() * 25_000);
+
+    const doHeartbeat = () => {
+      if (!this.connected) {
+        if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+        this.heartbeatTimer = null;
+        return;
+      }
+      try {
+        this.sendHeartbeat();
+        this.onAutoHeartbeat?.();
+      } catch {
+        // Connection may have closed between the check and send
+      }
+    };
+
+    // Schedule first heartbeat quickly, then switch to steady interval
+    this.heartbeatTimer = setTimeout(() => {
+      doHeartbeat();
+      this.heartbeatTimer = setInterval(doHeartbeat, intervalMs);
+    }, firstDelay) as unknown as ReturnType<typeof setInterval>;
+  }
+
+  /**
+   * Start WebSocket keepalive: sends text "ping" frames every 30s.
+   * The DO's setWebSocketAutoResponse auto-replies "pong" without waking,
+   * keeping the Cloudflare edge alive at zero DO CPU cost.
+   */
+  private startKeepalive(): void {
+    if (this.keepaliveTimer) return;
+    // Send initial ping immediately so the DO's auto-response timestamp is set
+    // before the alarm's zombie sweep fires
+    try {
+      if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        this.ws.send("ping");
+      }
+    } catch {
+      /* ignore */
+    }
+    this.keepaliveTimer = setInterval(() => {
+      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+        if (this.keepaliveTimer) clearInterval(this.keepaliveTimer);
+        this.keepaliveTimer = null;
+        return;
+      }
+      try {
+        this.ws.send("ping");
+      } catch {
+        // Connection may have closed
+      }
+    }, FakeOpampAgent.KEEPALIVE_INTERVAL_MS);
   }
 
   private send(msg: AgentToServer): void {

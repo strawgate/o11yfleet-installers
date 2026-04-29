@@ -76,6 +76,8 @@ function makeInitialState(overrides: Partial<AgentState> = {}): AgentState {
     last_error: "",
     current_config_hash: null,
     desired_config_hash: null,
+    effective_config_hash: null,
+    effective_config_body: null,
     last_seen_at: 0,
     connected_at: 0,
     agent_description: null,
@@ -326,7 +328,8 @@ describe("state-machine property tests", () => {
           // No health, no config status, no description, no disconnect
         };
         const result = processFrame(state, msg);
-        expect(result.shouldPersist).toBe(false);
+        // Always persists: sequence_num + last_seen_at saved on every message
+        expect(result.shouldPersist).toBe(true);
         expect(result.events).toHaveLength(0);
       }),
       { numRuns: 200 },

@@ -15,6 +15,7 @@ export enum FleetEventType {
   CONFIG_APPLIED = "config_applied",
   CONFIG_REJECTED = "config_rejected",
   AGENT_ENROLLED = "agent_enrolled",
+  CONFIG_EFFECTIVE_REPORTED = "config_effective_reported",
 }
 
 export interface AgentConnectedEvent extends FleetEvent {
@@ -49,10 +50,16 @@ export interface AgentEnrolledEvent extends FleetEvent {
   generation: number;
 }
 
+export interface ConfigEffectiveReportedEvent extends FleetEvent {
+  type: FleetEventType.CONFIG_EFFECTIVE_REPORTED;
+  effective_config_hash: string;
+}
+
 export type AnyFleetEvent =
   | AgentConnectedEvent
   | AgentDisconnectedEvent
   | AgentHealthChangedEvent
   | ConfigAppliedEvent
   | ConfigRejectedEvent
-  | AgentEnrolledEvent;
+  | AgentEnrolledEvent
+  | ConfigEffectiveReportedEvent;

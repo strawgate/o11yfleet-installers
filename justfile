@@ -263,9 +263,39 @@ load-test agents="50" ramp="10" steady="30":
 load-test-ci:
     pnpm --filter @o11yfleet/load-test load -- --agents=25 --ramp=10 --steady=30
 
+# 1K agent load test — single process, parallel enrollment
+load-test-1k:
+    pnpm --filter @o11yfleet/load-test load -- --agents=1000 --concurrency=50 --ramp=30 --steady=60 --heartbeat=15
+
+# 5K agent load test — single process, high concurrency
+load-test-5k:
+    pnpm --filter @o11yfleet/load-test load -- --agents=5000 --concurrency=100 --ramp=60 --steady=60 --heartbeat=30
+
+# 10K agent load test — multi-process
+load-test-10k:
+    ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=10000 --concurrency=200 --workers=4 --ramp=120 --steady=60 --heartbeat=30
+
+# 100K agent load test — multi-process fan-out
+load-test-100k:
+    ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=100000 --concurrency=200 --workers=10 --ramp=300 --steady=120 --heartbeat=60
+
 # CPU profile load test (200 agents, 60s, generates .cpuprofile)
 load-test-profile:
     ulimit -n 4096 && node --cpu-prof --cpu-prof-dir=./profiles --import tsx/esm tests/load/src/load-test.ts --agents=200 --ramp=20 --steady=60
+
+# ─── Real OTel Collector Fleet (Docker) ─────────────────────────────
+
+# Start real OTel Collectors in Docker (requires `just dev` + `just setup`)
+collectors-docker count="3":
+    ./configs/smoke-test/docker/launch-collectors.sh {{count}}
+
+# Stop the Docker collector fleet
+collectors-docker-down:
+    cd configs/smoke-test/docker && docker compose down --remove-orphans
+
+# Show logs from Docker collector fleet
+collectors-docker-logs:
+    cd configs/smoke-test/docker && docker compose logs -f
 
 # ─── E2E & UI Testing ───────────────────────────────────────────────
 
@@ -280,6 +310,26 @@ test-ui:
 # Install Playwright browsers (one-time setup)
 playwright-install:
     cd tests/ui && npx playwright install --with-deps chromium
+
+# ─── Load Generator (Cloudflare Worker) ──────────────────────────────
+
+# Deploy load generator to staging
+deploy-loadgen:
+    cd tests/load-gen-worker && pnpm wrangler deploy --env staging
+
+# Start 50K agent load test
+loadgen-50k:
+    curl -X POST https://o11yfleet-loadgen-staging.workers.dev/start \
+      -H "Content-Type: application/json" \
+      -d '{"target":"https://o11yfleet-worker-staging.o11yfleet.workers.dev","agents":50000,"shards":10}'
+
+# Check load generator status
+loadgen-status:
+    curl -s https://o11yfleet-loadgen-staging.workers.dev/status | jq .
+
+# Stop load generator
+loadgen-stop:
+    curl -X POST https://o11yfleet-loadgen-staging.workers.dev/stop | jq .
 
 # ─── Infrastructure ──────────────────────────────────────────────────
 

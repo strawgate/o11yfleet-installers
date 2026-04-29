@@ -1,18 +1,25 @@
 #!/usr/bin/env npx tsx
 /**
- * o11yfleet Load Test — simulates N OpAMP agents connecting to the platform.
+ * o11yfleet Load Test — scalable WebSocket load test for OpAMP Durable Objects.
+ *
+ * Tests enrollment throughput, connection capacity, and heartbeat latency
+ * at scale from 100 to 100,000+ agents.
  *
  * Usage:
- *   pnpm --filter @o11yfleet/load-test load
- *   pnpm --filter @o11yfleet/load-test load -- --agents=100 --ramp=30 --steady=60
- *   FP_URL=https://api.o11yfleet.com pnpm --filter @o11yfleet/load-test load
+ *   pnpm --filter @o11yfleet/load-test load                              # default: 50 agents
+ *   pnpm --filter @o11yfleet/load-test load -- --agents=1000 --ramp=30
+ *   pnpm --filter @o11yfleet/load-test load -- --agents=5000 --concurrency=200
+ *   pnpm --filter @o11yfleet/load-test load -- --agents=100000 --workers=10
  *
  * Environment:
- *   FP_URL           — Base URL (default: http://localhost:8787)
- *   FP_AGENTS        — Number of agents (default: 50)
- *   FP_RAMP_SEC      — Ramp-up duration in seconds (default: 10)
- *   FP_STEADY_SEC    — Steady-state duration in seconds (default: 30)
- *   FP_HEARTBEAT_SEC — Heartbeat interval in seconds (default: 10)
+ *   FP_URL             — Base URL (default: http://localhost:8787)
+ *   FP_AGENTS          — Number of agents (default: 50)
+ *   FP_RAMP_SEC        — Ramp-up duration in seconds (default: 10)
+ *   FP_STEADY_SEC      — Steady-state duration in seconds (default: 30)
+ *   FP_HEARTBEAT_SEC   — Heartbeat interval in seconds (default: 10)
+ *   FP_CONCURRENCY     — Parallel enrollment batch size (default: auto)
+ *   FP_WORKERS         — Number of child processes for 10K+ (default: 1)
+ *   FP_API_KEY         — API bearer token
  */
 
 import { FakeOpampAgent } from "@o11yfleet/test-utils";
@@ -39,6 +46,14 @@ interface LoadTestConfig {
   rampSeconds: number;
   steadySeconds: number;
   heartbeatSeconds: number;
+  concurrency: number;
+  workers: number;
+  /** Skip heartbeat probe messages during steady-state (passive monitoring only) */
+  noProbes: boolean;
+  /** When running as a child worker, receive setup info from parent */
+  isWorker: boolean;
+  workerId: number;
+  workerAgents: number;
 }
 
 function parseConfig(): LoadTestConfig {
@@ -50,18 +65,52 @@ function parseConfig(): LoadTestConfig {
   };
 
   const baseUrl = get("url", "FP_URL", "http://localhost:8787");
+  const agents = parseInt(get("agents", "FP_AGENTS", "50"), 10);
+
+  // Auto-tune concurrency: keep enrollment batches small enough to avoid
+  // overwhelming the DO with simultaneous WebSocket upgrades. Each upgrade
+  // is an HTTP request through the Worker → D1 lookup → DO.fetch chain.
+  // 50 concurrent is safe for staging; local miniflare can handle more.
+  const isLocal = get("url", "FP_URL", "http://localhost:8787").includes("localhost");
+  const defaultConcurrency = isLocal
+    ? agents <= 100
+      ? 10
+      : agents <= 1000
+        ? 50
+        : 100
+    : agents <= 100
+      ? 10
+      : 50;
+
+  const concurrency = parseInt(
+    get("concurrency", "FP_CONCURRENCY", String(defaultConcurrency)),
+    10,
+  );
+  const workers = parseInt(get("workers", "FP_WORKERS", "1"), 10);
+
+  const isWorker = get("worker-id", "__FP_WORKER_ID", "") !== "";
+  const workerId = parseInt(get("worker-id", "__FP_WORKER_ID", "0"), 10);
+  const workerAgents = parseInt(get("worker-agents", "__FP_WORKER_AGENTS", String(agents)), 10);
+  const noProbes = args.includes("--no-probes") || process.env["FP_NO_PROBES"] === "1";
+
   return {
     baseUrl,
     wsUrl: baseUrl.replace(/^http/, "ws") + "/v1/opamp",
-    agents: parseInt(get("agents", "FP_AGENTS", "50"), 10),
+    agents,
     rampSeconds: parseInt(get("ramp", "FP_RAMP_SEC", "10"), 10),
     steadySeconds: parseInt(get("steady", "FP_STEADY_SEC", "30"), 10),
     heartbeatSeconds: parseInt(get("heartbeat", "FP_HEARTBEAT_SEC", "10"), 10),
+    concurrency,
+    workers,
+    noProbes,
+    isWorker,
+    workerId,
+    workerAgents,
   };
 }
 
 // ---------------------------------------------------------------------------
-// API helpers (inline — avoids importing from e2e test helpers)
+// API helpers
 // ---------------------------------------------------------------------------
 
 const API_KEY = process.env["FP_API_KEY"] ?? "test-api-secret-for-dev-only-32chars";
@@ -127,6 +176,21 @@ async function setupTestInfra(baseUrl: string) {
   return { tenant, config, token: token.token };
 }
 
+interface ServerStats {
+  active_websockets: number;
+  total_agents: number;
+  connected_agents: number;
+  healthy_agents: number;
+}
+
+async function fetchServerStats(baseUrl: string, configId: string): Promise<ServerStats | null> {
+  try {
+    return await apiJson<ServerStats>(baseUrl, `/api/v1/configurations/${configId}/stats`);
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Agent lifecycle
 // ---------------------------------------------------------------------------
@@ -149,6 +213,10 @@ async function enrollAgent(
     endpoint: wsUrl,
     enrollmentToken,
     name: `load-agent-${idx}`,
+    autoHeartbeat: true,
+    onAutoHeartbeat: () => {
+      counters.messagesSent++;
+    },
   });
 
   counters.connectAttempted++;
@@ -160,8 +228,8 @@ async function enrollAgent(
 
     counters.connectSucceeded++;
     counters.enrollmentCompleted++;
-    counters.messagesSent++; // hello sent during enrollment
-    counters.messagesReceived += 2; // enrollment_complete text + binary response
+    counters.messagesSent++;
+    counters.messagesReceived += 2;
     record(connectTracker, connectMs);
     record(enrollTracker, connectMs);
 
@@ -171,13 +239,73 @@ async function enrollAgent(
       lastHeartbeat: Date.now(),
     };
   } catch (err) {
-    const errorMs = performance.now() - t0;
     counters.connectFailed++;
-    record(connectTracker, errorMs);
+    record(connectTracker, performance.now() - t0);
     const msg = err instanceof Error ? err.message : String(err);
     countError(counters, msg.includes("Timeout") ? "connect_timeout" : "connect_error");
     return null;
   }
+}
+
+/**
+ * Enroll agents in parallel batches of `concurrency`.
+ * Auto-heartbeat handles keepalives — server directs the interval via heart_beat_interval.
+ */
+async function enrollBatched(
+  wsUrl: string,
+  token: string,
+  total: number,
+  concurrency: number,
+  counters: CounterSet,
+  connectTracker: LatencyTracker,
+  enrollTracker: LatencyTracker,
+  rampMs: number,
+): Promise<ManagedAgent[]> {
+  const managed: ManagedAgent[] = [];
+  const batchDelayMs = total <= concurrency ? 0 : rampMs / Math.ceil(total / concurrency);
+  let attempted = 0;
+  const startTime = performance.now();
+
+  for (let offset = 0; offset < total; offset += concurrency) {
+    const batchSize = Math.min(concurrency, total - offset);
+    const promises: Promise<ManagedAgent | null>[] = [];
+
+    for (let j = 0; j < batchSize; j++) {
+      const idx = offset + j;
+      promises.push(enrollAgent(wsUrl, token, idx, counters, connectTracker, enrollTracker));
+    }
+
+    const results = await Promise.all(promises);
+    for (const r of results) {
+      if (r) managed.push(r);
+    }
+    attempted += batchSize;
+
+    // Prune disconnected agents periodically
+    if (attempted % (concurrency * 10) === 0 && managed.length > 0) {
+      const alive = managed.filter((m) => m.agent.connected);
+      const dropped = managed.length - alive.length;
+      if (dropped > 0) {
+        process.stdout.write(`\n   ⚠️  ${dropped} agents disconnected during ramp\n`);
+        managed.length = 0;
+        managed.push(...alive);
+      }
+    }
+
+    const elapsed = ((performance.now() - startTime) / 1000).toFixed(1);
+    const rate = (managed.length / ((performance.now() - startTime) / 1000)).toFixed(0);
+    process.stdout.write(
+      `\r   Enrolled: ${managed.length}/${attempted} (${counters.connectFailed} failed) ` +
+        `[${rate} enroll/s, ${elapsed}s elapsed]`,
+    );
+
+    if (batchDelayMs > 0 && offset + concurrency < total) {
+      await new Promise<void>((r) => {
+        setTimeout(r, batchDelayMs);
+      });
+    }
+  }
+  return managed;
 }
 
 async function sendHeartbeat(
@@ -190,7 +318,7 @@ async function sendHeartbeat(
     await managed.agent.sendHeartbeat();
     counters.messagesSent++;
 
-    const response = await managed.agent.waitForMessage(5000);
+    const response = await managed.agent.waitForMessage(10_000);
     if (response) {
       counters.messagesReceived++;
       record(rttTracker, performance.now() - t0);
@@ -206,22 +334,206 @@ async function sendHeartbeat(
 }
 
 // ---------------------------------------------------------------------------
-// Main
+// Multi-process coordinator (for 10K+ agents)
 // ---------------------------------------------------------------------------
 
-async function run() {
-  const cfg = parseConfig();
-  console.log(`
-🔥 o11yfleet Load Test
-   Target:    ${cfg.baseUrl}
-   Agents:    ${cfg.agents}
-   Ramp:      ${cfg.rampSeconds}s
-   Steady:    ${cfg.steadySeconds}s
-   Heartbeat: every ${cfg.heartbeatSeconds}s
-`);
+interface WorkerResult {
+  workerId: number;
+  counters: Omit<CounterSet, "errors"> & { errors: Record<string, number> };
+  connect: ReturnType<typeof summarize>;
+  enrollment: ReturnType<typeof summarize>;
+  heartbeatRtt: ReturnType<typeof summarize>;
+  peakMemoryMB: number;
+  durationSeconds: number;
+}
 
-  // Setup
-  const { token } = await setupTestInfra(cfg.baseUrl);
+async function runMultiProcess(cfg: LoadTestConfig): Promise<void> {
+  const { fork } = await import("node:child_process");
+
+  console.log(
+    `\n🔀 Multi-process mode: ${cfg.workers} workers × ${Math.ceil(cfg.agents / cfg.workers)} agents each\n`,
+  );
+
+  // Setup infra once from the coordinator
+  const { token, config } = await setupTestInfra(cfg.baseUrl);
+
+  const agentsPerWorker = Math.ceil(cfg.agents / cfg.workers);
+  const workerPromises: Promise<WorkerResult>[] = [];
+
+  for (let i = 0; i < cfg.workers; i++) {
+    const workerAgents = Math.min(agentsPerWorker, cfg.agents - i * agentsPerWorker);
+    if (workerAgents <= 0) break;
+
+    workerPromises.push(
+      new Promise<WorkerResult>((resolve, reject) => {
+        const child = fork(
+          import.meta.filename,
+          [
+            `--worker-id=${i}`,
+            `--worker-agents=${workerAgents}`,
+            `--url=${cfg.baseUrl}`,
+            `--ramp=${cfg.rampSeconds}`,
+            `--steady=${cfg.steadySeconds}`,
+            `--heartbeat=${cfg.heartbeatSeconds}`,
+            `--concurrency=${cfg.concurrency}`,
+          ],
+          {
+            env: {
+              ...process.env,
+              __FP_WORKER_ID: String(i),
+              __FP_WORKER_AGENTS: String(workerAgents),
+              __FP_ENROLLMENT_TOKEN: token,
+              __FP_CONFIG_ID: config.id,
+            },
+            stdio: ["pipe", "pipe", "pipe", "ipc"],
+          },
+        );
+
+        let result: WorkerResult | null = null;
+        child.on("message", (msg: WorkerResult) => {
+          result = msg;
+        });
+
+        child.stdout?.on("data", (data: Buffer) => {
+          const lines = data.toString().split("\n").filter(Boolean);
+          for (const line of lines) {
+            process.stdout.write(`   [W${i}] ${line}\n`);
+          }
+        });
+
+        child.stderr?.on("data", (data: Buffer) => {
+          process.stderr.write(`   [W${i}:err] ${data}`);
+        });
+
+        child.on("exit", (code) => {
+          if (result) resolve(result);
+          else reject(new Error(`Worker ${i} exited with code ${code} and no result`));
+        });
+      }),
+    );
+  }
+
+  const results = await Promise.all(workerPromises);
+
+  // Merge results
+  const merged = mergeWorkerResults(results, cfg, config.id);
+  printReport(merged);
+
+  // Poll server for final stats
+  const serverStats = await fetchServerStats(cfg.baseUrl, config.id);
+  if (serverStats) {
+    console.log(`📊 Server-side stats:`);
+    console.log(`   Active WebSockets: ${serverStats.active_websockets}`);
+    console.log(`   Total agents:      ${serverStats.total_agents}`);
+    console.log(`   Connected:         ${serverStats.connected_agents}`);
+    console.log(`   Healthy:           ${serverStats.healthy_agents}`);
+  }
+
+  const fs = await import("node:fs/promises");
+  const jsonPath = `load-test-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  await fs.writeFile(jsonPath, reportToJson(merged));
+  console.log(`\n📄 JSON report written to ${jsonPath}`);
+
+  const failRate = merged.counters.connectFailed / merged.counters.connectAttempted;
+  if (failRate > 0.1) {
+    console.error(`\n❌ Failure rate too high: ${(failRate * 100).toFixed(1)}%`);
+    process.exit(1);
+  }
+  console.log("\n✅ Load test completed successfully.");
+}
+
+function mergeWorkerResults(
+  results: WorkerResult[],
+  cfg: LoadTestConfig,
+  _configId: string,
+): ReturnType<typeof buildReport> {
+  const counters = createCounters();
+  for (const r of results) {
+    counters.connectAttempted += r.counters.connectAttempted;
+    counters.connectSucceeded += r.counters.connectSucceeded;
+    counters.connectFailed += r.counters.connectFailed;
+    counters.messagesSent += r.counters.messagesSent;
+    counters.messagesReceived += r.counters.messagesReceived;
+    counters.enrollmentCompleted += r.counters.enrollmentCompleted;
+    if (r.counters.errors) {
+      for (const [k, v] of Object.entries(r.counters.errors)) {
+        counters.errors.set(k, (counters.errors.get(k) ?? 0) + v);
+      }
+    }
+  }
+
+  // Take worst-case latencies across workers
+  const worstConnect = results.reduce(
+    (worst, r) => (r.connect.p99 > worst.p99 ? r.connect : worst),
+    results[0]!.connect,
+  );
+  const worstEnroll = results.reduce(
+    (worst, r) => (r.enrollment.p99 > worst.p99 ? r.enrollment : worst),
+    results[0]!.enrollment,
+  );
+  const worstHb = results.reduce(
+    (worst, r) => (r.heartbeatRtt.p99 > worst.p99 ? r.heartbeatRtt : worst),
+    results[0]!.heartbeatRtt,
+  );
+
+  return {
+    target: cfg.baseUrl,
+    agents: cfg.agents,
+    rampUpSeconds: cfg.rampSeconds,
+    steadyStateSeconds: cfg.steadySeconds,
+    heartbeatIntervalSeconds: cfg.heartbeatSeconds,
+    counters,
+    connect: worstConnect,
+    enrollment: worstEnroll,
+    heartbeatRtt: worstHb,
+    peakMemoryMB: Math.max(...results.map((r) => r.peakMemoryMB)),
+    durationSeconds: Math.max(...results.map((r) => r.durationSeconds)),
+  };
+}
+
+function buildReport(
+  cfg: LoadTestConfig,
+  counters: CounterSet,
+  connectTracker: LatencyTracker,
+  enrollTracker: LatencyTracker,
+  heartbeatTracker: LatencyTracker,
+  peakMemoryMB: number,
+  durationSeconds: number,
+) {
+  return {
+    target: cfg.baseUrl,
+    agents: cfg.agents,
+    rampUpSeconds: cfg.rampSeconds,
+    steadyStateSeconds: cfg.steadySeconds,
+    heartbeatIntervalSeconds: cfg.heartbeatSeconds,
+    counters,
+    connect: summarize(connectTracker),
+    enrollment: summarize(enrollTracker),
+    heartbeatRtt: summarize(heartbeatTracker),
+    peakMemoryMB,
+    durationSeconds,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Single-process runner
+// ---------------------------------------------------------------------------
+
+async function runSingleProcess(cfg: LoadTestConfig): Promise<void> {
+  const agentCount = cfg.isWorker ? cfg.workerAgents : cfg.agents;
+  const prefix = cfg.isWorker ? `[W${cfg.workerId}] ` : "";
+
+  // If running as worker, get token from env; else setup infra
+  let token: string;
+  let configId: string;
+  if (cfg.isWorker) {
+    token = process.env["__FP_ENROLLMENT_TOKEN"]!;
+    configId = process.env["__FP_CONFIG_ID"]!;
+  } else {
+    const infra = await setupTestInfra(cfg.baseUrl);
+    token = infra.token;
+    configId = infra.config.id;
+  }
 
   const counters = createCounters();
   const connectTracker = createTracker("connect");
@@ -236,109 +548,223 @@ async function run() {
 
   const startTime = performance.now();
 
-  // Phase 1: Ramp-up — enroll agents with linear spacing
-  console.log("\n🚀 Phase 1: Ramp-up (enrolling agents)...");
-  const delayPerAgent = (cfg.rampSeconds * 1000) / cfg.agents;
-  const managed: ManagedAgent[] = [];
+  // Phase 1: Parallel batched ramp-up
+  console.log(
+    `${prefix}🚀 Phase 1: Enrolling ${agentCount} agents (concurrency=${cfg.concurrency})...`,
+  );
 
-  for (let i = 0; i < cfg.agents; i++) {
-    const result = await enrollAgent(cfg.wsUrl, token, i, counters, connectTracker, enrollTracker);
-    if (result) managed.push(result);
+  let managed = await enrollBatched(
+    cfg.wsUrl,
+    token,
+    agentCount,
+    cfg.concurrency,
+    counters,
+    connectTracker,
+    enrollTracker,
+    cfg.rampSeconds * 1000,
+  );
 
-    if ((i + 1) % 10 === 0 || i === cfg.agents - 1) {
-      trackMemory();
+  trackMemory();
+  const rampDuration = ((performance.now() - startTime) / 1000).toFixed(1);
+  const enrollRate = (managed.length / ((performance.now() - startTime) / 1000)).toFixed(0);
+  console.log(
+    `\n${prefix}   ✅ Ramp-up complete: ${managed.length}/${agentCount} connected in ${rampDuration}s (${enrollRate} enroll/s)`,
+  );
+
+  // Poll server stats after ramp
+  if (!cfg.isWorker) {
+    const stats = await fetchServerStats(cfg.baseUrl, configId);
+    if (stats) {
+      console.log(
+        `${prefix}   📊 Server: ${stats.active_websockets} active WS, ${stats.connected_agents} connected, ${stats.healthy_agents} healthy`,
+      );
+    }
+  }
+
+  // Phase 2: Steady-state monitoring
+  // Auto-heartbeat is handled by each agent's timer (server-directed interval).
+  // We just monitor connection health and do periodic measurement heartbeats.
+  console.log(
+    `${prefix}💓 Phase 2: Steady-state (${cfg.steadySeconds}s, auto-heartbeat active)...`,
+  );
+  const steadyDeadline = Date.now() + cfg.steadySeconds * 1000;
+  let monitorRound = 0;
+  const MONITOR_INTERVAL_MS = 10_000; // check every 10s
+
+  while (Date.now() < steadyDeadline) {
+    monitorRound++;
+    trackMemory();
+
+    // Count alive agents and analyze disconnections
+    const alive: ManagedAgent[] = [];
+    const disconnected: ManagedAgent[] = [];
+    for (const m of managed) {
+      if (m.agent.connected) {
+        alive.push(m);
+      } else {
+        disconnected.push(m);
+      }
+    }
+    const dropped = disconnected.length;
+
+    // Report close reasons for dropped agents
+    if (dropped > 0) {
+      const closeReasons = new Map<string, number>();
+      for (const m of disconnected) {
+        const code = m.agent.lastCloseCode ?? "unknown";
+        const reason = m.agent.lastCloseReason || "no reason";
+        const key = `${code}: ${reason}`;
+        closeReasons.set(key, (closeReasons.get(key) ?? 0) + 1);
+      }
+      console.log(`\n${prefix}   ⚠️  ${dropped} agents disconnected:`);
+      for (const [reason, count] of closeReasons) {
+        console.log(`${prefix}      ${count}× close(${reason})`);
+      }
+      // Show timing spread
+      const times = disconnected
+        .map((m) => m.agent.disconnectedAt)
+        .filter((t): t is number => t !== null)
+        .sort((a, b) => a - b);
+      if (times.length > 0) {
+        const earliest = times[0]!;
+        const latest = times[times.length - 1]!;
+        const spread = ((latest - earliest) / 1000).toFixed(1);
+        const agoSec = ((Date.now() - earliest) / 1000).toFixed(0);
+        console.log(`${prefix}      timing: first ${agoSec}s ago, spread=${spread}s`);
+      }
+      managed = alive;
+    }
+
+    // Send one measured heartbeat wave for latency tracking (sample up to 100 agents)
+    // Unless --no-probes is set, in which case we passively monitor only
+    if (!cfg.noProbes) {
+      const sample = managed.slice(0, Math.min(100, managed.length));
+      if (sample.length > 0) {
+        const results = await Promise.all(
+          sample.map((m) => sendHeartbeat(m, counters, heartbeatTracker)),
+        );
+        const sampleAlive = results.filter(Boolean).length;
+        process.stdout.write(
+          `\r${prefix}   Monitor ${monitorRound}: ${managed.length} alive` +
+            `${dropped > 0 ? ` (-${dropped})` : ""}, ` +
+            `sample=${sampleAlive}/${sample.length}, ` +
+            `hb_sent=${counters.messagesSent}, ` +
+            `mem=${(process.memoryUsage().rss / 1024 / 1024).toFixed(0)}MB` +
+            "          ",
+        );
+      }
+    } else {
       process.stdout.write(
-        `\r   Enrolled: ${managed.length}/${i + 1} attempted (${counters.connectFailed} failed)`,
+        `\r${prefix}   Monitor ${monitorRound}: ${managed.length} alive` +
+          `${dropped > 0 ? ` (-${dropped})` : ""}, ` +
+          `mem=${(process.memoryUsage().rss / 1024 / 1024).toFixed(0)}MB` +
+          ` (passive)          `,
       );
     }
 
-    if (delayPerAgent > 0 && i < cfg.agents - 1) {
-      await new Promise((r) => {
-        setTimeout(r, delayPerAgent);
-      });
-    }
-  }
-  console.log(`\n   ✅ Ramp-up complete: ${managed.length} agents connected`);
-
-  // Phase 2: Steady-state — heartbeat loop
-  console.log(
-    `\n💓 Phase 2: Steady-state (${cfg.steadySeconds}s, heartbeat every ${cfg.heartbeatSeconds}s)...`,
-  );
-  const steadyDeadline = Date.now() + cfg.steadySeconds * 1000;
-  let heartbeatRound = 0;
-
-  while (Date.now() < steadyDeadline) {
-    heartbeatRound++;
-    const roundStart = performance.now();
-
-    // Send heartbeats to all connected agents
-    const alive: ManagedAgent[] = [];
-    const promises = managed.map(async (m) => {
-      const ok = await sendHeartbeat(m, counters, heartbeatTracker);
-      if (ok && m.agent.connected) alive.push(m);
-      else m.agent.close();
-    });
-    await Promise.all(promises);
-
-    trackMemory();
-    const roundMs = performance.now() - roundStart;
-    const remaining = Math.max(0, cfg.heartbeatSeconds * 1000 - roundMs);
-
-    process.stdout.write(
-      `\r   Round ${heartbeatRound}: ${alive.length} alive, round took ${roundMs.toFixed(0)}ms`,
-    );
-
-    // Replace managed array with surviving agents
-    managed.length = 0;
-    managed.push(...alive);
-
-    if (remaining > 0 && Date.now() < steadyDeadline) {
-      await new Promise((r) => {
-        setTimeout(r, Math.min(remaining, steadyDeadline - Date.now()));
+    const sleepMs = Math.min(MONITOR_INTERVAL_MS, Math.max(0, steadyDeadline - Date.now()));
+    if (sleepMs > 0) {
+      await new Promise<void>((r) => {
+        setTimeout(r, sleepMs);
       });
     }
   }
 
   // Phase 3: Teardown
-  console.log(`\n\n🧹 Phase 3: Teardown (closing ${managed.length} connections)...`);
-  for (const m of managed) {
-    m.agent.close();
+  console.log(`\n${prefix}🧹 Phase 3: Teardown (closing ${managed.length} connections)...`);
+  // Close in batches to avoid overwhelming the event loop
+  const closeBatch = 500;
+  for (let i = 0; i < managed.length; i += closeBatch) {
+    const batch = managed.slice(i, i + closeBatch);
+    for (const m of batch) m.agent.close();
+    if (i + closeBatch < managed.length) {
+      await new Promise<void>((r) => {
+        setTimeout(r, 10);
+      });
+    }
   }
 
   const durationSeconds = (performance.now() - startTime) / 1000;
   trackMemory();
 
-  // Report
-  const report = {
-    target: cfg.baseUrl,
-    agents: cfg.agents,
-    rampUpSeconds: cfg.rampSeconds,
-    steadyStateSeconds: cfg.steadySeconds,
-    heartbeatIntervalSeconds: cfg.heartbeatSeconds,
+  // If running as worker child, send results to parent via IPC
+  if (cfg.isWorker && process.send) {
+    const result: WorkerResult = {
+      workerId: cfg.workerId,
+      counters: {
+        ...counters,
+        errors: Object.fromEntries(counters.errors) as Record<string, number>,
+      },
+      connect: summarize(connectTracker),
+      enrollment: summarize(enrollTracker),
+      heartbeatRtt: summarize(heartbeatTracker),
+      peakMemoryMB,
+      durationSeconds,
+    };
+    process.send(result);
+    return;
+  }
+
+  // Single-process: print full report
+  const report = buildReport(
+    cfg,
     counters,
-    connect: summarize(connectTracker),
-    enrollment: summarize(enrollTracker),
-    heartbeatRtt: summarize(heartbeatTracker),
+    connectTracker,
+    enrollTracker,
+    heartbeatTracker,
     peakMemoryMB,
     durationSeconds,
-  };
-
+  );
   printReport(report);
 
-  // Write JSON report
-  const jsonPath = `load-test-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
+  // Poll server for final stats
+  const serverStats = await fetchServerStats(cfg.baseUrl, configId);
+  if (serverStats) {
+    console.log(`📊 Server-side stats (post-teardown):`);
+    console.log(`   Total agents:      ${serverStats.total_agents}`);
+    console.log(`   Connected:         ${serverStats.connected_agents}`);
+    console.log(`   Healthy:           ${serverStats.healthy_agents}`);
+  }
+
   const fs = await import("node:fs/promises");
+  const jsonPath = `load-test-${new Date().toISOString().replace(/[:.]/g, "-")}.json`;
   await fs.writeFile(jsonPath, reportToJson(report));
   console.log(`📄 JSON report written to ${jsonPath}`);
 
-  // Exit with error if too many failures
-  const failRate = counters.connectFailed / counters.connectAttempted;
+  const failRate = counters.connectFailed / Math.max(1, counters.connectAttempted);
   if (failRate > 0.1) {
     console.error(`\n❌ Failure rate too high: ${(failRate * 100).toFixed(1)}%`);
     process.exit(1);
   }
-
   console.log("\n✅ Load test completed successfully.");
+}
+
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
+
+async function run() {
+  const cfg = parseConfig();
+
+  if (!cfg.isWorker) {
+    console.log(`
+🔥 o11yfleet Load Test
+   Target:      ${cfg.baseUrl}
+   Agents:      ${cfg.agents.toLocaleString()}
+   Ramp:        ${cfg.rampSeconds}s
+   Steady:      ${cfg.steadySeconds}s
+   Heartbeat:   every ${cfg.heartbeatSeconds}s
+   Probes:      ${cfg.noProbes ? "DISABLED (passive monitoring)" : "active (100 sample heartbeats/round)"}
+   Concurrency: ${cfg.concurrency} parallel enrollments
+   Workers:     ${cfg.workers} process(es)
+`);
+  }
+
+  if (cfg.workers > 1 && !cfg.isWorker) {
+    await runMultiProcess(cfg);
+  } else {
+    await runSingleProcess(cfg);
+  }
 }
 
 run().catch((err) => {
