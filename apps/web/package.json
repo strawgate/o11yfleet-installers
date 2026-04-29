@@ -30,7 +30,7 @@
     "eslint-plugin-react-refresh": "^0.5.2",
     "globals": "^17.5.0",
     "typescript": "^5.8.0",
-    "typescript-eslint": "^8.58.2",
+    "typescript-eslint": "^8.59.1",
     "vite": "^8.0.10",
     "@tailwindcss/vite": "^4.0.0",
     "tailwindcss": "^4.0.0",
