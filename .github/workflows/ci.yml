@@ -9,16 +9,32 @@ on:
 
 jobs:
   test-install-script:
-    name: Test install.sh on ubuntu-${{ matrix.arch }}
-    runs-on: ubuntu-24.04
+    name: Test on ${{ matrix.os }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
-        arch:
-          - amd64
-          # arm64 testing requires self-hosted runners or ARM hardware
-          # Enable when available:
-          # - arm64
+        include:
+          # Linux amd64
+          - os: linux
+            runner: ubuntu-24.04
+            arch: amd64
+          # Linux arm64
+          - os: linux
+            runner: ubuntu-24.04-arm
+            arch: arm64
+          # macOS Apple Silicon (M1-M4)
+          - os: macos
+            runner: macos-15
+            arch: arm64
+          # macOS Intel
+          - os: macos
+            runner: macos-13
+            arch: amd64
+          # Windows
+          - os: windows
+            runner: windows-2025
+            arch: amd64
 
     steps:
       - name: Checkout
@@ -27,6 +43,7 @@ jobs:
       - name: Run install.sh (dry-run mode)
         env:
           OTELCOL_VERSION: "0.116.0"
+        shell: bash
         run: |
           chmod +x installers/install.sh
           ./installers/install.sh --dry-run --version "$OTELCOL_VERSION"
@@ -34,17 +51,19 @@ jobs:
       - name: Verify binary download and checksum
         env:
           OTELCOL_VERSION: "0.116.0"
+        shell: bash
         run: |
           chmod +x installers/install.sh
-          # Install to temp directory without systemd
+          # Use unique dir per run
+          TEST_DIR="/tmp/o11y-test-$(date +%s)-$$"
           sudo ./installers/install.sh \
             --version "$OTELCOL_VERSION" \
-            --token "fp_enroll_test_dry_run_token_$(date +%s)" \
-            --dir /tmp/o11y-test-$(date +%s)
+            --token "fp_enroll_test_dry_run_token" \
+            --dir "$TEST_DIR"
           # Verify binary exists and is executable
           find /tmp -name "otelcol-contrib" -type f 2>/dev/null | head -1 | xargs -I{} test -x {} && echo "Binary is executable"
           # Cleanup
-          sudo rm -rf /tmp/o11y-test-* 2>/dev/null || true
+          sudo rm -rf "$TEST_DIR" 2>/dev/null || true
 
   shellcheck:
     name: ShellCheck install.sh
@@ -63,27 +82,28 @@ jobs:
       matrix:
         version:
           - "0.116.0"  # older format with .sha256 files
-          - "0.151.0"  # newer format with checksums.txt
+          - "0.151.0"   # newer format with checksums.txt
     steps:
       - uses: actions/checkout@v6
       - name: Test checksums for ${{ matrix.version }}
+        shell: bash
         run: |
           VERSION="${{ matrix.version }}"
-          ARCH="$(uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
-          TARBALL="otelcol-contrib_${VERSION}_linux_${ARCH}.tar.gz"
+          # Test both amd64 and arm64
+          for ARCH in amd64 arm64; do
+            TARBALL="otelcol-contrib_${VERSION}_linux_${ARCH}.tar.gz"
+            CHECKSUMS_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+            EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
+            if [ -z "$EXPECTED_HASH" ]; then
+              echo "Failed to get hash for $TARBALL from checksums.txt"
+              exit 1
+            fi
+            echo "Got hash for $TARBALL: ${EXPECTED_HASH:0:16}..."
 
-          # Test checksums.txt format (0.116.0+)
-          CHECKSUMS_URL="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
-          EXPECTED_HASH=$(curl -sL "$CHECKSUMS_URL" | grep " $TARBALL$" | cut -d' ' -f1)
-          if [ -z "$EXPECTED_HASH" ]; then
-            echo "Failed to get hash for $TARBALL from checksums.txt"
-            exit 1
-          fi
-          echo "Got hash for $TARBALL: ${EXPECTED_HASH:0:16}..."
-
-          # Verify hash matches expected format (64 char hex)
-          if ! echo "$EXPECTED_HASH" | grep -qE '^[a-f0-9]{64}$'; then
-            echo "Invalid hash format: $EXPECTED_HASH"
-            exit 1
-          fi
-          echo "✓ Checksum format valid for v${VERSION}"
+            # Verify hash matches expected format (64 char hex)
+            if ! echo "$EXPECTED_HASH" | grep -qE '^[a-f0-9]{64}$'; then
+              echo "Invalid hash format: $EXPECTED_HASH"
+              exit 1
+            fi
+            echo "✓ Checksum format valid for v${VERSION} ${ARCH}"
+          done
