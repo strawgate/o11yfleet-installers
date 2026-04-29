@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import type { AiGuidanceRequest, AiGuidanceResponse } from "@o11yfleet/core/ai";
-import { apiPost } from "../client";
+import { ApiError, apiPost } from "../client";
 
 type GuidanceRoute = "admin" | "portal";
 
@@ -22,7 +22,10 @@ export function useAiGuidance(
     queryFn: () => apiPost<AiGuidanceResponse>(guidancePath(route), request),
     enabled: (options.enabled ?? true) && request !== null,
     staleTime: 60_000,
-    retry: 1,
+    retry: (failureCount, error) => {
+      if (error instanceof ApiError && error.status < 500) return false;
+      return failureCount < 1;
+    },
   });
 }
 

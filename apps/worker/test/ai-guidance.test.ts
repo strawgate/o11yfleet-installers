@@ -304,4 +304,34 @@ describe("AI guidance routes", () => {
     expect(response.items.length).toBeGreaterThan(0);
     expect(response.items.every((item) => item.action?.kind !== "open_page")).toBe(true);
   });
+
+  it("keeps admin deterministic configuration guidance inside admin routes", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.overview.page",
+            label: "Admin overview",
+            surface: "admin.overview",
+            kind: "page",
+          },
+        ],
+        context: {
+          total_tenants: 1,
+          total_configurations: 0,
+        },
+      },
+      {
+        env: {},
+        scopeLabel: "admin",
+      },
+    );
+
+    const hrefs = response.items
+      .map((item) => (item.action && "href" in item.action ? item.action.href : undefined))
+      .filter(Boolean);
+    expect(hrefs.length).toBeGreaterThan(0);
+    expect(hrefs.every((href) => href?.startsWith("/admin/"))).toBe(true);
+  });
 });

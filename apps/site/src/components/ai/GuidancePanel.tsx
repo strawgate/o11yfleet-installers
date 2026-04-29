@@ -21,7 +21,7 @@ export function GuidancePanel({
 }: GuidancePanelProps) {
   const items = filterItems(guidance?.items ?? [], targetKeys);
 
-  if (!error && !isLoading && items.length === 0) {
+  if ((error || !isLoading) && items.length === 0) {
     return null;
   }
 
@@ -39,7 +39,6 @@ export function GuidancePanel({
         ) : null}
       </div>
 
-      {error ? <p className="ai-empty">Guidance unavailable: {error.message}</p> : null}
       {!error && isLoading && !guidance ? (
         <p className="ai-empty">Analyzing current data...</p>
       ) : null}

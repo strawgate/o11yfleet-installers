@@ -210,11 +210,18 @@ function buildDeterministicGuidance(
       severity: "notice",
       confidence: 0.95,
       evidence: [{ label: "Configurations", value: "0", source: opts.scopeLabel }],
-      action: {
-        kind: "open_page",
-        label: "Create configuration",
-        href: "/portal/configurations",
-      },
+      action:
+        opts.scopeLabel === "admin"
+          ? {
+              kind: "open_page",
+              label: "Open tenants",
+              href: "/admin/tenants",
+            }
+          : {
+              kind: "open_page",
+              label: "Create configuration",
+              href: "/portal/configurations",
+            },
     });
   }
 
