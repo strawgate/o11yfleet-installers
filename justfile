@@ -42,14 +42,14 @@ doctor:
         }
 
         API_SECRET=$(read_dev_var API_SECRET)
-        if [ -z "$API_SECRET" ] || [ "$API_SECRET" = "dev-local" ]; then
+        if [ -z "$API_SECRET" ] || [[ "$API_SECRET" == dev-local* ]]; then
             echo "✗ API_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
             echo "✓ API_SECRET set in .dev.vars"
         fi
         CLAIM_SECRET=$(read_dev_var CLAIM_SECRET)
-        if [ -z "$CLAIM_SECRET" ] || [ "$CLAIM_SECRET" = "dev-local" ]; then
+        if [ -z "$CLAIM_SECRET" ] || [[ "$CLAIM_SECRET" == dev-local* ]]; then
             echo "✗ CLAIM_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
