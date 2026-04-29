@@ -2,9 +2,9 @@
 // Verifies that tenants cannot see each other's configs, agents, stats, or data.
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { apiFetch } from "./helpers.js";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
+  apiFetch,
   setupD1,
   CLAIM_SECRET,
   createTenant,

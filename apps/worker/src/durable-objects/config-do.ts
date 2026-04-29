@@ -1,7 +1,11 @@
 import { DurableObject } from "cloudflare:workers";
-import { decodeAgentToServer, encodeServerToAgent, detectCodecFormat } from "@o11yfleet/core/codec";
+import {
+  decodeAgentToServer,
+  encodeServerToAgent,
+  detectCodecFormat,
+  ServerCapabilities,
+} from "@o11yfleet/core/codec";
 import type { CodecFormat } from "@o11yfleet/core/codec";
-import { ServerCapabilities } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
 import type { AnyFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
