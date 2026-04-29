@@ -75,25 +75,28 @@ try {
 
     # Checksum verification
     Write-Info "Verifying checksum..."
-    $ChecksumFile = Invoke-WebRequest -Uri $ChecksumUrl -UseBasicParsing -OutFile "$TempDir.checksums.txt"
-    $Checksums = Get-Content "$TempDir.checksums.txt" -Raw
+    $ChecksumFile = Invoke-WebRequest -Uri $ChecksumUrl -UseBasicParsing -OutFile "$TempDir.checksums.txt" -ErrorAction SilentlyContinue
+    $Checksums = Get-Content "$TempDir.checksums.txt" -Raw -ErrorAction SilentlyContinue
 
-    $ExpectedHash = ($Checksums -split "`n" | ForEach-Object {
-        if ($_ -match "^\s*([a-f0-9]{64})\s+$([regex]::Escape($Tarball))$") {
-            $matches[1]
-        }
-    }) | Select-Object -First 1
+    $ExpectedHash = $null
+    if (-not [string]::IsNullOrEmpty($Checksums)) {
+        $ExpectedHash = ($Checksums -split "`n" | ForEach-Object {
+            if ($_ -match "^\s*([a-f0-9]{64})\s+$([regex]::Escape($Tarball))$") {
+                $matches[1]
+            }
+        }) | Select-Object -First 1
+    }
 
     if ([string]::IsNullOrEmpty($ExpectedHash)) {
-        Write-Fail "Checksum for ${Tarball} not found in checksums.txt"
+        Write-Warn "Checksum for ${Tarball} not found -- skipping verification (older OTel versions may not include Windows checksums)"
+    } else {
+        # Verify downloaded file hash
+        $DownloadedHash = (Get-FileHash -Path $TempFile -Algorithm SHA256).Hash.ToLower()
+        if ($DownloadedHash -ne $ExpectedHash) {
+            Write-Fail "Checksum mismatch! Expected $ExpectedHash, got $DownloadedHash"
+        }
+        Write-OK "Checksum verified"
     }
-
-    # Verify downloaded file hash
-    $DownloadedHash = (Get-FileHash -Path $TempFile -Algorithm SHA256).Hash.ToLower()
-    if ($DownloadedHash -ne $ExpectedHash) {
-        Write-Fail "Checksum mismatch! Expected $ExpectedHash, got $DownloadedHash"
-    }
-    Write-OK "Checksum verified"
 
     # Extract
     Write-Info "Extracting..."

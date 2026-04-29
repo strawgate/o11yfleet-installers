@@ -12,6 +12,7 @@ curl --proto '=https' --tlsv1.2 -fsSL https://install.o11yfleet.com/install.sh |
 
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
+- Windows (amd64, arm64)
 
 ## Options
 
@@ -37,11 +38,14 @@ sudo ./installers/install.sh --version 0.151.0 --token fp_enroll_test --dir /tmp
 
 ## CI
 
-CI runs on every push and PR to test the installer on:
+CI runs on every push and PR (path-filtered to installers/ and workflow changes) to test the installer on:
 - Ubuntu 24.04 (amd64)
-- Ubuntu 24.04 (arm64)
+- macOS 15 (Apple Silicon M4)
+- macOS 14 (Apple Silicon M3)
+- macOS 13 (Intel)
+- Windows 2022 (amd64)
 
-macOS testing is available via workflow_dispatch due to runner costs.
+Linux ARM64 binaries are validated via checksum verification since no standard GitHub ARM64 runner is available.
 
 ## Architecture
 

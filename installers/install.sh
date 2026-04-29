@@ -175,7 +175,9 @@ service:
       exporters: [debug]
 YAML
   sudo chmod 640 "$config_file"
-  sudo chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
+  if ! sudo chown o11yfleet:o11yfleet "$config_file" 2>/dev/null; then
+    warn "Could not change ownership to o11yfleet user (user may not exist)"
+  fi
   ok "Config written to $config_file"
 }
 
@@ -190,9 +192,13 @@ install_linux_service() {
   info "Installing systemd service..."
 
   if ! id -u o11yfleet >/dev/null 2>&1; then
-    sudo useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
+    if ! sudo useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null; then
+      warn "Could not create o11yfleet user (useradd may require root or user already exists)"
+    fi
   fi
-  sudo chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
+  if ! sudo chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null; then
+    warn "Could not change ownership to o11yfleet user - service may run as root"
+  fi
 
   sudo tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
 [Unit]
@@ -224,6 +230,25 @@ UNIT
 install_macos_service() {
   info "Installing launchd service..."
 
+  # Create o11yfleet user if it doesn't exist
+  if ! id -u o11yfleet >/dev/null 2>&1; then
+    info "Creating o11yfleet user..."
+    if ! sudo dscl . -create /Users/o11yfleet 2>/dev/null; then
+      warn "Could not create o11yfleet user - service may run as root"
+    else
+      sudo dscl . -create /Users/o11yfleet UserShell /usr/bin/false 2>/dev/null || true
+      sudo dscl . -create /Users/o11yfleet UniqueID 400 2>/dev/null || true
+      sudo dscl . -create /Users/o11yfleet GroupID 400 2>/dev/null || true
+      sudo dscl . -create /Users/o11yfleet RealName "O11yFleet Collector" 2>/dev/null || true
+      sudo dscl . -create /Users/o11yfleet PrimaryGroupID 400 2>/dev/null || true
+    fi
+  fi
+
+  # Change ownership of installation directory
+  if ! sudo chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null; then
+    warn "Could not change ownership to o11yfleet user - service may run as root"
+  fi
+
   local plist="/Library/LaunchDaemons/com.o11yfleet.collector.plist"
   sudo tee "$plist" >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
@@ -232,6 +257,10 @@ install_macos_service() {
 <dict>
   <key>Label</key>
   <string>com.o11yfleet.collector</string>
+  <key>UserName</key>
+  <string>o11yfleet</string>
+  <key>GroupName</key>
+  <string>o11yfleet</string>
   <key>ProgramArguments</key>
   <array>
     <string>${INSTALL_DIR}/bin/otelcol-contrib</string>
