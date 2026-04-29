@@ -81,45 +81,44 @@ install_binary() {
   local url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${tarball_name}"
 
   info "Downloading otelcol-contrib v${OTELCOL_VERSION} for ${OS}/${ARCH}..."
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  TMPDIR="$(mktemp -d)"
+  trap 'rm -rf "$TMPDIR"' EXIT
 
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
+  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$TMPDIR/$tarball_name" \
     || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
 
   info "Verifying checksum..."
   local checksums_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
   local sha256_url="${url}.sha256"
   local expected_hash=""
-  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt"; then
-    expected_hash="$(grep " ${tarball_name}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)" \
+  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$TMPDIR/checksums.txt"; then
+    expected_hash="$(grep " ${tarball_name}$" "$TMPDIR/checksums.txt" | cut -d' ' -f1)" \
       || fail "Checksum for ${tarball_name} not found in checksums.txt for version $OTELCOL_VERSION"
-  elif curl --proto '=https' --tlsv1.2 -fsSL "$sha256_url" -o "$tmpdir/${tarball_name}.sha256"; then
+  elif curl --proto '=https' --tlsv1.2 -fsSL "$sha256_url" -o "$TMPDIR/${tarball_name}.sha256"; then
     info "Using legacy SHA file (checksums.txt not available for v${OTELCOL_VERSION})"
   else
     fail "Checksum download failed.\n  Tried checksums.txt: $checksums_url\n  Tried SHA file: $sha256_url\n  Either the version $OTELCOL_VERSION is too old, or the release assets are missing."
   fi
   if [ -n "$expected_hash" ]; then
-    echo "$expected_hash  $tarball_name" > "$tmpdir/${tarball_name}.sha256"
+    echo "$expected_hash  $tarball_name" > "$TMPDIR/${tarball_name}.sha256"
   fi
-  (cd "$tmpdir" && (sha256sum -c "${tarball_name}.sha256" 2>/dev/null || shasum -a 256 -c "${tarball_name}.sha256")) \
+  (cd "$TMPDIR" && (sha256sum -c "${tarball_name}.sha256" 2>/dev/null || shasum -a 256 -c "${tarball_name}.sha256")) \
     || fail "Checksum verification failed — download may be corrupted"
   ok "Checksum verified"
 
   info "Extracting..."
-  tar -xzf "$tmpdir/$tarball_name" -C "$tmpdir"
+  tar -xzf "$TMPDIR/$tarball_name" -C "$TMPDIR"
 
   if [ "$DRY_RUN" = true ]; then
-    if [ -f "$tmpdir/otelcol-contrib" ]; then
+    if [ -f "$TMPDIR/otelcol-contrib" ]; then
       ok "Dry run: binary would be installed to $INSTALL_DIR/bin/"
-      "$tmpdir/otelcol-contrib" --version 2>/dev/null || true
+      "$TMPDIR/otelcol-contrib" --version 2>/dev/null || true
       return 0
     fi
   fi
 
   sudo mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
-  sudo cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
+  sudo cp "$TMPDIR/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
   sudo chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
   ok "Installed otelcol-contrib to $INSTALL_DIR/bin/"
 }
