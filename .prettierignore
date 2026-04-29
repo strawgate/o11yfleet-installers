@@ -13,3 +13,4 @@ apps/worker/worker-configuration.d.ts
 tmp/
 **/gen/
 **/test-results/**
+.github/workflows/

@@ -1,0 +1,51 @@
+name: CI Monitor
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
+
+permissions:
+  actions: read
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  report-failure:
+    if: github.event.workflow_run.conclusion == 'failure'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create issue on CI failure
+        run: |
+          RUN_URL="${{ github.event.workflow_run.html_url }}"
+          RUN_ID="${{ github.event.workflow_run.id }}"
+          WORKFLOW_NAME="${{ github.event.workflow_run.name }}"
+          ACTOR="${{ github.event.workflow_run.actor.login }}"
+
+          FAILED_JOBS=$(gh api repos/${{ github.repository }}/actions/runs/$RUN_ID/jobs \
+            --jq '.jobs[] | select(.conclusion == "failure") | "- **\(.name)**: \(.html_url)"' 2>/dev/null || echo "Failed to fetch job details")
+
+          gh issue create \
+            --repo ${{ github.repository }} \
+            --title "CI failed on main: $WORKFLOW_NAME" \
+            --label "ci-failure" \
+            --label "automated-issue" \
+            --assignee "$ACTOR" \
+            --body "## CI Failure on main
+
+The [CI workflow]($RUN_URL) failed.
+
+| Field | Value |
+|-------|-------|
+| **Run ID** | $RUN_ID |
+| **Workflow** | $WORKFLOW_NAME |
+| **Triggered by** | @$ACTOR |
+| **Run URL** | [View run]($RUN_URL) |
+
+### Failed Jobs
+
+$FAILED_JOBS
+
+---
+*This issue was automatically created by the CI Monitor workflow.*"

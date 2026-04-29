@@ -99,7 +99,10 @@ export function useOverview() {
 export function useConfigurations() {
   return useQuery({
     queryKey: ["configurations"],
-    queryFn: () => apiGet<Configuration[]>("/api/v1/configurations"),
+    queryFn: async () => {
+      const data = await apiGet<{ configurations: Configuration[] }>("/api/v1/configurations");
+      return data.configurations;
+    },
     refetchInterval: 10_000,
   });
 }
@@ -148,7 +151,12 @@ export function useConfigurationAgents(id: string | undefined) {
 export function useConfigurationVersions(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "versions"],
-    queryFn: () => apiGet<ConfigVersion[]>(`/api/v1/configurations/${id}/versions`),
+    queryFn: async () => {
+      const data = await apiGet<{ versions: ConfigVersion[] }>(
+        `/api/v1/configurations/${id}/versions`,
+      );
+      return data.versions;
+    },
     enabled: !!id,
   });
 }
@@ -156,7 +164,12 @@ export function useConfigurationVersions(id: string | undefined) {
 export function useConfigurationTokens(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "tokens"],
-    queryFn: () => apiGet<EnrollmentToken[]>(`/api/v1/configurations/${id}/enrollment-tokens`),
+    queryFn: async () => {
+      const data = await apiGet<{ tokens: EnrollmentToken[] }>(
+        `/api/v1/configurations/${id}/enrollment-tokens`,
+      );
+      return data.tokens;
+    },
     enabled: !!id,
   });
 }
@@ -180,7 +193,10 @@ export function useTenant(enabled = true) {
 export function useTeam() {
   return useQuery({
     queryKey: ["team"],
-    queryFn: () => apiGet<TeamMember[]>("/api/v1/team"),
+    queryFn: async () => {
+      const data = await apiGet<{ members: TeamMember[] }>("/api/v1/team");
+      return data.members;
+    },
   });
 }
 
