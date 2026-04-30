@@ -21,6 +21,7 @@ import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { EnrollmentDialogBody, enrollmentTokenFailureMessage } from "./EnrollmentDialogBody";
 import { relTime, trunc } from "../../utils/format";
 import {
   agentCurrentHash,
@@ -51,9 +52,6 @@ import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfle
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
 
-const INSTALL_COMMAND = (token: string) =>
-  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token ${token}`;
-
 export default function ConfigurationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -75,6 +73,7 @@ export default function ConfigurationDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
   const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
+  const [enrollmentTokenError, setEnrollmentTokenError] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
   const [rolloutOpen, setRolloutOpen] = useState(false);
   const [copilotRequest, setCopilotRequest] = useState<AiGuidanceRequest | null>(null);
@@ -360,14 +359,23 @@ export default function ConfigurationDetailPage() {
   }
 
   async function handleCreateEnrollmentToken() {
+    setEnrollmentTokenError(null);
     try {
       const result = await createEnrollmentToken.mutateAsync({ name: "configuration-enrollment" });
-      setEnrollmentToken(result.token ?? null);
-      if (result.token) {
-        toast("Enrollment token created", c!.name);
+      if (!result.token) {
+        const message = "The server did not return an enrollment token.";
+        setEnrollmentToken(null);
+        setEnrollmentTokenError(message);
+        toast("Failed to create token", message, "err");
+        return;
       }
+      setEnrollmentToken(result.token);
+      toast("Enrollment token created", c!.name);
     } catch (err) {
-      toast("Failed to create token", err instanceof Error ? err.message : "Unknown error", "err");
+      const message = enrollmentTokenFailureMessage(err);
+      setEnrollmentToken(null);
+      setEnrollmentTokenError(message);
+      toast("Failed to create token", message, "err");
     }
   }
 
@@ -476,7 +484,14 @@ export default function ConfigurationDetailPage() {
           </p>
         </div>
         <div className="actions">
-          <button className="btn btn-primary" onClick={() => setEnrollOpen(true)}>
+          <button
+            className="btn btn-primary"
+            onClick={() => {
+              setEnrollmentToken(null);
+              setEnrollmentTokenError(null);
+              setEnrollOpen(true);
+            }}
+          >
             Enroll agent
           </button>
           <span className={`tag tag-${c.status === "active" ? "ok" : "warn"}`}>
@@ -587,7 +602,11 @@ export default function ConfigurationDetailPage() {
                       >
                         <button
                           className="btn btn-primary btn-sm"
-                          onClick={() => setEnrollOpen(true)}
+                          onClick={() => {
+                            setEnrollmentToken(null);
+                            setEnrollmentTokenError(null);
+                            setEnrollOpen(true);
+                          }}
                         >
                           Enroll agent
                         </button>
@@ -901,12 +920,13 @@ export default function ConfigurationDetailPage() {
         </div>
       )}
 
-      {/* Delete modal */}
+      {/* Enrollment modal */}
       <Modal
         open={enrollOpen}
         onClose={() => {
           setEnrollOpen(false);
           setEnrollmentToken(null);
+          setEnrollmentTokenError(null);
         }}
         title="Enroll agent"
         footer={
@@ -916,6 +936,7 @@ export default function ConfigurationDetailPage() {
               onClick={() => {
                 setEnrollOpen(false);
                 setEnrollmentToken(null);
+                setEnrollmentTokenError(null);
               }}
             >
               Close
@@ -932,33 +953,10 @@ export default function ConfigurationDetailPage() {
           </>
         }
       >
-        {enrollmentToken ? (
-          <div className="command-panel">
-            <div className="banner info">
-              <div>
-                <div className="b-title">Enrollment token created</div>
-                <div className="b-body">
-                  This token will not be shown again. Copy it now or use the install command below.
-                  <div className="flex-row gap-sm mt-2">
-                    <code className="mono-cell token-value">{enrollmentToken}</code>
-                    <CopyButton value={enrollmentToken} />
-                  </div>
-                </div>
-              </div>
-            </div>
-            <pre className="code-block code-block-wrap">{INSTALL_COMMAND(enrollmentToken)}</pre>
-            <CopyButton value={INSTALL_COMMAND(enrollmentToken)} label="Copy command" />
-            <Link to="/portal/getting-started" className="btn btn-ghost btn-sm">
-              Open guided setup
-            </Link>
-          </div>
-        ) : (
-          <EmptyState
-            icon="plug"
-            title="Connect a collector"
-            description="Create a one-time enrollment token for this configuration, then run the installer on the host you want to manage."
-          />
-        )}
+        <EnrollmentDialogBody
+          enrollmentToken={enrollmentToken}
+          enrollmentTokenError={enrollmentTokenError}
+        />
       </Modal>
 
       <Modal
