@@ -65,11 +65,11 @@ The current app implementation is the React/Vite app under `apps/site/src`. Olde
 
 **Pricing tiers** (from pricing.html — the portal must respect and display these):
 
-- Hobby: Free, 10 collectors, 1 policy, 24h state, 1 user, no API keys or repo sync
+- Hobby: Free, 10 collectors, 1 policy, 1 user, no API keys or repo sync
 - Pro: $20/mo, 25 collectors, 3 policies, 7-day history, 1 user, no API keys or repo sync
-- Starter: Free, 1,000 collectors, 1 policy, 24h state, 3 users, no API keys or repo sync
-- Growth: $499/mo or $5,000/yr, 1,000 collectors plus packs, 10 policies, 30-day history, 10 users, unlimited API keys and repos, RBAC, webhooks, audit
-- Enterprise: Starts at $50k/yr, custom collectors, unlimited policies/users/API/repos, SSO/SCIM, advanced RBAC, approval workflows, audit export
+- Starter: Free, 1,000 collectors, 1 policy, 3 users, no API keys or repo sync
+- Growth: $499/mo or $5,000/yr, 1,000 collectors, 10 policies, 30-day history, 10 users, unlimited API keys, 10 repositories, RBAC, webhooks, audit
+- Enterprise: Starts at $50k/yr, custom collectors, unlimited policies/users/API/repos, SSO/SCIM, advanced RBAC, audit export
 
 ---
 

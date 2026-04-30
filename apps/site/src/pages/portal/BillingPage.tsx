@@ -85,7 +85,7 @@ export default function BillingPage() {
           <p className="meta mt-6">
             Plans should gate more than quotas. They decide whether a workspace has short-lived
             fleet state only, or also gets retained history, rollback, rollout safety, automation,
-            team roles, audit export, and approval workflows.
+            team roles, audit export, and governance controls.
           </p>
           <div className="mt-6">
             <span className={`tag ${hasStatefulOperations(plan) ? "tag-ok" : "tag-warn"}`}>

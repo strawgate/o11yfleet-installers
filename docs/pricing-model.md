@@ -25,13 +25,13 @@ pipeline automation against O11yFleet belongs on Growth or Enterprise, not Pro.
 
 ## Public Launch Tiers
 
-| Tier       | Price                | Collectors    | Policies  | History  | Users     | API / repos | Track        |
-| ---------- | -------------------- | ------------- | --------- | -------- | --------- | ----------- | ------------ |
-| Hobby      | Free                 | 10            | 1         | 24h      | 1         | None        | Individual   |
-| Pro        | $20/mo               | 25            | 3         | 7 days   | 1         | None        | Individual   |
-| Starter    | Free                 | 1,000         | 1         | 24h      | 3         | None        | Organization |
-| Growth     | $499/mo or $5,000/yr | 1,000 + packs | 10        | 30 days  | 10        | Unlimited   | Organization |
-| Enterprise | Starts at $50k/yr    | Custom        | Unlimited | 90d-1yr+ | Unlimited | Unlimited   | Organization |
+| Tier       | Price                | Collectors        | Policies           | History   | Users           | API / repos                         | Track        |
+| ---------- | -------------------- | ----------------- | ------------------ | --------- | --------------- | ----------------------------------- | ------------ |
+| Hobby      | Free                 | 10                | 1                  | Live only | 1               | None                                | Individual   |
+| Pro        | $20/mo               | 25                | 3                  | 7 days    | 1               | None                                | Individual   |
+| Starter    | Free                 | 1,000             | 1                  | Live only | 3               | None                                | Organization |
+| Growth     | $499/mo or $5,000/yr | 1,000             | 10                 | 30 days   | 10              | Unlimited API keys, 10 repositories | Organization |
+| Enterprise | Starts at $50k/yr    | Custom collectors | Unlimited policies | 90d-1yr+  | Unlimited users | Unlimited API keys and repositories | Organization |
 
 The deferred Max tier is not public at launch. Add it only if product analytics
 show a real cluster of individual users around 40-100 collectors.
@@ -56,12 +56,8 @@ Policies are the primary capacity paywall:
 - Growth: 10
 - Enterprise: unlimited/custom
 
-History retention is the primary stateful operations paywall:
-
-- Hobby and Starter: 24h state
-- Pro: 7 days
-- Growth: 30 days
-- Enterprise: 90 days to 1 year or custom
+History retention is the primary stateful operations paywall: Pro gets 7 days,
+Growth gets 30 days, and Enterprise gets 90 days to 1 year or custom retention.
 
 API keys and repo sync are not available on the individual track. They start at
 Growth to keep organizational automation out of Pro.
@@ -72,8 +68,8 @@ base package.
 
 Heartbeat frequency is not a pricing lever.
 
-## Growth Collector Packs
+## Billing Display
 
-Growth includes 1,000 collectors. Additional collector packs are $499/month, or
-$5,000/year, per additional 1,000 collectors. Self-serve Growth should route to
-Enterprise around 5,000 collectors.
+The public pricing page should include a monthly/annual toggle. Growth is
+$499/month or $5,000/year. Do not advertise collector packs on the public launch
+page.
