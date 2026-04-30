@@ -751,3 +751,8 @@ cli-bench-push config-id="CHANGE_ME":
 # Benchmark enrollment
 cli-bench-enrollment config-id="CHANGE_ME" collectors="10":
     pnpm --filter @o11yfleet/cli dev bench:enrollment --config-id {{config-id}} --collectors {{collectors}}
+
+# Mixed Config DO workload (experiment harness, issue #233)
+mixed-load agents="2000" duration="300" rollout_every="30" list_rps="2" stats_rps="2" reconnect_pct="5" concurrency="100" output="./artifacts/mixed-load.json":
+    mkdir -p "$(dirname "{{output}}")"
+    pnpm --filter @o11yfleet/load-test mixed -- --agents={{agents}} --duration={{duration}} --rollout-every={{rollout_every}} --list-rps={{list_rps}} --stats-rps={{stats_rps}} --reconnect-pct={{reconnect_pct}} --concurrency={{concurrency}} --output={{output}}

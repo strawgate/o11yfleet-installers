@@ -7,7 +7,8 @@
     "lint": "eslint src/ --ext .ts",
     "typecheck": "tsc --noEmit",
     "load": "tsx src/load-test.ts",
-    "smoke": "tsx src/smoke-test.ts"
+    "smoke": "tsx src/smoke-test.ts",
+    "mixed": "tsx src/mixed-config-do.ts"
   },
   "dependencies": {
     "@o11yfleet/core": "workspace:*",
