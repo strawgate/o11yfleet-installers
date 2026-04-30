@@ -206,14 +206,14 @@ export class LoadGenDO {
   }
 
   private handleMessage(conn: ConnState, event: MessageEvent): void {
-    if (typeof event.data === "string") {
-      if (event.data === "pong") return;
-      if (event.data.includes("enrollment_complete")) {
-        conn.enrolled = true;
-      }
+    if (typeof event.data !== "string") {
+      // Binary frames: OpAMP protocol — consume silently
       return;
     }
-    // Binary frames: OpAMP protocol — consume silently
+    if (event.data === "pong") return;
+    if (event.data.includes("enrollment_complete")) {
+      conn.enrolled = true;
+    }
   }
 
   private handleClose(connIndex: number, code: number): void {

@@ -44,7 +44,7 @@ env:
 
 jobs:
   validate:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
@@ -69,7 +69,7 @@ jobs:
           github.event_name == 'workflow_dispatch'
         )
       }}
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -115,7 +115,7 @@ jobs:
           (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply && vars.TERRAFORM_APPLY_ENABLED == 'true')
         )
       }}
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment != 'prod' && inputs.environment || 'production' }}
     steps:

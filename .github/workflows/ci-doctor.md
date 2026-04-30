@@ -29,6 +29,9 @@ tools:
     allowed: [list_workflow_jobs, get_workflow_run, get_job_logs, create_issue, create_issue_comment, search_issues]
 
 safe-outputs:
+  runs-on: ubicloud-standard-2-arm
+  threat-detection:
+    runs-on: ubicloud-standard-2-arm
   create-issue:
     title-prefix: "[ci-doctor] "
     labels: [ci-failure, automated]
@@ -41,6 +44,8 @@ safe-outputs:
     hide-older-comments: true
 
 timeout-minutes: 30
+runs-on: ubicloud-standard-2-arm
+runs-on-slim: ubicloud-standard-2-arm
 ---
 
 You are the CI Doctor — an expert investigative agent that diagnoses failing CI checks and provides actionable recommendations.

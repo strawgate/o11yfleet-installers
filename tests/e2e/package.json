@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "lint": "oxlint src",
     "test": "echo 'E2E tests require a live server. Run: just test-e2e'",
     "test:e2e": "vitest run",
     "test:e2e:watch": "vitest"

@@ -20,7 +20,7 @@
     "./hex": "./src/hex.ts"
   },
   "scripts": {
-    "lint": "eslint src/ test/",
+    "lint": "oxlint src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest"

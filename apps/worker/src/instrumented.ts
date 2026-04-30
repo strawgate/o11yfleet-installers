@@ -6,7 +6,7 @@ import { instrument, instrumentDO } from "@microlabs/otel-cf-workers";
 import handler from "./index.js";
 import { ConfigDurableObject } from "./durable-objects/config-do.js";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// oxlint-disable-next-line typescript/no-explicit-any
 const resolveConfig = (env: any, _trigger: any) => {
   const exporterUrl = env?.OTEL_EXPORTER_URL as string | undefined;
 

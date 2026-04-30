@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 3
     outputs:
       node: ${{ steps.filter.outputs.node }}
@@ -65,7 +65,7 @@ jobs:
 
           if has_match \
             '^(apps/(site|worker)|packages|tests|scripts|experiments)/' \
-            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js|vitest[^/]*\.config\.)' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|\.oxlintrc\.json|vitest[^/]*\.config\.)' \
             '^justfile$'; then
             set_output node true
           else
@@ -74,7 +74,7 @@ jobs:
 
           if has_match \
             '^(apps/site|packages/core|packages/test-utils|scripts)/' \
-            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js)' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|\.oxlintrc\.json)' \
             '^justfile$'; then
             set_output fast true
           else
@@ -83,7 +83,7 @@ jobs:
 
           if has_match \
             '^(apps/worker|packages/core|packages/db|packages/test-utils|tests/ui|tests/e2e)/' \
-            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js|vitest[^/]*\.config\.)' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|\.oxlintrc\.json|vitest[^/]*\.config\.)' \
             '^justfile$'; then
             set_output slow true
           else
@@ -100,7 +100,7 @@ jobs:
             set_output deploy false
           fi
 
-          if has_match '^\.github/workflows/.*\.(yml|yaml)$' '^\.github/workflows/.*\.md$' '^\.github/actions/'; then
+          if has_match '^\.github/workflows/.*\.(yml|yaml)$' '^\.github/workflows/.*\.md$' '^\.github/actions/' '^\.github/actionlint\.ya?ml$'; then
             set_output workflow true
           else
             set_output workflow false
@@ -108,8 +108,12 @@ jobs:
 
   lint-typecheck:
     needs: [changes]
-    if: needs.changes.outputs.node == 'true' || needs.changes.outputs.workflow == 'true'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+        (needs.changes.outputs.node == 'true' || needs.changes.outputs.workflow == 'true')
+      }}
+    runs-on: ubicloud-standard-4-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -117,7 +121,7 @@ jobs:
       - name: Lint workflows
         if: needs.changes.outputs.workflow == 'true'
         run: |
-          find .github/workflows -name '*.yml' ! -name '*.lock.yml' -print0 |
+          find .github/workflows \( -name '*.yml' -o -name '*.yaml' \) ! -name '*.lock.yml' -print0 |
             xargs -0 go run github.com/rhysd/actionlint/cmd/actionlint@latest
 
       - uses: pnpm/action-setup@v6
@@ -131,7 +135,17 @@ jobs:
 
       - name: Install dependencies
         if: needs.changes.outputs.node == 'true'
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Restore Turbo cache
+        if: needs.changes.outputs.node == 'true'
+        uses: actions/cache@v4
+        with:
+          path: .turbo/cache
+          key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ github.sha }}
+          restore-keys: |
+            turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-
+            turbo-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Lint
         if: needs.changes.outputs.node == 'true'
@@ -140,6 +154,10 @@ jobs:
       - name: Lint repo scripts
         if: needs.changes.outputs.node == 'true'
         run: pnpm lint:scripts
+
+      - name: Type-aware lint
+        if: needs.changes.outputs.node == 'true'
+        run: pnpm lint:type-aware
 
       - name: Dev-check script tests
         if: needs.changes.outputs.node == 'true'
@@ -159,8 +177,12 @@ jobs:
 
   test-fast:
     needs: [changes]
-    if: needs.changes.outputs.fast == 'true'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+        needs.changes.outputs.fast == 'true'
+      }}
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -173,7 +195,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Core tests (codec, state machine, auth)
         run: pnpm --filter @o11yfleet/core test
@@ -183,8 +205,12 @@ jobs:
 
   test-slow:
     needs: [changes]
-    if: needs.changes.outputs.slow == 'true'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+        needs.changes.outputs.slow == 'true'
+      }}
+    runs-on: ubicloud-standard-4-arm
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
@@ -197,7 +223,13 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
 
       - name: Worker tests (workerd runtime)
         run: pnpm --filter @o11yfleet/worker test:runtime
@@ -221,8 +253,12 @@ jobs:
 
   deploy-validate:
     needs: [changes]
-    if: needs.changes.outputs.deploy == 'true'
-    runs-on: ubuntu-latest
+    if: >-
+      ${{
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+        needs.changes.outputs.deploy == 'true'
+      }}
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -235,7 +271,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - uses: taiki-e/install-action@just
 
@@ -279,7 +315,7 @@ jobs:
 
   deploy-staging:
     needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 20
     if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true' && needs.deploy-validate.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     environment: staging
@@ -305,7 +341,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile --prefer-offline
 
       - uses: hashicorp/setup-terraform@v4
         with:

@@ -8,7 +8,7 @@
  * Run: cd tests/e2e && pnpm vitest run
  */
 
-import { describe, it, expect, beforeAll, afterAll, afterEach } from "vitest";
+import { describe, it, expect, beforeAll, afterEach } from "vitest";
 import { FakeOpampAgent } from "@o11yfleet/test-utils";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
@@ -20,7 +20,6 @@ import {
   createEnrollmentToken,
   rolloutConfig,
   getConfigStats,
-  getAgentSummaries,
   settle,
   healthz,
 } from "./helpers.js";
@@ -226,7 +225,7 @@ describe("Config Push", () => {
     // Verify the config content contains our YAML
     if (pushMsg.remote_config!.config_map) {
       const files = Object.values(pushMsg.remote_config!.config_map);
-      const hasOtlp = files.some((f: any) => {
+      const hasOtlp = files.some((f) => {
         const body = typeof f.body === "string" ? f.body : new TextDecoder().decode(f.body);
         return body.includes("otlp");
       });

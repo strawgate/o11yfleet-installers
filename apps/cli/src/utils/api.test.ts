@@ -3,6 +3,10 @@ import { apiRequest, ApiError } from "./api.js";
 import * as configModule from "./config.js";
 
 describe("apiRequest", () => {
+  function mockResponse(response: Partial<Response>): Response {
+    return response as Response;
+  }
+
   beforeEach(() => {
     vi.restoreAllMocks();
     vi.spyOn(configModule, "getApiUrl").mockResolvedValue("http://localhost:8787");
@@ -15,12 +19,14 @@ describe("apiRequest", () => {
   });
 
   it("returns data on successful JSON response", async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({ id: "123", name: "Test" }),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({ id: "123", name: "Test" }),
+      }),
+    );
 
     const result = await apiRequest("/api/test");
 
@@ -35,12 +41,14 @@ describe("apiRequest", () => {
       token: "test-token",
     });
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({}),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({}),
+      }),
+    );
 
     await apiRequest("/api/test");
 
@@ -60,12 +68,14 @@ describe("apiRequest", () => {
       token: undefined,
     });
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({}),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({}),
+      }),
+    );
 
     await apiRequest("/api/test");
 
@@ -82,12 +92,14 @@ describe("apiRequest", () => {
   it("uses API key env var when set", async () => {
     vi.stubEnv("O11YFLEET_API_KEY", "env-api-key");
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({}),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({}),
+      }),
+    );
 
     await apiRequest("/api/test");
 
@@ -106,12 +118,14 @@ describe("apiRequest", () => {
   it("includes X-Tenant-Id when tenantId is available", async () => {
     vi.spyOn(configModule, "getTenantId").mockResolvedValueOnce("tenant-123");
 
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({}),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({}),
+      }),
+    );
 
     await apiRequest("/api/test");
 
@@ -126,13 +140,15 @@ describe("apiRequest", () => {
   });
 
   it("returns error on HTTP error responses", async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 404,
-      statusText: "Not Found",
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockResolvedValue({ error: "Resource not found" }),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: false,
+        status: 404,
+        statusText: "Not Found",
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockResolvedValue({ error: "Resource not found" }),
+      }),
+    );
 
     const result = await apiRequest("/api/test");
 
@@ -150,13 +166,15 @@ describe("apiRequest", () => {
   });
 
   it("returns error text when response is not JSON", async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      statusText: "Internal Server Error",
-      headers: { get: () => "text/plain" },
-      text: vi.fn().mockResolvedValue("Server error occurred"),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: false,
+        status: 500,
+        statusText: "Internal Server Error",
+        headers: { get: () => "text/plain" },
+        text: vi.fn().mockResolvedValue("Server error occurred"),
+      }),
+    );
 
     const result = await apiRequest("/api/test");
 
@@ -165,13 +183,15 @@ describe("apiRequest", () => {
   });
 
   it("handles JSON parse errors", async () => {
-    global.fetch = vi.fn().mockResolvedValueOnce({
-      ok: false,
-      status: 400,
-      headers: { get: () => "application/json" },
-      json: vi.fn().mockRejectedValue(new Error("Invalid JSON")),
-      text: vi.fn().mockResolvedValue("Raw error text"),
-    } as any);
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: false,
+        status: 400,
+        headers: { get: () => "application/json" },
+        json: vi.fn().mockRejectedValue(new Error("Invalid JSON")),
+        text: vi.fn().mockResolvedValue("Raw error text"),
+      }),
+    );
 
     const result = await apiRequest("/api/test");
 

@@ -4,8 +4,8 @@ import { Output } from "./output.js";
 describe("Output", () => {
   let output: Output;
   let writeCalls: string[] = [];
-  let mockStdout: any;
-  let mockStderr: any;
+  let mockStdout: typeof process.stdout;
+  let mockStderr: typeof process.stderr;
 
   beforeEach(() => {
     writeCalls = [];
@@ -14,14 +14,14 @@ describe("Output", () => {
         writeCalls.push(msg);
         return true;
       },
-    };
+    } as typeof process.stdout;
     mockStderr = {
       write: (msg: string) => {
         writeCalls.push(msg);
         return true;
       },
-    };
-    output = new Output(mockStdout as any, mockStderr as any);
+    } as typeof process.stderr;
+    output = new Output(mockStdout, mockStderr);
   });
 
   afterEach(() => {

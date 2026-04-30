@@ -155,34 +155,44 @@ export async function getConfigStats(configId: string): Promise<{
   desired_config_hash: string | null;
   active_websockets: number;
 }> {
-  const { status, data } = await api(`/api/v1/configurations/${configId}/stats`);
+  const { status, data } = await api<{
+    total_agents: number;
+    connected_agents: number;
+    healthy_agents: number;
+    desired_config_hash: string | null;
+    active_websockets: number;
+  }>(`/api/v1/configurations/${configId}/stats`);
   if (status !== 200) throw new Error(`Failed to get stats: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Get agent summaries from D1 read model. */
 export async function getAgentSummaries(
   configId: string,
 ): Promise<{ agents: Array<Record<string, unknown>> }> {
-  const { status, data } = await api(`/api/v1/configurations/${configId}/agents`);
+  const { status, data } = await api<{ agents: Array<Record<string, unknown>> }>(
+    `/api/v1/configurations/${configId}/agents`,
+  );
   if (status !== 200) throw new Error(`Failed to get agents: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** List tenants. */
 export async function listTenants(): Promise<{
   tenants: Array<{ id: string; name: string }>;
 }> {
-  const { status, data } = await api("/api/admin/tenants");
+  const { status, data } = await api<{ tenants: Array<{ id: string; name: string }> }>(
+    "/api/admin/tenants",
+  );
   if (status !== 200) throw new Error(`Failed to list tenants: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Get a tenant by ID. */
 export async function getTenant(tenantId: string): Promise<Record<string, unknown>> {
-  const { status, data } = await api(`/api/admin/tenants/${tenantId}`);
+  const { status, data } = await api<Record<string, unknown>>(`/api/admin/tenants/${tenantId}`);
   if (status !== 200) throw new Error(`Failed to get tenant: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Update a tenant. */
@@ -215,12 +225,15 @@ export async function updateConfig(
   configId: string,
   body: { name?: string; description?: string },
 ): Promise<Record<string, unknown>> {
-  const { status, data } = await api(`/api/v1/configurations/${configId}`, {
-    method: "PUT",
-    body: JSON.stringify(body),
-  });
+  const { status, data } = await api<Record<string, unknown>>(
+    `/api/v1/configurations/${configId}`,
+    {
+      method: "PUT",
+      body: JSON.stringify(body),
+    },
+  );
   if (status !== 200) throw new Error(`Failed to update config: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Delete a configuration. */
@@ -237,18 +250,23 @@ export async function listConfigVersions(configId: string): Promise<{
   versions: Array<{ config_hash: string; created_at: string }>;
   current_config_hash: string;
 }> {
-  const { status, data } = await api(`/api/v1/configurations/${configId}/versions`);
+  const { status, data } = await api<{
+    versions: Array<{ config_hash: string; created_at: string }>;
+    current_config_hash: string;
+  }>(`/api/v1/configurations/${configId}/versions`);
   if (status !== 200) throw new Error(`Failed to list versions: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** List enrollment tokens. */
 export async function listEnrollmentTokens(configId: string): Promise<{
   tokens: Array<{ id: string; label: string | null; revoked_at: string | null }>;
 }> {
-  const { status, data } = await api(`/api/v1/configurations/${configId}/enrollment-tokens`);
+  const { status, data } = await api<{
+    tokens: Array<{ id: string; label: string | null; revoked_at: string | null }>;
+  }>(`/api/v1/configurations/${configId}/enrollment-tokens`);
   if (status !== 200) throw new Error(`Failed to list tokens: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Revoke an enrollment token. */
@@ -271,17 +289,19 @@ export async function uploadRaw(
     body,
     headers: headersForConfig(configId, { "Content-Type": "text/yaml" }),
   });
-  const data = await res.json().catch(() => ({}));
-  return { status: res.status, ...(data as any) };
+  const data = (await res.json().catch(() => ({}))) as { error?: string };
+  return { status: res.status, ...data };
 }
 
 /** List configurations for a tenant. */
 export async function listConfigs(tenantId: string): Promise<{
   configurations: Array<{ id: string; name: string; tenant_id: string }>;
 }> {
-  const { status, data } = await api(`/api/admin/tenants/${tenantId}/configurations`);
+  const { status, data } = await api<{
+    configurations: Array<{ id: string; name: string; tenant_id: string }>;
+  }>(`/api/admin/tenants/${tenantId}/configurations`);
   if (status !== 200) throw new Error(`Failed to list configs: ${status}`);
-  return data as any;
+  return data;
 }
 
 /** Health check. */
@@ -300,7 +320,9 @@ export async function waitForServer(maxWaitMs = 15_000): Promise<void> {
   let delay = 200;
   while (Date.now() - start < maxWaitMs) {
     if (await healthz()) return;
-    await new Promise((r) => setTimeout(r, delay));
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, delay);
+    });
     delay = Math.min(delay * 1.5, 2000);
   }
   throw new Error(`Server at ${BASE_URL} not ready after ${maxWaitMs}ms. Run 'just dev' first.`);
@@ -308,5 +330,7 @@ export async function waitForServer(maxWaitMs = 15_000): Promise<void> {
 
 /** Small delay for async operations to settle (e.g., queue processing). */
 export function settle(ms = 500): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }

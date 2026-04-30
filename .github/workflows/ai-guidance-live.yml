@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   live-guidance:
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     timeout-minutes: 20
     env:
       FP_URL: http://127.0.0.1:8787

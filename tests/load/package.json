@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "lint": "eslint src/ --ext .ts",
+    "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "load": "tsx src/load-test.ts",
     "smoke": "tsx src/smoke-test.ts",

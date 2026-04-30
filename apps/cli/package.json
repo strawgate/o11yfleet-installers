@@ -25,7 +25,7 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "oxlint src",
     "test": "vitest run",
     "test:watch": "vitest"
   },

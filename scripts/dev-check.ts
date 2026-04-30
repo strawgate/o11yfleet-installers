@@ -53,7 +53,7 @@ const rootFilesTriggeringFullCheck = new Set([
   ".husky/pre-commit",
   ".gitignore",
   ".prettierignore",
-  "eslint.config.mjs",
+  ".oxlintrc.json",
   "justfile",
   "package.json",
   "pnpm-lock.yaml",
@@ -189,7 +189,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
   const runScriptsLint = files.some(
     (file) =>
       file.startsWith("scripts/") ||
-      file === "eslint.config.mjs" ||
+      file === ".oxlintrc.json" ||
       file === "package.json" ||
       file === "pnpm-lock.yaml",
   );

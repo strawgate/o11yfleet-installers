@@ -16,7 +16,7 @@ permissions:
 jobs:
   report-failure:
     if: github.event_name == 'workflow_run' && github.event.workflow_run.event == 'push' && github.event.workflow_run.conclusion == 'failure'
-    runs-on: ubuntu-latest
+    runs-on: ubicloud-standard-2-arm
     steps:
       - name: Create issue on CI failure
         env:
