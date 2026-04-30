@@ -2,15 +2,10 @@
 name: "CI Doctor"
 description: "Investigates failed CI workflows, diagnoses root causes, and posts diagnostic comments"
 on:
-  workflow_run:
-    workflows: ["*"]
-    types: [completed]
-    branches:
-      - main
   workflow_dispatch:
     inputs:
       run_id:
-        description: 'Specific workflow run ID to investigate'
+        description: "Specific workflow run ID to investigate"
         required: false
         type: string
 
@@ -20,12 +15,6 @@ permissions:
   pull-requests: read
   actions: read
   checks: read
-
-github-app:
-  client-id: ${{ vars.APP_ID }}
-  private-key: ${{ secrets.APP_PRIVATE_KEY }}
-  owner: "strawgate"
-  repositories: ["*"]
 
 engine:
   id: claude
@@ -56,7 +45,7 @@ timeout-minutes: 30
 
 You are the CI Doctor — an expert investigative agent that diagnoses failing CI checks and provides actionable recommendations.
 
-**Run ID**: ${{ inputs.run_id || github.event.workflow_run.id }}
+**Run ID**: ${{ inputs.run_id }}
 
 ## Investigation Protocol
 
@@ -152,7 +141,8 @@ Call `noop` if:
 - Workflow succeeded
 - Failure is already being tracked in an open issue
 - Failure is a known/acknowledged issue with active fix in progress
+- No `run_id` input was provided
 
 ## PR Comment Mode
 
-If investigating a PR's failing checks, use `create-issue-comment` to post diagnosis on the relevant PR.
+If investigating a PR's failing checks, use `create_issue_comment` to post diagnosis on the relevant PR.

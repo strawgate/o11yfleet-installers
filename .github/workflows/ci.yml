@@ -12,41 +12,154 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    outputs:
+      node: ${{ steps.filter.outputs.node }}
+      fast: ${{ steps.filter.outputs.fast }}
+      slow: ${{ steps.filter.outputs.slow }}
+      deploy: ${{ steps.filter.outputs.deploy }}
+      workflow: ${{ steps.filter.outputs.workflow }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - id: filter
+        name: Classify changed files
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+            if [ "$BASE" = "0000000000000000000000000000000000000000" ]; then
+              BASE="${HEAD}^"
+            fi
+          else
+            BASE="${{ github.sha }}^"
+            HEAD="${{ github.sha }}"
+          fi
+
+          git diff --name-only "$BASE" "$HEAD" > changed-files.txt
+          cat changed-files.txt
+
+          has_match() {
+            local pattern
+            for pattern in "$@"; do
+              if grep -Eq "$pattern" changed-files.txt; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          set_output() {
+            printf '%s=%s\n' "$1" "$2" >> "$GITHUB_OUTPUT"
+          }
+
+          if has_match \
+            '^(apps/(site|worker)|packages|tests|scripts|experiments)/' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js|vitest[^/]*\.config\.)' \
+            '^justfile$'; then
+            set_output node true
+          else
+            set_output node false
+          fi
+
+          if has_match \
+            '^(apps/site|packages/core|packages/test-utils|scripts)/' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js)' \
+            '^justfile$'; then
+            set_output fast true
+          else
+            set_output fast false
+          fi
+
+          if has_match \
+            '^(apps/worker|packages/core|packages/db|packages/test-utils|tests/ui|tests/e2e)/' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|eslint\.config\.js|vitest[^/]*\.config\.)' \
+            '^justfile$'; then
+            set_output slow true
+          else
+            set_output slow false
+          fi
+
+          if has_match \
+            '^apps/worker/' \
+            '^infra/terraform/' \
+            '^justfile$' \
+            '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json)'; then
+            set_output deploy true
+          else
+            set_output deploy false
+          fi
+
+          if has_match '^\.github/workflows/.*\.(yml|yaml)$' '^\.github/workflows/.*\.md$' '^\.github/actions/'; then
+            set_output workflow true
+          else
+            set_output workflow false
+          fi
+
   lint-typecheck:
+    needs: [changes]
+    if: needs.changes.outputs.node == 'true' || needs.changes.outputs.workflow == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
+      - name: Lint workflows
+        if: needs.changes.outputs.workflow == 'true'
+        run: |
+          find .github/workflows -name '*.yml' ! -name '*.lock.yml' -print0 |
+            xargs -0 go run github.com/rhysd/actionlint/cmd/actionlint@latest
+
       - uses: pnpm/action-setup@v6
+        if: needs.changes.outputs.node == 'true'
 
       - uses: actions/setup-node@v6
+        if: needs.changes.outputs.node == 'true'
         with:
           node-version: "22"
           cache: "pnpm"
 
       - name: Install dependencies
+        if: needs.changes.outputs.node == 'true'
         run: pnpm install --frozen-lockfile
 
       - name: Lint
+        if: needs.changes.outputs.node == 'true'
         run: pnpm turbo lint
 
       - name: Lint repo scripts
+        if: needs.changes.outputs.node == 'true'
         run: pnpm lint:scripts
 
       - name: Dev-check script tests
+        if: needs.changes.outputs.node == 'true'
         run: pnpm test:dev-check
 
       - name: Format check
-        run: pnpm prettier --check .
+        if: needs.changes.outputs.node == 'true'
+        run: pnpm prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .
 
       - name: Worker typegen drift check
+        if: needs.changes.outputs.node == 'true'
         run: pnpm --filter @o11yfleet/worker typegen:check
 
       - name: Type check
+        if: needs.changes.outputs.node == 'true'
         run: pnpm turbo typecheck
 
   test-fast:
+    needs: [changes]
+    if: needs.changes.outputs.fast == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -69,6 +182,8 @@ jobs:
         run: pnpm --filter @o11yfleet/site test
 
   test-slow:
+    needs: [changes]
+    if: needs.changes.outputs.slow == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -88,7 +203,7 @@ jobs:
         run: pnpm --filter @o11yfleet/worker test:runtime
 
       - name: Install Playwright browser
-        run: pnpm --filter @o11yfleet/ui-tests exec playwright install --with-deps chromium
+        run: pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
 
       - name: Run UI tests
         run: pnpm --filter @o11yfleet/ui-tests test:e2e
@@ -102,9 +217,11 @@ jobs:
             tests/ui/playwright-report
             tests/ui/test-results
           if-no-files-found: ignore
-          retention-days: 7
+          retention-days: 3
 
   deploy-validate:
+    needs: [changes]
+    if: needs.changes.outputs.deploy == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -120,10 +237,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - uses: taiki-e/install-action@just
+
       - name: Build worker bundle
-        run: |
-          cd apps/worker
-          npx wrangler deploy --env="" --dry-run --outdir dist 2>&1 | tail -20 || true
+        run: just worker-bundle
 
       - name: "Check bundle size (Workers limit: 10MB compressed)"
         run: |
@@ -141,24 +258,22 @@ jobs:
             fi
           done < <(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
           if [ -z "$MAX_BUNDLE" ]; then
-            echo "⚠ No bundle found — skipping size check"
-            exit 0
+            echo "No bundle found"
+            exit 1
           fi
           echo ""
           echo "Largest bundle: $MAX_BUNDLE"
           echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
           if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
-            echo "❌ Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
+            echo "Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
             exit 1
           fi
-          echo "✓ Bundle size OK"
+          echo "Bundle size OK"
 
       - name: Terraform validate
         uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9"
-
-      - uses: taiki-e/install-action@just
 
       - run: just tf-validate
 
@@ -166,7 +281,7 @@ jobs:
     needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true'
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true' && needs.deploy-validate.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     environment: staging
     env:
       TF_IN_AUTOMATION: "true"

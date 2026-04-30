@@ -17,8 +17,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  lint:
-    name: Lint
+  check:
+    name: Check
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -36,60 +36,11 @@ jobs:
       - run: pnpm run lint
         working-directory: apps/cli
 
-  typecheck:
-    name: Typecheck
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
-
       - run: pnpm run typecheck
         working-directory: apps/cli
 
-  test:
-    name: Test
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
-
       - run: pnpm test
         working-directory: apps/cli
-
-  build:
-    name: Build
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    needs: [lint, typecheck, test]
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - run: pnpm install --frozen-lockfile
 
       - run: pnpm run build
         working-directory: apps/cli
@@ -105,7 +56,7 @@ jobs:
     name: Publish
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [build]
+    needs: [check]
     if: github.event_name == 'release' && github.event.action == 'published'
     environment: npm-publish
     permissions:
