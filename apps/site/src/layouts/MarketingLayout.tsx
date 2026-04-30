@@ -95,7 +95,7 @@ export default function MarketingLayout() {
               <Logo />
               O11yFleet
             </Link>
-            <p>The hosted OpAMP control plane for OpenTelemetry Collectors.</p>
+            <p>The best way to manage your fleet of OpenTelemetry Collectors.</p>
           </div>
           <FooterColumn title="Product" links={FOOTER_PRODUCT} />
           <FooterColumn title="Resources" links={FOOTER_RESOURCES} />

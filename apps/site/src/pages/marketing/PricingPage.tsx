@@ -9,31 +9,30 @@ const personalPlans = [
     monthlyPrice: "$0",
     annualPrice: "$0",
     period: "",
-    desc: "For one person keeping a small collector fleet in line from the UI.",
+    desc: "The perfect plan for simple monitoring in personal projects.",
     collectors: "10 collectors",
     policies: "1 policy",
     users: "1 user",
-    repos: "No repo sync",
-    features: ["Live inventory and status", "Manual config deployment", "Community support"],
+    support: "Community",
     cta: "Start Hobby",
-    ctaTo: "/signup",
+    ctaTo: "/signup?plan=hobby",
     ctaClass: "btn btn-secondary btn-lg",
     featured: false,
   },
   {
     name: "Pro",
-    monthlyPrice: "$20",
-    annualPrice: "$20",
+    monthlyPrice: "$29",
+    annualPrice: "$290",
     period: "/month",
-    desc: "For one operator who wants history, diffs, and rollback without automation.",
+    annualPeriod: "/year",
+    desc: "For solo operators who need just a little bit more.",
     collectors: "25 collectors",
     policies: "3 policies",
     history: "7-day history",
     users: "1 user",
-    repos: "No repo sync",
-    features: ["Version history and diffs", "Rollback"],
+    support: "Email",
     cta: "Start Pro",
-    ctaTo: "/signup",
+    ctaTo: "/signup?plan=pro",
     ctaClass: "btn btn-secondary btn-lg",
     featured: false,
   },
@@ -50,10 +49,12 @@ const organizationPlans = [
     policies: "1 policy",
     users: "3 users",
     repos: "No repo sync",
-    features: ["Shared collector inventory", "Manual config deployment", "Community support"],
+    support: "Community",
     cta: "Start Starter",
-    ctaTo: "/signup",
+    ctaTo: "/signup?plan=starter",
     ctaClass: "btn btn-secondary btn-lg",
+    secondaryCta: "Solo Developer?",
+    secondaryHref: "#personal-plans",
     featured: false,
   },
   {
@@ -62,20 +63,15 @@ const organizationPlans = [
     annualPrice: "$5,000",
     period: "/month",
     annualPeriod: "/year",
-    desc: "For organizations running collector config in production.",
+    desc: "For organizations running collectors in production.",
     collectors: "1,000 collectors",
     policies: "10 policies",
     history: "30-day history",
     users: "10 users",
     repos: "10 repositories",
-    features: [
-      "Progressive and canary rollouts",
-      "Drift detection",
-      "Unlimited API keys",
-      "RBAC and audit log",
-    ],
+    support: "Email",
     cta: "Start Growth",
-    ctaTo: "/signup",
+    ctaTo: "/signup?plan=growth",
     ctaClass: "btn btn-primary btn-lg",
     featured: true,
   },
@@ -85,35 +81,18 @@ const organizationPlans = [
     annualPrice: "Custom",
     period: "",
     secondaryPrice: "Starts at $50k/year",
-    desc: "For large-scale and regulated collector fleets.",
+    desc: "For companies with enterprise requirements.",
     collectors: "Custom collectors",
     policies: "Unlimited policies",
     history: "90d-1yr+",
     users: "Unlimited users",
     repos: "Unlimited repositories",
-    features: [
-      "SSO, SCIM, and multi-IdP",
-      "Long-term audit retention",
-      "Unlimited API keys",
-      "SLA, dedicated support, and deployment options",
-    ],
-    cta: "Talk to sales",
+    support: "Custom",
+    cta: "Contact us",
     ctaTo: "/enterprise",
     ctaClass: "btn btn-secondary btn-lg",
     featured: false,
   },
-];
-
-const comparisonRows = [
-  ["Collectors", "10", "25", "1,000", "1,000", "Custom collectors"],
-  ["Policies", "1", "3", "1", "10", "Unlimited policies"],
-  ["History", "Live only", "7 days", "Live only", "30 days", "90d-1yr+"],
-  ["Users", "1", "1", "3", "10", "Unlimited users"],
-  ["API keys", "None", "None", "None", "Unlimited API keys", "Unlimited API keys"],
-  ["Repo sync", "None", "None", "None", "10 repositories", "Unlimited repositories"],
-  ["Progressive rollouts", "No", "No", "No", "Yes", "Yes"],
-  ["RBAC and audit", "No", "No", "No", "Yes", "Advanced"],
-  ["SSO / SCIM", "No", "No", "No", "No", "Yes"],
 ];
 
 type Plan = (typeof personalPlans | typeof organizationPlans)[number];
@@ -157,11 +136,12 @@ function PlanCard({ plan, billingCycle }: { plan: Plan; billingCycle: BillingCyc
       : plan.period;
   const limits = [
     ["Collectors", plan.collectors],
-    ["Policies", plan.policies],
-    ["Users", plan.users],
-    ["Repos", plan.repos],
+    ["Management policies", plan.policies],
   ];
   if ("history" in plan && plan.history) limits.splice(2, 0, ["History", plan.history]);
+  limits.push(["Users", plan.users]);
+  if ("repos" in plan && plan.repos) limits.push(["Repositories", plan.repos]);
+  limits.push(["Support", plan.support]);
 
   return (
     <div
@@ -187,13 +167,16 @@ function PlanCard({ plan, billingCycle }: { plan: Plan; billingCycle: BillingCyc
           </div>
         ))}
       </div>
-      <p className="pricing-includes">
-        <span>Includes</span>
-        {plan.features.join(", ")}.
-      </p>
-      <Link to={plan.ctaTo} className={plan.ctaClass}>
-        {plan.cta}
-      </Link>
+      <div className="pricing-card-actions">
+        {"secondaryCta" in plan && plan.secondaryCta ? (
+          <a href={plan.secondaryHref} className="btn btn-secondary btn-lg">
+            {plan.secondaryCta}
+          </a>
+        ) : null}
+        <Link to={plan.ctaTo} className={plan.ctaClass}>
+          {plan.cta}
+        </Link>
+      </div>
     </div>
   );
 }
@@ -205,34 +188,19 @@ export default function PricingPage() {
   return (
     <>
       <section className="hero wrap pricing-hero">
-        <h1>Cost: Probably $0.</h1>
-        <p className="lede">
-          Connect the fleet for free. Pay when production needs history, safer rollouts, automation,
-          and governance.
-        </p>
-        <p className="meta" style={{ marginTop: 18 }}>
-          Fleet management is free; production governance is paid.
-        </p>
+        <div className="pricing-hero-copy">
+          <span className="eyebrow">Pricing</span>
+          <h1>Your cost is probably $0.</h1>
+          <p className="lede">
+            Free for teams with up to 1000 collectors. Who even has more than a thousand collectors?
+            Upgrade when you need more management policies, users, history, or repo sync.
+          </p>
+        </div>
       </section>
 
       <section className="section pricing-plans-section">
         <div className="wrap pricing-tracks">
-          <div className="pricing-track">
-            <div className="pricing-track-head">
-              <div>
-                <span className="eyebrow">Individual track</span>
-                <h2>Personal fleets.</h2>
-                <p className="meta">The perfect plan if you like clicky clicky.</p>
-              </div>
-              <BillingToggle value={individualBillingCycle} onChange={setIndividualBillingCycle} />
-            </div>
-            <div className="grid-2">
-              {personalPlans.map((plan) => (
-                <PlanCard key={plan.name} plan={plan} billingCycle={individualBillingCycle} />
-              ))}
-            </div>
-          </div>
-          <div className="pricing-track">
+          <div className="pricing-track" id="team-plans">
             <div className="pricing-track-head">
               <div>
                 <span className="eyebrow">Organization track</span>
@@ -250,59 +218,35 @@ export default function PricingPage() {
               ))}
             </div>
           </div>
+          <div className="pricing-track" id="personal-plans">
+            <div className="pricing-track-head">
+              <div>
+                <span className="eyebrow">Individual track</span>
+                <h2>Personal fleets.</h2>
+                <p className="meta">The perfect plan if you like clicky clicky.</p>
+              </div>
+              <BillingToggle value={individualBillingCycle} onChange={setIndividualBillingCycle} />
+            </div>
+            <div className="grid-2">
+              {personalPlans.map((plan) => (
+                <PlanCard key={plan.name} plan={plan} billingCycle={individualBillingCycle} />
+              ))}
+            </div>
+          </div>
         </div>
       </section>
 
-      <section className="section">
+      <section className="section pricing-decision-section">
         <div className="wrap">
-          <div className="section-head">
-            <span className="eyebrow">Compare plans</span>
-            <h2>Policies and history are the paid axis.</h2>
-          </div>
-          <div style={{ overflowX: "auto", border: "1px solid var(--line)", borderRadius: 8 }}>
-            <table className="dt" aria-label="Plan feature comparison" style={{ minWidth: 820 }}>
-              <thead>
-                <tr>
-                  <th scope="col">Feature</th>
-                  <th scope="col">Hobby</th>
-                  <th scope="col">Pro</th>
-                  <th scope="col">Starter</th>
-                  <th scope="col">Growth</th>
-                  <th scope="col">Enterprise</th>
-                </tr>
-              </thead>
-              <tbody>
-                {comparisonRows.map(([feature, hobby, pro, starter, growth, enterprise]) => (
-                  <tr key={feature}>
-                    <th scope="row">{feature}</th>
-                    <td>{hobby}</td>
-                    <td>{pro}</td>
-                    <td>{starter}</td>
-                    <td>{growth}</td>
-                    <td>{enterprise}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <p className="meta" style={{ marginTop: 18 }}>
-            A policy is the customer-facing management unit: collector selection, rendered config,
-            versioning, and rollout rules. Internally this still maps to configuration groups.
-          </p>
-        </div>
-      </section>
-
-      <section className="section">
-        <div className="wrap">
-          <div className="cta-block">
+          <div className="cta-block pricing-decision">
             <h2>Not sure which plan?</h2>
-            <p className="lede">
-              Start with Starter for fleet visibility. Move to Growth when production automation,
-              rollout safety, history, RBAC, or audit become real requirements.
-            </p>
-            <div className="hero-actions">
-              <Link to="/signup" className="btn btn-primary btn-lg">
-                Request access
+            <p>Start free. Pick the path that matches how you will use the fleet.</p>
+            <div className="pricing-decision-actions">
+              <Link to="/signup?plan=hobby" className="btn btn-secondary btn-lg">
+                Flying solo
+              </Link>
+              <Link to="/signup?plan=starter" className="btn btn-primary btn-lg">
+                I&apos;ll be inviting friends
               </Link>
             </div>
           </div>

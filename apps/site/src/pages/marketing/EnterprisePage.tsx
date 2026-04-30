@@ -23,8 +23,8 @@ const features = [
   },
   {
     icon: "🛟",
-    title: "Dedicated support",
-    desc: "Dedicated support is available by arrangement for early hosted users.",
+    title: "Custom support",
+    desc: "Support terms are handled case by case for enterprise customers.",
   },
   {
     icon: "📄",
@@ -47,8 +47,8 @@ export default function EnterprisePage() {
           <br /> for large organizations
         </h1>
         <p className="lede">
-          SSO, audit trails, role-based access, and dedicated support — built for teams that need
-          control at scale.
+          Planning support for SSO, audit trails, role-based access, custom retention, and support
+          terms for companies with enterprise requirements.
         </p>
       </section>
 

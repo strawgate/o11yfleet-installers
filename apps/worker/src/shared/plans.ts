@@ -51,8 +51,8 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     id: "pro",
     name: "Pro",
     audience: "personal",
-    price: "$20/mo",
-    annual_price: null,
+    price: "$29/mo",
+    annual_price: "$290/yr",
     max_users: 1,
     max_collectors: 25,
     max_policies: 3,
@@ -134,10 +134,10 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     stateful_operations: true,
     features: [
       "Custom managed config and repo limits",
-      "SSO / SAML / OIDC and SCIM",
+      "SSO / SAML / OIDC",
       "Advanced RBAC and governance controls",
       "Audit log export",
-      "Dedicated support and SLA",
+      "Custom support and SLA terms",
     ],
   },
 };

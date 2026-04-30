@@ -4,52 +4,81 @@ export default function HomePage() {
   return (
     <>
       <section className="hero wrap">
-        <div className="hero-meta">
-          <span className="pin">
-            <span className="dot dot-ok dot-pulse" /> OpAMP-native · v0.42
-          </span>
-        </div>
-        <h1>
-          The hosted OpAMP control plane
-          <br /> for OpenTelemetry Collectors
-        </h1>
+        <h1>Free for up to 1000 OTel Collectors</h1>
         <p className="lede" style={{ marginTop: 22 }}>
-          Monitor collector health, inspect effective configs, upload managed configs, and trigger
-          rollouts — while your telemetry keeps flowing to the tools you already use.
+          Connect collectors, see health and effective configuration, and roll out changes from one
+          hosted control plane. O11yFleet stays free until production requirements like history,
+          rollout safety, and governance become real.
         </p>
         <div className="hero-actions">
           <Link to="/signup" className="btn btn-primary btn-lg">
             Request access →
           </Link>
-          <a href="#how" className="btn btn-secondary btn-lg">
-            See how it works
-          </a>
-        </div>
-        <div className="trust-strip">
-          <span>No telemetry lock-in</span>
-          <span>UI-managed configurations today</span>
-          <span>Hosted access by request</span>
+          <Link to="/pricing" className="btn btn-secondary btn-lg">
+            See pricing
+          </Link>
         </div>
       </section>
 
       <section className="section" id="how">
         <div className="wrap">
           <div className="section-head">
-            <span className="eyebrow">What you get</span>
-            <h2>Everything between commit and collector</h2>
+            <span className="eyebrow">Control plane</span>
+            <h2>Monitor first. Manage when ready.</h2>
           </div>
           <div className="grid-3">
             <div className="card card-pad">
-              <h3>Configuration management</h3>
-              <p>Version, diff, and roll out collector configs.</p>
+              <h3>Fleet visibility</h3>
+              <p>
+                See connected collectors, heartbeat status, and the effective config each collector
+                is actually running.
+              </p>
             </div>
             <div className="card card-pad">
-              <h3>Fleet monitoring</h3>
-              <p>Real-time health, heartbeats, and effective config inspection.</p>
+              <h3>Management policies</h3>
+              <p>
+                Group collectors by policy, keep configuration versions, compare changes, and roll
+                back when needed.
+              </p>
             </div>
             <div className="card card-pad">
-              <h3>Multi-tenant</h3>
-              <p>Isolate teams, projects, or environments in one control plane.</p>
+              <h3>Safer rollouts</h3>
+              <p>
+                Push collector changes intentionally, watch the fleet respond, and keep rollback
+                close when production is on the line.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section className="section">
+        <div className="wrap">
+          <div className="section-head">
+            <span className="eyebrow">Why it matters</span>
+            <h2>OpenTelemetry is open. Collector operations should be too.</h2>
+          </div>
+          <div className="grid-3">
+            <div className="card card-pad">
+              <h3>Start with inventory</h3>
+              <p>
+                Most teams just need to know which collectors are connected and what they are
+                running.
+              </p>
+            </div>
+            <div className="card card-pad">
+              <h3>Invite the team</h3>
+              <p>
+                Starter includes 1,000 collectors and 3 users, so shared visibility does not require
+                a sales call.
+              </p>
+            </div>
+            <div className="card card-pad">
+              <h3>Upgrade for governance</h3>
+              <p>
+                Growth adds more management policies, 30-day history, repo sync, API keys, RBAC, and
+                audit.
+              </p>
             </div>
           </div>
         </div>
@@ -58,18 +87,18 @@ export default function HomePage() {
       <section className="section">
         <div className="wrap">
           <div className="cta-block">
-            <h2>Stop hand-editing YAML on 200&nbsp;servers.</h2>
+            <h2>Start with fleet visibility.</h2>
             <p className="lede">
-              Start locally in minutes, or request hosted access when you are ready to connect real
-              collectors.
+              Connect collectors for free, then upgrade when production needs history, rollout
+              safety, team controls, or governance.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
                 Request access →
               </Link>
-              <a href="/docs/index.html" className="btn btn-secondary btn-lg">
-                Read the docs
-              </a>
+              <Link to="/pricing" className="btn btn-secondary btn-lg">
+                Compare plans
+              </Link>
             </div>
           </div>
         </div>

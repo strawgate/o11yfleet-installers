@@ -705,19 +705,35 @@ p {
 
 /* ---------- Pricing ---------- */
 .hero.pricing-hero {
-  padding-top: 72px;
-  padding-bottom: 12px;
+  display: grid;
+  gap: 22px;
+  padding-top: 44px;
+  padding-bottom: 18px;
+}
+.pricing-hero-copy {
+  max-width: 920px;
+}
+.pricing-hero-copy .eyebrow {
+  margin-bottom: 14px;
+}
+.pricing-hero-copy h1 {
+  max-width: 760px;
+}
+.pricing-hero-copy .lede {
+  margin-top: 14px;
 }
 .pricing-plans-section {
   padding-top: 20px;
+  padding-bottom: 44px;
 }
 .pricing-tracks {
   display: grid;
-  gap: 36px;
+  gap: 32px;
 }
 .pricing-track {
   display: grid;
   gap: 14px;
+  scroll-margin-top: 84px;
 }
 .pricing-track-head {
   display: flex;
@@ -788,26 +804,51 @@ p {
   line-height: 1.5;
   margin-top: 2px;
 }
-.pricing-includes {
-  color: var(--fg-2);
-  font-size: 0.92rem;
-  margin: 0 0 16px;
-}
-.pricing-includes span {
-  display: block;
-  color: var(--fg-4);
-  font-family: var(--font-mono);
-  font-size: 10px;
-  margin-bottom: 4px;
-  text-transform: uppercase;
-}
-.pricing-card .btn {
+.pricing-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
   margin-top: auto;
 }
+.pricing-card-actions .btn {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.pricing-decision-section {
+  padding-top: 20px;
+  padding-bottom: 56px;
+}
+.cta-block.pricing-decision {
+  background: var(--surface);
+  padding: 44px;
+}
+.pricing-decision p {
+  max-width: 54ch;
+  margin: 0 auto;
+}
+.pricing-decision-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 26px;
+}
 @media (max-width: 720px) {
+  .hero.pricing-hero {
+    padding-top: 34px;
+  }
   .pricing-track-head {
     align-items: start;
     flex-direction: column;
+  }
+  .cta-block.pricing-decision {
+    padding: 32px 20px;
+  }
+  .pricing-decision-actions .btn {
+    width: 100%;
+  }
+  .pricing-card-actions .btn {
+    flex-basis: 100%;
   }
 }
 
