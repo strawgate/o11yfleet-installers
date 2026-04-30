@@ -390,12 +390,11 @@ test.describe("AI guidance surfaces", () => {
     expect(runtime.errors).toEqual([]);
   });
 
-  test("command palette navigation still works when AI guidance is empty or unavailable", async ({
+  test("command palette opens streaming page copilot and navigation still works", async ({
     page,
   }) => {
     const runtime = collectRuntimeErrors(page);
-    let explainRequests = 0;
-    let riskRequests = 0;
+    const chatRequests: unknown[] = [];
 
     await mockJson(page, "/auth/me", {
       user: {
@@ -417,29 +416,6 @@ test.describe("AI guidance surfaces", () => {
     });
     await mockJson(page, "/api/v1/configurations", { configurations: [] });
     await page.route(`${API_URL}/api/v1/ai/guidance`, async (route) => {
-      const requestBody = route.request().postDataJSON() as { intent?: string };
-      if (requestBody.intent === "explain_page") {
-        explainRequests += 1;
-        await route.fulfill({
-          status: 200,
-          contentType: "application/json",
-          body: JSON.stringify({
-            summary: "No non-obvious guidance found in the provided browser context.",
-            generated_at: "2026-04-28T20:00:00.000Z",
-            model: "o11yfleet-guidance-fixture",
-          }),
-        });
-        return;
-      }
-      if (requestBody.intent === "triage_state") {
-        riskRequests += 1;
-        await route.fulfill({
-          status: 422,
-          contentType: "application/json",
-          body: JSON.stringify({ error: "Invalid AI guidance request" }),
-        });
-        return;
-      }
       await route.fulfill({
         status: 200,
         contentType: "application/json",
@@ -451,19 +427,51 @@ test.describe("AI guidance surfaces", () => {
         }),
       });
     });
+    await page.route(`${API_URL}/api/v1/ai/chat`, async (route) => {
+      chatRequests.push(route.request().postDataJSON());
+      await route.fulfill({
+        status: 200,
+        contentType: "text/event-stream",
+        body: [
+          'data: {"type":"start"}',
+          "",
+          'data: {"type":"text-start","id":"t1"}',
+          "",
+          'data: {"type":"text-delta","id":"t1","delta":"Copilot response from visible page context."}',
+          "",
+          'data: {"type":"text-end","id":"t1"}',
+          "",
+          'data: {"type":"finish","finishReason":"stop"}',
+          "",
+          "data: [DONE]",
+          "",
+        ].join("\n"),
+      });
+    });
 
     await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
     await page.getByRole("button", { name: "Open command menu" }).click();
     await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
 
-    await page.getByRole("option", { name: /Explain this page/ }).click();
-    await expect.poll(() => explainRequests).toBe(1);
+    await page.getByRole("option", { name: /Ask AI about this page/ }).click();
+    await expect.poll(() => chatRequests.length).toBe(1);
+    expect(chatRequests[0]).toMatchObject({
+      context: { surface: "portal.overview", intent: "explain_page" },
+    });
     await expect(page.getByText("No non-obvious guidance found")).toHaveCount(0);
+    await expect(page.getByRole("dialog", { name: "Page copilot" })).toBeVisible();
+    await expect(page.getByText("Copilot response from visible page context.")).toBeVisible();
 
-    await page.getByRole("option", { name: /Find operational risks/ }).click();
-    await expect.poll(() => riskRequests).toBeGreaterThanOrEqual(1);
-    await expect(page.getByText("Invalid AI guidance request")).toBeVisible();
+    await page.getByRole("button", { name: "Close" }).click();
+    await page.getByRole("button", { name: "Open command menu" }).click();
+    await page.getByRole("option", { name: /Ask AI about this page/ }).click();
+    await expect.poll(() => chatRequests.length).toBe(2);
+    expect(chatRequests[1]).toMatchObject({
+      context: { surface: "portal.overview", intent: "explain_page" },
+    });
+    await page.getByRole("button", { name: "Close" }).click();
 
+    await page.getByRole("button", { name: "Open command menu" }).click();
     await page.getByRole("combobox", { name: "Search collectors, configs, pages..." }).fill("age");
     await page.getByRole("option", { name: /Agents Workspace/ }).click();
     await expect(page).toHaveURL(/\/portal\/agents/);

@@ -2,7 +2,11 @@
 // These endpoints require admin auth (currently: API_SECRET bearer token)
 
 import type { Env } from "../../index.js";
-import { AiApiError, handleAdminGuidanceRequest } from "../../ai/guidance.js";
+import {
+  AiApiError,
+  handleAdminChatRequest,
+  handleAdminGuidanceRequest,
+} from "../../ai/guidance.js";
 import { buildCloudflareUsage } from "../../cloudflare-usage.js";
 import {
   DEFAULT_PLAN,
@@ -54,6 +58,9 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   if (path === "/api/admin/ai/guidance" && method === "POST") {
     return handleAdminGuidanceRequest(request, env);
+  }
+  if (path === "/api/admin/ai/chat" && method === "POST") {
+    return handleAdminChatRequest(request, env);
   }
 
   // ─── Tenants ────────────────────────────────────────────────

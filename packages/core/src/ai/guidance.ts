@@ -184,6 +184,27 @@ export const aiGuidanceResponseSchema = z.object({
   model: z.string().trim().min(1).max(120).optional(),
 });
 
+export const aiChatTextPartSchema = z
+  .object({
+    type: z.literal("text"),
+    text: z.string().max(4000),
+  })
+  .passthrough();
+
+export const aiChatMessageSchema = z
+  .object({
+    id: z.string().trim().min(1).max(200).optional(),
+    role: z.enum(["user", "assistant"]),
+    parts: z.array(aiChatTextPartSchema).min(1).max(64),
+  })
+  .passthrough();
+
+export const aiChatRequestSchema = z.object({
+  id: z.string().trim().min(1).max(200).optional(),
+  messages: z.array(aiChatMessageSchema).min(1).max(40),
+  context: aiGuidanceRequestSchema,
+});
+
 export type AiGuidanceSurface = z.infer<typeof aiGuidanceSurfaceSchema>;
 export type AiGuidanceTargetKind = z.infer<typeof aiGuidanceTargetKindSchema>;
 export type AiGuidanceIntent = z.infer<typeof aiGuidanceIntentSchema>;
@@ -199,3 +220,6 @@ export type AiPageContext = z.infer<typeof aiPageContextSchema>;
 export type AiGuidanceItem = z.infer<typeof aiGuidanceItemSchema>;
 export type AiGuidanceRequest = z.infer<typeof aiGuidanceRequestSchema>;
 export type AiGuidanceResponse = z.infer<typeof aiGuidanceResponseSchema>;
+export type AiChatTextPart = z.infer<typeof aiChatTextPartSchema>;
+export type AiChatMessage = z.infer<typeof aiChatMessageSchema>;
+export type AiChatRequest = z.infer<typeof aiChatRequestSchema>;

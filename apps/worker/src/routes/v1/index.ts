@@ -8,7 +8,11 @@ import {
   validateYaml,
 } from "../../config-store.js";
 import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
-import { AiApiError, handleTenantGuidanceRequest } from "../../ai/guidance.js";
+import {
+  AiApiError,
+  handleTenantChatRequest,
+  handleTenantGuidanceRequest,
+} from "../../ai/guidance.js";
 import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -70,6 +74,9 @@ async function routeV1Request(
 
   if (path === "/api/v1/ai/guidance" && method === "POST") {
     return handleTenantGuidanceRequest(request, env, tenantId);
+  }
+  if (path === "/api/v1/ai/chat" && method === "POST") {
+    return handleTenantChatRequest(request, env, tenantId);
   }
 
   // ─── Configurations ────────────────────────────────────────

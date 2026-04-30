@@ -203,6 +203,63 @@ describe("AI guidance routes", () => {
     expect(response.status).toBe(403);
   });
 
+  it("streams tenant page copilot chat with the AI SDK UI protocol", async () => {
+    const request = new Request("http://localhost/api/v1/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        id: "chat_123",
+        messages: [
+          {
+            id: "msg_123",
+            role: "user",
+            parts: [{ type: "text", text: "What matters on this page?" }],
+          },
+        ],
+        context: overviewRequest,
+      }),
+    });
+
+    const response = await handleV1Request(request, env, new URL(request.url), "tenant-ai-test");
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    const body = await response.text();
+    expect(body).toContain("I can use the visible context");
+    expect(body).toContain("Total collectors");
+  });
+
+  it("rejects admin surfaces on the tenant chat route", async () => {
+    const request = new Request("http://localhost/api/v1/ai/chat", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        messages: [
+          {
+            role: "user",
+            parts: [{ type: "text", text: "Explain this admin page" }],
+          },
+        ],
+        context: {
+          surface: "admin.overview",
+          targets: [
+            {
+              key: "admin.page",
+              label: "Admin overview",
+              surface: "admin.overview",
+              kind: "page",
+            },
+          ],
+          context: {},
+        },
+      }),
+    });
+
+    const response = await handleV1Request(request, env, new URL(request.url), "tenant-ai-test");
+
+    expect(response.status).toBe(400);
+  });
+
   it("returns a provider error when SDK mode is configured without an API key", async () => {
     const request = new Request("http://localhost/api/v1/ai/guidance", {
       method: "POST",
@@ -280,6 +337,23 @@ describe("AI guidance routes", () => {
     expect(response.model).toBe("MiniMax-M2.7");
     expect(response.summary).toContain("connectivity");
     expect(response.items[0]?.action?.kind).toBe("open_page");
+  });
+
+  it("requires an explicit base URL for generic OpenAI-compatible providers", async () => {
+    await expect(
+      generateAiGuidance(overviewRequest, {
+        env: {
+          LLM_PROVIDER: "openai-compatible",
+          LLM_MODEL: "MiniMax-M2.7",
+          MINIMAX_API_KEY: "test-key",
+        },
+        scopeLabel: "tenant:tenant-ai-test",
+        fetch: vi.fn(),
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      message: "LLM_BASE_URL is required when LLM_PROVIDER is openai-compatible",
+    });
   });
 
   it("sanitizes model-generated guidance actions to app-relative links", async () => {

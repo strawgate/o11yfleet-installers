@@ -16,6 +16,11 @@ const adminEndpoints: AdminEndpoint[] = [
     use: "Admin AI guidance helper",
   },
   {
+    method: "POST",
+    path: "/api/admin/ai/chat",
+    use: "Admin AI page copilot stream",
+  },
+  {
     method: "GET/POST",
     path: "/api/admin/tenants",
     use: "List or create tenants",
