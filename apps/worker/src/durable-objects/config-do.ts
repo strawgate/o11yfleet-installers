@@ -8,7 +8,7 @@ import {
 } from "@o11yfleet/core/codec";
 import type { CodecFormat, ServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
-import { FleetEventType } from "@o11yfleet/core/events";
+import { FleetEventType, makeFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
@@ -388,14 +388,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
           // Buffer enrollment event to SQLite (sync, ~µs). Alarm drains in batches.
           bufferEvents(this.ctx.storage.sql, [
-            {
+            makeFleetEvent({
               type: FleetEventType.AGENT_ENROLLED,
               tenant_id: attachment.tenant_id,
               config_id: attachment.config_id,
               instance_uid: attachment.instance_uid,
               timestamp: Date.now(),
               generation: 1,
-            },
+              dedupe_key: `enrolled:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:1`,
+            }),
           ]);
           await this.ensureAlarm();
 
@@ -514,15 +515,17 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (state.status === "disconnected") {
         return;
       }
+      const timestamp = Date.now();
       bufferEvents(this.ctx.storage.sql, [
-        {
+        makeFleetEvent({
           type: FleetEventType.AGENT_DISCONNECTED,
           tenant_id: attachment.tenant_id,
           config_id: attachment.config_id,
           instance_uid: attachment.instance_uid,
-          timestamp: Date.now(),
+          timestamp,
           reason: "websocket_close",
-        },
+          dedupe_key: `disconnected:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:websocket_close:${attachment.connected_at}`,
+        }),
       ]);
       // Ensure alarm fires soon to drain this disconnect event,
       // even if the DO was about to go idle.
@@ -540,19 +543,35 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     span.setStatus({ code: SpanStatusCode.ERROR });
     try {
       if (attachment) {
+        // The runtime may deliver `close` followed by `error` for the same
+        // socket. Inspect state before buffering so we don't enqueue a second
+        // disconnect with a divergent dedupe_key that downstream consumers
+        // can't collapse.
+        const config = this.getDesiredConfig();
+        const state = loadAgentState(
+          this.ctx.storage.sql,
+          attachment.instance_uid,
+          attachment.tenant_id,
+          attachment.config_id,
+          config.hash,
+        );
         markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
-        bufferEvents(this.ctx.storage.sql, [
-          {
-            type: FleetEventType.AGENT_DISCONNECTED,
-            tenant_id: attachment.tenant_id,
-            config_id: attachment.config_id,
-            instance_uid: attachment.instance_uid,
-            timestamp: Date.now(),
-            reason: "websocket_error",
-          },
-        ]);
-        // Ensure alarm fires soon to drain this error event
-        await this.ensureAlarm();
+        if (state.status !== "disconnected") {
+          const timestamp = Date.now();
+          bufferEvents(this.ctx.storage.sql, [
+            makeFleetEvent({
+              type: FleetEventType.AGENT_DISCONNECTED,
+              tenant_id: attachment.tenant_id,
+              config_id: attachment.config_id,
+              instance_uid: attachment.instance_uid,
+              timestamp,
+              reason: "websocket_error",
+              dedupe_key: `disconnected:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:websocket_error:${attachment.connected_at}`,
+            }),
+          ]);
+          // Ensure alarm fires soon to drain this error event
+          await this.ensureAlarm();
+        }
       }
       try {
         ws.close(1011, "Internal error");
@@ -764,14 +783,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (staleUids.length > 0) {
       bufferEvents(
         this.ctx.storage.sql,
-        staleUids.map((agent) => ({
-          type: FleetEventType.AGENT_DISCONNECTED as const,
-          tenant_id: agent.tenant_id,
-          config_id: agent.config_id,
-          instance_uid: agent.instance_uid,
-          timestamp: Date.now(),
-          reason: "stale_timeout",
-        })),
+        staleUids.map((agent) => {
+          const timestamp = Date.now();
+          return makeFleetEvent({
+            type: FleetEventType.AGENT_DISCONNECTED as const,
+            tenant_id: agent.tenant_id,
+            config_id: agent.config_id,
+            instance_uid: agent.instance_uid,
+            timestamp,
+            reason: "stale_timeout",
+            dedupe_key: `disconnected:${agent.tenant_id}:${agent.config_id}:${agent.instance_uid}:stale_timeout:${timestamp}`,
+          });
+        }),
       );
       await this.ensureAlarm();
     }

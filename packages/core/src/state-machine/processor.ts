@@ -10,7 +10,7 @@ import {
   AgentCapabilities,
   AgentToServerFlags,
 } from "../codec/types.js";
-import { FleetEventType } from "../events.js";
+import { FleetEventType, makeFleetEvent } from "../events.js";
 import type { AnyFleetEvent } from "../events.js";
 import { uint8ToHex } from "../hex.js";
 
@@ -127,6 +127,7 @@ export function processFrame(
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
   const now = Date.now();
+  const instanceUid = uint8ToHex(state.instance_uid);
 
   // Clone state
   const newState: AgentState = { ...state, last_seen_at: now };
@@ -162,16 +163,23 @@ export function processFrame(
 
   // Handle disconnect
   if (msg.agent_disconnect) {
+    // Capture the connection generation (`state.connected_at`) before we
+    // clear it so the dedupe_key is unique to this session. `sequence_num`
+    // alone is only unique within one connection — it resets on reconnect.
+    const sessionGeneration = state.connected_at;
     newState.status = "disconnected";
     newState.connected_at = 0;
-    events.push({
-      type: FleetEventType.AGENT_DISCONNECTED,
-      tenant_id: state.tenant_id,
-      config_id: state.config_id,
-      instance_uid: uint8ToHex(state.instance_uid),
-      timestamp: now,
-      reason: "agent_disconnect_message",
-    });
+    events.push(
+      makeFleetEvent({
+        type: FleetEventType.AGENT_DISCONNECTED,
+        tenant_id: state.tenant_id,
+        config_id: state.config_id,
+        instance_uid: instanceUid,
+        timestamp: now,
+        reason: "agent_disconnect_message",
+        dedupe_key: `disconnected:${state.tenant_id}:${state.config_id}:${instanceUid}:agent_disconnect_message:${sessionGeneration}:${msg.sequence_num}`,
+      }),
+    );
     shouldPersist = true;
     return { newState, response: null, events, shouldPersist };
   }
@@ -183,13 +191,16 @@ export function processFrame(
   if (isHello) {
     newState.connected_at = now;
     shouldPersist = true;
-    events.push({
-      type: FleetEventType.AGENT_CONNECTED,
-      tenant_id: state.tenant_id,
-      config_id: state.config_id,
-      instance_uid: uint8ToHex(state.instance_uid),
-      timestamp: now,
-    });
+    events.push(
+      makeFleetEvent({
+        type: FleetEventType.AGENT_CONNECTED,
+        tenant_id: state.tenant_id,
+        config_id: state.config_id,
+        instance_uid: instanceUid,
+        timestamp: now,
+        dedupe_key: `connected:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${now}`,
+      }),
+    );
   }
 
   // C3 fix: Store capabilities from message when present
@@ -211,16 +222,22 @@ export function processFrame(
       newState.status = msg.health.status;
       newState.last_error = msg.health.last_error;
       shouldPersist = true;
-      events.push({
-        type: FleetEventType.AGENT_HEALTH_CHANGED,
-        tenant_id: state.tenant_id,
-        config_id: state.config_id,
-        instance_uid: uint8ToHex(state.instance_uid),
-        timestamp: now,
-        healthy: msg.health.healthy,
-        status: msg.health.status,
-        last_error: msg.health.last_error,
-      });
+      events.push(
+        makeFleetEvent({
+          type: FleetEventType.AGENT_HEALTH_CHANGED,
+          tenant_id: state.tenant_id,
+          config_id: state.config_id,
+          instance_uid: instanceUid,
+          timestamp: now,
+          healthy: msg.health.healthy,
+          status: msg.health.status,
+          last_error: msg.health.last_error,
+          // Include the current connection generation so a reused
+          // sequence_num after a reconnect does not collide with a prior
+          // session's health event.
+          dedupe_key: `health:${state.tenant_id}:${state.config_id}:${instanceUid}:${newState.connected_at}:${msg.sequence_num}:${msg.health.healthy}:${msg.health.status}:${msg.health.last_error}`,
+        }),
+      );
     }
   }
 
@@ -246,14 +263,17 @@ export function processFrame(
         newState.effective_config_hash = hashHex;
         newState.effective_config_body = body;
         shouldPersist = true;
-        events.push({
-          type: FleetEventType.CONFIG_EFFECTIVE_REPORTED,
-          tenant_id: state.tenant_id,
-          config_id: state.config_id,
-          instance_uid: uint8ToHex(state.instance_uid),
-          timestamp: now,
-          effective_config_hash: hashHex,
-        });
+        events.push(
+          makeFleetEvent({
+            type: FleetEventType.CONFIG_EFFECTIVE_REPORTED,
+            tenant_id: state.tenant_id,
+            config_id: state.config_id,
+            instance_uid: instanceUid,
+            timestamp: now,
+            effective_config_hash: hashHex,
+            dedupe_key: `effective:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${hashHex}`,
+          }),
+        );
       }
     }
   }
@@ -273,26 +293,32 @@ export function processFrame(
       if (hash && hashChanged) {
         newState.current_config_hash = hash;
         shouldPersist = true;
-        events.push({
-          type: FleetEventType.CONFIG_APPLIED,
-          tenant_id: state.tenant_id,
-          config_id: state.config_id,
-          instance_uid: uint8ToHex(state.instance_uid),
-          timestamp: now,
-          config_hash: hashHex,
-        });
+        events.push(
+          makeFleetEvent({
+            type: FleetEventType.CONFIG_APPLIED,
+            tenant_id: state.tenant_id,
+            config_id: state.config_id,
+            instance_uid: instanceUid,
+            timestamp: now,
+            config_hash: hashHex,
+            dedupe_key: `applied:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${hashHex}`,
+          }),
+        );
       }
     } else if (msg.remote_config_status.status === RemoteConfigStatuses.FAILED) {
       shouldPersist = true;
-      events.push({
-        type: FleetEventType.CONFIG_REJECTED,
-        tenant_id: state.tenant_id,
-        config_id: state.config_id,
-        instance_uid: uint8ToHex(state.instance_uid),
-        timestamp: now,
-        config_hash: hashHex,
-        error_message: msg.remote_config_status.error_message,
-      });
+      events.push(
+        makeFleetEvent({
+          type: FleetEventType.CONFIG_REJECTED,
+          tenant_id: state.tenant_id,
+          config_id: state.config_id,
+          instance_uid: instanceUid,
+          timestamp: now,
+          config_hash: hashHex,
+          error_message: msg.remote_config_status.error_message,
+          dedupe_key: `rejected:${state.tenant_id}:${state.config_id}:${instanceUid}:${hashHex}:${msg.remote_config_status.error_message}`,
+        }),
+      );
     }
   }
 

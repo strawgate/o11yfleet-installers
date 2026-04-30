@@ -330,6 +330,8 @@ describe("Config Durable Object", () => {
 
         const columns = state.storage.sql.exec(`PRAGMA table_info(pending_events)`).toArray();
         expect(columns.some((c) => c["name"] === "created_at")).toBe(true);
+        expect(columns.some((c) => c["name"] === "event_id")).toBe(true);
+        expect(columns.some((c) => c["name"] === "dedupe_key")).toBe(true);
 
         const rows = state.storage.sql
           .exec(`SELECT created_at FROM pending_events ORDER BY id`)
@@ -397,6 +399,64 @@ describe("Config Durable Object", () => {
         await instance.alarm();
 
         expect(batchSizes).toEqual([100, 100, 50]);
+        expect(countPendingEvents(state.storage.sql)).toBe(0);
+      },
+    );
+  });
+
+  it("preserves event identity across queue retry", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-queue-identity-retry");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const { bufferEvents, peekBufferedEvents, countPendingEvents } =
+          await import("../src/durable-objects/agent-state-repo.js");
+
+        const original = {
+          type: "test_event",
+          event_id: "evt-123",
+          dedupe_key: "dedupe-123",
+          timestamp: Date.now(),
+        };
+        bufferEvents(state.storage.sql, [original]);
+
+        let attempts = 0;
+        (
+          instance as unknown as {
+            env: {
+              FP_EVENTS: { sendBatch: (messages: Array<{ body: unknown }>) => Promise<void> };
+            };
+          }
+        ).env.FP_EVENTS = {
+          sendBatch: async () => {
+            attempts += 1;
+            if (attempts === 1) throw new Error("queue temporarily unavailable");
+          },
+        };
+
+        await instance.alarm();
+        expect(countPendingEvents(state.storage.sql)).toBe(1);
+        const firstPeek = peekBufferedEvents(state.storage.sql, 1).events[0] as {
+          event_id?: string;
+          dedupe_key?: string;
+        };
+        expect(firstPeek.event_id).toBe("evt-123");
+        expect(firstPeek.dedupe_key).toBe("dedupe-123");
+
+        // Also verify the dedicated columns were persisted, not just the
+        // JSON payload — `peekBufferedEvents` falls back to the payload when
+        // the columns are missing, so this protects against a regression
+        // where `bufferEvents` quietly drops `event_id` / `dedupe_key`.
+        const persisted = state.storage.sql
+          .exec(`SELECT event_id, dedupe_key FROM pending_events`)
+          .one() as { event_id: string; dedupe_key: string };
+        expect(persisted.event_id).toBe("evt-123");
+        expect(persisted.dedupe_key).toBe("dedupe-123");
+
+        await instance.alarm();
         expect(countPendingEvents(state.storage.sql)).toBe(0);
       },
     );

@@ -65,6 +65,8 @@ export function initSchema(sql: SqlStorage): void {
     CREATE TABLE IF NOT EXISTS pending_events (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      event_id TEXT,
+      dedupe_key TEXT,
       payload TEXT NOT NULL
     )
   `);
@@ -105,6 +107,12 @@ function migrateSchema(sql: SqlStorage): void {
   if (!eventCols.some((c) => c["name"] === "created_at")) {
     sql.exec(`ALTER TABLE pending_events ADD COLUMN created_at INTEGER`);
     sql.exec(`UPDATE pending_events SET created_at = unixepoch() WHERE created_at IS NULL`);
+  }
+  if (!eventCols.some((c) => c["name"] === "event_id")) {
+    sql.exec(`ALTER TABLE pending_events ADD COLUMN event_id TEXT`);
+  }
+  if (!eventCols.some((c) => c["name"] === "dedupe_key")) {
+    sql.exec(`ALTER TABLE pending_events ADD COLUMN dedupe_key TEXT`);
   }
   // Migration 3: add config_snapshots table (CREATE IF NOT EXISTS handles this)
   // Migration 4: migrate legacy effective_config_body values into config_snapshots.
@@ -562,8 +570,13 @@ export function sweepStaleAgents(
 export function bufferEvents(sql: SqlStorage, events: unknown[]): void {
   if (events.length === 0) return;
   for (const event of events) {
+    const maybeEvent = event as { event_id?: unknown; dedupe_key?: unknown };
+    const eventId = typeof maybeEvent.event_id === "string" ? maybeEvent.event_id : null;
+    const dedupeKey = typeof maybeEvent.dedupe_key === "string" ? maybeEvent.dedupe_key : null;
     sql.exec(
-      `INSERT INTO pending_events (created_at, payload) VALUES (unixepoch(), ?)`,
+      `INSERT INTO pending_events (created_at, event_id, dedupe_key, payload) VALUES (unixepoch(), ?, ?, ?)`,
+      eventId,
+      dedupeKey,
       JSON.stringify(event),
     );
   }

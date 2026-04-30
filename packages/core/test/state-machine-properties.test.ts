@@ -303,6 +303,10 @@ describe("state-machine property tests", () => {
             expect(event.config_id).toBe("c-check");
             expect(event.timestamp).toBeGreaterThan(0);
             expect(typeof event.instance_uid).toBe("string");
+            expect(typeof event.event_id).toBe("string");
+            expect(event.event_id.length).toBeGreaterThan(0);
+            expect(typeof event.dedupe_key).toBe("string");
+            expect(event.dedupe_key.length).toBeGreaterThan(0);
           }
         },
       ),
