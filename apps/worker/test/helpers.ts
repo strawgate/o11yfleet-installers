@@ -32,6 +32,12 @@ async function ensureAuthTables(): Promise<void> {
   await env.FP_DB.exec(
     `CREATE INDEX IF NOT EXISTS idx_sessions_impersonation_expires ON sessions(is_impersonation, expires_at)`,
   );
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS auth_identities (id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, provider_login TEXT, provider_email TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(provider, provider_user_id))`,
+  );
+  await env.FP_DB.exec(
+    `CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id)`,
+  );
 }
 
 export async function adminSessionCookie(): Promise<string> {

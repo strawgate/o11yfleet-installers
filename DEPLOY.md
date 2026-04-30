@@ -28,12 +28,22 @@ the values.
 | `SEED_ADMIN_EMAIL`          | Bootstrap only | Initial admin email used by `/auth/seed`.                                                                                                                   |
 | `SEED_ADMIN_PASSWORD`       | Bootstrap only | Initial admin password used by `/auth/seed`.                                                                                                                |
 | `MINIMAX_API_KEY`           | AI guidance    | Enables AI guidance when the MiniMax provider is selected.                                                                                                  |
+| `GITHUB_APP_CLIENT_ID`      | Self-service   | GitHub App OAuth client id used for social signup and login.                                                                                                |
+| `GITHUB_APP_CLIENT_SECRET`  | Self-service   | GitHub App OAuth client secret used to exchange GitHub authorization codes.                                                                                 |
+| `GITHUB_APP_ID`             | Future GitOps  | GitHub App id returned by the manifest flow; retained for repo installation features.                                                                       |
+| `GITHUB_APP_WEBHOOK_SECRET` | Future GitOps  | GitHub App webhook secret returned by the manifest flow; retained for repo installation webhooks.                                                           |
+| `GITHUB_APP_PRIVATE_KEY`    | Future GitOps  | GitHub App private key returned by the manifest flow; retained for future installation-token minting.                                                       |
 | `LLM_PROVIDER`              | Terraform var  | Non-secret Worker binding set to `minimax` for Terraform-managed deployments.                                                                               |
 | `LLM_MODEL`                 | Terraform var  | Non-secret Worker binding set to `MiniMax-M2.7` for Terraform-managed deployments.                                                                          |
 | `LLM_BASE_URL`              | Terraform var  | Non-secret Worker binding set to `https://api.minimax.io/v1` for Terraform-managed deployments.                                                             |
 
 Worker runtime secrets live on the deployed Worker, not in Terraform state and not in the Pages
 site. GitHub Actions secrets are only for deployment tooling and smoke tests.
+
+To create the GitHub App, run the Worker locally and open
+`http://localhost:8787/auth/github/app-manifest`. The manifest creates a public GitHub App with
+only read access to account email addresses. After GitHub redirects back, copy the returned values
+into Worker secrets for each deployed environment.
 
 ## AI Guidance Live Check
 

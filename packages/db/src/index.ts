@@ -5,4 +5,7 @@ export type {
   ConfigVersion,
   EnrollmentToken,
   AgentSummary,
+  Session,
+  User,
+  AuthIdentity,
 } from "./schema.js";

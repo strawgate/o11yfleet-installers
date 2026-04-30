@@ -86,6 +86,10 @@ export function detectApiBase(): string {
 export const apiBase: string = detectApiBase();
 if (apiBase) localStorage.setItem("fp-api-base", apiBase);
 
+export function apiUrl(path: string): string {
+  return apiBase + path;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Core fetch helpers                                                */
 /* ------------------------------------------------------------------ */

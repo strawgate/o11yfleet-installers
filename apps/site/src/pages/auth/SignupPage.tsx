@@ -1,8 +1,15 @@
-import { Link } from "react-router-dom";
-import { PrototypeBanner } from "../../components/common/PrototypeBanner";
+import { Link, useSearchParams } from "react-router-dom";
+import { apiUrl } from "@/api/client";
+import { GitHubMark } from "@/components/common/GitHubMark";
 import { Logo } from "@/components/common/Logo";
 
 export default function SignupPage() {
+  const [searchParams] = useSearchParams();
+  const plan = searchParams.get("plan") ?? "starter";
+  const githubUrl = apiUrl(
+    `/auth/github/start?mode=signup&plan=${encodeURIComponent(plan)}&site_origin=${encodeURIComponent(window.location.origin)}`,
+  );
+
   return (
     <div className="auth-shell">
       <div className="auth-card">
@@ -12,14 +19,13 @@ export default function SignupPage() {
         </Link>
 
         <h1>Create your workspace</h1>
-        <p className="sub">Self-service registration coming soon. Contact us to get started.</p>
-
-        <PrototypeBanner message="Account creation is not yet available" />
+        <p className="sub">Use GitHub to create your O11yFleet workspace.</p>
 
         <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "22px" }}>
-          <Link to="/login" className="btn btn-primary" style={{ textAlign: "center" }}>
-            Sign in to existing workspace
-          </Link>
+          <a className="sso-btn" href={githubUrl}>
+            <GitHubMark />
+            Continue with GitHub
+          </a>
           <a href="mailto:hello@o11yfleet.com" className="btn" style={{ textAlign: "center" }}>
             Contact us for access
           </a>

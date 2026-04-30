@@ -383,7 +383,7 @@ p {
 .site-header .wrap {
   display: flex;
   align-items: center;
-  gap: 28px;
+  gap: 18px;
   height: 60px;
 }
 .logo {
@@ -394,6 +394,7 @@ p {
   font-weight: 600;
   font-size: 15px;
   letter-spacing: -0.012em;
+  flex: 0 0 auto;
 }
 .logo svg {
   width: 22px;
@@ -404,7 +405,9 @@ p {
   display: flex;
   align-items: center;
   gap: 4px;
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
 }
 .nav a,
 .nav .nav-trigger {
@@ -486,6 +489,8 @@ p {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 0 0 auto;
+  margin-left: auto;
 }
 
 .theme-toggle {
@@ -522,10 +527,47 @@ p {
 .mobile-toggle {
   display: none;
 }
-@media (max-width: 920px) {
+@media (max-width: 1100px) {
+  .nav-link-partners,
+  .nav-link-about,
+  .nav-link-docs {
+    display: none;
+  }
+}
+@media (max-width: 900px) {
+  .nav-link-enterprise {
+    display: none;
+  }
+}
+@media (max-width: 760px) {
+  .nav-link-product {
+    display: none;
+  }
+}
+@media (max-width: 640px) {
   .nav {
     display: none;
   }
+  .site-header .wrap {
+    gap: 12px;
+  }
+}
+@media (max-width: 430px) {
+  .site-header .logo {
+    font-size: 0;
+    gap: 0;
+  }
+  .site-header .logo svg {
+    margin-right: 0;
+  }
+  .header-right {
+    gap: 6px;
+  }
+  .header-right .btn-sm {
+    padding: 0 10px;
+  }
+}
+@media (max-width: 920px) {
   .mobile-toggle {
     display: inline-flex;
     align-items: center;

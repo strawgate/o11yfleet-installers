@@ -1435,6 +1435,8 @@ body.auth {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  box-sizing: border-box;
+  width: 100%;
   height: 38px;
   border: 1px solid var(--line-strong);
   border-radius: 7px;
@@ -1443,6 +1445,7 @@ body.auth {
   cursor: pointer;
   font-family: inherit;
   font-size: 13.5px;
+  text-decoration: none;
 }
 .auth-card .sso-btn:hover {
   background: var(--surface-2);

@@ -30,6 +30,8 @@ export default defineConfig({
           CLOUDFLARE_D1_DATABASE_ID: "",
           CLOUDFLARE_R2_BUCKET_NAME: "",
           CLOUDFLARE_ANALYTICS_DATASET: "",
+          GITHUB_APP_CLIENT_ID: "test-github-client-id",
+          GITHUB_APP_CLIENT_SECRET: "test-github-client-secret",
         },
       },
     }),

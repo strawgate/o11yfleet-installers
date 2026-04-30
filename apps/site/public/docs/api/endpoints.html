@@ -181,7 +181,33 @@
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">POST</td>
                 <td style="padding: 10px 14px"><code class="mono">/auth/login</code></td>
-                <td style="padding: 10px 14px">Create a portal session cookie</td>
+                <td style="padding: 10px 14px">Create an employee/admin session cookie</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/github/start</code></td>
+                <td style="padding: 10px 14px">Start GitHub social signup or login</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px"><code class="mono">/auth/github/callback</code></td>
+                <td style="padding: 10px 14px">
+                  Exchange the GitHub OAuth code for a portal session
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/auth/github/app-manifest</code>
+                </td>
+                <td style="padding: 10px 14px">Render the GitHub App manifest setup form</td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/auth/github/app-manifest/callback</code>
+                </td>
+                <td style="padding: 10px 14px">Convert manifest code into GitHub App secrets</td>
               </tr>
               <tr style="border-bottom: 1px solid var(--line)">
                 <td style="padding: 10px 14px">GET</td>

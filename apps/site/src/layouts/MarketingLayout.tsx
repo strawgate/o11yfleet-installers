@@ -65,16 +65,22 @@ export default function MarketingLayout() {
             O11yFleet
           </Link>
 
-          <nav className="nav">
+          <nav className="nav" aria-label="Primary navigation">
             {NAV_LINKS.filter((n) => n.label !== "Home").map((n) =>
               isDocumentLink(n.to) ? (
-                <a key={n.to} href={n.to} aria-current={pathname === n.to ? "page" : undefined}>
+                <a
+                  key={n.to}
+                  href={n.to}
+                  className={`nav-link nav-link-${n.label.toLowerCase()}`}
+                  aria-current={pathname === n.to ? "page" : undefined}
+                >
                   {n.label}
                 </a>
               ) : (
                 <Link
                   key={n.to}
                   to={n.to}
+                  className={`nav-link nav-link-${n.label.toLowerCase()}`}
                   aria-current={isNavActive(pathname, n.to) ? "page" : undefined}
                 >
                   {n.label}

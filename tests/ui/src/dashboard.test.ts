@@ -66,37 +66,6 @@ async function mockPortalOverview(page: Page) {
   await mockEmptyGuidance(page);
 }
 
-async function mockLoginFlow(page: Page) {
-  let loggedIn = false;
-  await page.route(`${API_URL}/auth/me`, async (route) => {
-    if (!loggedIn) {
-      await route.fulfill({
-        status: 401,
-        contentType: "application/json",
-        body: JSON.stringify({ error: "Session expired" }),
-      });
-      return;
-    }
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ user: memberUser }),
-    });
-  });
-  await page.route(`${API_URL}/auth/login`, async (route) => {
-    expect(route.request().postDataJSON()).toMatchObject({
-      email: "demo@o11yfleet.com",
-      password: "demo-password",
-    });
-    loggedIn = true;
-    await route.fulfill({
-      status: 200,
-      contentType: "application/json",
-      body: JSON.stringify({ user: memberUser }),
-    });
-  });
-}
-
 function collectRuntimeErrors(page: Page): { errors: string[]; dispose: () => void } {
   const errors: string[] = [];
   const pageErrorHandler = (error: Error) => errors.push(error.message);
@@ -126,21 +95,23 @@ test.describe("portal smoke coverage", () => {
     await page.route(`${API_URL}/**`, failUnexpectedApi);
   });
 
-  test("login flow signs in and lands on the portal overview", async ({ page }) => {
+  test("login page offers GitHub auth and portal overview loads with a session", async ({
+    page,
+  }) => {
     const runtime = collectRuntimeErrors(page);
 
-    await mockLoginFlow(page);
-    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockPortalSession(page);
     await mockPortalOverview(page);
 
     await page.goto(`${UI_URL}/login?api=${encodeURIComponent(API_URL)}`);
     await expect(page.getByRole("heading", { name: "Sign in to your workspace" })).toBeVisible();
+    const githubLink = page.getByRole("link", { name: "Continue with GitHub" });
+    await expect(githubLink).toHaveAttribute("href", /\/auth\/github\/start\?/);
+    await expect(githubLink).toHaveAttribute("href", /mode=login/);
+    await expect(githubLink).toHaveAttribute("href", /return_to=%2Fportal%2Foverview/);
 
-    await page.getByLabel("Email").fill("demo@o11yfleet.com");
-    await page.getByLabel("Password").fill("demo-password");
-    await page.getByRole("button", { name: "Sign in", exact: true }).click();
-
-    await expect(page).toHaveURL(/\/portal\/overview$/);
+    await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
+    await expect(page).toHaveURL(/\/portal\/overview(?:\?|$)/);
     await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     await expect(page.getByText("prod-collectors")).toBeVisible();
     runtime.dispose();

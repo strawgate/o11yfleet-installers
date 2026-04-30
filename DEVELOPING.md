@@ -114,13 +114,18 @@ Runtime auth behavior:
 
 | Surface        | Auth path                                                                    |
 | -------------- | ---------------------------------------------------------------------------- |
-| Browser portal | HTTP-only `fp_session` cookie from `/auth/login`                             |
+| Browser portal | GitHub social auth through `/auth/github/start`, then HTTP-only `fp_session` |
 | Tenant API     | Cookie tenant scope, or `Authorization: Bearer <API_SECRET>` + `X-Tenant-Id` |
 | Admin API      | Cookie user with `role = admin`; `API_SECRET` is rejected                    |
 | OpAMP ingress  | Enrollment tokens and signed assignment claims, not browser sessions         |
 
-Required local variables are documented in `apps/worker/.dev.vars.example`.
-Deployment secrets are documented in [DEPLOY.md](DEPLOY.md).
+Use `GET /auth/github/app-manifest` on the local Worker to create the GitHub App and return the
+runtime secret values. User signup/login uses `GITHUB_APP_CLIENT_ID` and
+`GITHUB_APP_CLIENT_SECRET`; the app id, webhook secret, and private key are retained for future
+GitOps installation flows.
+
+Required local variables are documented in `apps/worker/.dev.vars.example`. Deployment secrets are
+documented in [DEPLOY.md](DEPLOY.md).
 
 ## Config Rollout Flow
 

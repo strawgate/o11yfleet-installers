@@ -32,6 +32,13 @@ export interface Env {
   CLOUDFLARE_D1_DATABASE_ID?: string;
   CLOUDFLARE_R2_BUCKET_NAME?: string;
   CLOUDFLARE_ANALYTICS_DATASET?: string;
+  GITHUB_APP_CLIENT_ID?: string;
+  GITHUB_APP_CLIENT_SECRET?: string;
+  GITHUB_APP_ID?: string;
+  GITHUB_APP_WEBHOOK_SECRET?: string;
+  GITHUB_APP_PRIVATE_KEY?: string;
+  GITHUB_OAUTH_CLIENT_ID?: string;
+  GITHUB_OAUTH_CLIENT_SECRET?: string;
 }
 
 // Production CORS origins (always allowed)

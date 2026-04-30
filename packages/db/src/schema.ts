@@ -64,3 +64,25 @@ export interface Session {
   is_impersonation: boolean;
   created_at: string;
 }
+
+export interface User {
+  id: string;
+  email: string;
+  password_hash: string;
+  display_name: string;
+  role: "member" | "admin";
+  tenant_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface AuthIdentity {
+  id: string;
+  user_id: string;
+  provider: "github";
+  provider_user_id: string;
+  provider_login: string | null;
+  provider_email: string | null;
+  created_at: string;
+  updated_at: string;
+}
