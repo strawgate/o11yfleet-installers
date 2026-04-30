@@ -15,6 +15,58 @@ import { api, log, saveState, loadState, stateFilePath, BASE_URL, requireApiKey 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+function requestOrigin(): string {
+  return process.env.O11YFLEET_ORIGIN ?? new URL(BASE_URL).origin;
+}
+
+async function createAdminSessionCookie(): Promise<string> {
+  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+  const password = process.env.SEED_ADMIN_PASSWORD ?? "admin-password";
+  const response = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: requestOrigin(),
+    },
+    body: JSON.stringify({ email, password }),
+  });
+
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(`Failed to create admin session: HTTP ${response.status} ${body}`);
+  }
+
+  const setCookie = response.headers.get("Set-Cookie");
+  const sessionCookie = setCookie?.match(/(?:^|,\s*)?(fp_session=[^;]+)/)?.[1];
+  if (!sessionCookie) {
+    throw new Error("Admin login did not return an fp_session cookie");
+  }
+  return sessionCookie;
+}
+
+async function createTenantWithAdminSession(
+  adminCookie: string,
+): Promise<{ status: number; data: { id: string; name: string; plan: string } | null }> {
+  const response = await fetch(`${BASE_URL}/api/admin/tenants`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Cookie: adminCookie,
+      Origin: requestOrigin(),
+    },
+    body: JSON.stringify({ name: "Local Dev", plan: "starter" }),
+  });
+  const raw = await response.json().catch(() => null);
+  const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
+  const data =
+    typeof record?.id === "string" &&
+    typeof record.name === "string" &&
+    typeof record.plan === "string"
+      ? { id: record.id, name: record.name, plan: record.plan }
+      : null;
+  return { status: response.status, data };
+}
+
 async function main() {
   const reset = process.argv.includes("--reset");
 
@@ -59,11 +111,9 @@ async function main() {
 
   // 1. Create tenant
   log.info("Creating tenant...");
-  const { status: ts, data: tenant } = await api<{ id: string; name: string; plan: string }>(
-    "/api/admin/tenants",
-    { method: "POST", body: JSON.stringify({ name: "Local Dev", plan: "starter" }) },
-  );
-  if (ts !== 201) {
+  const adminCookie = await createAdminSessionCookie();
+  const { status: ts, data: tenant } = await createTenantWithAdminSession(adminCookie);
+  if (ts !== 201 || !tenant) {
     log.error(`Failed to create tenant: ${JSON.stringify(tenant)}`);
     process.exit(1);
   }
