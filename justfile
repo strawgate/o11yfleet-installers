@@ -405,6 +405,10 @@ test-e2e:
 test-ui:
     cd tests/ui && pnpm run test:e2e
 
+# Optional real-provider AI guidance audit. Requires MINIMAX_API_KEY.
+ai-guidance-audit collectors="20":
+    bash scripts/run-ai-guidance-audit.sh {{collectors}}
+
 # Install Playwright browsers (one-time setup)
 playwright-install:
     cd tests/ui && npx playwright install --with-deps chromium

@@ -6,10 +6,12 @@
   "scripts": {
     "test": "echo 'UI tests require browsers. Run: just test-ui'",
     "test:e2e": "playwright test",
+    "test:ai-live": "LIVE_AI_GUIDANCE=1 PLAYWRIGHT_SKIP_WEBSERVER=1 playwright test src/ai-guidance-live.test.ts",
     "test:headed": "playwright test --headed",
     "test:ui": "playwright test --ui"
   },
   "devDependencies": {
+    "@o11yfleet/core": "workspace:*",
     "@playwright/test": "^1.52.0"
   }
 }

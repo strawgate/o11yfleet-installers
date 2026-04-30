@@ -1,4 +1,4 @@
-name: AI Guidance Live Check
+name: AI Guidance Live Audit
 
 on:
   workflow_dispatch:
@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  live-guidance:
+  live-guidance-audit:
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 20
     env:
@@ -36,40 +36,28 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check live AI secret
-        id: ai-secret
         shell: bash
         run: |
           if [ -z "${MINIMAX_API_KEY:-}" ]; then
-            echo "available=false" >> "$GITHUB_OUTPUT"
-            echo "::notice::MINIMAX_API_KEY is not configured; skipping live AI guidance check."
-          else
-            echo "available=true" >> "$GITHUB_OUTPUT"
+            echo "::error::MINIMAX_API_KEY is required for the AI Guidance Live Audit."
+            exit 1
           fi
 
       - name: Install Playwright browser
-        if: steps.ai-secret.outputs.available == 'true'
         run: pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
 
-      - name: Start seeded live-AI stack
-        if: steps.ai-secret.outputs.available == 'true'
-        run: bash scripts/serve-explore.sh 20
-
-      - name: Run live AI guidance check
-        if: steps.ai-secret.outputs.available == 'true'
+      - name: Run live AI guidance audit
         env:
-          PLAYWRIGHT_SKIP_WEBSERVER: "1"
-        run: pnpm --filter @o11yfleet/ui-tests exec playwright test src/ai-guidance-live.test.ts
+          AI_GUIDANCE_AUDIT_DIR: test-results/ai-guidance-audit
+        run: bash scripts/run-ai-guidance-audit.sh 20
 
-      - name: Stop seeded stack
+      - name: Upload AI guidance audit artifacts
         if: always()
-        run: bash scripts/serve-explore.sh down
-
-      - name: Upload Playwright artifacts
-        if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: ai-guidance-live-playwright-artifacts
+          name: ai-guidance-live-audit
           path: |
+            test-results/ai-guidance-audit
             tests/ui/playwright-report
             tests/ui/test-results
           if-no-files-found: ignore

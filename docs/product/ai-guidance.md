@@ -79,3 +79,37 @@ Future AI PRs should include:
 - candidate rules and evidence level
 - at least one positive test and one "say nothing" test
 - UI behavior for empty/low-value output
+
+## Live Provider Audit
+
+Real-provider output is non-deterministic, so the live MiniMax path is an audit
+artifact rather than an eval score. Run it when changing prompts, provider
+recovery, page context, or display placement:
+
+```bash
+MINIMAX_API_KEY=... just ai-guidance-audit
+```
+
+The command starts the seeded local stack through `scripts/serve-explore.sh`,
+runs `tests/ui/src/ai-guidance-live.test.ts`, and writes artifacts to
+`test-results/ai-guidance-audit/`.
+
+The audit captures each page contract, request payload, provider response,
+rendered AI text, and a screenshot. It intentionally allows silence and disables
+Playwright retries so transient provider failures remain visible. It fails only
+objective hard gates:
+
+- visible "Guidance unavailable" text
+- expected guidance request not sent
+- non-2xx guidance route response
+- fixture provider used in a live run
+- invalid or missing guidance response fields
+- item target keys outside the request target set
+- guidance items without evidence
+- external action URLs
+- baseline-style claims such as "spike", "regression", or "unusual" without
+  baseline, history, rollout, cohort, policy, or threshold support
+
+Use the generated report to review whether the model was helpful. Do not turn
+subjective usefulness into CI pass/fail until we add a real eval suite with
+human-authored scenarios and a clear rubric.
