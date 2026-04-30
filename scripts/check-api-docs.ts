@@ -18,7 +18,7 @@ const legacyScanFiles = [
   "README.md",
   "apps/site/public/docs/getting-started.html",
   "apps/site/public/docs/how-to/install.html",
-  "docs/portal-design-prompt.md",
+  "docs/research/portal-design-notes.md",
   ".github/workflows/ci.yml",
   "apps/worker/src/index.ts",
   "apps/worker/test/api.test.ts",

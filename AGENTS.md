@@ -6,12 +6,14 @@ OpAMP (Open Agent Management Protocol) fleet management built on Cloudflare Work
 
 ## Documentation Routing
 
-| File                   | Purpose                                             |
-| ---------------------- | --------------------------------------------------- |
-| `README.md`            | User-facing overview, quick start                   |
-| `DEVELOPING.md`        | Architecture, design decisions, build/test commands |
-| `docs/architecture.md` | Technical architecture details                      |
-| `justfile`             | All developer commands                              |
+| File                            | Purpose                                    |
+| ------------------------------- | ------------------------------------------ |
+| `README.md`                     | User-facing overview, quick start          |
+| `DEVELOPING.md`                 | Developer workflow, package map, test flow |
+| `CODE_STYLE.md`                 | Subjective reviewer/style preferences      |
+| `docs/README.md`                | Documentation index                        |
+| `docs/architecture/overview.md` | Technical architecture details             |
+| `justfile`                      | All developer commands                     |
 
 ## Key Commands
 
@@ -24,7 +26,8 @@ just setup       # Migrate, seed, and show fleet status
 just ui          # Start apps/site UI
 just test        # Run all tests
 just test-core   # Core package only (fast)
-just test-worker # Worker tests (workerd runtime)
+just test-worker # Worker unit tests
+just test-runtime # Worker runtime tests (workerd runtime)
 just lint        # Lint all packages
 just typecheck   # Type check all packages
 just bench       # Run benchmarks
@@ -42,7 +45,7 @@ just bench       # Run benchmarks
 
 ## Project-Specific Rules
 
-- Worker code uses `@cloudflare/vitest-pool-workers` for tests
+- Worker runtime tests use `@cloudflare/vitest-pool-workers`
 - Core package tests run in plain Vitest (no CF runtime needed)
 - All packages use TypeScript with strict mode
 - Config DO uses SQLite internally (not D1) for agent state
