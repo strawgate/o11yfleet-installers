@@ -62,18 +62,20 @@ You are the **o11yFleet Admin Console UX Explorer**. Explore the admin panel as 
 
 This is a scheduled or manual audit. Create one issue only for concrete, reproducible, user-facing admin defects. If the admin experience is healthy, call `noop`.
 
-Use Playwright MCP browser tools directly. Do not write Playwright specs or standalone browser scripts. If browser tools are unavailable, report `missing_tool`.
+Emit exactly one final safe output. If you call `create_issue`, stop after that and do not call `noop`. Call `noop` only when you are not filing an issue.
+
+Use Playwright MCP browser tools directly. Do not write Playwright specs or standalone browser scripts. If browser tools are unavailable, report `missing_tool`. Treat Playwright box coordinates carefully: an element is horizontally visible only when its bounding box intersects the viewport (`right > 0 && left < viewportWidth`); `right <= 0` is fully off-screen left, `left >= viewportWidth` is fully off-screen right, and `right > viewportWidth` is partial overflow that may still be visible. File layout or occlusion defects only when a screenshot or `browser_run_code` viewport-intersection check proves the element is visible to the user.
 
 ## Local Stack
 
 - Site: `http://127.0.0.1:3000`
-- Worker API: `http://localhost:8787`
+- Worker API: `http://127.0.0.1:8787`
 - Admin login: `admin@o11yfleet.com` / `admin-password`
 - Tenant login, if needed after sign out: `demo@o11yfleet.com` / `demo-password`
 
 Run `bash scripts/serve-explore.sh status` before admin login, before impersonation, and before reporting any connectivity failure.
 
-Sign in at `http://127.0.0.1:3000/admin/login?api=http://localhost:8787`. After login, use normal admin routes without repeating `?api=` unless the app loses local API context.
+Sign in at `http://127.0.0.1:3000/admin/login?api=http://127.0.0.1:8787`. After login, use normal admin routes without repeating `?api=` unless the app loses local API context.
 
 ## Viewports
 

@@ -1,13 +1,14 @@
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth, useLogout } from "@/api/hooks/auth";
-import { useTenant } from "@/api/hooks/portal";
+import { useConfiguration, useTenant } from "@/api/hooks/portal";
 import { useRegisterBrowserContext } from "@/ai/browser-context-react";
 import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Logo } from "@/components/common/Logo";
 import { useTheme } from "@/hooks/useTheme";
 import { useClickOutside } from "@/hooks/useClickOutside";
+import { portalBreadcrumbConfigurationId, portalBreadcrumbLabel } from "./portal-breadcrumbs";
 import "@/styles/portal-shared.css";
 
 /* ------------------------------------------------------------------ */
@@ -275,6 +276,8 @@ function SearchBar({ onOpen }: { onOpen: () => void }) {
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
+  const configurationId = portalBreadcrumbConfigurationId(pathname);
+  const configuration = useConfiguration(configurationId);
   const segments = pathname
     .replace(/^\/portal\/?/, "")
     .split("/")
@@ -285,7 +288,10 @@ function Breadcrumbs() {
   return (
     <div className="crumbs">
       {segments.map((seg, i) => {
-        const label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+        const label = portalBreadcrumbLabel(seg, i, segments, {
+          configurationId,
+          configurationName: configuration.data?.name,
+        });
         if (i === segments.length - 1) {
           return (
             <span key={seg} className="current">

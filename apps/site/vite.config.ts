@@ -13,8 +13,8 @@ export default defineConfig({
   server: {
     port: 4000,
     proxy: {
-      "/auth": "http://localhost:8787",
-      "/api": "http://localhost:8787",
+      "/auth": "http://127.0.0.1:8787",
+      "/api": "http://127.0.0.1:8787",
     },
   },
   build: {

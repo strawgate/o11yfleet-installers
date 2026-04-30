@@ -14,6 +14,14 @@ WORKER_PROCESS_MARKER="pnpm --dir=apps/worker wrangler dev"
 WORKER_READY_MARKER="[wrangler:info] Ready on"
 WORKER_ENV_FILE=""
 
+# GitHub Actions cleans up background processes that inherit this marker at the
+# end of a step. The explore stack intentionally spans subsequent agent steps.
+unset RUNNER_TRACKING_ID
+
+# Keep wrangler telemetry out of explore runs. The workflow network firewall is
+# intentionally narrow, and telemetry calls should not become UX findings.
+export WRANGLER_SEND_METRICS="${WRANGLER_SEND_METRICS:-false}"
+
 stop_pid_file() {
   local file="$1"
   local expected="$2"
@@ -82,6 +90,23 @@ log_has_startup_error() {
   grep -Eqi "EADDRINUSE|address already in use|listen EADDRINUSE" "$file" 2>/dev/null
 }
 
+wait_for_url() {
+  local url="$1"
+  local attempts="${2:-1}"
+  local delay="${3:-1}"
+  local connect_timeout="${4:-2}"
+  local max_time="${5:-5}"
+
+  for attempt in $(seq 1 "$attempts"); do
+    if curl -fsS --connect-timeout "$connect_timeout" --max-time "$max_time" "$url" >/dev/null; then
+      return 0
+    fi
+    [ "$attempt" -lt "$attempts" ] && sleep "$delay"
+  done
+
+  return 1
+}
+
 cleanup_on_exit() {
   local code=$?
   if [ "$code" -ne 0 ]; then
@@ -132,6 +157,8 @@ ensure_dev_vars() {
 
   ensure_dev_var API_SECRET dev-local-api-secret-1234567890x
   ensure_dev_var CLAIM_SECRET dev-local-claim-secret-12345678x
+  ensure_dev_var MINIMAX_API_KEY dev-local-minimax-placeholder
+  ensure_dev_var LLM_PROVIDER fixture
   ensure_dev_var SEED_TENANT_USER_EMAIL demo@o11yfleet.com
   ensure_dev_var SEED_TENANT_USER_PASSWORD demo-password
   ensure_dev_var SEED_ADMIN_EMAIL admin@o11yfleet.com
@@ -140,7 +167,7 @@ ensure_dev_vars() {
   chmod 600 "$vars_file"
 }
 
-FP_URL="${FP_URL:-http://localhost:8787}"
+FP_URL="${FP_URL:-http://127.0.0.1:8787}"
 UI_URL="${UI_URL:-http://127.0.0.1:3000}"
 WORKER_LISTEN=$(
   FP_URL="$FP_URL" node -e 'const u = new URL(process.env.FP_URL); const host = u.hostname === "localhost" ? "127.0.0.1" : u.hostname; const port = u.port || (u.protocol === "https:" ? "443" : "80"); console.log(host + " " + port);'
@@ -161,7 +188,14 @@ fi
 
 if [ "${1:-}" = "status" ]; then
   failed=0
-  if curl -fsS "$FP_URL/healthz" >/dev/null; then
+  status_retries="${O11YFLEET_EXPLORE_STATUS_RETRIES:-10}"
+  status_delay="${O11YFLEET_EXPLORE_STATUS_DELAY_SECONDS:-2}"
+  if ! [[ "$status_retries" =~ ^[0-9]+$ ]] || ! [[ "$status_delay" =~ ^[0-9]+$ ]]; then
+    echo "Invalid status retry config: O11YFLEET_EXPLORE_STATUS_RETRIES and O11YFLEET_EXPLORE_STATUS_DELAY_SECONDS must be non-negative integers." >&2
+    exit 2
+  fi
+
+  if wait_for_url "$FP_URL/healthz" "$status_retries" "$status_delay"; then
     echo "Worker healthy: $FP_URL/healthz"
   else
     echo "Worker unhealthy: $FP_URL/healthz" >&2
@@ -169,7 +203,7 @@ if [ "${1:-}" = "status" ]; then
     failed=1
   fi
 
-  if curl -fsS "$UI_URL/" >/dev/null; then
+  if wait_for_url "$UI_URL/" "$status_retries" "$status_delay"; then
     echo "Site healthy: $UI_URL/"
   else
     echo "Site unhealthy: $UI_URL/" >&2
@@ -179,9 +213,16 @@ if [ "${1:-}" = "status" ]; then
   exit "$failed"
 fi
 
-COLLECTOR_COUNT="${1:-0}"
+if [ "${1:-}" = "start" ]; then
+  COLLECTOR_COUNT="${2:-0}"
+else
+  COLLECTOR_COUNT="${1:-0}"
+fi
+if ! [[ "$COLLECTOR_COUNT" =~ ^[0-9]+$ ]]; then
+  echo "Usage: $0 [start <collector-count>|<collector-count>|status|down]" >&2
+  exit 2
+fi
 ensure_dev_vars
-
 trap cleanup_on_exit EXIT
 stop_stack
 
@@ -218,7 +259,7 @@ for _ in $(seq 1 60); do
   fi
   if process_matches "$worker_pid" "$WORKER_PROCESS_MARKER" &&
     log_has_marker "$LOG_DIR/worker.log" "$WORKER_READY_MARKER" &&
-    curl -fsS "$FP_URL/healthz" >/dev/null 2>&1; then
+    curl -fsS --connect-timeout 2 --max-time 5 "$FP_URL/healthz" >/dev/null 2>&1; then
     break
   fi
   sleep 2
@@ -226,7 +267,7 @@ done
 if ! process_matches "$worker_pid" "$WORKER_PROCESS_MARKER" ||
   ! log_has_marker "$LOG_DIR/worker.log" "$WORKER_READY_MARKER" ||
   log_has_startup_error "$LOG_DIR/worker.log" ||
-  ! curl -fsS "$FP_URL/healthz" >/dev/null; then
+  ! curl -fsS --connect-timeout 2 --max-time 5 "$FP_URL/healthz" >/dev/null; then
   echo "Worker failed to start"
   tail -80 "$LOG_DIR/worker.log"
   exit 1
@@ -240,7 +281,7 @@ for _ in $(seq 1 60); do
   fi
   if process_matches "$site_pid" "$SITE_PROCESS_MARKER" &&
     log_has_marker "$LOG_DIR/site.log" "$SITE_READY_MARKER" &&
-    curl -fsS "$UI_URL/" >/dev/null 2>&1; then
+    curl -fsS --connect-timeout 2 --max-time 5 "$UI_URL/" >/dev/null 2>&1; then
     break
   fi
   sleep 2
@@ -248,7 +289,7 @@ done
 if ! process_matches "$site_pid" "$SITE_PROCESS_MARKER" ||
   ! log_has_marker "$LOG_DIR/site.log" "$SITE_READY_MARKER" ||
   log_has_startup_error "$LOG_DIR/site.log" ||
-  ! curl -fsS "$UI_URL/" >/dev/null; then
+  ! curl -fsS --connect-timeout 2 --max-time 5 "$UI_URL/" >/dev/null; then
   echo "Site failed to start"
   tail -80 "$LOG_DIR/site.log"
   exit 1

@@ -62,18 +62,20 @@ You are the **o11yFleet Fleet Data UX Explorer**. Explore tenant workflows when 
 
 This is a scheduled or manual audit. Create one issue only for concrete, reproducible, user-facing defects. If the data-backed fleet experience is healthy, call `noop`.
 
-Use Playwright MCP browser tools directly. Do not write Playwright specs or standalone browser scripts. If browser tools are unavailable, report `missing_tool`.
+Emit exactly one final safe output. If you call `create_issue`, stop after that and do not call `noop`. Call `noop` only when you are not filing an issue.
+
+Use Playwright MCP browser tools directly. Do not write Playwright specs or standalone browser scripts. If browser tools are unavailable, report `missing_tool`. Treat Playwright box coordinates carefully: an element is horizontally visible only when its bounding box intersects the viewport (`right > 0 && left < viewportWidth`); `right <= 0` is fully off-screen left, `left >= viewportWidth` is fully off-screen right, and `right > viewportWidth` is partial overflow that may still be visible. File layout or occlusion defects only when a screenshot or `browser_run_code` viewport-intersection check proves the element is visible to the user.
 
 ## Local Stack
 
 - Site: `http://127.0.0.1:3000`
-- Worker API: `http://localhost:8787`
+- Worker API: `http://127.0.0.1:8787`
 - Tenant login: `demo@o11yfleet.com` / `demo-password`
 - The workflow starts 12 fake collectors.
 
 Run `bash scripts/serve-explore.sh status` before login, before fleet table checks, and before reporting any connectivity failure. If fake collectors appear missing, inspect `/tmp/o11yfleet-explore/collectors/*.log` before filing a UI issue.
 
-Sign in at `http://127.0.0.1:3000/login?api=http://localhost:8787`. After login, use normal navigation without repeating `?api=` unless the app loses local API context.
+Sign in at `http://127.0.0.1:3000/login?api=http://127.0.0.1:8787`. After login, use normal navigation without repeating `?api=` unless the app loses local API context.
 
 ## Viewports
 
