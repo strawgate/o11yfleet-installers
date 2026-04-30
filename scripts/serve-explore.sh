@@ -12,6 +12,7 @@ SITE_PROCESS_MARKER="pnpm --dir=apps/site dev"
 SITE_READY_MARKER="ready in"
 WORKER_PROCESS_MARKER="pnpm --dir=apps/worker wrangler dev"
 WORKER_READY_MARKER="[wrangler:info] Ready on"
+WORKER_ENV_FILE=""
 
 stop_pid_file() {
   local file="$1"
@@ -41,6 +42,7 @@ stop_stack() {
   stop_pid_file "$LOG_DIR/collectors.pid" "$COLLECTOR_PROCESS_MARKER" || failed=1
   stop_pid_file "$LOG_DIR/site.pid" "$SITE_PROCESS_MARKER" || failed=1
   stop_pid_file "$LOG_DIR/worker.pid" "$WORKER_PROCESS_MARKER" || failed=1
+  remove_worker_env_file
   return "$failed"
 }
 
@@ -73,20 +75,56 @@ cleanup_on_exit() {
   if [ "$code" -ne 0 ]; then
     stop_stack
   fi
+  remove_worker_env_file
+}
+
+remove_worker_env_file() {
+  local path_file="$LOG_DIR/worker-env.path"
+  local env_file="${WORKER_ENV_FILE:-}"
+  if [ -z "$env_file" ] && [ -f "$path_file" ]; then
+    env_file="$(cat "$path_file")"
+  fi
+  if [ -n "$env_file" ] && [ -f "$env_file" ]; then
+    rm -f "$env_file"
+  fi
+  rm -f "$path_file"
+  WORKER_ENV_FILE=""
+}
+
+write_worker_env_file() {
+  [ -n "${MINIMAX_API_KEY:-}" ] || return 0
+
+  WORKER_ENV_FILE="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/o11yfleet-worker-env.XXXXXX")"
+  chmod 600 "$WORKER_ENV_FILE"
+  printf '%s\n' "$WORKER_ENV_FILE" >"$LOG_DIR/worker-env.path"
+  chmod 600 "$LOG_DIR/worker-env.path"
+  cat apps/worker/.dev.vars >"$WORKER_ENV_FILE"
+  {
+    printf '\n'
+    printf 'MINIMAX_API_KEY=%s\n' "$MINIMAX_API_KEY"
+  } >>"$WORKER_ENV_FILE"
 }
 
 ensure_dev_vars() {
   local vars_file="apps/worker/.dev.vars"
   if [ ! -f "$vars_file" ]; then
-    cat >"$vars_file" <<'DEV_VARS'
-API_SECRET=dev-local-api-secret-1234567890x
-CLAIM_SECRET=dev-local-claim-secret-12345678x
-SEED_TENANT_USER_EMAIL=demo@o11yfleet.com
-SEED_TENANT_USER_PASSWORD=demo-password
-SEED_ADMIN_EMAIL=admin@o11yfleet.com
-SEED_ADMIN_PASSWORD=admin-password
-DEV_VARS
+    : >"$vars_file"
   fi
+
+  ensure_dev_var() {
+    local key="$1"
+    local value="$2"
+    grep -Eq "^[[:space:]]*${key}[[:space:]]*=" "$vars_file" 2>/dev/null ||
+      printf '%s=%s\n' "$key" "$value" >>"$vars_file"
+  }
+
+  ensure_dev_var API_SECRET dev-local-api-secret-1234567890x
+  ensure_dev_var CLAIM_SECRET dev-local-claim-secret-12345678x
+  ensure_dev_var SEED_TENANT_USER_EMAIL demo@o11yfleet.com
+  ensure_dev_var SEED_TENANT_USER_PASSWORD demo-password
+  ensure_dev_var SEED_ADMIN_EMAIL admin@o11yfleet.com
+  ensure_dev_var SEED_ADMIN_PASSWORD admin-password
+
   chmod 600 "$vars_file"
 }
 
@@ -110,11 +148,28 @@ read -r SITE_HOST SITE_PORT <<<"$SITE_LISTEN"
 
 mkdir -p "$LOG_DIR/collectors"
 ensure_dev_vars
+
 trap cleanup_on_exit EXIT
 stop_stack
 
+WORKER_VAR_ARGS=()
+if [ -n "${MINIMAX_API_KEY:-}" ]; then
+  write_worker_env_file
+  WORKER_VAR_ARGS+=(--var "LLM_PROVIDER:${LLM_PROVIDER:-minimax}")
+  WORKER_VAR_ARGS+=(--var "LLM_MODEL:${LLM_MODEL:-MiniMax-M2.7}")
+  WORKER_VAR_ARGS+=(--var "LLM_BASE_URL:${LLM_BASE_URL:-https://api.minimax.io/v1}")
+fi
+
 echo "Starting worker at $FP_URL"
-pnpm --dir=apps/worker wrangler dev --ip "$WORKER_HOST" --port "$WORKER_PORT" >"$LOG_DIR/worker.log" 2>&1 &
+worker_command=(pnpm --dir=apps/worker wrangler dev src/index.ts)
+if [ -n "${WORKER_ENV_FILE:-}" ]; then
+  worker_command+=("--env-file=$WORKER_ENV_FILE")
+fi
+worker_command+=(--ip "$WORKER_HOST" --port "$WORKER_PORT")
+if [ "${#WORKER_VAR_ARGS[@]}" -gt 0 ]; then
+  worker_command+=("${WORKER_VAR_ARGS[@]}")
+fi
+"${worker_command[@]}" >"$LOG_DIR/worker.log" 2>&1 &
 worker_pid=$!
 echo "$worker_pid" >"$LOG_DIR/worker.pid"
 
@@ -143,6 +198,7 @@ if ! process_matches "$worker_pid" "$WORKER_PROCESS_MARKER" ||
   tail -80 "$LOG_DIR/worker.log"
   exit 1
 fi
+remove_worker_env_file
 
 echo "Waiting for site..."
 for _ in $(seq 1 60); do

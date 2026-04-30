@@ -15,58 +15,6 @@ import { api, log, saveState, loadState, stateFilePath, BASE_URL, requireApiKey 
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-function requestOrigin(): string {
-  return process.env.O11YFLEET_ORIGIN ?? new URL(BASE_URL).origin;
-}
-
-async function createAdminSessionCookie(): Promise<string> {
-  const email = process.env.SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
-  const password = process.env.SEED_ADMIN_PASSWORD ?? "admin-password";
-  const response = await fetch(`${BASE_URL}/auth/login`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Origin: requestOrigin(),
-    },
-    body: JSON.stringify({ email, password }),
-  });
-
-  if (!response.ok) {
-    const body = await response.text();
-    throw new Error(`Failed to create admin session: HTTP ${response.status} ${body}`);
-  }
-
-  const setCookie = response.headers.get("Set-Cookie");
-  const sessionCookie = setCookie?.match(/(?:^|,\s*)?(fp_session=[^;]+)/)?.[1];
-  if (!sessionCookie) {
-    throw new Error("Admin login did not return an fp_session cookie");
-  }
-  return sessionCookie;
-}
-
-async function createTenantWithAdminSession(
-  adminCookie: string,
-): Promise<{ status: number; data: { id: string; name: string; plan: string } | null }> {
-  const response = await fetch(`${BASE_URL}/api/admin/tenants`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Cookie: adminCookie,
-      Origin: requestOrigin(),
-    },
-    body: JSON.stringify({ name: "Local Dev", plan: "starter" }),
-  });
-  const raw = await response.json().catch(() => null);
-  const record = raw && typeof raw === "object" ? (raw as Record<string, unknown>) : null;
-  const data =
-    typeof record?.id === "string" &&
-    typeof record.name === "string" &&
-    typeof record.plan === "string"
-      ? { id: record.id, name: record.name, plan: record.plan }
-      : null;
-  return { status: response.status, data };
-}
-
 async function main() {
   const reset = process.argv.includes("--reset");
 
@@ -86,11 +34,18 @@ async function main() {
   requireApiKey();
 
   log.info("Seeding local login accounts...");
-  const { status: seedStatus } = await api<{ seeded: string[]; tenantId: string }>("/auth/seed", {
-    method: "POST",
-  });
+  const { status: seedStatus, data: seedData } = await api<{ seeded: string[]; tenantId: string }>(
+    "/auth/seed",
+    {
+      method: "POST",
+    },
+  );
   if (seedStatus !== 200) {
     log.error(`Failed to seed login accounts: status ${seedStatus}`);
+    process.exit(1);
+  }
+  if (!seedData.tenantId) {
+    log.error(`Seed response did not include tenantId: ${JSON.stringify(seedData)}`);
     process.exit(1);
   }
   log.ok("Login accounts ready");
@@ -109,15 +64,19 @@ async function main() {
     return;
   }
 
-  // 1. Create tenant
-  log.info("Creating tenant...");
-  const adminCookie = await createAdminSessionCookie();
-  const { status: ts, data: tenant } = await createTenantWithAdminSession(adminCookie);
-  if (ts !== 201 || !tenant) {
-    log.error(`Failed to create tenant: ${JSON.stringify(tenant)}`);
+  // 1. Use the seeded tenant so the seeded workspace login sees local configs and agents.
+  log.info("Loading seeded tenant...");
+  const tenantId = seedData.tenantId;
+  const { status: ts, data: tenant } = await api<{ id: string; name: string; plan: string }>(
+    "/api/v1/tenant",
+    { method: "GET" },
+    tenantId,
+  );
+  if (ts !== 200) {
+    log.error(`Failed to load seeded tenant: ${JSON.stringify(tenant)}`);
     process.exit(1);
   }
-  log.ok(`Tenant: ${tenant.name} (${tenant.id}) — plan: ${tenant.plan}`);
+  log.ok(`Tenant: ${tenant.name} (${tenant.id}) - plan: ${tenant.plan}`);
 
   // 2. Create configuration
   log.info("Creating configuration...");

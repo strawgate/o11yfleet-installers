@@ -66,6 +66,30 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 - Run `just docs-api-check` after changing API docs, public docs, route files, or
   route-heavy historical docs.
 
+### AI Guidance Live Check
+
+The manual **AI Guidance Live Check** workflow starts a local seeded
+Worker/site stack and runs the Playwright live-provider check against the
+MiniMax-backed guidance route.
+
+| Name              | Where                 | Purpose                                                        |
+| ----------------- | --------------------- | -------------------------------------------------------------- |
+| `MINIMAX_API_KEY` | GitHub Actions secret | Passed to the local Worker as `MINIMAX_API_KEY` during checks. |
+
+The workflow sets non-secret provider env vars itself. `scripts/serve-explore.sh`
+passes them to `wrangler dev` as Worker vars and bridges `MINIMAX_API_KEY`
+through a short-lived dotenv file outside the repo, then removes that file once
+the Worker is healthy.
+
+| Name           | Value                       |
+| -------------- | --------------------------- |
+| `LLM_PROVIDER` | `minimax`                   |
+| `LLM_MODEL`    | `MiniMax-M2.7`              |
+| `LLM_BASE_URL` | `https://api.minimax.io/v1` |
+
+If `MINIMAX_API_KEY` is absent, the workflow exits successfully with a notice
+instead of silently falling back to fixture guidance.
+
 ## API Contract Rules
 
 - Put reusable request, response, and error contracts in `packages/core/src/api`.

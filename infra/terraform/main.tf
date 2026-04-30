@@ -82,6 +82,21 @@ locals {
       text = local.worker_environment_name
     },
     {
+      name = "LLM_PROVIDER"
+      type = "plain_text"
+      text = "minimax"
+    },
+    {
+      name = "LLM_MODEL"
+      type = "plain_text"
+      text = "MiniMax-M2.7"
+    },
+    {
+      name = "LLM_BASE_URL"
+      type = "plain_text"
+      text = "https://api.minimax.io/v1"
+    },
+    {
       name    = "FP_ANALYTICS"
       type    = "analytics_engine"
       dataset = var.worker_analytics_engine_dataset

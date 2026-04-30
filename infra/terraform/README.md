@@ -230,8 +230,8 @@ tag Terraform sends with new Worker versions. Change it only when the Durable
 Object migration list changes, such as adding, renaming, or deleting Durable
 Object classes.
 
-Terraform-managed Worker versions inherit `API_SECRET`, `CLAIM_SECRET`, and
-seed-account secrets from the latest Worker version by default. Keep
+Terraform-managed Worker versions inherit `API_SECRET`, `CLAIM_SECRET`,
+`MINIMAX_API_KEY`, and seed-account secrets from the latest Worker version by default. Keep
 provisioning secret values with Wrangler until the project adopts Cloudflare
 Secrets Store or another Terraform-managed secret source. If a production Worker
 relies on additional dashboard/Wrangler-managed bindings, add their names to

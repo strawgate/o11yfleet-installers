@@ -27,13 +27,20 @@ the values.
 | `SEED_TENANT_USER_PASSWORD` | Bootstrap only | Initial tenant user password used by `/auth/seed`.                                                                                                          |
 | `SEED_ADMIN_EMAIL`          | Bootstrap only | Initial admin email used by `/auth/seed`.                                                                                                                   |
 | `SEED_ADMIN_PASSWORD`       | Bootstrap only | Initial admin password used by `/auth/seed`.                                                                                                                |
-| `MINIMAX_API_KEY`           | Optional       | Enables AI guidance when the MiniMax provider is selected.                                                                                                  |
-| `LLM_PROVIDER`              | Optional       | Selects the AI guidance provider.                                                                                                                           |
-| `LLM_MODEL`                 | Optional       | Selects the AI guidance model.                                                                                                                              |
-| `LLM_BASE_URL`              | Optional       | Overrides the AI guidance provider base URL.                                                                                                                |
+| `MINIMAX_API_KEY`           | AI guidance    | Enables AI guidance when the MiniMax provider is selected.                                                                                                  |
+| `LLM_PROVIDER`              | Terraform var  | Non-secret Worker binding set to `minimax` for Terraform-managed deployments.                                                                               |
+| `LLM_MODEL`                 | Terraform var  | Non-secret Worker binding set to `MiniMax-M2.7` for Terraform-managed deployments.                                                                          |
+| `LLM_BASE_URL`              | Terraform var  | Non-secret Worker binding set to `https://api.minimax.io/v1` for Terraform-managed deployments.                                                             |
 
 Worker runtime secrets live on the deployed Worker, not in Terraform state and not in the Pages
 site. GitHub Actions secrets are only for deployment tooling and smoke tests.
+
+## AI Guidance Live Check
+
+Configure the `MINIMAX_API_KEY` GitHub Actions secret to enable the manual
+**AI Guidance Live Check** workflow. Workflow mechanics, defaults, and the
+non-secret provider env vars it sets are documented in
+[`DEVELOPING.md`](./DEVELOPING.md#ai-guidance-live-check).
 
 ## Site Runtime Configuration
 

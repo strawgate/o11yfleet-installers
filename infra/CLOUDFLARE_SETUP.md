@@ -70,7 +70,9 @@ as plaintext Worker configuration. Provision these as Worker secrets for each
 deployed environment. Terraform-managed Worker versions inherit `API_SECRET`,
 `CLAIM_SECRET`, and seed-account secrets from the latest Worker version by
 default. Provision them before Terraform Worker deployments so the uploaded
-version can inherit the secret bindings.
+version can inherit the secret bindings. AI guidance also inherits
+`MINIMAX_API_KEY`; Terraform provides the non-secret `LLM_PROVIDER`, `LLM_MODEL`,
+and `LLM_BASE_URL` Worker bindings.
 
 `apps/worker/wrangler.jsonc` also declares these names under
 `secrets.required` for the base, staging, and production Worker environments.
@@ -85,6 +87,7 @@ non-secret build-time values such as `VITE_O11YFLEET_API_URL`.
 cd apps/worker
 pnpm wrangler versions secret put CLAIM_SECRET --env staging
 pnpm wrangler versions secret put API_SECRET --env staging
+pnpm wrangler versions secret put MINIMAX_API_KEY --env staging
 pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL --env staging
 pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD --env staging
 pnpm wrangler versions secret put SEED_ADMIN_EMAIL --env staging
@@ -94,6 +97,7 @@ pnpm wrangler versions secret put SEED_ADMIN_PASSWORD --env staging
 # o11yfleet-worker script identity, not Wrangler's -production script.
 pnpm wrangler versions secret put CLAIM_SECRET
 pnpm wrangler versions secret put API_SECRET
+pnpm wrangler versions secret put MINIMAX_API_KEY
 pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL
 pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD
 pnpm wrangler versions secret put SEED_ADMIN_EMAIL

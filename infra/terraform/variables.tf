@@ -128,6 +128,7 @@ variable "worker_inherited_binding_names" {
   default = [
     "API_SECRET",
     "CLAIM_SECRET",
+    "MINIMAX_API_KEY",
     "SEED_ADMIN_EMAIL",
     "SEED_ADMIN_PASSWORD",
     "SEED_TENANT_USER_EMAIL",
@@ -139,6 +140,7 @@ variable "worker_inherited_binding_names" {
       for name in [
         "API_SECRET",
         "CLAIM_SECRET",
+        "MINIMAX_API_KEY",
         "SEED_ADMIN_EMAIL",
         "SEED_ADMIN_PASSWORD",
         "SEED_TENANT_USER_EMAIL",

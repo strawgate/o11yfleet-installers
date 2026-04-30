@@ -104,7 +104,7 @@ jobs:
         run: |
           SECRET_NAMES=$(pnpm --filter @o11yfleet/worker exec wrangler secret list --format json \
             | jq -r '.[].name')
-          for name in API_SECRET CLAIM_SECRET SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD SEED_TENANT_USER_EMAIL SEED_TENANT_USER_PASSWORD; do
+          for name in API_SECRET CLAIM_SECRET MINIMAX_API_KEY SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD SEED_TENANT_USER_EMAIL SEED_TENANT_USER_PASSWORD; do
             if ! printf '%s\n' "$SECRET_NAMES" | grep -Fxq "$name"; then
               echo "Missing production Worker secret: $name"
               echo "Provision it on the Terraform-managed production script with: cd apps/worker && pnpm wrangler secret put $name"

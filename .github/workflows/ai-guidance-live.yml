@@ -1,0 +1,76 @@
+name: AI Guidance Live Check
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-guidance-live-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  live-guidance:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FP_URL: http://127.0.0.1:8787
+      UI_URL: http://127.0.0.1:3000
+      LIVE_AI_GUIDANCE: "1"
+      MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+      LLM_PROVIDER: minimax
+      LLM_MODEL: MiniMax-M2.7
+      LLM_BASE_URL: https://api.minimax.io/v1
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check live AI secret
+        id: ai-secret
+        shell: bash
+        run: |
+          if [ -z "${MINIMAX_API_KEY:-}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::MINIMAX_API_KEY is not configured; skipping live AI guidance check."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install Playwright browser
+        if: steps.ai-secret.outputs.available == 'true'
+        run: pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
+
+      - name: Start seeded live-AI stack
+        if: steps.ai-secret.outputs.available == 'true'
+        run: bash scripts/serve-explore.sh 20
+
+      - name: Run live AI guidance check
+        if: steps.ai-secret.outputs.available == 'true'
+        env:
+          PLAYWRIGHT_SKIP_WEBSERVER: "1"
+        run: pnpm --filter @o11yfleet/ui-tests exec playwright test src/ai-guidance-live.test.ts
+
+      - name: Stop seeded stack
+        if: always()
+        run: bash scripts/serve-explore.sh down
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: ai-guidance-live-playwright-artifacts
+          path: |
+            tests/ui/playwright-report
+            tests/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 3

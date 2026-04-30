@@ -4,6 +4,7 @@ import { defineConfig } from "vitest/config";
 const requiredWorkerSecretTestBindings = {
   API_SECRET: "test-api-secret-for-dev-only-32chars",
   CLAIM_SECRET: "dev-secret-key-for-testing-only-32ch",
+  MINIMAX_API_KEY: "",
   SEED_ADMIN_EMAIL: "admin@o11yfleet.com",
   SEED_ADMIN_PASSWORD: "admin-password",
   SEED_TENANT_USER_EMAIL: "demo@o11yfleet.com",
