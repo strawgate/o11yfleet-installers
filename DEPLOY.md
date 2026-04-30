@@ -19,18 +19,18 @@ read by the running Worker unless explicitly configured as Worker secrets.
 Set these on the Worker with `wrangler secret put` for every deployed environment. Do not commit
 the values.
 
-| Name                        | Required       | Purpose                                                                                |
-| --------------------------- | -------------- | -------------------------------------------------------------------------------------- |
-| `API_SECRET`                | Yes            | Deployment-level bearer secret for controlled bootstrap and programmatic admin access. |
-| `CLAIM_SECRET`              | Yes            | HMAC secret for enrollment and assignment claims.                                      |
-| `SEED_TENANT_USER_EMAIL`    | Bootstrap only | Initial tenant user email used by `/auth/seed`.                                        |
-| `SEED_TENANT_USER_PASSWORD` | Bootstrap only | Initial tenant user password used by `/auth/seed`.                                     |
-| `SEED_ADMIN_EMAIL`          | Bootstrap only | Initial admin email used by `/auth/seed`.                                              |
-| `SEED_ADMIN_PASSWORD`       | Bootstrap only | Initial admin password used by `/auth/seed`.                                           |
-| `MINIMAX_API_KEY`           | Optional       | Enables AI guidance when the MiniMax provider is selected.                             |
-| `LLM_PROVIDER`              | Optional       | Selects the AI guidance provider.                                                      |
-| `LLM_MODEL`                 | Optional       | Selects the AI guidance model.                                                         |
-| `LLM_BASE_URL`              | Optional       | Overrides the AI guidance provider base URL.                                           |
+| Name                        | Required       | Purpose                                                                                                                                                     |
+| --------------------------- | -------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `API_SECRET`                | Yes            | Deployment-level bearer secret for controlled bootstrap and tenant-scoped programmatic access. It is not accepted for `/api/admin/*` employee admin routes. |
+| `CLAIM_SECRET`              | Yes            | HMAC secret for enrollment and assignment claims.                                                                                                           |
+| `SEED_TENANT_USER_EMAIL`    | Bootstrap only | Initial tenant user email used by `/auth/seed`.                                                                                                             |
+| `SEED_TENANT_USER_PASSWORD` | Bootstrap only | Initial tenant user password used by `/auth/seed`.                                                                                                          |
+| `SEED_ADMIN_EMAIL`          | Bootstrap only | Initial admin email used by `/auth/seed`.                                                                                                                   |
+| `SEED_ADMIN_PASSWORD`       | Bootstrap only | Initial admin password used by `/auth/seed`.                                                                                                                |
+| `MINIMAX_API_KEY`           | Optional       | Enables AI guidance when the MiniMax provider is selected.                                                                                                  |
+| `LLM_PROVIDER`              | Optional       | Selects the AI guidance provider.                                                                                                                           |
+| `LLM_MODEL`                 | Optional       | Selects the AI guidance model.                                                                                                                              |
+| `LLM_BASE_URL`              | Optional       | Overrides the AI guidance provider base URL.                                                                                                                |
 
 Worker runtime secrets live on the deployed Worker, not in Terraform state and not in the Pages
 site. GitHub Actions secrets are only for deployment tooling and smoke tests.

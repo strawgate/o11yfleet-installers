@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { env, exports } from "cloudflare:workers";
-import { authHeaders } from "./helpers.js";
+import { adminSessionHeaders } from "./helpers.js";
 import { handleV1Request } from "../src/routes/v1/index.js";
 import { generateAiGuidance } from "../src/ai/provider.js";
 import type { AiGuidanceResponse } from "@o11yfleet/core/ai";
@@ -156,7 +156,7 @@ describe("AI guidance routes", () => {
   it("generates admin guidance only on admin route", async () => {
     const response = await exports.default.fetch("http://localhost/api/admin/ai/guidance", {
       method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: await adminSessionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         surface: "admin.overview",
         targets: [
@@ -182,7 +182,7 @@ describe("AI guidance routes", () => {
   it("rejects invalid guidance payload shape on admin route", async () => {
     const response = await exports.default.fetch("http://localhost/api/admin/ai/guidance", {
       method: "POST",
-      headers: authHeaders({ "Content-Type": "application/json" }),
+      headers: await adminSessionHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         surface: "admin.overview",
         targets: [

@@ -1,6 +1,6 @@
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { API_SECRET, apiFetch, setupD1 } from "./helpers.js";
+import { API_SECRET, adminSessionHeaders, apiFetch, authHeaders, setupD1 } from "./helpers.js";
 
 beforeAll(async () => {
   await setupD1();
@@ -86,6 +86,26 @@ describe("admin API routes", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "Admin access required" });
+  });
+
+  it("rejects API_SECRET bearer access to admin routes", async () => {
+    const response = await exports.default.fetch("http://localhost/api/admin/health", {
+      headers: authHeaders(),
+    });
+
+    expect(response.status).toBe(403);
+    expect(await response.json()).toEqual({
+      error: "Admin session required",
+      code: "admin_session_required",
+    });
+  });
+
+  it("allows admin route access with an admin session", async () => {
+    const response = await exports.default.fetch("http://localhost/api/admin/health", {
+      headers: await adminSessionHeaders(),
+    });
+
+    expect(response.status).toBe(200);
   });
 
   it("rejects admin route access for non-admin session", async () => {

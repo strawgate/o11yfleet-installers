@@ -8,11 +8,11 @@ deployment details in `DEPLOY.md`.
 
 o11yFleet has three runtime planes:
 
-| Plane               | Owner  | Stores / APIs                                                             |
-| ------------------- | ------ | ------------------------------------------------------------------------- |
-| Agent control plane | Worker | `/v1/opamp`, per-`tenant:config` Durable Objects, DO SQLite, WebSockets   |
-| Management API      | Worker | `/api/v1/*`, `/api/admin/*`, D1 metadata, R2 config blobs, Queue events   |
-| Auth                | Worker | `/auth/*`, D1 users/sessions, HTTP-only `fp_session`, bearer `API_SECRET` |
+| Plane               | Owner  | Stores / APIs                                                                                                        |
+| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
+| Agent control plane | Worker | `/v1/opamp`, per-`tenant:config` Durable Objects, DO SQLite, WebSockets                                              |
+| Management API      | Worker | `/api/v1/*`, `/api/admin/*`, D1 metadata, R2 config blobs, Queue events                                              |
+| Auth                | Worker | `/auth/*`, D1 users/sessions, HTTP-only `fp_session`, bearer `API_SECRET` for bootstrap and tenant-scoped automation |
 
 The customer portal and admin console call the real API. Remaining product gaps
 are mostly depth: signup/password reset, team invites, richer RBAC, audit-event
@@ -77,7 +77,7 @@ Runtime auth behavior:
 | -------------- | ---------------------------------------------------------------------------- |
 | Browser portal | HTTP-only `fp_session` cookie from `/auth/login`                             |
 | Tenant API     | Cookie tenant scope, or `Authorization: Bearer <API_SECRET>` + `X-Tenant-Id` |
-| Admin API      | Cookie user with `role = admin`, or bearer `API_SECRET`                      |
+| Admin API      | Cookie user with `role = admin`; `API_SECRET` is rejected                    |
 | OpAMP ingress  | Enrollment tokens and signed assignment claims, not browser sessions         |
 
 Required local variables are documented in `apps/worker/.dev.vars.example`.

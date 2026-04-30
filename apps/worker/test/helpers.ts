@@ -10,10 +10,53 @@ import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 
 export const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
 export const API_SECRET = "test-api-secret-for-dev-only-32chars";
+const TEST_ADMIN_USER_ID = "test-admin-user";
+const TEST_ADMIN_EMAIL = "admin@o11yfleet.test";
 
 /** Standard auth headers for API requests in tests */
 export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   return { Authorization: `Bearer ${API_SECRET}`, ...extra };
+}
+
+async function ensureAuthTables(): Promise<void> {
+  await setupD1();
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'admin')), tenant_id TEXT REFERENCES tenants(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
+  await env.FP_DB.exec(
+    `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, is_impersonation INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+  );
+  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
+  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
+  await env.FP_DB.exec(
+    `CREATE INDEX IF NOT EXISTS idx_sessions_impersonation_expires ON sessions(is_impersonation, expires_at)`,
+  );
+}
+
+export async function adminSessionCookie(): Promise<string> {
+  await ensureAuthTables();
+  await env.FP_DB.prepare(
+    `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, role, tenant_id)
+     VALUES (?, ?, 'not-used-in-test', 'Test Admin', 'admin', NULL)`,
+  )
+    .bind(TEST_ADMIN_USER_ID, TEST_ADMIN_EMAIL)
+    .run();
+
+  const sessionId = crypto.randomUUID().replace(/-/g, "");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  await env.FP_DB.prepare(
+    `INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 0)`,
+  )
+    .bind(sessionId, TEST_ADMIN_USER_ID, expiresAt)
+    .run();
+  return `fp_session=${sessionId}`;
+}
+
+export async function adminSessionHeaders(
+  extra: Record<string, string> = {},
+): Promise<Record<string, string>> {
+  return { Origin: "https://app.o11yfleet.com", Cookie: await adminSessionCookie(), ...extra };
 }
 
 const configTenantIds = new Map<string, string>();
@@ -61,7 +104,12 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
   const needsAuth = url.includes("/api/");
   if (needsAuth) {
     const headers = new Headers(init?.headers);
-    if (!headers.has("Authorization")) {
+    if (url.includes("/api/admin/") && !headers.has("Cookie")) {
+      headers.set("Cookie", await adminSessionCookie());
+      if (!headers.has("Origin")) {
+        headers.set("Origin", "https://app.o11yfleet.com");
+      }
+    } else if (!headers.has("Authorization")) {
       headers.set("Authorization", `Bearer ${API_SECRET}`);
     }
     if (url.includes("/api/v1/")) {
@@ -183,7 +231,7 @@ export async function createTenant(name: string): Promise<TenantResult> {
   const res = await exports.default.fetch("http://localhost/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name, plan: "growth" }),
-    headers: authHeaders({ "Content-Type": "application/json" }),
+    headers: await adminSessionHeaders({ "Content-Type": "application/json" }),
   });
   expect(res.status).toBe(201);
   return res.json<TenantResult>();

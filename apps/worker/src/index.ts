@@ -308,13 +308,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // API routes — with auth + CORS
   if (url.pathname.startsWith("/api/")) {
-    // Check Bearer token first (programmatic API access)
-    let hasBearerAuth = false;
+    // Check Bearer token first (programmatic API access). API_SECRET is intentionally
+    // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
+    let hasApiSecretBearer = false;
     if (env.API_SECRET) {
       const auth = request.headers.get("Authorization");
       const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
       if (token && timingSafeEqual(token, env.API_SECRET)) {
-        hasBearerAuth = true;
+        hasApiSecretBearer = true;
       }
     }
 
@@ -325,14 +326,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     // Admin routes — /api/admin/*
     if (url.pathname.startsWith("/api/admin/")) {
-      // Require either Bearer API_SECRET or admin session
-      if (!hasBearerAuth && (!sessionAuth || sessionAuth.role !== "admin")) {
+      // Require an authenticated admin browser session. API_SECRET must not act as
+      // a broad employee/admin credential for human-facing support operations.
+      if (!sessionAuth || sessionAuth.role !== "admin") {
+        const body = hasApiSecretBearer
+          ? { error: "Admin session required", code: "admin_session_required" }
+          : { error: "Admin access required" };
         return addSecurityHeaders(
-          addCorsHeaders(
-            Response.json({ error: "Admin access required" }, { status: 403 }),
-            request,
-            env,
-          ),
+          addCorsHeaders(Response.json(body, { status: 403 }), request, env),
         );
       }
       resp = await handleAdminRequest(request, env, url);
@@ -343,7 +344,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       let tenantId: string | null = null;
       if (sessionAuth?.tenantId) {
         tenantId = sessionAuth.tenantId;
-      } else if (hasBearerAuth) {
+      } else if (hasApiSecretBearer) {
         tenantId = request.headers.get("X-Tenant-Id");
       }
       if (!tenantId) {
