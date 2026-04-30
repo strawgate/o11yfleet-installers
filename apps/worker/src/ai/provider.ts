@@ -3,8 +3,7 @@ import {
   convertToModelMessages,
   createUIMessageStream,
   createUIMessageStreamResponse,
-  generateText,
-  Output,
+  generateObject,
   streamText,
   type UIMessage,
 } from "ai";
@@ -12,6 +11,7 @@ import {
   aiGuidanceResponseSchema,
   analyzeGuidanceCandidates,
   candidatesToGuidanceItems,
+  filterGuidanceItemsForQuality,
   type AiChatRequest,
   type AiGuidanceRequest,
   type AiGuidanceResponse,
@@ -55,21 +55,23 @@ export async function generateAiGuidance(
   }
 
   try {
-    const result = await generateText({
+    const result = await generateObject({
       model: providerConfig.provider(providerConfig.model),
-      output: Output.object({
-        name: "O11yFleetGuidance",
-        description: "Evidence-backed guidance for one o11yFleet app surface.",
-        schema: modelOutputSchema,
-      }),
+      schema: modelOutputSchema,
+      schemaName: "O11yFleetGuidance",
+      schemaDescription: "Evidence-backed guidance for one o11yFleet app surface.",
       system:
         "You are the o11yFleet guidance engine. Return concise, operational guidance only. Base every item on the supplied targets and context. Do not invent data, credentials, outages, tenants, agents, or configuration state.",
       prompt: buildGuidancePrompt(input, opts.scopeLabel, candidates),
       temperature: 0.2,
       maxOutputTokens: 1600,
     });
-    const output = sanitizeModelOutput(
-      validateModelOutputTargets(modelOutputSchema.parse(result.output), input),
+    const output = qualityGateModelOutput(
+      input,
+      sanitizeModelOutput(
+        validateModelOutputTargets(modelOutputSchema.parse(result.object), input),
+      ),
+      candidates,
     );
 
     return aiGuidanceResponseSchema.parse({
@@ -207,6 +209,21 @@ function sanitizeModelOutput(output: Pick<AiGuidanceResponse, "summary" | "items
         },
       };
     }),
+  };
+}
+
+function qualityGateModelOutput(
+  input: AiGuidanceRequest,
+  output: Pick<AiGuidanceResponse, "summary" | "items">,
+  candidates: ReturnType<typeof analyzeGuidanceCandidates>,
+) {
+  const items = filterGuidanceItemsForQuality(input, output.items, { candidates });
+  return {
+    summary:
+      items.length > 0
+        ? output.summary
+        : `No non-obvious guidance found in the provided ${input.surface} context.`,
+    items,
   };
 }
 

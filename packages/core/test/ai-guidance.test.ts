@@ -5,6 +5,8 @@ import {
   aiGuidanceResponseSchema,
   analyzeConfigCopilotYaml,
   analyzeGuidanceCandidates,
+  evaluateGuidanceItemQuality,
+  filterGuidanceItemsForQuality,
 } from "../src/ai/index.js";
 
 describe("ai guidance contracts", () => {
@@ -236,6 +238,119 @@ describe("ai guidance contracts", () => {
 
     expect(parsed.items).toHaveLength(1);
     expect(parsed.items[0]?.severity).toBe("warning");
+  });
+});
+
+describe("ai guidance quality gate", () => {
+  const request = aiGuidanceRequestSchema.parse({
+    surface: "portal.overview",
+    targets: [
+      {
+        key: "overview.fleet-health",
+        label: "Fleet health",
+        surface: "portal.overview",
+        kind: "metric",
+      },
+    ],
+    context: {},
+    page_context: {
+      route: "/portal/overview",
+      metrics: [
+        { key: "total_agents", label: "Total collectors", value: 10 },
+        { key: "connected_agents", label: "Connected collectors", value: 8 },
+      ],
+    },
+  });
+
+  const countOnlyItem = {
+    target_key: "overview.fleet-health",
+    headline: "Offline collector count is unusually high",
+    detail: "Two collectors are offline, which is a large number for this fleet.",
+    severity: "warning" as const,
+    confidence: 0.66,
+    evidence: [
+      { label: "Total collectors", value: "10", source: "visible page" },
+      { label: "Connected collectors", value: "8", source: "visible page" },
+    ],
+  };
+
+  it("drops model items that make unsupported significance claims from raw counts", () => {
+    expect(evaluateGuidanceItemQuality(request, countOnlyItem)).toEqual({
+      keep: false,
+      reason: "count-only evidence lacks threshold or baseline support",
+    });
+    expect(filterGuidanceItemsForQuality(request, [countOnlyItem])).toEqual([]);
+  });
+
+  it("drops neutral count-only model items without threshold or baseline support", () => {
+    expect(
+      evaluateGuidanceItemQuality(request, {
+        ...countOnlyItem,
+        headline: "Two collectors are offline",
+        detail: "The page shows two collectors not currently connected.",
+      }),
+    ).toEqual({
+      keep: false,
+      reason: "count-only evidence lacks threshold or baseline support",
+    });
+  });
+
+  it("still reports unsupported significance claims when evidence is not purely numeric", () => {
+    expect(
+      evaluateGuidanceItemQuality(request, {
+        ...countOnlyItem,
+        evidence: [{ label: "Current page", value: "Fleet overview", source: "visible page" }],
+      }),
+    ).toEqual({
+      keep: false,
+      reason: "significance claim lacks baseline or threshold support",
+    });
+  });
+
+  it("keeps significance claims when rollout or baseline evidence is visible", () => {
+    const rolloutRequest = aiGuidanceRequestSchema.parse({
+      ...request,
+      context: { rollout_started_at: "2026-04-30T01:00:00.000Z" },
+      page_context: {
+        ...request.page_context!,
+        light_fetches: [
+          {
+            key: "configuration.rollout_cohort_summary",
+            label: "Rollout cohort summary",
+            status: "included",
+            data: {
+              previous_version: 13,
+              current_version: 14,
+              disconnected_after_rollout: 7,
+            },
+          },
+        ],
+      },
+    });
+
+    const item = {
+      ...countOnlyItem,
+      headline: "Offline collectors spiked after rollout",
+      detail:
+        "The rollout cohort summary shows seven disconnected collectors after version 14 started.",
+      evidence: [
+        { label: "Disconnected after rollout", value: "7", source: "rollout cohort" },
+        { label: "Current version", value: "14", source: "rollout cohort" },
+      ],
+    };
+
+    expect(evaluateGuidanceItemQuality(rolloutRequest, item)).toEqual({ keep: true });
+  });
+
+  it("drops model items without visible evidence", () => {
+    expect(
+      evaluateGuidanceItemQuality(request, {
+        ...countOnlyItem,
+        headline: "Review fleet health",
+        detail: "There may be an issue worth checking.",
+        evidence: [],
+      }),
+    ).toEqual({ keep: false, reason: "items need visible evidence" });
   });
 });
 

@@ -48,6 +48,25 @@ const overviewRequest = {
   },
 };
 
+const moderateCountOnlyRequest = {
+  ...overviewRequest,
+  context: {
+    total_agents: 10,
+    connected_agents: 8,
+    healthy_agents: 8,
+    configs_count: 2,
+  },
+  page_context: {
+    ...overviewRequest.page_context,
+    metrics: [
+      { key: "total_agents", label: "Total collectors", value: 10 },
+      { key: "connected_agents", label: "Connected collectors", value: 8 },
+      { key: "healthy_agents", label: "Healthy collectors", value: 8 },
+      { key: "configs_count", label: "Configurations", value: 2 },
+    ],
+  },
+};
+
 describe("AI guidance routes", () => {
   it("generates tenant-scoped portal guidance with validated response shape", async () => {
     const request = new Request("http://localhost/api/v1/ai/guidance", {
@@ -379,7 +398,7 @@ describe("AI guidance routes", () => {
                     detail: "The provider suggested a link outside the app.",
                     severity: "notice",
                     confidence: 0.5,
-                    evidence: [],
+                    evidence: [{ label: "Current page", value: "Fleet overview" }],
                     action: {
                       kind: "open_page",
                       label: "Open runbook",
@@ -459,6 +478,136 @@ describe("AI guidance routes", () => {
       "If there is no non-obvious useful insight, return an empty items array.",
     );
     expect(prompt).toContain("Use only target_key values from the supplied targets.");
+  });
+
+  it("uses structured AI SDK output but suppresses unsupported count-only model claims", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "Two offline collectors is a lot.",
+                items: [
+                  {
+                    target_key: "overview.fleet-health",
+                    headline: "Offline collector count is unusually high",
+                    detail: "Two collectors are offline, which is a large number for this fleet.",
+                    severity: "warning",
+                    confidence: 0.66,
+                    evidence: [
+                      { label: "Total collectors", value: "10", source: "visible page" },
+                      { label: "Connected collectors", value: "8", source: "visible page" },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = await generateAiGuidance(moderateCountOnlyRequest, {
+      env: {
+        LLM_PROVIDER: "minimax",
+        LLM_MODEL: "MiniMax-M2.7",
+        LLM_BASE_URL: "https://api.minimax.test/v1",
+        MINIMAX_API_KEY: "test-key",
+      },
+      scopeLabel: "tenant:tenant-ai-test",
+      fetch: fakeFetch,
+    });
+
+    expect(response.items).toEqual([]);
+    expect(response.summary).toBe(
+      "No non-obvious guidance found in the provided portal.overview context.",
+    );
+  });
+
+  it("keeps model guidance when light fetch context supplies rollout support", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content: JSON.stringify({
+                summary: "Rollout-backed guidance is supported by the visible context.",
+                items: [
+                  {
+                    target_key: "overview.fleet-health",
+                    headline: "Offline collectors spiked after rollout",
+                    detail:
+                      "The rollout cohort summary shows seven disconnected collectors after version 14 started.",
+                    severity: "warning",
+                    confidence: 0.82,
+                    evidence: [
+                      {
+                        label: "Disconnected after rollout",
+                        value: "7",
+                        source: "rollout cohort",
+                      },
+                      { label: "Current version", value: "14", source: "rollout cohort" },
+                    ],
+                  },
+                ],
+              }),
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = await generateAiGuidance(
+      {
+        ...moderateCountOnlyRequest,
+        context: {
+          ...moderateCountOnlyRequest.context,
+          rollout_started_at: "2026-04-30T01:00:00.000Z",
+        },
+        page_context: {
+          ...moderateCountOnlyRequest.page_context,
+          light_fetches: [
+            {
+              key: "configuration.rollout_cohort_summary",
+              label: "Rollout cohort summary",
+              status: "included",
+              data: {
+                current_version: 14,
+                disconnected_after_rollout: 7,
+              },
+            },
+          ],
+        },
+      },
+      {
+        env: {
+          LLM_PROVIDER: "minimax",
+          LLM_MODEL: "MiniMax-M2.7",
+          LLM_BASE_URL: "https://api.minimax.test/v1",
+          MINIMAX_API_KEY: "test-key",
+        },
+        scopeLabel: "tenant:tenant-ai-test",
+        fetch: fakeFetch,
+      },
+    );
+
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.headline).toContain("spiked after rollout");
   });
 
   it("rejects model output that targets slots outside the request", async () => {

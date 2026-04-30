@@ -52,6 +52,9 @@ configuration went offline after version 14 rolled out" is useful.
   missing facts or weaken caveats.
 
 Candidate rules live in `packages/core/src/ai/insight-candidates.ts`.
+Model output is also passed through the reusable quality gate in
+`packages/core/src/ai/quality.ts`; tests should cover both accepted guidance and
+suppressed low-signal output.
 
 ## Current Product Direction
 
