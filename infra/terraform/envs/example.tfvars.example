@@ -1,0 +1,17 @@
+# Copy this file to an untracked .tfvars file only when creating a new
+# Cloudflare account/zone target or testing the stack outside o11yFleet's
+# canonical account. Do not put secrets here.
+#
+# Committed envs/*.tfvars files may contain stable, non-secret account and zone
+# IDs. Sensitive values belong in GitHub environment secrets, process
+# environment variables, or another secret store.
+
+cloudflare_account_id = "<cloudflare-account-id>"
+cloudflare_zone_id    = "<cloudflare-zone-id>"
+zone_name             = "example.com"
+environment           = "staging"
+
+# For strongest isolation, use a separate Cloudflare account and separate DNS
+# zone per long-lived environment. If sharing an account/zone, keep all
+# stateful resources and hostnames environment-prefixed.
+pages_custom_domains_to_attach = ["site", "app", "admin"]

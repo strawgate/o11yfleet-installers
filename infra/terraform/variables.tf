@@ -59,8 +59,8 @@ variable "pages_functions_compatibility_date" {
 
 variable "worker_script_name" {
   type        = string
-  description = "Cloudflare Worker script name. Terraform owns the script identity, API route, queue consumer, and optionally code deployments."
-  default     = "o11yfleet-worker"
+  description = "Optional Cloudflare Worker script name override. Defaults to o11yfleet-worker for prod and o11yfleet-worker-<env> for non-prod."
+  default     = null
 }
 
 variable "worker_subdomain_enabled" {

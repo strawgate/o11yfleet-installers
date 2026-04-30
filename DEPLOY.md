@@ -32,19 +32,39 @@ the values.
 | `LLM_MODEL`                 | Optional       | Selects the AI guidance model.                                                         |
 | `LLM_BASE_URL`              | Optional       | Overrides the AI guidance provider base URL.                                           |
 
+Worker runtime secrets live on the deployed Worker, not in Terraform state and not in the Pages
+site. GitHub Actions secrets are only for deployment tooling and smoke tests.
+
+## Site Runtime Configuration
+
+The browser site must not receive `API_SECRET`, `CLAIM_SECRET`, or any admin bearer token. Site
+builds receive only non-secret configuration:
+
+| Name                     | Purpose                                 |
+| ------------------------ | --------------------------------------- |
+| `VITE_O11YFLEET_API_URL` | Public API base URL for the target env. |
+
+The `just site-build <env>` recipe sets this automatically:
+
+| Env       | API URL                             | Pages projects                                                               |
+| --------- | ----------------------------------- | ---------------------------------------------------------------------------- |
+| `dev`     | `https://dev-api.o11yfleet.com`     | `o11yfleet-dev-site`, `o11yfleet-dev-app`, `o11yfleet-dev-admin`             |
+| `staging` | `https://staging-api.o11yfleet.com` | `o11yfleet-staging-site`, `o11yfleet-staging-app`, `o11yfleet-staging-admin` |
+| `prod`    | `https://api.o11yfleet.com`         | `o11yfleet-site`, `o11yfleet-app`, `o11yfleet-admin`                         |
+
 ## Admin Usage & Spend
 
 The `/admin/usage` page estimates Cloudflare usage and spend from analytics APIs. It does not read
 Cloudflare billing totals. Configure these Worker runtime secrets to enable it:
 
-| Name                                   | Required | Source                                                                                                                                                          |
-| -------------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY` | Yes      | Cloudflare API token with the permissions needed for account analytics and Analytics Engine SQL reads.                                                          |
-| `CLOUDFLARE_ACCOUNT_ID`                | Yes      | Cloudflare account id.                                                                                                                                          |
-| `CLOUDFLARE_WORKER_SCRIPT_NAME`        | Yes      | Worker script name for invocation analytics. Local default: `o11yfleet-worker`; staging: `o11yfleet-worker-staging`; production: `o11yfleet-worker-production`. |
-| `CLOUDFLARE_D1_DATABASE_ID`            | Yes      | D1 database id from `apps/worker/wrangler.jsonc`.                                                                                                               |
-| `CLOUDFLARE_R2_BUCKET_NAME`            | Yes      | R2 bucket name from `apps/worker/wrangler.jsonc`.                                                                                                               |
-| `CLOUDFLARE_ANALYTICS_DATASET`         | Yes      | Analytics Engine dataset from `apps/worker/wrangler.jsonc`.                                                                                                     |
+| Name                                   | Required | Source                                                                                                                                         |
+| -------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY` | Yes      | Cloudflare API token with the permissions needed for account analytics and Analytics Engine SQL reads.                                         |
+| `CLOUDFLARE_ACCOUNT_ID`                | Yes      | Cloudflare account id.                                                                                                                         |
+| `CLOUDFLARE_WORKER_SCRIPT_NAME`        | Yes      | Worker script name for invocation analytics. Local/prod: `o11yfleet-worker`; staging: `o11yfleet-worker-staging`; dev: `o11yfleet-worker-dev`. |
+| `CLOUDFLARE_D1_DATABASE_ID`            | Yes      | D1 database id from `apps/worker/wrangler.jsonc`.                                                                                              |
+| `CLOUDFLARE_R2_BUCKET_NAME`            | Yes      | R2 bucket name from `apps/worker/wrangler.jsonc`.                                                                                              |
+| `CLOUDFLARE_ANALYTICS_DATASET`         | Yes      | Analytics Engine dataset from `apps/worker/wrangler.jsonc`.                                                                                    |
 
 Use `CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY` for the runtime analytics token. The admin usage page
 does not fall back to `CLOUDFLARE_API_TOKEN`; that name is reserved for deployment tooling.
@@ -54,17 +74,41 @@ git and should be `0600`.
 
 ## Deployment Commands
 
+Terraform owns stable resources for every deployed environment. Wrangler remains the uploader for
+Pages assets and the Worker bundle builder used by Terraform.
+
+Before enabling Terraform-managed staging, retire/delete any legacy
+`o11yfleet-worker-staging` Worker that was created outside Terraform and let
+Terraform create the environment-specific Worker, D1, R2, Queue, DNS route, and
+Pages projects. Import the staging Worker only if preserving its identity is
+required. Do not point staging at production D1/R2/Queue.
+
+Staging:
+
+```bash
+just tf-plan staging
+just tf-apply staging
+just tf-apply-worker staging
+just d1-migrate staging
+just site-build staging
+just pages-deploy staging
+```
+
+Or run the combined recipe:
+
+```bash
+just deploy-staging
+```
+
+Production:
+
 ```bash
 just ci
 just tf-plan-worker prod
 just tf-apply-worker prod
-```
-
-Staging still has a legacy direct deploy command until Terraform-managed staging rollout is fully
-aligned:
-
-```bash
-just deploy-staging
+just d1-migrate prod
+just site-build prod
+just pages-deploy prod
 ```
 
 After deploying, verify:

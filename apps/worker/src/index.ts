@@ -17,7 +17,7 @@ export interface Env {
   FP_ANALYTICS?: AnalyticsEngineDataset;
   CLAIM_SECRET: string;
   API_SECRET?: string;
-  ENVIRONMENT?: string;
+  ENVIRONMENT?: "staging" | "dev" | "production";
   MINIMAX_API_KEY?: string;
   LLM_PROVIDER?: string;
   LLM_MODEL?: string;

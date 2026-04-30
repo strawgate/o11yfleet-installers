@@ -28,19 +28,42 @@ export class AuthError extends ApiError {
 
 export function detectApiBase(): string {
   const host = window.location.hostname;
+  const buildApiUrl = import.meta.env.VITE_O11YFLEET_API_URL?.trim();
 
   // Allow ?api= override only in local development
   if (host === "localhost" || host === "127.0.0.1") {
     const params = new URLSearchParams(window.location.search);
     const explicit = params.get("api") || localStorage.getItem("fp-api-base");
     if (explicit) return explicit;
-    return `http://${host}:8787`;
+    return buildApiUrl || `http://${host}:8787`;
   }
 
+  if (buildApiUrl) return buildApiUrl;
+
+  if (
+    host === "staging.o11yfleet.com" ||
+    host.endsWith(".staging.o11yfleet.com") ||
+    host.startsWith("staging-")
+  ) {
+    return "https://staging-api.o11yfleet.com";
+  }
+  if (
+    host === "dev.o11yfleet.com" ||
+    host.endsWith(".dev.o11yfleet.com") ||
+    host.startsWith("dev-")
+  ) {
+    return "https://dev-api.o11yfleet.com";
+  }
   if (host.endsWith(".o11yfleet.com") || host === "o11yfleet.com") {
     return "https://api.o11yfleet.com";
   }
   if (host.endsWith(".pages.dev")) {
+    if (host.startsWith("o11yfleet-staging-")) {
+      return "https://staging-api.o11yfleet.com";
+    }
+    if (host.startsWith("o11yfleet-dev-")) {
+      return "https://dev-api.o11yfleet.com";
+    }
     return "https://o11yfleet-worker.o11yfleet.workers.dev";
   }
   return "";

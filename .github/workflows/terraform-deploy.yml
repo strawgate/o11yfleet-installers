@@ -21,6 +21,7 @@ on:
         default: "prod"
         type: choice
         options:
+          - dev
           - staging
           - prod
       apply:
@@ -122,7 +123,7 @@ jobs:
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    environment: production
+    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment != 'prod' && inputs.environment || 'production' }}
     steps:
       - uses: actions/checkout@v6
 

@@ -1,71 +1,75 @@
 # Copy this file to infra/terraform/imports.prod.tf only during a production
-# adoption run, then delete it after the imports have landed in remote state.
-# Replace every placeholder before use. Keep placeholder IDs out of committed
-# .tf files; Terraform evaluates import blocks during plan.
+# adoption run. imports.*.tf files are gitignored because Terraform evaluates
+# import blocks during every plan.
+#
+# Replace every placeholder before use. Current production IDs live in
+# ../CLOUDFLARE_SETUP.md; keep concrete IDs in the untracked copy, not here.
+# After applying the import, either delete imports.prod.tf or archive the final
+# copy in an internal runbook outside Terraform's active .tf files.
 
 import {
   to = cloudflare_d1_database.fleet
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/192ca9ca-bd47-4bd2-9321-fcdf62d9cf05"
+  id = "<cloudflare-account-id>/<d1-database-id>"
 }
 
 import {
   to = cloudflare_r2_bucket.configs
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/fp-configs"
+  id = "<cloudflare-account-id>/<r2-bucket-name>"
 }
 
 import {
   to = cloudflare_queue.events
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/<fp-events-queue-id>"
+  id = "<cloudflare-account-id>/<queue-id>"
 }
 
 import {
   to = cloudflare_worker.fleet
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+  id = "<cloudflare-account-id>/<worker-script-name>"
 }
 
 import {
   to = cloudflare_pages_project.pages["site"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-site"
+  id = "<cloudflare-account-id>/<site-pages-project-name>"
 }
 
 import {
   to = cloudflare_pages_project.pages["app"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-app"
+  id = "<cloudflare-account-id>/<app-pages-project-name>"
 }
 
 import {
   to = cloudflare_pages_project.pages["admin"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-admin"
+  id = "<cloudflare-account-id>/<admin-pages-project-name>"
 }
 
 # Fill these IDs from the Cloudflare dashboard or cf-terraforming before use.
 
 import {
   to = cloudflare_dns_record.api
-  id = "2650adcd696a6e400201a68323e90c5e/<api-dns-record-id>"
+  id = "<cloudflare-zone-id>/<api-dns-record-id>"
 }
 
 import {
   to = cloudflare_workers_route.api
-  id = "2650adcd696a6e400201a68323e90c5e/<api-worker-route-id>"
+  id = "<cloudflare-zone-id>/<api-worker-route-id>"
 }
 
 import {
   to = cloudflare_queue_consumer.events
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/<fp-events-queue-id>/<fp-events-consumer-id>"
+  id = "<cloudflare-account-id>/<queue-id>/<queue-consumer-id>"
 }
 
 import {
   to = cloudflare_pages_domain.pages["site"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-site/o11yfleet.com"
+  id = "<cloudflare-account-id>/<site-pages-project-name>/<site-domain>"
 }
 
 import {
   to = cloudflare_pages_domain.pages["app"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-app/app.o11yfleet.com"
+  id = "<cloudflare-account-id>/<app-pages-project-name>/<app-domain>"
 }
 
 import {
   to = cloudflare_pages_domain.pages["admin"]
-  id = "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-admin/admin.o11yfleet.com"
+  id = "<cloudflare-account-id>/<admin-pages-project-name>/<admin-domain>"
 }

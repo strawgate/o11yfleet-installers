@@ -270,9 +270,18 @@ bundle-size:
     echo "Raw: $((RAW / 1024)) KB  |  Gzip: $((GZ / 1024)) KB"
 
 # Build the Worker bundle that Terraform uploads.
-worker-bundle out="apps/worker/dist":
+worker-bundle env="prod" out="apps/worker/dist":
     #!/usr/bin/env bash
     set -euo pipefail
+    case "{{env}}" in
+      prod|production) WRANGLER_ENV="production" ;;
+      staging|dev) WRANGLER_ENV="{{env}}" ;;
+      local|"") WRANGLER_ENV="" ;;
+      *)
+        printf 'unknown worker bundle env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
     REPO_ROOT="$(pwd)"
     OUT_DIR="$(node -e 'const path = require("node:path"); const root = path.resolve(process.argv[1]); const out = path.resolve(root, process.argv[2]); if (out === root || !out.startsWith(root + path.sep)) process.exit(1); process.stdout.write(out)' "$REPO_ROOT" "{{out}}")" || {
         printf 'worker-bundle out must stay under %s: %s\n' "$REPO_ROOT" "{{out}}" >&2
@@ -281,7 +290,11 @@ worker-bundle out="apps/worker/dist":
     rm -rf "$OUT_DIR"
     mkdir -p "$OUT_DIR"
     cd apps/worker
-    pnpm exec wrangler deploy --env="" --dry-run --outdir "$OUT_DIR" >&2
+    if [ -n "$WRANGLER_ENV" ]; then
+        pnpm exec wrangler deploy --env "$WRANGLER_ENV" --dry-run --outdir "$OUT_DIR" >&2
+    else
+        pnpm exec wrangler deploy --env="" --dry-run --outdir "$OUT_DIR" >&2
+    fi
     BUNDLES=()
     while IFS= read -r bundle; do
         BUNDLES+=("$bundle")
@@ -509,11 +522,105 @@ tf-check-prod-imports env="prod": (tf-init-remote env)
 tf-apply env="prod": (tf-init-remote env)
     cd infra/terraform && terraform apply -var-file=envs/{{env}}.tfvars -auto-approve
 
+# Print the API URL for a deployment environment.
+env-api-url env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) printf '%s\n' "https://api.o11yfleet.com" ;;
+      staging) printf '%s\n' "https://staging-api.o11yfleet.com" ;;
+      dev) printf '%s\n' "https://dev-api.o11yfleet.com" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Print the D1 database name for a deployment environment.
+env-d1-name env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) printf '%s\n' "fp-db" ;;
+      staging|dev) printf '%s\n' "o11yfleet-{{env}}-db" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Print Pages project names for a deployment environment.
+env-pages-projects env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production)
+        printf '%s\n' o11yfleet-site o11yfleet-app o11yfleet-admin
+        ;;
+      staging|dev)
+        printf 'o11yfleet-%s-site\n' "{{env}}"
+        printf 'o11yfleet-%s-app\n' "{{env}}"
+        printf 'o11yfleet-%s-admin\n' "{{env}}"
+        ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Print smoke-test targets for Pages in a deployment environment.
+env-pages-smoke-targets env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production)
+        printf '%s\n' \
+          "site|https://o11yfleet-site.pages.dev/" \
+          "app|https://o11yfleet-app.pages.dev/portal/overview" \
+          "admin|https://o11yfleet-admin.pages.dev/admin/overview"
+        ;;
+      staging|dev)
+        printf '%s\n' \
+          "site|https://o11yfleet-{{env}}-site.pages.dev/" \
+          "app|https://o11yfleet-{{env}}-app.pages.dev/portal/overview" \
+          "admin|https://o11yfleet-{{env}}-admin.pages.dev/admin/overview"
+        ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Build the site bundle for a deployment environment.
+site-build env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    API_URL="$(just --quiet env-api-url {{env}})"
+    VITE_O11YFLEET_API_URL="$API_URL" pnpm --filter @o11yfleet/site run build
+
+# Deploy the already-built site bundle to the Pages projects for a deployment environment.
+pages-deploy env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    while IFS= read -r project; do
+        [ -n "$project" ] || continue
+        pnpm exec wrangler pages deploy apps/site/dist \
+            --project-name "$project" \
+            --commit-dirty=true
+    done < <(just --quiet env-pages-projects {{env}})
+
+# Run D1 migrations for a deployment environment.
+d1-migrate env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    DB_NAME="$(just --quiet env-d1-name {{env}})"
+    pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply "$DB_NAME" --remote
+
 # Terraform plan that includes the Worker code bundle and deployment rollout.
 tf-plan-worker env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
-    BUNDLE_PATH="$(just --quiet worker-bundle)"
+    BUNDLE_PATH="$(just --quiet worker-bundle {{env}})"
     if [ -z "$BUNDLE_PATH" ]; then
         echo "worker-bundle did not emit a bundle path" >&2
         exit 1
@@ -532,7 +639,7 @@ tf-plan-worker env="prod": (tf-init-remote env)
 tf-apply-worker env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
-    BUNDLE_PATH="$(just --quiet worker-bundle)"
+    BUNDLE_PATH="$(just --quiet worker-bundle {{env}})"
     if [ -z "$BUNDLE_PATH" ]; then
         echo "worker-bundle did not emit a bundle path" >&2
         exit 1
@@ -548,10 +655,19 @@ tf-apply-worker env="prod": (tf-init-remote env)
         -var="worker_bundle_path=$BUNDLE_PATH" \
         -auto-approve
 
-# Legacy staging deploy path. Move this to tf-apply-worker staging after staging
-# remote state imports mirror the production Terraform-managed Worker rollout.
+# Deploy staging control-plane resources, Worker code, D1 migrations, and Pages.
 deploy-staging:
-    cd apps/worker && pnpm wrangler deploy --env staging
+    #!/usr/bin/env bash
+    set -euo pipefail
+    if [ "${TERRAFORM_STAGING_DEPLOY_ENABLED:-false}" != "true" ]; then
+        echo "deploy-staging is disabled; set TERRAFORM_STAGING_DEPLOY_ENABLED=true to enable it." >&2
+        exit 1
+    fi
+    just tf-apply staging
+    just tf-apply-worker staging
+    just d1-migrate staging
+    just site-build staging
+    just pages-deploy staging
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
 # Run the extended local gate, including workerd and browser tests

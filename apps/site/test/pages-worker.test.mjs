@@ -57,6 +57,52 @@ test("serves the current SPA index for clean portal routes even when stale asset
   assert.deepEqual(seen, ["/"]);
 });
 
+test("redirects environment-specific app and admin roots", async () => {
+  const app = envWithAssets();
+  const appResponse = await worker.fetch(
+    new Request("https://staging-app.o11yfleet.com/"),
+    app.env,
+  );
+  assert.equal(appResponse.status, 302);
+  assert.equal(
+    appResponse.headers.get("location"),
+    "https://staging-app.o11yfleet.com/portal/overview",
+  );
+
+  const admin = envWithAssets();
+  const adminResponse = await worker.fetch(
+    new Request("https://dev-admin.o11yfleet.com/"),
+    admin.env,
+  );
+  assert.equal(adminResponse.status, 302);
+  assert.equal(
+    adminResponse.headers.get("location"),
+    "https://dev-admin.o11yfleet.com/admin/overview",
+  );
+
+  const pagesApp = envWithAssets();
+  const pagesAppResponse = await worker.fetch(
+    new Request("https://o11yfleet-staging-app.pages.dev/"),
+    pagesApp.env,
+  );
+  assert.equal(pagesAppResponse.status, 302);
+  assert.equal(
+    pagesAppResponse.headers.get("location"),
+    "https://o11yfleet-staging-app.pages.dev/portal/overview",
+  );
+
+  const pagesAdmin = envWithAssets();
+  const pagesAdminResponse = await worker.fetch(
+    new Request("https://o11yfleet-dev-admin.pages.dev/"),
+    pagesAdmin.env,
+  );
+  assert.equal(pagesAdminResponse.status, 302);
+  assert.equal(
+    pagesAdminResponse.headers.get("location"),
+    "https://o11yfleet-dev-admin.pages.dev/admin/overview",
+  );
+});
+
 test("continues serving docs and static assets directly", async () => {
   const docs = envWithAssets();
   const docsResponse = await worker.fetch(new Request("https://o11yfleet.com/docs/"), docs.env);

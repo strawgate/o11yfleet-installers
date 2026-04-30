@@ -119,14 +119,13 @@ jobs:
       # compatible with the currently deployed Worker. Contract/destructive
       # schema changes need a separate release after old code is gone.
       - name: Run D1 migrations
-        run: pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply FP_DB --env production --remote
+        run: just d1-migrate prod
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
 
       - name: Deploy worker to production with Terraform
         run: just tf-apply-worker prod
-
       - name: Smoke test production
         run: |
           WORKER_URL="https://api.o11yfleet.com"
@@ -239,11 +238,13 @@ jobs:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
 
+      - uses: taiki-e/install-action@just
+
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Build site
-        run: pnpm --filter @o11yfleet/site run build
+        run: just site-build prod
 
       - name: Deploy and smoke test Pages projects
         uses: ./.github/actions/deploy-pages

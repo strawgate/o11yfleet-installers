@@ -13,6 +13,10 @@ coverage/
 *.tfstate.backup
 .terraform.lock.hcl
 terraform.tfvars
+*.auto.tfvars
+*.tfvars.json
+*.tfplan
+infra/terraform/imports.*.tf
 .local-state.json
 .generated-config.yaml
 .env

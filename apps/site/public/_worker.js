@@ -1,7 +1,7 @@
 // Cloudflare Pages Function — subdomain routing + SPA fallback
-// app.o11yfleet.com  → serves portal SPA (root redirects to /portal/overview)
-// admin.o11yfleet.com → serves admin SPA (root redirects to /admin/overview)
-// o11yfleet.com       → serves marketing site SPA
+// app-style hosts redirect root to /portal/overview.
+// admin-style hosts redirect root to /admin/overview.
+// site-style hosts serve the marketing/docs SPA.
 
 // Known static asset prefixes/extensions that should be served directly
 const STATIC_ASSET_RE =
@@ -13,6 +13,30 @@ function shouldServeAssetDirectly(pathname) {
     return true;
   }
   return pathname === "/docs" || pathname.startsWith("/docs/");
+}
+
+function rootRedirectPath(host) {
+  if (
+    host === "app.o11yfleet.com" ||
+    host === "staging-app.o11yfleet.com" ||
+    host === "dev-app.o11yfleet.com" ||
+    host.startsWith("o11yfleet-app.") ||
+    host.startsWith("o11yfleet-staging-app.") ||
+    host.startsWith("o11yfleet-dev-app.")
+  ) {
+    return "/portal/overview";
+  }
+  if (
+    host === "admin.o11yfleet.com" ||
+    host === "staging-admin.o11yfleet.com" ||
+    host === "dev-admin.o11yfleet.com" ||
+    host.startsWith("o11yfleet-admin.") ||
+    host.startsWith("o11yfleet-staging-admin.") ||
+    host.startsWith("o11yfleet-dev-admin.")
+  ) {
+    return "/admin/overview";
+  }
+  return null;
 }
 
 async function serveSpaIndex(request, env) {
@@ -32,14 +56,9 @@ export default {
     const url = new URL(request.url);
     const host = url.hostname;
 
-    // app.o11yfleet.com — redirect root to portal
-    if (host === "app.o11yfleet.com" && (url.pathname === "/" || url.pathname === "")) {
-      return Response.redirect("https://app.o11yfleet.com/portal/overview", 302);
-    }
-
-    // admin.o11yfleet.com — redirect root to admin overview
-    if (host === "admin.o11yfleet.com" && (url.pathname === "/" || url.pathname === "")) {
-      return Response.redirect("https://admin.o11yfleet.com/admin/overview", 302);
+    const redirectPath = rootRedirectPath(host);
+    if (redirectPath && (url.pathname === "/" || url.pathname === "")) {
+      return Response.redirect(new URL(redirectPath, url.origin).toString(), 302);
     }
 
     // Redirect .html paths to clean URLs (backward compat for cached/bookmarked links)

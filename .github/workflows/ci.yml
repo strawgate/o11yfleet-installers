@@ -130,7 +130,7 @@ jobs:
           MAX_GZIP=0
           MAX_BUNDLE=""
           MAX_RAW=0
-          for BUNDLE in $(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null); do
+          while IFS= read -r BUNDLE; do
             RAW=$(wc -c < "$BUNDLE" | tr -d ' ')
             GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
             echo "Bundle: $BUNDLE  Raw: $((RAW / 1024)) KB  Gzip: $((GZ / 1024)) KB"
@@ -139,7 +139,7 @@ jobs:
               MAX_BUNDLE=$BUNDLE
               MAX_RAW=$RAW
             fi
-          done
+          done < <(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
           if [ -z "$MAX_BUNDLE" ]; then
             echo "⚠ No bundle found — skipping size check"
             exit 0
@@ -165,9 +165,20 @@ jobs:
   deploy-staging:
     needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
     runs-on: ubuntu-latest
-    timeout-minutes: 10
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    timeout-minutes: 20
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true'
     environment: staging
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
+      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+      TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
+      TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TERRAFORM_STAGING_DEPLOY_ENABLED: ${{ vars.TERRAFORM_STAGING_DEPLOY_ENABLED }}
     steps:
       - uses: actions/checkout@v6
 
@@ -181,21 +192,41 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Deploy to staging
-        run: pnpm --filter @o11yfleet/worker exec wrangler deploy --env staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
 
-      - name: Run D1 migrations (staging)
-        run: pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply FP_DB --env staging
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      - uses: taiki-e/install-action@just
+
+      - name: Check staging deploy configuration
+        run: |
+          test -n "$TF_STATE_BUCKET"
+          test -n "$TF_STATE_ENDPOINT"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+      - name: Deploy staging infrastructure, Worker, migrations, and Pages
+        run: just deploy-staging
+
+      - name: Resolve staging Pages smoke targets
+        id: staging-pages-smoke
+        run: |
+          {
+            echo 'targets<<TARGETS'
+            just --quiet env-pages-smoke-targets staging
+            echo 'TARGETS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test staging Pages
+        uses: ./.github/actions/deploy-pages
+        with:
+          smoke-targets: ${{ steps.staging-pages-smoke.outputs.targets }}
 
       - name: Smoke test
         run: |
-          WORKER_URL="${{ vars.STAGING_WORKER_URL }}"
+          WORKER_URL="$(just --quiet env-api-url staging)"
           API_SECRET="${{ secrets.API_SECRET }}"
 
           echo "=== Health check ==="

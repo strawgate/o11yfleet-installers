@@ -20,6 +20,7 @@ locals {
   d1_database_name = coalesce(var.d1_database_name, "${local.name_prefix}-db")
   r2_bucket_name   = coalesce(var.r2_bucket_name, "${local.name_prefix}-configs")
   queue_name       = coalesce(var.queue_name, "${local.name_prefix}-events")
+  worker_name      = coalesce(var.worker_script_name, local.env_slug == "prod" ? "${var.resource_prefix}-worker" : "${var.resource_prefix}-worker-${local.env_slug}")
 
   site_domain     = coalesce(var.site_domain, local.env_slug == "prod" ? var.zone_name : "${local.env_slug}.${var.zone_name}")
   app_domain      = coalesce(var.app_domain, local.env_slug == "prod" ? "app.${var.zone_name}" : "${local.env_slug}-app.${var.zone_name}")
@@ -73,7 +74,7 @@ locals {
       name        = "CONFIG_DO"
       type        = "durable_object_namespace"
       class_name  = "ConfigDurableObject"
-      script_name = cloudflare_worker.fleet.name
+      script_name = local.worker_name
     },
     {
       name = "ENVIRONMENT"
@@ -130,12 +131,12 @@ resource "cloudflare_dns_record" "api" {
   content = "100::"
   ttl     = 1
   proxied = true
-  comment = "Routes ${local.api_domain} to the ${var.worker_script_name} Worker"
+  comment = "Routes ${local.api_domain} to the ${local.worker_name} Worker"
 }
 
 resource "cloudflare_worker" "fleet" {
   account_id = var.cloudflare_account_id
-  name       = var.worker_script_name
+  name       = local.worker_name
 
   subdomain = {
     enabled          = var.worker_subdomain_enabled

@@ -1,21 +1,26 @@
 name: Deploy Site to Cloudflare Pages
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "apps/site/**"
-      - ".github/workflows/site.yml"
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Site environment to deploy.
+        required: true
+        default: staging
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
 
 concurrency:
-  group: pages-${{ github.event_name }}-${{ github.ref }}
+  group: pages-${{ inputs.environment }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    environment: production
+    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
     steps:
       - uses: actions/checkout@v6
 
@@ -35,20 +40,28 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Build site
-        run: pnpm --filter @o11yfleet/site run build
+      - uses: taiki-e/install-action@just
 
-      - name: Deploy and smoke test Pages projects
-        uses: ./.github/actions/deploy-pages
+      - name: Build site
+        run: just site-build ${{ inputs.environment }}
+
+      - name: Deploy Pages projects
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-        with:
-          projects: |
-            o11yfleet-site
-            o11yfleet-app
-            o11yfleet-admin
-          smoke-targets: |
-            site|https://o11yfleet-site.pages.dev/
-            app|https://o11yfleet-app.pages.dev/portal/overview
-            admin|https://o11yfleet-admin.pages.dev/admin/overview
+        run: just pages-deploy ${{ inputs.environment }}
+
+      - name: Smoke test Pages targets
+        run: |
+          while IFS= read -r target; do
+            [ -n "$target" ] || continue
+            surface="${target%%|*}"
+            url="${target#*|}"
+            STATUS=$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/pages-smoke.html -w "%{http_code}" "$url" || true)
+            if [ "$STATUS" != "200" ]; then
+              echo "$surface smoke failed: $STATUS"
+              cat /tmp/pages-smoke.html
+              exit 1
+            fi
+            grep 'id="root"' /tmp/pages-smoke.html >/dev/null
+          done < <(just --quiet env-pages-smoke-targets ${{ inputs.environment }})

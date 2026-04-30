@@ -70,7 +70,7 @@
   // Local dev uses src/index.ts directly (workerd pool doesn't support Node APIs).
   "env": {
     "staging": {
-      "main": "src/index.ts",
+      "main": "src/instrumented.ts",
       "routes": [],
       "vars": {
         "ENVIRONMENT": "staging",
@@ -113,6 +113,77 @@
         "consumers": [
           {
             "queue": "fp-events",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+          },
+        ],
+      },
+      "durable_objects": {
+        "bindings": [
+          {
+            "name": "CONFIG_DO",
+            "class_name": "ConfigDurableObject",
+          },
+        ],
+      },
+      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
+      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      "triggers": {
+        "crons": ["17 3 * * *"],
+      },
+      "analytics_engine_datasets": [
+        {
+          "binding": "FP_ANALYTICS",
+          "dataset": "fp_analytics",
+        },
+      ],
+    },
+    "dev": {
+      "main": "src/instrumented.ts",
+      "routes": [],
+      "vars": {
+        "ENVIRONMENT": "dev",
+      },
+      "secrets": {
+        "required": [
+          "API_SECRET",
+          "CLAIM_SECRET",
+          "SEED_ADMIN_EMAIL",
+          "SEED_ADMIN_PASSWORD",
+          "SEED_TENANT_USER_EMAIL",
+          "SEED_TENANT_USER_PASSWORD",
+        ],
+      },
+      "observability": {
+        "enabled": true,
+        "head_sampling_rate": 1,
+      },
+      "d1_databases": [
+        {
+          "binding": "FP_DB",
+          "database_name": "o11yfleet-dev-db",
+          // Terraform supplies the real dev D1 binding for deployed Workers.
+          // Keep Wrangler dry-run/typegen from accidentally targeting production.
+          "database_id": "00000000-0000-0000-0000-000000000000",
+          "migrations_dir": "../../packages/db/migrations",
+        },
+      ],
+      "r2_buckets": [
+        {
+          "binding": "FP_CONFIGS",
+          "bucket_name": "o11yfleet-dev-configs",
+        },
+      ],
+      "queues": {
+        "producers": [
+          {
+            "binding": "FP_EVENTS",
+            "queue": "o11yfleet-dev-events",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "o11yfleet-dev-events",
             "max_batch_size": 100,
             "max_batch_timeout": 5,
           },

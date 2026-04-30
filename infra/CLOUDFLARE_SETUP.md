@@ -67,8 +67,8 @@ Zone resources: Include all zones in account.
 
 Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars`
 as plaintext Worker configuration. Provision these as Worker secrets for each
-deployed environment. Terraform-managed Worker versions inherit `API_SECRET`
-`CLAIM_SECRET`, and seed-account secrets from the latest deployed version by
+deployed environment. Terraform-managed Worker versions inherit `API_SECRET`,
+`CLAIM_SECRET`, and seed-account secrets from the latest Worker version by
 default. Provision them before Terraform Worker deployments so the uploaded
 version can inherit the secret bindings.
 
@@ -78,24 +78,32 @@ That makes Wrangler fail deploys/version uploads when a required secret binding
 is missing, while Terraform validates that the production Worker version keeps
 the same required inherited bindings.
 
+Pages deployments do not get Worker runtime secrets. The browser receives only
+non-secret build-time values such as `VITE_O11YFLEET_API_URL`.
+
 ```bash
 cd apps/worker
-pnpm wrangler secret put CLAIM_SECRET --env staging
-pnpm wrangler secret put API_SECRET --env staging
-pnpm wrangler secret put SEED_TENANT_USER_EMAIL --env staging
-pnpm wrangler secret put SEED_TENANT_USER_PASSWORD --env staging
-pnpm wrangler secret put SEED_ADMIN_EMAIL --env staging
-pnpm wrangler secret put SEED_ADMIN_PASSWORD --env staging
+pnpm wrangler versions secret put CLAIM_SECRET --env staging
+pnpm wrangler versions secret put API_SECRET --env staging
+pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL --env staging
+pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD --env staging
+pnpm wrangler versions secret put SEED_ADMIN_EMAIL --env staging
+pnpm wrangler versions secret put SEED_ADMIN_PASSWORD --env staging
 
 # Production Worker deploys are Terraform-managed and use the base
 # o11yfleet-worker script identity, not Wrangler's -production script.
-pnpm wrangler secret put CLAIM_SECRET
-pnpm wrangler secret put API_SECRET
-pnpm wrangler secret put SEED_TENANT_USER_EMAIL
-pnpm wrangler secret put SEED_TENANT_USER_PASSWORD
-pnpm wrangler secret put SEED_ADMIN_EMAIL
-pnpm wrangler secret put SEED_ADMIN_PASSWORD
+pnpm wrangler versions secret put CLAIM_SECRET
+pnpm wrangler versions secret put API_SECRET
+pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL
+pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD
+pnpm wrangler versions secret put SEED_ADMIN_EMAIL
+pnpm wrangler versions secret put SEED_ADMIN_PASSWORD
 ```
+
+Use `wrangler versions secret put` for Terraform-managed scripts so secret
+updates create a Worker version without immediately shifting traffic. Use
+`wrangler secret put` only for bootstrap/recovery cases where an immediate
+Wrangler deployment is intentional.
 
 ## Analytics Engine
 
@@ -134,3 +142,14 @@ curl "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6
 | Site (custom)        | https://o11yfleet.com                          |
 | Portal (custom)      | https://app.o11yfleet.com                      |
 | Admin (custom)       | https://admin.o11yfleet.com                    |
+
+Terraform non-production defaults:
+
+| Service        | Staging URL                          | Dev URL                          |
+| -------------- | ------------------------------------ | -------------------------------- |
+| Worker API     | https://staging-api.o11yfleet.com    | https://dev-api.o11yfleet.com    |
+| Marketing/docs | https://staging.o11yfleet.com        | https://dev.o11yfleet.com        |
+| Portal         | https://staging-app.o11yfleet.com    | https://dev-app.o11yfleet.com    |
+| Admin          | https://staging-admin.o11yfleet.com  | https://dev-admin.o11yfleet.com  |
+| Pages projects | `o11yfleet-staging-{site,app,admin}` | `o11yfleet-dev-{site,app,admin}` |
+| Worker script  | `o11yfleet-worker-staging`           | `o11yfleet-worker-dev`           |

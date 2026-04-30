@@ -15,6 +15,42 @@ the resources those deploys target, including Worker bindings, Worker rollout,
 Queue consumer settings, and Pages deployment configuration. Add runtime
 configuration to Terraform unless it is a secret that must stay out of state.
 
+## Best-Practice Baseline
+
+This stack follows these rules from the current Cloudflare and Terraform docs:
+
+- Terraform should be authoritative for every resource it manages. If a
+  Cloudflare resource already exists, either import it into state before apply
+  or deliberately retire/delete it and let Terraform create the replacement.
+- Do not manage the same Cloudflare resource through both Terraform and
+  Wrangler/dashboard settings. Wrangler is allowed here only as a bundler,
+  secret provisioning helper, D1 migration runner, and Pages asset uploader.
+- Keep Cloudflare credentials and state backend credentials out of committed
+  files. Use GitHub environment secrets in CI and local environment variables or
+  an approved secret manager locally.
+- Keep secrets out of Terraform state unless we explicitly choose a
+  Terraform-managed secret source. Worker runtime secrets currently use
+  Wrangler/Cloudflare secret storage plus Terraform `inherit` bindings.
+- Prefer separate Cloudflare accounts and separate DNS zones for strong
+  long-lived environment isolation. The current dev/staging templates share the
+  o11yFleet account and zone as a pragmatic starting point, so every stateful
+  resource name and hostname is environment-prefixed.
+
+Primary references:
+
+- Cloudflare Terraform best practices:
+  <https://developers.cloudflare.com/terraform/advanced-topics/best-practices/>
+- Cloudflare Workers IaC:
+  <https://developers.cloudflare.com/workers/platform/infrastructure-as-code/>
+- Cloudflare Workers secrets:
+  <https://developers.cloudflare.com/workers/configuration/secrets/>
+- Wrangler configuration source-of-truth rules:
+  <https://developers.cloudflare.com/workers/wrangler/configuration/#source-of-truth>
+- Terraform sensitive variable guidance:
+  <https://developer.hashicorp.com/terraform/tutorials/configuration-language/sensitive-variables>
+- Terraform import blocks:
+  <https://developer.hashicorp.com/terraform/language/import>
+
 ## Target Layout
 
 | Surface               | Resource                                           |
@@ -24,9 +60,18 @@ configuration to Terraform unless it is a secret that must stay out of state.
 | `admin.o11yfleet.com` | Admin Pages project protected by Cloudflare Access |
 | `api.o11yfleet.com`   | Worker route to `o11yfleet-worker`                 |
 
-Non-production defaults use prefixed hostnames such as `staging-app.o11yfleet.com` and resource names such as `o11yfleet-staging-db`.
+Non-production defaults use prefixed hostnames such as
+`staging-app.o11yfleet.com` and resource names such as
+`o11yfleet-staging-db`.
 
 Pages projects and Pages custom domains are intentionally separate. The production deploy workflows publish the same built SPA bundle to all three Pages projects, so production attaches the `site`, `app`, and `admin` custom domains to their split projects. For new non-production environments, add custom domains only after the matching deployment workflow is publishing the right asset bundle to that project.
+
+For stronger future isolation, create a second Cloudflare account and zone such
+as `o11yfleet-staging.com`, copy `envs/example.tfvars.example` to an untracked
+environment file, and set that file's `cloudflare_account_id`,
+`cloudflare_zone_id`, and `zone_name` to the staging account and zone. This is
+the Cloudflare-recommended shape when account-level resources or zone-level
+experiments need to be isolated from production.
 
 ## Validate
 
@@ -49,6 +94,17 @@ export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
 ```
 
+`CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` are
+credentials. Do not place them in `.tfvars` files or backend config files.
+Terraform's S3 backend reads the R2 credentials from the AWS environment
+variables above.
+
+The committed `envs/*.tfvars` files contain stable, non-secret identifiers and
+environment-specific names. If you need private or experimental variable values,
+put them in an untracked `*.auto.tfvars` file under `infra/terraform/` or pass
+them as `TF_VAR_*` environment variables. `.gitignore` excludes those local
+files.
+
 ```bash
 just tf-plan staging
 just tf-plan prod
@@ -63,7 +119,7 @@ The production tfvars intentionally point D1/R2/Queue at the existing names so t
 
 - Pull requests validate Terraform and, once remote state is enabled, run a production plan.
 - Pushes to `main` run the same plan and apply production only when explicitly enabled.
-- Manual dispatch can plan either `staging` or `prod`; applying is restricted to the `main` branch and still runs through the `production` GitHub environment.
+- Manual dispatch can plan `dev`, `staging`, or `prod`; applying is restricted to the `main` branch and uses the matching GitHub environment.
 
 Repository secrets:
 
@@ -75,14 +131,15 @@ Repository secrets:
 
 Repository variables:
 
-| Variable                            | Purpose                                                                   |
-| ----------------------------------- | ------------------------------------------------------------------------- |
-| `TF_STATE_BUCKET`                   | R2 bucket that stores Terraform state                                     |
-| `TF_STATE_ENDPOINT`                 | R2 S3 endpoint URL for the Cloudflare account                             |
-| `TF_STATE_REGION`                   | Optional; defaults to `auto`                                              |
-| `TERRAFORM_REMOTE_STATE_ENABLED`    | Set to `true` after the state bucket exists                               |
-| `TERRAFORM_PROVIDER_V5_STATE_READY` | Set to `true` after the remote state is migrated/imported for provider v5 |
-| `TERRAFORM_APPLY_ENABLED`           | Set to `true` only after production imports                               |
+| Variable                            | Purpose                                                                            |
+| ----------------------------------- | ---------------------------------------------------------------------------------- |
+| `TF_STATE_BUCKET`                   | R2 bucket that stores Terraform state                                              |
+| `TF_STATE_ENDPOINT`                 | R2 S3 endpoint URL for the Cloudflare account                                      |
+| `TF_STATE_REGION`                   | Optional; defaults to `auto`                                                       |
+| `TERRAFORM_REMOTE_STATE_ENABLED`    | Set to `true` after the state bucket exists                                        |
+| `TERRAFORM_PROVIDER_V5_STATE_READY` | Set to `true` after the remote state is migrated/imported for provider v5          |
+| `TERRAFORM_APPLY_ENABLED`           | Set to `true` only after production imports                                        |
+| `TERRAFORM_STAGING_DEPLOY_ENABLED`  | Set to `true` only after staging state and Worker secrets are ready for CI deploys |
 
 The `production` GitHub environment should require reviewer approval when the
 GitHub plan supports it. If required reviewers are not available, restrict the
@@ -105,7 +162,11 @@ Worker rollout.
 
 ## Adopting Existing Production Resources
 
-Before the first production apply, import current resources into state. Terraform cannot safely manage resources created in the Cloudflare dashboard until they are imported.
+Before the first production apply, import current resources into state.
+Terraform cannot safely manage resources created in the Cloudflare dashboard
+until they are imported. Cloudflare recommends `cf-terraforming` for discovery
+and generated import commands, but import blocks are useful for this small,
+known adoption set.
 
 Known production IDs are documented in `../CLOUDFLARE_SETUP.md`.
 
@@ -120,10 +181,13 @@ terraform import \
 ```
 
 For Terraform 1.5+ import-block-based adoption, copy `imports/prod.tf.example`
-to `imports.prod.tf`, replace every placeholder ID, run a production plan
-against remote state, then delete `imports.prod.tf` after the imports are
-recorded. Do not commit a live `imports.prod.tf`; import blocks are evaluated
-during every plan.
+to `imports.prod.tf`, replace every placeholder ID with the current IDs from
+`../CLOUDFLARE_SETUP.md` or Cloudflare discovery, run a production plan against
+remote state, then apply the import. Do not commit a live `imports.prod.tf`;
+`imports.*.tf` files are gitignored because Terraform evaluates import blocks
+during every plan. After the import lands in state, delete the active
+`imports.prod.tf` or archive it outside Terraform's active `.tf` files as an
+operator record.
 
 Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, Queue, and Access IDs before importing those resources. After imports, run:
 
@@ -167,20 +231,27 @@ Object migration list changes, such as adding, renaming, or deleting Durable
 Object classes.
 
 Terraform-managed Worker versions inherit `API_SECRET`, `CLAIM_SECRET`, and
-seed-account secrets from the latest deployed Worker version by default. Keep
-provisioning secret values with `wrangler secret put` until the project adopts
-Cloudflare Secrets Store or another Terraform-managed secret source. If a
-production Worker relies on additional dashboard/Wrangler-managed bindings, add
-their names to `worker_inherited_binding_names` before the first Terraform
-Worker deployment. Terraform validates that this inherited binding list still
-contains the runtime secrets declared in `apps/worker/wrangler.jsonc`
-`secrets.required`, so deploy plans cannot accidentally drop one of the required
-secret bindings.
+seed-account secrets from the latest Worker version by default. Keep
+provisioning secret values with Wrangler until the project adopts Cloudflare
+Secrets Store or another Terraform-managed secret source. If a production Worker
+relies on additional dashboard/Wrangler-managed bindings, add their names to
+`worker_inherited_binding_names` before the first Terraform Worker deployment.
+Terraform validates that this inherited binding list still contains the runtime
+secrets declared in `apps/worker/wrangler.jsonc` `secrets.required`, so deploy
+plans cannot accidentally drop one of the required secret bindings.
 
-For production, run `wrangler secret put` against the base Worker script
-identity, without `--env production`. Terraform owns the production
-`o11yfleet-worker` script; Wrangler's `--env production` targets a separate
-Wrangler environment script and is not the source Terraform inherits from.
+Cloudflare's Terraform Worker version resource also supports `secret_text`
+bindings, but those values are Terraform inputs and therefore become part of
+Terraform state history. Do not switch to `secret_text` for `API_SECRET` or
+seed credentials unless the remote state access model, rotation policy, and
+review process have been designed around secrets in state.
+
+For production secret updates, run `wrangler versions secret put` against the
+base Worker script identity, without `--env production`. Terraform owns the
+production `o11yfleet-worker` script; Wrangler's `--env production` targets a
+separate Wrangler environment script and is not the source Terraform inherits
+from. Use `wrangler secret put` only for bootstrap or recovery cases where an
+immediate Wrangler deployment is intentional.
 If the Worker is ever destroyed outside Terraform and there is no latest version
 to inherit from, recover by redeploying a temporary Wrangler version with the
 required secrets or by moving those secrets to a Terraform-managed secret
@@ -191,9 +262,13 @@ project settings and both production and preview `deployment_configs`. If Pages
 Functions later need bindings or secrets, add them to this Terraform stack so a
 plan can show the full runtime config drift.
 
-The `deploy-staging` just recipe still uses Wrangler directly. Treat it as the
-legacy staging path until staging remote state imports mirror production and the
-staging Worker rollout can use `tf-apply-worker staging`.
+The `deploy-staging` just recipe uses Terraform for staging control-plane
+resources and Worker rollout, then Wrangler only for D1 migrations and Pages
+asset upload. The preferred staging cutover is to retire/delete any
+Wrangler-created staging Worker and let Terraform create
+`o11yfleet-worker-staging`; import the old Worker only if its identity must be
+preserved. Provision the required Worker secrets before enabling the CI staging
+deploy.
 
 ## Admin Access
 
