@@ -1,5 +1,5 @@
 // Admin API routes — full tenant management, system health, impersonation
-// These endpoints require admin auth (currently: API_SECRET bearer token)
+// These endpoints require admin auth before reaching this router.
 
 import type { Env } from "../../index.js";
 import {
@@ -15,8 +15,9 @@ import {
   VALID_PLANS,
   normalizePlan,
 } from "../../shared/plans.js";
-import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
+import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
+import { validateJsonBody } from "../../shared/validation.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -34,7 +35,7 @@ export async function handleAdminRequest(request: Request, env: Env, url: URL): 
     return await routeAdminRequest(request, env, url);
   } catch (err) {
     if (err instanceof ApiError) {
-      return jsonError(err.message, err.status);
+      return jsonApiError(err);
     }
     if (err instanceof AiApiError) {
       return jsonError(err.message, err.status);
@@ -127,13 +128,10 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 // ─── Tenant Handlers ────────────────────────────────────────────────
 
 async function handleCreateTenant(request: Request, env: Env): Promise<Response> {
-  const body = await parseJsonBody<{ name: string; plan?: string }>(request);
-  if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
-    return jsonError("name is required", 400);
-  }
-  if (body.name.length > 255) {
-    return jsonError("name must be 255 characters or fewer", 400);
-  }
+  const body = await validateJsonBody<{ name: string; plan?: string }>(request, {
+    name: { type: "string", required: true, trim: true, minLength: 1, maxLength: 255 },
+    plan: { type: "string" },
+  });
 
   const plan = normalizePlan(body.plan ?? DEFAULT_PLAN);
   if (!plan) {
@@ -146,10 +144,10 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
   await env.FP_DB.prepare(
     `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)`,
   )
-    .bind(id, body.name.trim(), plan, limits.max_configs, limits.max_agents_per_config)
+    .bind(id, body.name, plan, limits.max_configs, limits.max_agents_per_config)
     .run();
 
-  return Response.json({ id, name: body.name.trim(), plan }, { status: 201 });
+  return Response.json({ id, name: body.name, plan }, { status: 201 });
 }
 
 function boundedPositiveInt(value: string | null, fallback: number, max: number): number {
@@ -213,13 +211,16 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .first();
   if (!tenant) return jsonError("Tenant not found", 404);
 
-  const body = await parseJsonBody<{ name?: string; plan?: string }>(request);
+  const body = await validateJsonBody<{ name?: string; plan?: string }>(request, {
+    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
+    plan: { type: "string" },
+  });
   const updates: string[] = [];
   const values: unknown[] = [];
 
-  if (body.name && typeof body.name === "string" && body.name.trim().length > 0) {
+  if (body.name) {
     updates.push("name = ?");
-    values.push(body.name.trim());
+    values.push(body.name);
   }
   if (body.plan) {
     const plan = normalizePlan(body.plan);
@@ -319,6 +320,19 @@ async function handleDoTables(env: Env, configId: string): Promise<Response> {
 }
 
 async function handleDoQuery(request: Request, env: Env, configId: string): Promise<Response> {
+  const body = await validateJsonBody<{ sql: string; params?: unknown[] }>(request, {
+    sql: { type: "string", required: true, trim: true, minLength: 1, maxLength: 4000 },
+    params: {
+      type: "array",
+      maxLength: 100,
+      validateItem: (value) =>
+        value === null ||
+        typeof value === "string" ||
+        typeof value === "number" ||
+        typeof value === "boolean",
+      itemDetail: "expected_string_number_boolean_or_null",
+    },
+  });
   const stub = await getConfigDoStub(env, configId);
   return stub.fetch(
     new Request("http://internal/debug/query", {
@@ -327,7 +341,7 @@ async function handleDoQuery(request: Request, env: Env, configId: string): Prom
         "content-type": "application/json",
         "x-fp-admin-debug": "true",
       },
-      body: await request.text(),
+      body: JSON.stringify(body),
     }),
   );
 }

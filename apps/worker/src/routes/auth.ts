@@ -3,8 +3,9 @@
 import type { Env } from "../index.js";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits } from "../shared/plans.js";
-import { jsonError } from "../shared/errors.js";
+import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
 import { clearSessionCookie, sessionCookie } from "../shared/cookies.js";
+import { validateJsonBody } from "../shared/validation.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
@@ -101,38 +102,42 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
 // ─── Route handler ──────────────────────────────────────────────────
 
 export async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<Response> {
-  const path = url.pathname;
-  const method = request.method;
+  try {
+    const path = url.pathname;
+    const method = request.method;
 
-  if (path === "/auth/login" && method === "POST") return handleLogin(request, env);
-  if (path === "/auth/logout" && method === "POST") return handleLogout(request, env);
-  if (path === "/auth/me" && method === "GET") return handleMe(request, env);
-  if (path === "/auth/seed" && method === "POST") {
-    // Require Bearer API_SECRET to prevent unauthorized account creation
-    const auth = request.headers.get("Authorization");
-    const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-    if (!token || !env.API_SECRET || !timingSafeEqual(token, env.API_SECRET)) {
-      return jsonError("Unauthorized", 401);
+    if (path === "/auth/login" && method === "POST") return await handleLogin(request, env);
+    if (path === "/auth/logout" && method === "POST") return await handleLogout(request, env);
+    if (path === "/auth/me" && method === "GET") return await handleMe(request, env);
+    if (path === "/auth/seed" && method === "POST") {
+      // Require Bearer API_SECRET to prevent unauthorized account creation
+      const auth = request.headers.get("Authorization");
+      const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+      if (!token || !env.API_SECRET || !timingSafeEqual(token, env.API_SECRET)) {
+        return jsonError("Unauthorized", 401);
+      }
+      return await handleSeed(env);
     }
-    return handleSeed(env);
-  }
 
-  return jsonError("Not found", 404);
+    return jsonError("Not found", 404);
+  } catch (err) {
+    if (err instanceof ApiError) {
+      return jsonApiError(err);
+    }
+    throw err;
+  }
 }
 
 // ─── POST /auth/login ───────────────────────────────────────────────
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
-  let body: { email?: string; password?: string };
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError("Invalid JSON", 400);
-  }
+  const body = await validateJsonBody<{ email: string; password: string }>(request, {
+    email: { type: "string", required: true, trim: true, minLength: 1, maxLength: 320 },
+    password: { type: "string", required: true, minLength: 1, maxLength: 1024 },
+  });
 
-  const email = body.email?.trim();
+  const email = body.email;
   const password = body.password;
-  if (!email || !password) return jsonError("email and password are required", 400);
 
   const user = await env.FP_DB.prepare(
     "SELECT id, email, password_hash, display_name, role, tenant_id FROM users WHERE email = ?",

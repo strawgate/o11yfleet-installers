@@ -37,6 +37,50 @@ describe("admin API routes", () => {
     expect(cookie).toContain("SameSite=None");
   });
 
+  it("rejects login payload schema drift", async () => {
+    const response = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://o11yfleet.com" },
+      body: JSON.stringify({
+        email: "admin@o11yfleet.com",
+        password: "admin-password",
+        remember_me: true,
+      }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "validation_error",
+      field: "remember_me",
+    });
+  });
+
+  it("rejects malformed login bodies with stable validation details", async () => {
+    const invalidJson = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://o11yfleet.com" },
+      body: "{",
+    });
+    expect(invalidJson.status).toBe(400);
+    expect(await invalidJson.json()).toMatchObject({
+      code: "validation_error",
+      field: "body",
+      detail: "invalid_json",
+    });
+
+    const missingPassword = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Origin: "https://o11yfleet.com" },
+      body: JSON.stringify({ email: "admin@o11yfleet.com" }),
+    });
+    expect(missingPassword.status).toBe(400);
+    expect(await missingPassword.json()).toMatchObject({
+      code: "validation_error",
+      field: "password",
+      detail: "required",
+    });
+  });
+
   it("rejects admin route access without bearer token", async () => {
     const response = await exports.default.fetch("http://localhost/api/admin/health");
 
@@ -73,6 +117,56 @@ describe("admin API routes", () => {
 
     expect(response.status).toBe(403);
     expect(await response.json()).toEqual({ error: "Admin access required" });
+  });
+
+  it("rejects admin tenant schema drift with stable validation details", async () => {
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Tenant", extra: true }),
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "validation_error",
+      field: "extra",
+    });
+  });
+
+  it("rejects invalid admin tenant create payloads before persistence", async () => {
+    const missingName = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ plan: "growth" }),
+    });
+    expect(missingName.status).toBe(400);
+    expect(await missingName.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+      detail: "required",
+    });
+
+    const overlongName = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "x".repeat(256), plan: "growth" }),
+    });
+    expect(overlongName.status).toBe(400);
+    expect(await overlongName.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+      detail: "too_long",
+    });
+
+    const invalidPlan = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: "Bad Plan", plan: "gold" }),
+    });
+    expect(invalidPlan.status).toBe(400);
+    expect(await invalidPlan.json()).toMatchObject({
+      error: expect.stringContaining("Invalid plan"),
+    });
   });
 
   it("covers tenant CRUD routes plus tenant scoped admin listings", async () => {
@@ -179,6 +273,35 @@ describe("admin API routes", () => {
       },
     );
     expect(unsafeDoQueryRes.status).toBe(400);
+
+    const invalidShapeDoQueryRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sql: "SELECT 1", params: [{ nested: true }] }),
+      },
+    );
+    expect(invalidShapeDoQueryRes.status).toBe(400);
+    expect(await invalidShapeDoQueryRes.json()).toMatchObject({
+      code: "validation_error",
+      field: "params",
+    });
+
+    const missingSqlDoQueryRes = await apiFetch(
+      `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ params: [] }),
+      },
+    );
+    expect(missingSqlDoQueryRes.status).toBe(400);
+    expect(await missingSqlDoQueryRes.json()).toMatchObject({
+      code: "validation_error",
+      field: "sql",
+      detail: "required",
+    });
 
     const pragmaDoQueryRes = await apiFetch(
       `http://localhost/api/admin/configurations/${createdConfig.id}/do/query`,

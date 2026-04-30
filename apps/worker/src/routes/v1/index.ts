@@ -13,7 +13,8 @@ import {
   handleTenantChatRequest,
   handleTenantGuidanceRequest,
 } from "../../ai/guidance.js";
-import { jsonError, parseJsonBody, ApiError } from "../../shared/errors.js";
+import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
+import { validateJsonBody } from "../../shared/validation.js";
 
 // ─── Router ─────────────────────────────────────────────────────────
 
@@ -27,7 +28,7 @@ export async function handleV1Request(
     return await routeV1Request(request, env, url, tenantId);
   } catch (err) {
     if (err instanceof ApiError) {
-      return jsonError(err.message, err.status);
+      return jsonApiError(err);
     }
     if (err instanceof AiApiError) {
       return jsonError(err.message, err.status);
@@ -260,13 +261,14 @@ async function handleCreateConfiguration(
   env: Env,
   tenantId: string,
 ): Promise<Response> {
-  const body = await parseJsonBody<{ name: string; description?: string }>(request);
-  if (!body.name || typeof body.name !== "string" || body.name.trim().length === 0) {
-    return jsonError("name is required", 400);
-  }
-  if (body.name.length > 255) {
-    return jsonError("name must be 255 characters or fewer", 400);
-  }
+  const body = await validateJsonBody<{ name: string; description?: string; tenant_id?: string }>(
+    request,
+    {
+      name: { type: "string", required: true, trim: true, minLength: 1, maxLength: 255 },
+      description: { type: "string", maxLength: 2048 },
+      tenant_id: { type: "string" },
+    },
+  );
 
   const id = crypto.randomUUID();
   const insertResult = await env.FP_DB.prepare(
@@ -278,7 +280,7 @@ async function handleCreateConfiguration(
          SELECT COUNT(*) FROM configurations c WHERE c.tenant_id = t.id
        ) < t.max_configs`,
   )
-    .bind(id, body.name.trim(), body.description ?? null, tenantId)
+    .bind(id, body.name, body.description ?? null, tenantId)
     .run();
 
   if ((insertResult.meta.changes ?? 0) === 0) {
@@ -289,7 +291,7 @@ async function handleCreateConfiguration(
     return jsonError(`Configuration limit reached (${tenant.max_configs})`, 429);
   }
 
-  return Response.json({ id, tenant_id: tenantId, name: body.name.trim() }, { status: 201 });
+  return Response.json({ id, tenant_id: tenantId, name: body.name }, { status: 201 });
 }
 
 async function handleGetConfiguration(
@@ -311,11 +313,14 @@ async function handleUpdateConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const body = await parseJsonBody<{ name?: string; description?: string }>(request);
+  const body = await validateJsonBody<{ name?: string; description?: string }>(request, {
+    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
+    description: { type: "string", maxLength: 2048 },
+  });
   const updates: string[] = [];
   const values: unknown[] = [];
 
-  if (body.name && typeof body.name === "string") {
+  if (body.name) {
     updates.push("name = ?");
     values.push(body.name);
   }
@@ -513,10 +518,10 @@ async function handleCreateEnrollmentToken(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const body = await parseJsonBody<{ label?: string; expires_in_hours?: number }>(request);
-  if (body.label && body.label.length > 255) {
-    return jsonError("Label must be 255 characters or fewer", 400);
-  }
+  const body = await validateJsonBody<{ label?: string; expires_in_hours?: number }>(request, {
+    label: { type: "string", trim: true, maxLength: 255 },
+    expires_in_hours: { type: "positiveInt", max: 8760 },
+  });
 
   const rawToken = generateEnrollmentToken();
   const tokenHash = await hashEnrollmentToken(rawToken);
@@ -524,12 +529,6 @@ async function handleCreateEnrollmentToken(
 
   let expiresAt: string | null = null;
   if (body.expires_in_hours) {
-    if (typeof body.expires_in_hours !== "number" || body.expires_in_hours <= 0) {
-      return jsonError("expires_in_hours must be a positive number", 400);
-    }
-    if (body.expires_in_hours > 8760) {
-      return jsonError("expires_in_hours must be 8760 (1 year) or less", 400);
-    }
     expiresAt = new Date(Date.now() + body.expires_in_hours * 3600 * 1000).toISOString();
   }
 
@@ -889,12 +888,14 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .bind(tenantId)
     .first();
   if (!tenant) return jsonError("Tenant not found", 404);
-  const body = await parseJsonBody<{ name?: string }>(request);
-  if (body.name && typeof body.name === "string" && body.name.trim().length > 0) {
+  const body = await validateJsonBody<{ name?: string }>(request, {
+    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
+  });
+  if (body.name) {
     await env.FP_DB.prepare(
       "UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?",
     )
-      .bind(body.name.trim(), tenantId)
+      .bind(body.name, tenantId)
       .run();
   }
   const updated = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?")

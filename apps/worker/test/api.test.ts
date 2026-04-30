@@ -95,6 +95,70 @@ describe("API routes", () => {
     expect(body.name).toBe("production");
   });
 
+  it("POST /api/v1/configurations rejects schema drift", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: `Schema Drift ${crypto.randomUUID()}`, plan: "growth" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const tenant = await tenantRes.json<{ id: string }>();
+
+    const wrongType = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: 42 }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(wrongType.status).toBe(400);
+    expect(await wrongType.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+    });
+
+    const unknown = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: "valid", enabled: true }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toMatchObject({
+      code: "validation_error",
+      field: "enabled",
+    });
+  });
+
+  it("POST /api/v1/configurations rejects missing and overlong names", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: `Schema Limits ${crypto.randomUUID()}`, plan: "growth" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const tenant = await tenantRes.json<{ id: string }>();
+
+    const missingName = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(missingName.status).toBe(400);
+    expect(await missingName.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+      detail: "required",
+    });
+
+    const overlongName = await apiFetch("http://localhost/api/v1/configurations", {
+      method: "POST",
+      body: JSON.stringify({ tenant_id: tenant.id, name: "x".repeat(256) }),
+      headers: { "Content-Type": "application/json" },
+    });
+    expect(overlongName.status).toBe(400);
+    expect(await overlongName.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+      detail: "too_long",
+    });
+  });
+
   it("GET /api/v1/configurations/:id returns config", async () => {
     // Create tenant + config
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
@@ -224,6 +288,71 @@ describe("API routes", () => {
     expect(tokenRes.status).toBe(201);
     const body = await tokenRes.json<{ token: string; id: string }>();
     expect(body.token).toMatch(/^fp_enroll_/);
+
+    const invalidTokenRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ label: "test-agent", expires_in_hours: "soon" }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    expect(invalidTokenRes.status).toBe(400);
+    expect(await invalidTokenRes.json()).toMatchObject({
+      code: "validation_error",
+      field: "expires_in_hours",
+    });
+
+    const tooLongTokenRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ label: "x".repeat(256) }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    expect(tooLongTokenRes.status).toBe(400);
+    expect(await tooLongTokenRes.json()).toMatchObject({
+      code: "validation_error",
+      field: "label",
+      detail: "too_long",
+    });
+
+    const tooLargeExpiryRes = await apiFetch(
+      `http://localhost/api/v1/configurations/${config.id}/enrollment-token`,
+      {
+        method: "POST",
+        body: JSON.stringify({ expires_in_hours: 8761 }),
+        headers: { "Content-Type": "application/json" },
+      },
+    );
+    expect(tooLargeExpiryRes.status).toBe(400);
+    expect(await tooLargeExpiryRes.json()).toMatchObject({
+      code: "validation_error",
+      field: "expires_in_hours",
+      detail: "too_large",
+    });
+  });
+
+  it("PUT /api/v1/tenant validates update shape", async () => {
+    const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "POST",
+      body: JSON.stringify({ name: "Tenant Update Shape", plan: "growth" }),
+      headers: { "Content-Type": "application/json" },
+    });
+    const tenant = await tenantRes.json<{ id: string }>();
+
+    const response = await apiFetch("http://localhost/api/v1/tenant", {
+      method: "PUT",
+      body: JSON.stringify({ name: 123 }),
+      headers: { "Content-Type": "application/json", "X-Tenant-Id": tenant.id },
+    });
+
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+    });
   });
 
   it("GET /api/admin/tenants/:id/configurations lists configs", async () => {

@@ -3,8 +3,12 @@
 /**
  * Create a JSON error response with the given message and HTTP status.
  */
-export function jsonError(error: string, status: number): Response {
-  return Response.json({ error }, { status });
+export function jsonError(
+  error: string,
+  status: number,
+  extra?: Record<string, unknown>,
+): Response {
+  return Response.json({ error, ...extra }, { status });
 }
 
 /**
@@ -15,9 +19,22 @@ export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public code?: string,
+    public field?: string,
+    public detail?: string,
   ) {
     super(message);
+    this.name = "ApiError";
+    Object.setPrototypeOf(this, ApiError.prototype);
   }
+}
+
+export function jsonApiError(error: ApiError): Response {
+  return jsonError(error.message, error.status, {
+    ...(error.code ? { code: error.code } : {}),
+    ...(error.field ? { field: error.field } : {}),
+    ...(error.detail ? { detail: error.detail } : {}),
+  });
 }
 
 /**
@@ -26,6 +43,12 @@ export class ApiError extends Error {
  */
 export async function parseJsonBody<T>(request: Request): Promise<T> {
   return request.json<T>().catch(() => {
-    throw new ApiError("Invalid JSON in request body", 400);
+    throw new ApiError(
+      "Invalid JSON in request body",
+      400,
+      "validation_error",
+      "body",
+      "invalid_json",
+    );
   });
 }

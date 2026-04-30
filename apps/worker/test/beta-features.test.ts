@@ -146,6 +146,21 @@ describe("Tenant CRUD", () => {
     expect(body.name).toBe("after-update");
   });
 
+  it("PUT /api/admin/tenants/:id validates update shape", async () => {
+    const tenant = await createTenant("admin-update-shape");
+    const res = await apiFetch(`http://localhost/api/admin/tenants/${tenant.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name: 123 }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+    });
+  });
+
   it("DELETE /api/admin/tenants/:id deletes an empty tenant", async () => {
     const tenant = await createTenant("delete-me");
     const res = await apiFetch(`http://localhost/api/admin/tenants/${tenant.id}`, {
@@ -186,6 +201,23 @@ describe("Configuration CRUD", () => {
     expect(res.status).toBe(200);
     const body = await res.json<{ name: string }>();
     expect(body.name).toBe("new-name");
+  });
+
+  it("PUT /api/v1/configurations/:id validates update shape", async () => {
+    const tenant = await createTenant("config-update-shape");
+    const config = await createConfig(tenant.id, "old-name");
+
+    const res = await apiFetch(`http://localhost/api/v1/configurations/${config.id}`, {
+      method: "PUT",
+      body: JSON.stringify({ name: 123 }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    expect(res.status).toBe(400);
+    expect(await res.json()).toMatchObject({
+      code: "validation_error",
+      field: "name",
+    });
   });
 
   it("DELETE /api/v1/configurations/:id cascades deletes", async () => {
