@@ -46,6 +46,16 @@ export interface Agent {
   capabilities?: number | string | null;
   [key: string]: unknown;
 }
+export interface AgentPage {
+  agents: Agent[];
+  pagination: {
+    limit: number;
+    next_cursor: string | null;
+    has_more: boolean;
+    sort: "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
+  };
+  filters: { q?: string; status?: string; health?: "healthy" | "unhealthy" | "unknown" };
+}
 
 export interface ConfigVersion {
   id: string;
@@ -67,6 +77,9 @@ export interface ConfigStats {
   agents_connected?: number;
   connected_agents?: number;
   healthy_agents?: number;
+  drifted_agents?: number;
+  status_counts?: Record<string, number>;
+  current_hash_counts?: Array<{ value: string; count: number }>;
   desired_config_hash?: string | null;
   active_websockets?: number;
   [key: string]: unknown;
@@ -174,22 +187,52 @@ export function useConfigurationYaml(id: string | undefined, enabled = true) {
   });
 }
 
-export function useConfigurationAgents(id: string | undefined) {
+export function useConfigurationAgent(
+  configId: string | undefined,
+  instanceUid: string | undefined,
+) {
   return useQuery({
-    queryKey: ["configuration", id, "agents"],
+    queryKey: ["configuration", configId, "agent", instanceUid],
+    queryFn: () =>
+      apiGet<Agent>(
+        `/api/v1/configurations/${configId}/agents/${encodeURIComponent(instanceUid ?? "")}`,
+      ),
+    enabled: !!configId && !!instanceUid,
+  });
+}
+
+export function useConfigurationAgents(
+  id: string | undefined,
+  params?: {
+    limit?: number;
+    cursor?: string;
+    q?: string;
+    status?: string;
+    health?: string;
+    sort?: string;
+  },
+) {
+  return useQuery({
+    queryKey: ["configuration", id, "agents", params],
     queryFn: async () => {
-      const data = await apiGet<Agent[] | { agents?: Agent[] }>(
-        `/api/v1/configurations/${id}/agents`,
+      const query = new URLSearchParams();
+      if (params?.limit) query.set("limit", String(params.limit));
+      if (params?.cursor) query.set("cursor", params.cursor);
+      if (params?.q) query.set("q", params.q);
+      if (params?.status) query.set("status", params.status);
+      if (params?.health) query.set("health", params.health);
+      if (params?.sort) query.set("sort", params.sort);
+      const data = await apiGet<AgentPage>(
+        `/api/v1/configurations/${id}/agents${query.toString() ? `?${query.toString()}` : ""}`,
       );
-      const agents = Array.isArray(data) ? data : data.agents;
-      if (!Array.isArray(agents)) {
+      if (!Array.isArray(data.agents)) {
         throw new ApiError("GET agents: unexpected response shape", 500);
       }
-      const missingIdentity = agents.some((agent) => !agent.instance_uid && !agent.id);
+      const missingIdentity = data.agents.some((agent) => !agent.instance_uid && !agent.id);
       if (missingIdentity) {
         throw new ApiError("GET agents: missing agent identity", 500);
       }
-      return agents;
+      return data;
     },
     enabled: !!id,
   });

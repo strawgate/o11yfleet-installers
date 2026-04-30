@@ -26,7 +26,8 @@ import {
   agentExists,
   markDisconnected,
   getStats,
-  listAgents,
+  getCohortBreakdown,
+  listAgentsPage,
   loadDesiredConfig,
   saveDesiredConfig,
   checkRateLimit,
@@ -200,7 +201,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
 
     if (url.pathname === "/agents" && request.method === "GET") {
-      return this.handleGetAgents();
+      return this.handleGetAgents(request);
+    }
+    const agentMatch = url.pathname.match(/^\/agents\/([^/]+)$/);
+    if (agentMatch && request.method === "GET") {
+      return this.handleGetAgent(agentMatch[1]!);
     }
 
     if (url.pathname === "/debug/tables" && request.method === "GET") {
@@ -673,19 +678,75 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const config = this.getDesiredConfig();
     const sweepStats = getSweepStats(this.ctx.storage.sql);
     const wsCount = this.ctx.getWebSockets().length;
+    const cohort = getCohortBreakdown(this.ctx.storage.sql, config.hash);
     return Response.json({
       total_agents: stats.total,
       connected_agents: wsCount, // authoritative: live WebSocket count, not SQL
       healthy_agents: stats.healthy,
+      drifted_agents: cohort.drifted,
+      status_counts: cohort.status_counts,
+      current_hash_counts: cohort.current_hash_counts,
       desired_config_hash: config.hash,
       active_websockets: wsCount,
       stale_sweep: sweepStats,
     });
   }
 
-  private handleGetAgents(): Response {
-    const agents = listAgents(this.ctx.storage.sql);
-    return Response.json({ agents });
+  private handleGetAgents(request: Request): Response {
+    const url = new URL(request.url);
+    const limit = Math.min(Math.max(Number(url.searchParams.get("limit") ?? 50) || 50, 1), 100);
+    const sortParam = url.searchParams.get("sort") ?? "last_seen_desc";
+    const allowedSort = new Set(["last_seen_desc", "last_seen_asc", "instance_uid_asc"]);
+    const sort = allowedSort.has(sortParam)
+      ? (sortParam as "last_seen_desc" | "last_seen_asc" | "instance_uid_asc")
+      : "last_seen_desc";
+    const status = url.searchParams.get("status") ?? undefined;
+    const q = url.searchParams.get("q") ?? undefined;
+    const healthParam = url.searchParams.get("health") ?? undefined;
+    const health =
+      healthParam === "healthy" || healthParam === "unhealthy" || healthParam === "unknown"
+        ? healthParam
+        : undefined;
+    let cursor: { last_seen_at: number; instance_uid: string } | null = null;
+    const cursorRaw = url.searchParams.get("cursor");
+    if (cursorRaw) {
+      try {
+        const parsed = JSON.parse(atob(cursorRaw)) as {
+          last_seen_at?: unknown;
+          instance_uid?: unknown;
+        };
+        if (typeof parsed.last_seen_at !== "number" || typeof parsed.instance_uid !== "string") {
+          return Response.json({ error: "Invalid cursor" }, { status: 400 });
+        }
+        cursor = { last_seen_at: parsed.last_seen_at, instance_uid: parsed.instance_uid };
+      } catch {
+        return Response.json({ error: "Invalid cursor" }, { status: 400 });
+      }
+    }
+
+    const page = listAgentsPage(this.ctx.storage.sql, { limit, cursor, q, status, health, sort });
+    const nextCursor = page.nextCursor ? btoa(JSON.stringify(page.nextCursor)) : null;
+    return Response.json({
+      agents: page.agents,
+      pagination: { limit, next_cursor: nextCursor, has_more: page.hasMore, sort },
+      filters: { q, status, health },
+    });
+  }
+
+  private handleGetAgent(agentUid: string): Response {
+    const rows = this.ctx.storage.sql
+      .exec(
+        `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,cs.body AS effective_config_body,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.rate_window_start,a.rate_window_count
+         FROM agents a
+         LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash
+         WHERE a.instance_uid = ?
+         LIMIT 1`,
+        agentUid,
+      )
+      .toArray();
+    const agent = rows[0];
+    if (!agent) return Response.json({ error: "Agent not found" }, { status: 404 });
+    return Response.json(agent);
   }
 
   /** Externally triggered stale agent audit (called via daily cron → worker → DO).

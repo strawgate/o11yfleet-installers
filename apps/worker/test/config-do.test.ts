@@ -18,8 +18,122 @@ describe("Config Durable Object", () => {
     const stub = env.CONFIG_DO.get(id);
     const response = await stub.fetch("http://internal/agents");
     expect(response.status).toBe(200);
-    const body = await response.json<{ agents: unknown[] }>();
+    const body = await response.json<{
+      agents: unknown[];
+      pagination: { has_more: boolean; next_cursor: string | null; sort: string };
+    }>();
     expect(body.agents).toHaveLength(0);
+    expect(body.pagination.has_more).toBe(false);
+    expect(body.pagination.next_cursor).toBeNull();
+    expect(body.pagination.sort).toBe("last_seen_desc");
+  });
+
+  it("GET /agents returns 400 on invalid cursor", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-invalid-cursor");
+    const stub = env.CONFIG_DO.get(id);
+    const response = await stub.fetch("http://internal/agents?cursor=bad");
+    expect(response.status).toBe(400);
+  });
+
+  it("GET /agents/:instanceUid returns the inserted agent", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-agent-detail");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, agent_description, current_config_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          "detail-agent-1",
+          "tenant-1",
+          "config-agent-detail",
+          "connected",
+          Date.now(),
+          Date.now(),
+          "host-detail-1",
+          "hash-current-1",
+        );
+      },
+    );
+
+    const found = await stub.fetch("http://internal/agents/detail-agent-1");
+    expect(found.status).toBe(200);
+    const agent = await found.json<{
+      instance_uid: string;
+      status: string;
+      agent_description: string;
+      current_config_hash: string;
+    }>();
+    expect(agent.instance_uid).toBe("detail-agent-1");
+    expect(agent.status).toBe("connected");
+    expect(agent.agent_description).toBe("host-detail-1");
+    expect(agent.current_config_hash).toBe("hash-current-1");
+
+    const missing = await stub.fetch("http://internal/agents/does-not-exist");
+    expect(missing.status).toBe(404);
+  });
+
+  it("GET /stats reports drift and status_counts without scanning agents", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-cohort-stats");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await stub.fetch("http://internal/command/set-desired-config", {
+      method: "POST",
+      body: JSON.stringify({ config_hash: "desired-hash" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        const inserts: Array<[string, string, string, number]> = [
+          // [uid, status, current_hash, healthy]
+          ["a1", "connected", "desired-hash", 1],
+          ["a2", "connected", "stale-hash", 1],
+          ["a3", "degraded", "stale-hash", 0],
+          ["a4", "disconnected", "desired-hash", 1],
+        ];
+        for (const [uid, status, hash, healthy] of inserts) {
+          state.storage.sql.exec(
+            `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, current_config_hash)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+            uid,
+            "tenant-1",
+            "config-cohort-stats",
+            status,
+            healthy,
+            now,
+            now,
+            hash,
+          );
+        }
+      },
+    );
+
+    const statsRes = await stub.fetch("http://internal/stats");
+    const stats = await statsRes.json<{
+      total_agents: number;
+      drifted_agents: number;
+      status_counts: Record<string, number>;
+      current_hash_counts: Array<{ value: string; count: number }>;
+    }>();
+    expect(stats.total_agents).toBe(4);
+    expect(stats.drifted_agents).toBe(2);
+    expect(stats.status_counts).toMatchObject({
+      connected: 2,
+      degraded: 1,
+      disconnected: 1,
+    });
+    expect(stats.current_hash_counts).toEqual(
+      expect.arrayContaining([
+        { value: "desired-hash", count: 2 },
+        { value: "stale-hash", count: 2 },
+      ]),
+    );
   });
 
   it("POST /command/set-desired-config stores hash", async () => {

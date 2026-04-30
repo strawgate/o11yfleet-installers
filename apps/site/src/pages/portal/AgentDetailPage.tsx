@@ -1,7 +1,7 @@
 import { Link, useParams } from "react-router-dom";
 import {
   useConfiguration,
-  useConfigurationAgents,
+  useConfigurationAgent,
   useConfigurationStats,
 } from "../../api/hooks/portal";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
@@ -15,7 +15,6 @@ import {
   agentHost,
   agentIsHealthy,
   agentLastSeen,
-  agentUid as getAgentUid,
   hashLabel,
 } from "../../utils/agents";
 
@@ -25,14 +24,15 @@ export default function AgentDetailPage() {
     agentUid: string;
   }>();
   const config = useConfiguration(configId);
-  const agents = useConfigurationAgents(configId);
+  const agentQuery = useConfigurationAgent(configId, routeAgentUid);
   const stats = useConfigurationStats(configId);
 
-  if (config.isLoading || agents.isLoading) return <LoadingSpinner />;
+  if (config.isLoading || agentQuery.isLoading) return <LoadingSpinner />;
   if (config.error) return <ErrorState error={config.error} retry={() => void config.refetch()} />;
-  if (agents.error) return <ErrorState error={agents.error} retry={() => void agents.refetch()} />;
+  if (agentQuery.error)
+    return <ErrorState error={agentQuery.error} retry={() => void agentQuery.refetch()} />;
 
-  const agent = (agents.data ?? []).find((a) => getAgentUid(a) === routeAgentUid);
+  const agent = agentQuery.data;
   const desiredHash =
     agent?.desired_config_hash ??
     stats.data?.desired_config_hash ??

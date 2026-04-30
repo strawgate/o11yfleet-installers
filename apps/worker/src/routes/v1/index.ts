@@ -146,7 +146,7 @@ async function routeV1Request(
 
   const agentsMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/agents$/);
   if (agentsMatch && method === "GET") {
-    return handleListAgents(env, tenantId, agentsMatch[1]!);
+    return handleListAgents(env, tenantId, agentsMatch[1]!, url);
   }
 
   const agentDetailMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)$/);
@@ -588,13 +588,24 @@ async function handleRevokeEnrollmentToken(
 
 // ─── Agent & Stats Handlers (from DO) ───────────────────────────────
 
-async function handleListAgents(env: Env, tenantId: string, configId: string): Promise<Response> {
+async function handleListAgents(
+  env: Env,
+  tenantId: string,
+  configId: string,
+  url: URL,
+): Promise<Response> {
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(new Request("http://internal/agents"));
+  const source = new URL("http://internal/agents");
+  const allowed = ["limit", "cursor", "q", "status", "health", "sort"];
+  for (const key of allowed) {
+    const value = url.searchParams.get(key);
+    if (value !== null) source.searchParams.set(key, value);
+  }
+  return stub.fetch(new Request(source.toString()));
 }
 
 async function handleGetStats(env: Env, tenantId: string, configId: string): Promise<Response> {
@@ -616,56 +627,39 @@ async function handleRolloutCohortSummary(
 
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  let agentsResponse: Response;
   let statsResponse: Response;
   try {
-    [agentsResponse, statsResponse] = await Promise.all([
-      stub.fetch(new Request("http://internal/agents")),
-      stub.fetch(new Request("http://internal/stats")),
-    ]);
+    statsResponse = await stub.fetch(new Request("http://internal/stats"));
   } catch (error) {
     console.error("rollout cohort summary DO fetch threw", error);
     return jsonError("Rollout cohort summary unavailable", 502);
   }
-  const failedResponse = await failedDoResponse([
-    ["agents", agentsResponse],
-    ["stats", statsResponse],
-  ]);
+  const failedResponse = await failedDoResponse([["stats", statsResponse]]);
   if (failedResponse) {
     console.error("rollout cohort summary DO fetch failed", failedResponse);
     return jsonError("Rollout cohort summary unavailable", 502);
   }
-  const agentsPayload = (await agentsResponse.json()) as unknown;
   const stats = (await statsResponse.json()) as Record<string, unknown>;
-  const agents = Array.isArray(agentsPayload)
-    ? agentsPayload
-    : Array.isArray((agentsPayload as { agents?: unknown }).agents)
-      ? ((agentsPayload as { agents: Array<Record<string, unknown>> }).agents ?? [])
-      : [];
   const desiredHash =
     stringValue(stats["desired_config_hash"]) ?? stringValue(config["current_config_hash"]);
-  const connected = agents.filter((agent) => stringValue(agent["status"]) === "connected").length;
-  const healthy = agents.filter((agent) => booleanLike(agent["healthy"]) === true).length;
-  const drifted = desiredHash
-    ? agents.filter((agent) => {
-        const current = stringValue(agent["current_config_hash"]);
-        return current !== null && current !== desiredHash;
-      }).length
-    : 0;
+  const statusCountsRaw = stats["status_counts"];
+  const status_counts =
+    statusCountsRaw && typeof statusCountsRaw === "object" && !Array.isArray(statusCountsRaw)
+      ? (statusCountsRaw as Record<string, number>)
+      : {};
+  const hashCountsRaw = stats["current_hash_counts"];
+  const current_hash_counts = Array.isArray(hashCountsRaw)
+    ? (hashCountsRaw as Array<{ value: string; count: number }>)
+    : [];
 
   return Response.json({
-    total_agents: agents.length,
-    connected_agents: connected,
-    healthy_agents: healthy,
-    drifted_agents: drifted,
+    total_agents: numberValue(stats["total_agents"]) ?? 0,
+    connected_agents: numberValue(stats["connected_agents"]) ?? 0,
+    healthy_agents: numberValue(stats["healthy_agents"]) ?? 0,
+    drifted_agents: numberValue(stats["drifted_agents"]) ?? 0,
     desired_config_hash: desiredHash,
-    status_counts: countByStringField(agents, "status"),
-    current_hash_counts: topCounts(
-      agents
-        .map((agent) => stringValue(agent["current_config_hash"]))
-        .filter((value): value is string => Boolean(value)),
-      5,
-    ),
+    status_counts,
+    current_hash_counts,
   });
 }
 
@@ -803,34 +797,9 @@ function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
 
-function booleanLike(value: unknown): boolean | null {
-  if (typeof value === "boolean") return value;
-  if (typeof value === "number") return value === 1 ? true : value === 0 ? false : null;
+function numberValue(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
   return null;
-}
-
-function countByStringField(rows: Array<Record<string, unknown>>, field: string) {
-  return Object.fromEntries(
-    [
-      ...rows.reduce<Map<string, number>>((counts, row) => {
-        const value = stringValue(row[field]) ?? "unknown";
-        counts.set(value, (counts.get(value) ?? 0) + 1);
-        return counts;
-      }, new Map()),
-    ].sort((a, b) => b[1] - a[1]),
-  );
-}
-
-function topCounts(values: string[], limit: number) {
-  return [
-    ...values.reduce<Map<string, number>>((counts, value) => {
-      counts.set(value, (counts.get(value) ?? 0) + 1);
-      return counts;
-    }, new Map()),
-  ]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, limit)
-    .map(([value, count]) => ({ value, count }));
 }
 
 // ─── Overview (aggregate stats) ─────────────────────────────────────
@@ -917,9 +886,9 @@ async function handleGetAgent(
 
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  const agentsResp = await stub.fetch(new Request("http://internal/agents"));
-  const data = (await agentsResp.json()) as { agents: Array<Record<string, unknown>> };
-  const agent = data.agents.find((a) => a["instance_uid"] === agentUid);
-  if (!agent) return jsonError("Agent not found", 404);
-  return Response.json(agent);
+  const agentResp = await stub.fetch(
+    new Request(`http://internal/agents/${encodeURIComponent(agentUid)}`),
+  );
+  if (agentResp.status === 404) return jsonError("Agent not found", 404);
+  return agentResp;
 }

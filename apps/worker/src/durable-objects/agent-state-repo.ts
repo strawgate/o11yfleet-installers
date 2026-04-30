@@ -340,8 +340,83 @@ export function getStats(sql: SqlStorage): {
 }
 
 /**
+ * Aggregate cohort breakdown that does not require loading every agent row.
+ *
+ * `desiredConfigHash` is the configuration's current desired hash; agents whose
+ * `current_config_hash` is set and differs from it are counted as drifted.
+ * Returning the top N current-hash buckets (sorted by count desc) lets callers
+ * surface the dominant deployed hashes without paginating through all agents.
+ */
+export function getCohortBreakdown(
+  sql: SqlStorage,
+  desiredConfigHash: string | null,
+  topHashCount = 5,
+): {
+  drifted: number;
+  status_counts: Record<string, number>;
+  current_hash_counts: Array<{ value: string; count: number }>;
+} {
+  let drifted = 0;
+  if (desiredConfigHash) {
+    const row = sql
+      .exec(
+        `SELECT COUNT(*) as drifted
+         FROM agents
+         WHERE current_config_hash IS NOT NULL
+           AND current_config_hash != ?`,
+        desiredConfigHash,
+      )
+      .one();
+    drifted = (row["drifted"] ?? 0) as number;
+  }
+
+  const statusRows = sql
+    .exec(
+      `SELECT COALESCE(status, 'unknown') as status, COUNT(*) as count
+       FROM agents GROUP BY status`,
+    )
+    .toArray() as Array<{ status: string; count: number }>;
+  const status_counts: Record<string, number> = {};
+  for (const r of statusRows) status_counts[r.status] = r.count;
+
+  const hashRows = sql
+    .exec(
+      `SELECT current_config_hash as hash, COUNT(*) as count
+       FROM agents
+       WHERE current_config_hash IS NOT NULL
+       GROUP BY current_config_hash
+       ORDER BY count DESC, current_config_hash ASC
+       LIMIT ?`,
+      topHashCount,
+    )
+    .toArray() as Array<{ hash: string; count: number }>;
+
+  return {
+    drifted,
+    status_counts,
+    current_hash_counts: hashRows.map((r) => ({ value: r.hash, count: r.count })),
+  };
+}
+
+/**
  * List agents (most recently seen first).
  */
+export type AgentSort = "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
+
+export interface AgentPageCursor {
+  last_seen_at: number;
+  instance_uid: string;
+}
+
+export interface ListAgentsPageParams {
+  limit: number;
+  cursor?: AgentPageCursor | null;
+  q?: string;
+  status?: string;
+  health?: "healthy" | "unhealthy" | "unknown";
+  sort: AgentSort;
+}
+
 export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknown>[] {
   return sql
     .exec(
@@ -372,6 +447,61 @@ export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknow
     .toArray();
 }
 
+export function listAgentsPage(
+  sql: SqlStorage,
+  params: ListAgentsPageParams,
+): { agents: Record<string, unknown>[]; hasMore: boolean; nextCursor: AgentPageCursor | null } {
+  const where: string[] = [];
+  const bind: Array<string | number> = [];
+  if (params.q) {
+    where.push(`(a.instance_uid LIKE ? OR COALESCE(a.agent_description, '') LIKE ?)`);
+    const term = `%${params.q}%`;
+    bind.push(term, term);
+  }
+  if (params.status) {
+    where.push(`a.status = ?`);
+    bind.push(params.status);
+  }
+  if (params.health === "healthy") where.push(`a.healthy = 1`);
+  if (params.health === "unhealthy") where.push(`a.healthy = 0`);
+  if (params.health === "unknown") where.push(`a.healthy IS NULL`);
+
+  const dir = params.sort.endsWith("_desc") ? "DESC" : "ASC";
+  if (params.cursor) {
+    if (params.sort === "instance_uid_asc") {
+      where.push(`a.instance_uid > ?`);
+      bind.push(params.cursor.instance_uid);
+    } else {
+      where.push(
+        `(a.last_seen_at ${dir === "DESC" ? "<" : ">"} ? OR (a.last_seen_at = ? AND a.instance_uid ${dir === "DESC" ? "<" : ">"} ?))`,
+      );
+      bind.push(params.cursor.last_seen_at, params.cursor.last_seen_at, params.cursor.instance_uid);
+    }
+  }
+  const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
+  const orderSql =
+    params.sort === "instance_uid_asc"
+      ? "a.instance_uid ASC"
+      : `a.last_seen_at ${dir}, a.instance_uid ${dir}`;
+  const rows = sql
+    .exec(
+      `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,cs.body AS effective_config_body,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.rate_window_start,a.rate_window_count FROM agents a LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
+      ...bind,
+      params.limit + 1,
+    )
+    .toArray();
+  const hasMore = rows.length > params.limit;
+  const agents = hasMore ? rows.slice(0, params.limit) : rows;
+  const tail = agents[agents.length - 1] as Record<string, unknown> | undefined;
+  const nextCursor =
+    hasMore && tail
+      ? {
+          last_seen_at: Number(tail["last_seen_at"] ?? 0),
+          instance_uid: String(tail["instance_uid"] ?? ""),
+        }
+      : null;
+  return { agents, hasMore, nextCursor };
+}
 // ─── Stale Agent Detection ──────────────────────────────────────────
 
 /**

@@ -27,16 +27,25 @@ import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../.
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 function AgentSection({ config }: { config: Configuration }) {
-  const { data: agents, isLoading, error } = useConfigurationAgents(config.id);
-  const stats = useConfigurationStats(config.id);
   const [filter, setFilter] = useState("");
-  const list = (agents ?? []).filter(
-    (a) =>
-      !filter ||
-      agentHost(a).toLowerCase().includes(filter.toLowerCase()) ||
-      agentUid(a).toLowerCase().includes(filter.toLowerCase()),
-  );
-  const visible = list.slice(0, 100);
+  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  const setFilterAndResetCursor = (next: string) => {
+    setFilter(next);
+    setCursor(undefined);
+  };
+  const {
+    data: agentsPage,
+    isLoading,
+    error,
+  } = useConfigurationAgents(config.id, {
+    limit: 50,
+    cursor,
+    q: filter || undefined,
+  });
+  const agents = agentsPage?.agents ?? [];
+  const stats = useConfigurationStats(config.id);
+  const list = agents;
+  const visible = list;
   const desiredHash =
     stats.data?.desired_config_hash ?? (config["current_config_hash"] as string | undefined);
   const connectedCount = (agents ?? []).filter((agent) => agent.status === "connected").length;
@@ -157,7 +166,7 @@ function AgentSection({ config }: { config: Configuration }) {
             className="input"
             placeholder="Filter agents…"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => setFilterAndResetCursor(e.target.value)}
           />
         </div>
         <table className="dt">
@@ -241,12 +250,22 @@ function AgentSection({ config }: { config: Configuration }) {
             )}
           </tbody>
         </table>
-        {list.length > visible.length ? (
-          <div className="meta" style={{ padding: "12px 16px" }}>
-            Showing first {visible.length} collectors. Add server-side pagination before rendering
-            the full fleet.
-          </div>
-        ) : null}
+        <div className="meta" style={{ padding: "12px 16px", display: "flex", gap: 12 }}>
+          <button
+            className="btn btn-ghost btn-sm"
+            disabled={!cursor}
+            onClick={() => setCursor(undefined)}
+          >
+            First page
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            disabled={!agentsPage?.pagination?.has_more}
+            onClick={() => setCursor(agentsPage?.pagination?.next_cursor ?? undefined)}
+          >
+            Next page
+          </button>
+        </div>
       </div>
     </>
   );

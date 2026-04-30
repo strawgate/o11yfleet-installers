@@ -62,7 +62,8 @@ export default function ConfigurationDetailPage() {
   const config = useConfiguration(id);
   const hasConfigContent = Boolean(config.data?.["current_config_hash"]);
   const yaml = useConfigurationYaml(id, hasConfigContent);
-  const agents = useConfigurationAgents(id);
+  const [agentCursor, setAgentCursor] = useState<string | undefined>(undefined);
+  const agents = useConfigurationAgents(id, { limit: 50, cursor: agentCursor });
   const versions = useConfigurationVersions(id);
   const tokens = useConfigurationTokens(id);
   const stats = useConfigurationStats(id);
@@ -81,7 +82,7 @@ export default function ConfigurationDetailPage() {
   const latestCopilotRunRef = useRef(0);
 
   const c = config.data;
-  const agentList = agents.data ?? [];
+  const agentList = agents.data?.agents ?? [];
   const versionList = versions.data ?? [];
   const tokenList = tokens.data ?? [];
   const connectedAgents = stats.data?.connected_agents ?? stats.data?.agents_connected ?? 0;
@@ -90,8 +91,10 @@ export default function ConfigurationDetailPage() {
   const activeWebSockets = stats.data?.active_websockets;
   const desiredHash =
     stats.data?.desired_config_hash ?? (c?.["current_config_hash"] as string | undefined) ?? null;
-  const driftedAgents = agentList.filter((a) => agentHasDrift(a, desiredHash)).length;
-  const connectedCount = agentList.filter((agent) => agent.status === "connected").length;
+  // Drift and connection counts are derived from server-side aggregates so they
+  // remain accurate when the agents tab paginates beyond the first page.
+  const driftedAgents = stats.data?.drifted_agents ?? 0;
+  const connectedCount = connectedAgents;
   const guidanceReady =
     Boolean(c) &&
     agents.isFetched &&
@@ -587,7 +590,7 @@ export default function ConfigurationDetailPage() {
                     </td>
                   </tr>
                 ) : (
-                  agentList.slice(0, 100).map((a) => {
+                  agentList.map((a) => {
                     const uid = agentUid(a);
                     const healthy = agentIsHealthy(a);
                     const drift = agentHasDrift(a, desiredHash);
@@ -634,12 +637,22 @@ export default function ConfigurationDetailPage() {
               </tbody>
             </table>
           )}
-          {agentList.length > 100 ? (
-            <div className="meta" style={{ padding: "12px 16px" }}>
-              Showing first 100 collectors. Add server-side pagination before rendering the full
-              fleet.
-            </div>
-          ) : null}
+          <div className="meta" style={{ padding: "12px 16px", display: "flex", gap: 12 }}>
+            <button
+              className="btn btn-ghost btn-sm"
+              disabled={!agentCursor}
+              onClick={() => setAgentCursor(undefined)}
+            >
+              First page
+            </button>
+            <button
+              className="btn btn-secondary btn-sm"
+              disabled={!agents.data?.pagination?.has_more}
+              onClick={() => setAgentCursor(agents.data?.pagination?.next_cursor ?? undefined)}
+            >
+              Next page
+            </button>
+          </div>
         </div>
       )}
 

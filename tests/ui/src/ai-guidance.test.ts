@@ -751,7 +751,7 @@ test.describe("AI guidance surfaces", () => {
       updated_at: "2026-04-28T20:00:00.000Z",
     });
     await mockText(page, "/api/v1/configurations/config-1/yaml", "receivers: {}\n");
-    await mockJson(page, "/api/v1/configurations/config-1/agents", {
+    await mockJson(page, "/api/v1/configurations/config-1/agents?limit=50", {
       agents: [
         {
           id: "agent-1",
@@ -760,6 +760,8 @@ test.describe("AI guidance surfaces", () => {
           last_seen: "2026-04-28T20:00:00.000Z",
         },
       ],
+      pagination: { limit: 50, next_cursor: null, has_more: false, sort: "last_seen_desc" },
+      filters: {},
     });
     await mockJson(page, "/api/v1/configurations/config-1/versions", {
       versions: [{ id: "version-1", version: 1, created_at: "2026-04-28T20:00:00.000Z" }],
@@ -832,7 +834,11 @@ test.describe("AI guidance surfaces", () => {
       "/api/v1/configurations/config-1/yaml",
       "receivers:\n  otlp: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]\n",
     );
-    await mockJson(page, "/api/v1/configurations/config-1/agents", { agents: [] });
+    await mockJson(page, "/api/v1/configurations/config-1/agents?limit=50", {
+      agents: [],
+      pagination: { limit: 50, next_cursor: null, has_more: false, sort: "last_seen_desc" },
+      filters: {},
+    });
     await mockJson(page, "/api/v1/configurations/config-1/versions", {
       versions: [
         { id: "version-2", version: 2, created_at: "2026-04-28T21:00:00.000Z" },
@@ -999,7 +1005,11 @@ test.describe("AI guidance surfaces", () => {
       updated_at: "2026-04-28T20:00:00.000Z",
     });
     await mockText(page, "/api/v1/configurations/config-1/yaml", "receivers: {}\n");
-    await mockJson(page, "/api/v1/configurations/config-1/agents", { agents: [] });
+    await mockJson(page, "/api/v1/configurations/config-1/agents?limit=50", {
+      agents: [],
+      pagination: { limit: 50, next_cursor: null, has_more: false, sort: "last_seen_desc" },
+      filters: {},
+    });
     await mockJson(page, "/api/v1/configurations/config-1/versions", { versions: [] });
     await mockJson(page, "/api/v1/configurations/config-1/enrollment-tokens", { tokens: [] });
     await mockJson(page, "/api/v1/configurations/config-1/stats", { agents_connected: 0 });
