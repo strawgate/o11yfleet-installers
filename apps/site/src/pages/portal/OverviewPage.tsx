@@ -81,6 +81,8 @@ export default function OverviewPage() {
           {
             configs_count: totalConfigs,
             total_agents: totalAgents,
+            connected_agents: connectedAgents,
+            healthy_agents: healthyAgents,
             active_rollouts: activeRollouts,
             configurations: cfgList.slice(0, 8).map((config) => ({
               id: config.id,
@@ -165,6 +167,7 @@ export default function OverviewPage() {
         isLoading={guidance.isLoading}
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
+        excludeTargetKeys={["overview.configurations", "overview.agents"]}
       />
 
       <div className="dt-card mt-6">

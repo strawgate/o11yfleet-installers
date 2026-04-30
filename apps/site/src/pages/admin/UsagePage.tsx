@@ -273,6 +273,7 @@ export default function UsagePage() {
         isLoading={guidance.isLoading}
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
+        excludeTargetKeys={["admin.usage.spend", "admin.usage.sources"]}
       />
 
       <section className="admin-callout mt-6">

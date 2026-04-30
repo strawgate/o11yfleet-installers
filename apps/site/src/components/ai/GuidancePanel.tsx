@@ -9,6 +9,7 @@ interface GuidancePanelProps {
   error?: Error | null;
   onRefresh?: () => void;
   targetKeys?: string[];
+  excludeTargetKeys?: string[];
 }
 
 export function GuidancePanel({
@@ -18,12 +19,11 @@ export function GuidancePanel({
   error,
   onRefresh,
   targetKeys,
+  excludeTargetKeys,
 }: GuidancePanelProps) {
-  const items = filterItems(guidance?.items ?? [], targetKeys);
+  const items = filterItems(guidance?.items ?? [], targetKeys, excludeTargetKeys);
 
-  if ((error || !isLoading) && items.length === 0) {
-    return null;
-  }
+  if (items.length === 0) return null;
 
   return (
     <section className="ai-panel" aria-live="polite">
@@ -39,9 +39,6 @@ export function GuidancePanel({
         ) : null}
       </div>
 
-      {!error && isLoading && !guidance ? (
-        <p className="ai-empty">Analyzing current data...</p>
-      ) : null}
       {!error && !isLoading && guidance ? <p className="ai-summary">{guidance.summary}</p> : null}
 
       {items.length > 0 ? (
@@ -83,8 +80,17 @@ function GuidanceItemView({ item }: { item: AiGuidanceItem }) {
   );
 }
 
-function filterItems(items: AiGuidanceItem[], targetKeys?: string[]): AiGuidanceItem[] {
-  if (!targetKeys || targetKeys.length === 0) return items;
-  const keys = new Set(targetKeys);
-  return items.filter((item) => keys.has(item.target_key));
+function filterItems(
+  items: AiGuidanceItem[],
+  targetKeys?: string[],
+  excludeTargetKeys?: string[],
+): AiGuidanceItem[] {
+  const includeKeys = targetKeys && targetKeys.length > 0 ? new Set(targetKeys) : null;
+  const excludeKeys =
+    excludeTargetKeys && excludeTargetKeys.length > 0 ? new Set(excludeTargetKeys) : null;
+  return items.filter((item) => {
+    if (includeKeys && !includeKeys.has(item.target_key)) return false;
+    if (excludeKeys?.has(item.target_key)) return false;
+    return true;
+  });
 }

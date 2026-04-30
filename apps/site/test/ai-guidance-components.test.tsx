@@ -43,6 +43,16 @@ test("GuidancePanel hides empty guidance payloads", () => {
   assert.equal(html, "");
 });
 
+test("GuidancePanel renders nothing while waiting for first insight", () => {
+  const html = renderToStaticMarkup(
+    <MemoryRouter>
+      <GuidancePanel title="Fleet overview guidance" isLoading />
+    </MemoryRouter>,
+  );
+
+  assert.equal(html, "");
+});
+
 test("GuidancePanel renders useful guidance items", () => {
   const html = renderToStaticMarkup(
     <MemoryRouter>
@@ -62,4 +72,23 @@ test("GuidancePanel renders useful guidance items", () => {
   assert.match(html, /Focus on offline collectors/);
   assert.match(html, /Collectors offline/);
   assert.match(html, /Connected/);
+});
+
+test("GuidancePanel can hide items already rendered in metric slots", () => {
+  const html = renderToStaticMarkup(
+    <MemoryRouter>
+      <GuidancePanel
+        title="Fleet overview guidance"
+        excludeTargetKeys={["overview.agents"]}
+        guidance={{
+          summary: "Focus on offline collectors.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "fixture",
+          items: [guidanceItem],
+        }}
+      />
+    </MemoryRouter>,
+  );
+
+  assert.equal(html, "");
 });

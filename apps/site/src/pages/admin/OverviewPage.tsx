@@ -199,6 +199,11 @@ export default function OverviewPage() {
         isLoading={guidance.isLoading}
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
+        excludeTargetKeys={[
+          "admin.overview.tenants",
+          "admin.overview.configs",
+          "admin.overview.agents",
+        ]}
       />
 
       <div className="mt-6" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>

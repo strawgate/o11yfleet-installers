@@ -393,6 +393,27 @@ describe("ai insight candidates", () => {
     expect(candidates).toEqual([]);
   });
 
+  it("does not promote single-collector outages without supporting evidence", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets,
+        context: {},
+        page_context: {
+          route: "/portal/overview",
+          metrics: [
+            { key: "total_agents", label: "Total collectors", value: 1 },
+            { key: "connected_agents", label: "Connected collectors", value: 0 },
+            { key: "healthy_agents", label: "Healthy collectors", value: 0 },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual([]);
+  });
+
   it("promotes explicit policy threshold crossings with evidence", () => {
     const candidates = analyzeGuidanceCandidates(
       {
@@ -423,6 +444,48 @@ describe("ai insight candidates", () => {
     expect(candidates[0]?.item.evidence).toEqual(
       expect.arrayContaining([expect.objectContaining({ label: "Offline share", value: "60%" })]),
     );
+  });
+
+  it("targets collector connectivity gaps at the collector metric when other metrics come first", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.overview",
+        targets: [
+          {
+            key: "overview.page",
+            label: "Overview page",
+            surface: "portal.overview",
+            kind: "page",
+          },
+          {
+            key: "overview.configurations",
+            label: "Configurations metric",
+            surface: "portal.overview",
+            kind: "metric",
+          },
+          {
+            key: "overview.agents",
+            label: "Collectors metric",
+            surface: "portal.overview",
+            kind: "metric",
+          },
+        ],
+        context: {
+          total_agents: 12,
+          connected_agents: 2,
+          healthy_agents: 10,
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates[0]).toMatchObject({
+      signal: "connectivity_gap",
+      item: {
+        target_key: "overview.agents",
+      },
+    });
+    expect(candidates[0]?.item.detail).toContain("health counts disagree");
   });
 
   it("keeps admin setup gaps separate from fleet health anomalies", () => {
@@ -492,7 +555,7 @@ describe("ai insight candidates", () => {
       evidence_level: "correlated",
       item: {
         target_key: "overview.agents-table",
-        severity: "critical",
+        severity: "warning",
       },
     });
     expect(cluster?.item.evidence).toEqual(

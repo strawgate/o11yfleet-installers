@@ -8,11 +8,13 @@ import {
   type UIMessage,
 } from "ai";
 import {
+  aiGuidanceItemSchema,
   aiGuidanceResponseSchema,
   analyzeGuidanceCandidates,
   candidatesToGuidanceItems,
   filterGuidanceItemsForQuality,
   type AiChatRequest,
+  type AiGuidanceItem,
   type AiGuidanceRequest,
   type AiGuidanceResponse,
 } from "@o11yfleet/core/ai";
@@ -61,29 +63,25 @@ export async function generateAiGuidance(
       schemaName: "O11yFleetGuidance",
       schemaDescription: "Evidence-backed guidance for one o11yFleet app surface.",
       system:
-        "You are the o11yFleet guidance engine. Return concise, operational guidance only. Base every item on the supplied targets and context. Do not invent data, credentials, outages, tenants, agents, or configuration state.",
+        "You are the o11yFleet guidance engine. Return concise, operational guidance only. Base every item on the supplied targets and context. Do not invent data, credentials, outages, tenants, agents, or configuration state. Return only the requested JSON object; do not include markdown fences, prose, chain-of-thought, or <think> tags.",
       prompt: buildGuidancePrompt(input, opts.scopeLabel, candidates),
       temperature: 0.2,
       maxOutputTokens: 1600,
+      experimental_repairText: async ({ text }) => repairGuidanceText(text),
     });
-    const output = qualityGateModelOutput(
-      input,
-      sanitizeModelOutput(
-        validateModelOutputTargets(modelOutputSchema.parse(result.object), input),
-      ),
-      candidates,
-    );
-
-    return aiGuidanceResponseSchema.parse({
-      ...output,
-      generated_at: new Date().toISOString(),
-      model: providerConfig.model,
-    });
+    return finalizeGuidanceOutput(input, providerConfig.model, result.object, candidates);
   } catch (err) {
+    const recovered = recoverGuidanceOutput(err);
+    if (recovered) {
+      return finalizeGuidanceOutput(input, providerConfig.model, recovered, candidates);
+    }
     if (err instanceof AiProviderError) {
       throw err;
     }
-    console.error("AI guidance provider failed:", err);
+    console.error(
+      "AI guidance provider failed:",
+      err instanceof Error ? `${err.name}: ${err.message}` : String(err),
+    );
     throw new AiProviderError("AI guidance provider failed");
   }
 }
@@ -158,6 +156,150 @@ function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiP
   };
 }
 
+function finalizeGuidanceOutput(
+  input: AiGuidanceRequest,
+  model: string,
+  output: Pick<AiGuidanceResponse, "summary" | "items">,
+  candidates: ReturnType<typeof analyzeGuidanceCandidates>,
+): AiGuidanceResponse {
+  const gated = qualityGateModelOutput(
+    input,
+    sanitizeModelOutput(validateModelOutputTargets(modelOutputSchema.parse(output), input)),
+    candidates,
+  );
+
+  return aiGuidanceResponseSchema.parse({
+    ...gated,
+    generated_at: new Date().toISOString(),
+    model,
+  });
+}
+
+function recoverGuidanceOutput(err: unknown): Pick<AiGuidanceResponse, "summary" | "items"> | null {
+  const text = findModelText(err);
+  if (!text) return null;
+
+  const repaired = repairGuidanceText(text);
+  if (!repaired) return null;
+
+  const parsed = JSON.parse(repaired) as unknown;
+  return modelOutputSchema.parse(parsed);
+}
+
+function repairGuidanceText(text: string): string | null {
+  const parsed = parseJsonObjectFromModelText(text);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null;
+
+  const record = parsed as Record<string, unknown>;
+  const hasGuidanceSummary =
+    typeof record["summary"] === "string" && record["summary"].trim() !== "";
+  const hasGuidanceItems = Array.isArray(record["items"]);
+  if (!hasGuidanceSummary && !hasGuidanceItems) return null;
+
+  const items = hasGuidanceItems ? (record["items"] as unknown[]) : [];
+  const summary = hasGuidanceSummary
+    ? (record["summary"] as string)
+    : items.length > 0
+      ? `Found ${items.length} guidance item${items.length === 1 ? "" : "s"} from the model response.`
+      : "No non-obvious guidance found in the supplied context.";
+
+  const normalizedItems = items.map(normalizeRecoveredGuidanceItem);
+  const parsedOutput = modelOutputSchema.safeParse({ summary, items: normalizedItems });
+  if (parsedOutput.success) return JSON.stringify(parsedOutput.data);
+
+  const validItems: AiGuidanceItem[] = [];
+  for (const item of normalizedItems) {
+    const parsedItem = aiGuidanceItemSchema.safeParse(item);
+    if (parsedItem.success) validItems.push(parsedItem.data);
+  }
+  return JSON.stringify(modelOutputSchema.parse({ summary, items: validItems }));
+}
+
+function findModelText(err: unknown, seen = new Set<unknown>()): string {
+  if (!err || typeof err !== "object" || seen.has(err)) return "";
+  seen.add(err);
+
+  const record = err as Record<string, unknown>;
+  if (typeof record["text"] === "string" && record["text"].trim() !== "") {
+    return record["text"];
+  }
+
+  const causeText = findModelText(record["cause"], seen);
+  if (causeText) return causeText;
+
+  if (Array.isArray(record["errors"])) {
+    for (const nested of record["errors"]) {
+      const nestedText = findModelText(nested, seen);
+      if (nestedText) return nestedText;
+    }
+  }
+
+  return "";
+}
+
+function normalizeRecoveredGuidanceItem(item: unknown): unknown {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return item;
+
+  const record = item as Record<string, unknown>;
+  const action = record["action"];
+  if (!action || typeof action !== "object" || Array.isArray(action)) return item;
+
+  const actionRecord = action as Record<string, unknown>;
+  const kind = typeof actionRecord["kind"] === "string" ? actionRecord["kind"] : "";
+  if (kind === "none") return item;
+
+  const label =
+    typeof actionRecord["label"] === "string" && actionRecord["label"].trim() !== ""
+      ? actionRecord["label"].trim()
+      : "Review in app";
+  const href = typeof actionRecord["href"] === "string" ? actionRecord["href"].trim() : "";
+
+  if (
+    ["open_page", "open_configuration", "open_agent", "open_tenant"].includes(kind) &&
+    (!href || !isAppRelativeHref(href))
+  ) {
+    return {
+      ...record,
+      action: {
+        kind: "none",
+        label,
+      },
+    };
+  }
+
+  if (kind === "propose_config_change" && href && !isAppRelativeHref(href)) {
+    return {
+      ...record,
+      action: {
+        kind: "none",
+        label,
+      },
+    };
+  }
+
+  return item;
+}
+
+function parseJsonObjectFromModelText(text: string): unknown | null {
+  const withoutReasoning = text.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+  const fenced = /```(?:json)?\s*([\s\S]*?)```/i.exec(withoutReasoning)?.[1]?.trim();
+  for (const candidate of [fenced, withoutReasoning, sliceJsonObject(withoutReasoning)]) {
+    if (!candidate) continue;
+    try {
+      return JSON.parse(candidate);
+    } catch {
+      // Try the next normalized form.
+    }
+  }
+  return null;
+}
+
+function sliceJsonObject(text: string): string | null {
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  return start >= 0 && end > start ? text.slice(start, end + 1) : null;
+}
+
 function buildGuidancePrompt(
   input: AiGuidanceRequest,
   scopeLabel: string,
@@ -178,10 +320,13 @@ function buildGuidancePrompt(
         "Severity must reflect operational urgency: notice, warning, or critical.",
         "Confidence should be conservative when context is sparse.",
         "Evidence values must come from page_context, generic context, or target context.",
-        "Candidate insights are deterministic pre-analysis from app-owned rules. Prefer them when present, and do not weaken their evidence or caveats.",
+        "Candidate insights are optional app-owned pre-analysis. Use them only when they add non-obvious, evidence-backed guidance, and return no items when they do not.",
+        "Do not return an item that only restates a visible metric, table row, status badge, or candidate headline; include a decision-useful implication, prioritization, data-quality caveat, or correlation.",
         "Do not turn raw counts into claims like unusual, high, low, spike, or regression unless the context includes a baseline, history, rollout timing, clustering, or an explicit threshold.",
+        "If page metrics conflict, such as healthy collectors exceeding connected collectors, frame it as a data freshness or context consistency issue instead of assuming disconnected collectors are healthy.",
         "Actions are optional; use kind none when no safe app action is obvious.",
         "If there is no non-obvious useful insight, return an empty items array.",
+        "Return only the JSON object for the requested schema. Do not wrap it in markdown, prose, chain-of-thought, or <think> tags.",
       ],
       targets: input.targets,
       candidate_insights: candidates,
@@ -221,7 +366,7 @@ function qualityGateModelOutput(
   return {
     summary:
       items.length > 0
-        ? output.summary
+        ? `Found ${items.length} guidance item${items.length === 1 ? "" : "s"} from the provided ${input.surface} context.`
         : `No non-obvious guidance found in the provided ${input.surface} context.`,
     items,
   };
@@ -271,6 +416,7 @@ function buildChatSystemPrompt(input: AiChatRequest, scopeLabel: string): string
       behavior: [
         "Use the supplied browser-visible context as the primary source of truth.",
         "Be concise and operational. Prefer a short answer with direct evidence.",
+        "Do not include chain-of-thought, hidden reasoning, markdown fences, or <think> tags.",
         "Do not invent agents, tenants, configuration state, credentials, outages, baselines, or history.",
         "Do not call a count unusual, high, low, a spike, or a regression unless the context includes a baseline, history, rollout timing, clustering, or an explicit threshold.",
         "If the visible context is insufficient, say what is missing instead of guessing.",

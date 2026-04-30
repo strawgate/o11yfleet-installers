@@ -118,8 +118,8 @@ test.describe("AI guidance surfaces", () => {
 
     await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     await expect(page.getByText("prod-collectors")).toBeVisible();
-    await expect(page.getByText("Portal guidance from test data.")).toBeVisible();
-    await expect(page.locator(".ai-panel").getByText("3 collectors offline")).toBeVisible();
+    await expect(page.locator(".ai-slot").getByText("3 collectors offline")).toBeVisible();
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
@@ -198,8 +198,8 @@ test.describe("AI guidance surfaces", () => {
 
     await expect(page.getByRole("heading", { name: "Admin Overview" })).toBeVisible();
     await expect(page.getByText("Demo Org")).toBeVisible();
-    await expect(page.getByText("Admin guidance from test data.")).toBeVisible();
-    await expect(page.locator(".ai-panel").getByText("Review collector growth")).toBeVisible();
+    await expect(page.locator(".ai-slot").getByText("Review collector growth")).toBeVisible();
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
@@ -317,10 +317,10 @@ test.describe("AI guidance surfaces", () => {
     await page.goto(`${UI_URL}/admin/usage?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "Usage & Spend" })).toBeVisible();
-    await expect(page.getByText("Usage guidance from test data.")).toBeVisible();
     await expect(
-      page.locator(".ai-panel").getByText("One usage source is not connected"),
+      page.locator(".ai-slot").getByText("One usage source is not connected"),
     ).toBeVisible();
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
     await expect(page.locator(".stat .val", { hasText: "1/2" })).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
@@ -801,8 +801,8 @@ test.describe("AI guidance surfaces", () => {
     await page.goto(`${UI_URL}/portal/configurations/config-1?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
-    await expect(page.getByText("Configuration guidance from test data.")).toBeVisible();
-    await expect(page.locator(".ai-panel").getByText("Collector count is stable")).toBeVisible();
+    await expect(page.locator(".ai-slot").getByText("Collector count is stable")).toBeVisible();
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });

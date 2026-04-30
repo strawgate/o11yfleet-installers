@@ -24,6 +24,9 @@ const criticalConnectivityGapRatio = 0.5;
 const warningHealthGapRatio = 0.25;
 const warningDriftGapRatio = 0.25;
 const offlineClusterMinAgents = 3;
+const minOperationalCohortSize = 5;
+const minOperationalAffectedCollectors = 3;
+const minCriticalAffectedCollectors = 10;
 const minAdminCohortSize = 5;
 const maxGuidanceDetailLength = 800;
 
@@ -34,6 +37,7 @@ export function analyzeGuidanceCandidates(
   const candidates: AiInsightCandidate[] = [];
   const pageTarget = targetFor(input, "page") ?? input.targets[0]!;
   const metricTarget = targetFor(input, "metric") ?? pageTarget;
+  const collectorMetricTarget = targetForCollectorMetric(input) ?? metricTarget;
   const sectionTarget = targetFor(input, "section") ?? pageTarget;
   const tableTarget = targetFor(input, "table") ?? sectionTarget;
 
@@ -59,18 +63,20 @@ export function analyzeGuidanceCandidates(
   ) {
     const offline = totalAgents - connectedAgents;
     const offlineRatio = offline / Math.max(totalAgents, 1);
-    if (offlineRatio >= criticalConnectivityGapRatio) {
+    if (hasMaterialOperationalShare(offline, totalAgents, criticalConnectivityGapRatio)) {
       candidates.push({
         signal: "connectivity_gap",
         evidence_level: "policy_threshold",
         rationale:
           "The connected collector count is below the configured triage threshold. This is a policy-threshold insight, not a historical anomaly claim.",
         item: {
-          target_key: metricTarget.key,
+          target_key: collectorMetricTarget.key,
           headline: `${offline} collector${offline === 1 ? "" : "s"} offline`,
           detail:
-            "The current page data crosses the connectivity triage threshold. Check whether the gap is concentrated in one configuration before changing rollout policy.",
-          severity: offlineRatio > 0.75 ? "critical" : "warning",
+            healthyAgents !== null && healthyAgents > connectedAgents
+              ? "Connectivity and health counts disagree, so treat health as stale until collectors reconnect. Check configuration-level concentration before changing rollout policy."
+              : "The disconnected share crosses the connectivity triage threshold. Check whether the gap is concentrated in one configuration before changing rollout policy.",
+          severity: severityForOperationalShare(offline, offlineRatio),
           confidence: 0.76,
           evidence: [
             evidence("Total collectors", totalAgents, options.scopeLabel),
@@ -91,18 +97,18 @@ export function analyzeGuidanceCandidates(
   ) {
     const unhealthy = connectedAgents - healthyAgents;
     const unhealthyRatio = unhealthy / connectedAgents;
-    if (unhealthyRatio >= warningHealthGapRatio) {
+    if (hasMaterialOperationalShare(unhealthy, connectedAgents, warningHealthGapRatio)) {
       candidates.push({
         signal: "health_gap",
         evidence_level: "policy_threshold",
         rationale:
           "Connected collectors are reporting unhealthy runtime state above the configured triage threshold.",
         item: {
-          target_key: sectionTarget.key,
+          target_key: collectorMetricTarget.key,
           headline: `${unhealthy} connected collector${unhealthy === 1 ? "" : "s"} unhealthy`,
           detail:
             "This is a health-state gap among collectors that are still connected. Prioritize config status, resource pressure, or exporter failures before network troubleshooting.",
-          severity: unhealthyRatio > 0.5 ? "critical" : "warning",
+          severity: severityForOperationalShare(unhealthy, unhealthyRatio, 0.5),
           confidence: 0.72,
           evidence: [
             evidence("Connected collectors", connectedAgents, options.scopeLabel),
@@ -195,7 +201,7 @@ function deriveAgentCandidates(
   const driftedAgents = numberFromRequest(input, "drifted_agents");
   if (driftedAgents !== null && driftedAgents > 0) {
     const driftRatio = driftedAgents / totalAgents;
-    if (driftedAgents >= 3 || driftRatio >= warningDriftGapRatio) {
+    if (hasMaterialOperationalShare(driftedAgents, totalAgents, warningDriftGapRatio)) {
       candidates.push({
         signal: "visible_agent_drift",
         evidence_level: "policy_threshold",
@@ -206,7 +212,7 @@ function deriveAgentCandidates(
           headline: `${driftedAgents} collector${driftedAgents === 1 ? "" : "s"} drifted`,
           detail:
             "Visible collectors are reporting a current config hash that differs from desired. Check rollout completion and collector apply errors before changing policy.",
-          severity: driftRatio >= 0.5 ? "critical" : "warning",
+          severity: severityForOperationalShare(driftedAgents, driftRatio, 0.5),
           confidence: 0.76,
           evidence: [
             evidence("Total collectors", totalAgents, "visible page"),
@@ -222,7 +228,7 @@ function deriveAgentCandidates(
   const degradedAgents = numberFromRequest(input, "degraded_agents");
   if (degradedAgents !== null && degradedAgents > 0) {
     const degradedRatio = degradedAgents / totalAgents;
-    if (degradedRatio >= warningHealthGapRatio) {
+    if (hasMaterialOperationalShare(degradedAgents, totalAgents, warningHealthGapRatio)) {
       candidates.push({
         signal: "visible_agent_degraded_state",
         evidence_level: "policy_threshold",
@@ -233,7 +239,7 @@ function deriveAgentCandidates(
           headline: `${degradedAgents} collector${degradedAgents === 1 ? "" : "s"} degraded`,
           detail:
             "Degraded collectors are still visible but need runtime-state triage. Prioritize their last error, health state, and config sync before connectivity work.",
-          severity: degradedRatio >= 0.5 ? "critical" : "warning",
+          severity: severityForOperationalShare(degradedAgents, degradedRatio, 0.5),
           confidence: 0.72,
           evidence: [
             evidence("Total collectors", totalAgents, "visible page"),
@@ -258,7 +264,7 @@ function deriveConfigurationOperationalCandidates(
   if (driftedAgents === null || connectedAgents === null || connectedAgents <= 0) return [];
 
   const driftRatio = driftedAgents / connectedAgents;
-  if (driftedAgents === 0 || driftRatio < warningDriftGapRatio) return [];
+  if (!hasMaterialOperationalShare(driftedAgents, connectedAgents, warningDriftGapRatio)) return [];
 
   const rolloutTarget = targetForKey(input, "configuration.rollout")?.key ?? fallbackTargetKey;
   return [
@@ -272,7 +278,7 @@ function deriveConfigurationOperationalCandidates(
         headline: `${driftedAgents} connected collector${driftedAgents === 1 ? "" : "s"} drifted`,
         detail:
           "A meaningful share of connected collectors has not converged to the desired config hash. Check rollout cohort state and collector apply errors before retrying rollout.",
-        severity: driftRatio >= 0.5 ? "critical" : "warning",
+        severity: severityForOperationalShare(driftedAgents, driftRatio, 0.5),
         confidence: 0.74,
         evidence: [
           evidence("Connected collectors", connectedAgents, "visible page"),
@@ -629,9 +635,40 @@ function targetFor(
   return input.targets.find((target) => target.kind === kind) ?? null;
 }
 
+function targetForCollectorMetric(input: AiGuidanceRequest): AiGuidanceTarget | null {
+  return (
+    input.targets.find(
+      (target) =>
+        target.kind === "metric" && /(agent|collector)/i.test(`${target.key} ${target.label}`),
+    ) ?? null
+  );
+}
+
 function reviewAgentsActionFor(scopeLabel: string): AiGuidanceAction | undefined {
   if (scopeLabel === "admin") return undefined;
   return { kind: "open_page", label: "Review agents", href: "/portal/agents" };
+}
+
+function hasMaterialOperationalShare(
+  affectedCollectors: number,
+  totalCollectors: number,
+  ratioThreshold: number,
+): boolean {
+  return (
+    totalCollectors >= minOperationalCohortSize &&
+    affectedCollectors >= minOperationalAffectedCollectors &&
+    affectedCollectors / Math.max(totalCollectors, 1) >= ratioThreshold
+  );
+}
+
+function severityForOperationalShare(
+  affectedCollectors: number,
+  affectedRatio: number,
+  criticalRatio = 0.75,
+): AiGuidanceItem["severity"] {
+  return affectedCollectors >= minCriticalAffectedCollectors && affectedRatio >= criticalRatio
+    ? "critical"
+    : "warning";
 }
 
 function evidence(label: string, value: string | number, source: string): AiGuidanceEvidence {
@@ -741,7 +778,7 @@ function deriveOfflineClusterCandidates(
         headline: `Offline cluster on ${strongestCluster.configHash.slice(0, 12)}`,
         detail:
           "Visible collectors sharing a configuration hash are disproportionately offline. Check recent rollout timing and config validity before broad connectivity remediation.",
-        severity: offlineRatio > 0.75 ? "critical" : "warning",
+        severity: severityForOperationalShare(strongestCluster.offline, offlineRatio),
         confidence: 0.74,
         evidence: [
           evidence("Cluster config hash", strongestCluster.configHash, scopeLabel),

@@ -103,6 +103,34 @@ describe("AI guidance routes", () => {
     expect(response.items[0]?.evidence.some((item) => item.value === "10")).toBe(true);
   });
 
+  it("does not render deterministic guidance for a single offline collector", async () => {
+    const response = await generateAiGuidance(
+      {
+        surface: "portal.overview",
+        targets: overviewRequest.targets,
+        context: {},
+        page_context: {
+          route: "/portal/overview",
+          title: "Fleet overview",
+          metrics: [
+            { key: "total_agents", label: "Total collectors", value: 1 },
+            { key: "connected_agents", label: "Connected collectors", value: 0 },
+            { key: "healthy_agents", label: "Healthy collectors", value: 0 },
+          ],
+        },
+      },
+      {
+        env: {},
+        scopeLabel: "tenant:tenant-ai-test",
+      },
+    );
+
+    expect(response.items).toEqual([]);
+    expect(response.summary).toBe(
+      "No non-obvious guidance found in the provided portal.overview context.",
+    );
+  });
+
   it("prefers browser page context over generic context for deterministic guidance", async () => {
     const response = await generateAiGuidance(
       {
@@ -354,8 +382,155 @@ describe("AI guidance routes", () => {
     expect(calls[0]?.url).toBe("https://api.minimax.test/v1/chat/completions");
     expect(calls[0]?.headers.get("Authorization")).toBe("Bearer test-key");
     expect(response.model).toBe("MiniMax-M2.7");
-    expect(response.summary).toContain("connectivity");
+    expect(response.summary).toBe(
+      "Found 1 guidance item from the provided portal.overview context.",
+    );
     expect(response.items[0]?.action?.kind).toBe("open_page");
+  });
+
+  it("recovers MiniMax fenced JSON responses that include reasoning text", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content:
+                '<think>Visible counts are healthy, so there is no useful operational guidance.</think>\n\n```json\n{"items":[]}\n```',
+            },
+          },
+        ],
+        usage: {
+          prompt_tokens: 10,
+          completion_tokens: 20,
+          total_tokens: 30,
+        },
+      }),
+    );
+
+    const response = await generateAiGuidance(
+      {
+        surface: "portal.overview",
+        targets: overviewRequest.targets,
+        context: {
+          total_agents: 12,
+          connected_agents: 12,
+          healthy_agents: 12,
+        },
+        page_context: {
+          route: "/portal/overview",
+          title: "Fleet overview",
+          metrics: [
+            { key: "total_agents", label: "Total collectors", value: 12 },
+            { key: "connected_agents", label: "Connected collectors", value: 12 },
+            { key: "healthy_agents", label: "Healthy collectors", value: 12 },
+          ],
+        },
+      },
+      {
+        env: {
+          LLM_PROVIDER: "minimax",
+          LLM_MODEL: "MiniMax-M2.7",
+          LLM_BASE_URL: "https://api.minimax.test/v1",
+          MINIMAX_API_KEY: "test-key",
+        },
+        scopeLabel: "tenant:tenant-ai-test",
+        fetch: fakeFetch,
+      },
+    );
+
+    expect(response.model).toBe("MiniMax-M2.7");
+    expect(response.items).toEqual([]);
+    expect(response.summary).toBe(
+      "No non-obvious guidance found in the provided portal.overview context.",
+    );
+  });
+
+  it("does not recover arbitrary JSON as an empty guidance response", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content:
+                '<think>This is not a guidance payload.</think>\n```json\n{"ok":true,"status":"done"}\n```',
+            },
+          },
+        ],
+      }),
+    );
+
+    await expect(
+      generateAiGuidance(overviewRequest, {
+        env: {
+          LLM_PROVIDER: "minimax",
+          LLM_MODEL: "MiniMax-M2.7",
+          LLM_BASE_URL: "https://api.minimax.test/v1",
+          MINIMAX_API_KEY: "test-key",
+        },
+        scopeLabel: "tenant:tenant-ai-test",
+        fetch: fakeFetch,
+      }),
+    ).rejects.toMatchObject({
+      name: "AiProviderError",
+      message: "AI guidance provider failed",
+    });
+  });
+
+  it("keeps recovered MiniMax guidance when only the action shape is invalid", async () => {
+    const fakeFetch: typeof fetch = vi.fn(async () =>
+      Response.json({
+        id: "chatcmpl-guidance-test",
+        object: "chat.completion",
+        created: 0,
+        model: "MiniMax-M2.7",
+        choices: [
+          {
+            index: 0,
+            finish_reason: "stop",
+            message: {
+              role: "assistant",
+              content:
+                '<think>There is a connectivity gap.</think>\n```json\n{"summary":"One invalid item should not fail the route.","items":[{"target_key":"overview.fleet-health","headline":"Connectivity needs review","detail":"The visible connected count is below the total collector count.","severity":"warning","confidence":0.7,"evidence":[{"label":"Connected collectors","value":"4"}],"action":{"kind":"open_page","label":"Review agents"}}]}\n```',
+            },
+          },
+        ],
+      }),
+    );
+
+    const response = await generateAiGuidance(overviewRequest, {
+      env: {
+        LLM_PROVIDER: "minimax",
+        LLM_MODEL: "MiniMax-M2.7",
+        LLM_BASE_URL: "https://api.minimax.test/v1",
+        MINIMAX_API_KEY: "test-key",
+      },
+      scopeLabel: "tenant:tenant-ai-test",
+      fetch: fakeFetch,
+    });
+
+    expect(response.summary).toBe(
+      "Found 1 guidance item from the provided portal.overview context.",
+    );
+    expect(response.items).toHaveLength(1);
+    expect(response.items[0]?.headline).toBe("Connectivity needs review");
+    expect(response.items[0]?.action).toEqual({
+      kind: "none",
+      label: "Review agents",
+    });
   });
 
   it("requires an explicit base URL for generic OpenAI-compatible providers", async () => {

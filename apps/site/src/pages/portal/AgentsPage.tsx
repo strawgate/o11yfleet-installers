@@ -52,6 +52,48 @@ function AgentSection({ config }: { config: Configuration }) {
   const healthyCount = (agents ?? []).filter((agent) => agentIsHealthy(agent) === true).length;
   const degradedCount = (agents ?? []).filter((agent) => agent.status === "degraded").length;
   const insightSurface = insightSurfaces.portalAgent;
+  const driftedCount = desiredHash
+    ? (agents ?? []).filter((agent) => agentHasDrift(agent, desiredHash)).length
+    : 0;
+  const guidanceTargets = useMemo(
+    () => [
+      insightTarget(insightSurface, {
+        key: `agents.${config.id}.section`,
+        label: `${config.name} agents`,
+        kind: "section",
+      }),
+      insightTarget(insightSurface, {
+        key: `agents.${config.id}.table`,
+        label: `${config.name} agent table`,
+        kind: "table",
+      }),
+    ],
+    [config.id, config.name, insightSurface],
+  );
+  const guidanceContext = useMemo(
+    () => ({
+      configuration_id: config.id,
+      configuration_name: config.name,
+      total_agents: agents.length,
+      connected_agents: connectedCount,
+      healthy_agents: healthyCount,
+      degraded_agents: degradedCount,
+      drifted_agents: driftedCount,
+      agents: agents.slice(0, 12).map((agent) => ({
+        id: agentUid(agent),
+        hostname: agentHost(agent),
+        status: agent.status ?? null,
+        last_seen: agentLastSeen(agent) ?? null,
+      })),
+    }),
+    [agents, config.id, config.name, connectedCount, degradedCount, driftedCount, healthyCount],
+  );
+  const shouldRequestGuidance = hasMaterialAgentGuidanceSignal({
+    totalAgents: agents.length,
+    connectedAgents: connectedCount,
+    degradedAgents: degradedCount,
+    driftedAgents: driftedCount,
+  });
   const pageContext =
     agents && !isLoading
       ? buildBrowserPageContext({
@@ -66,6 +108,7 @@ function AgentSection({ config }: { config: Configuration }) {
             pageMetric("connected_agents", "Connected collectors", connectedCount),
             pageMetric("healthy_agents", "Healthy collectors", healthyCount),
             pageMetric("degraded_agents", "Degraded collectors", degradedCount),
+            pageMetric("drifted_agents", "Drifted collectors", driftedCount),
           ],
           details: [
             pageDetail("configuration_id", "Configuration ID", config.id),
@@ -91,55 +134,22 @@ function AgentSection({ config }: { config: Configuration }) {
         })
       : null;
   const guidanceRequest: AiGuidanceRequest | null =
-    agents && !isLoading && pageContext
-      ? buildInsightRequest(
-          insightSurface,
-          [
-            insightTarget(insightSurface, {
-              key: `agents.${config.id}.section`,
-              label: `${config.name} agents`,
-              kind: "section",
-            }),
-            insightTarget(insightSurface, {
-              key: `agents.${config.id}.table`,
-              label: `${config.name} agent table`,
-              kind: "table",
-            }),
-          ],
-          {
-            configuration_id: config.id,
-            configuration_name: config.name,
-            total_agents: agents.length,
-            connected_agents: connectedCount,
-            healthy_agents: healthyCount,
-            degraded_agents: degradedCount,
-            agents: agents.slice(0, 12).map((agent) => ({
-              id: agentUid(agent),
-              hostname: agentHost(agent),
-              status: agent.status ?? null,
-              last_seen: agentLastSeen(agent) ?? null,
-            })),
-          },
-          { intent: "triage_state", pageContext },
-        )
+    shouldRequestGuidance && agents && !isLoading && pageContext
+      ? buildInsightRequest(insightSurface, guidanceTargets, guidanceContext, {
+          intent: "triage_state",
+          pageContext,
+        })
       : null;
   const browserContext = useMemo(
     () => ({
       id: `portal.agents.${config.id}`,
       title: `${config.name} collectors`,
       surface: insightSurface.surface,
-      context: guidanceRequest?.context ?? {},
-      targets: guidanceRequest?.targets ?? [],
+      context: guidanceContext,
+      targets: guidanceTargets,
       pageContext: pageContext ?? undefined,
     }),
-    [
-      config.id,
-      config.name,
-      guidanceRequest?.context,
-      guidanceRequest?.targets,
-      insightSurface.surface,
-      pageContext,
-    ],
+    [config.id, config.name, guidanceContext, guidanceTargets, insightSurface.surface, pageContext],
   );
   useRegisterBrowserContext(browserContext);
   const guidance = usePortalGuidance(guidanceRequest);
@@ -269,6 +279,25 @@ function AgentSection({ config }: { config: Configuration }) {
       </div>
     </>
   );
+}
+
+function hasMaterialAgentGuidanceSignal(input: {
+  totalAgents: number;
+  connectedAgents: number;
+  degradedAgents: number;
+  driftedAgents: number;
+}): boolean {
+  if (input.totalAgents < 5) return false;
+  const disconnectedAgents = Math.max(input.totalAgents - input.connectedAgents, 0);
+  return (
+    hasMaterialShare(disconnectedAgents, input.totalAgents, 0.5) ||
+    hasMaterialShare(input.degradedAgents, input.totalAgents, 0.25) ||
+    hasMaterialShare(input.driftedAgents, input.totalAgents, 0.25)
+  );
+}
+
+function hasMaterialShare(affected: number, total: number, ratio: number): boolean {
+  return affected >= 3 && affected / Math.max(total, 1) >= ratio;
 }
 
 export default function AgentsPage() {

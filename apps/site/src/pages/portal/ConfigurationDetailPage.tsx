@@ -530,6 +530,11 @@ export default function ConfigurationDetailPage() {
         isLoading={guidance.isLoading}
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
+        excludeTargetKeys={[
+          "configuration.agents",
+          "configuration.versions",
+          "configuration.tokens",
+        ]}
       />
       {copilotRequest ? (
         <GuidancePanel
