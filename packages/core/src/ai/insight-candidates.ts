@@ -22,6 +22,7 @@ export interface AnalyzeGuidanceCandidatesOptions {
 
 const criticalConnectivityGapRatio = 0.5;
 const warningHealthGapRatio = 0.25;
+const warningDriftGapRatio = 0.25;
 const offlineClusterMinAgents = 3;
 const minAdminCohortSize = 5;
 const maxGuidanceDetailLength = 800;
@@ -165,14 +166,123 @@ export function analyzeGuidanceCandidates(
   }
 
   candidates.push(...clusterCandidates);
+  if (input.surface === "portal.agent") {
+    candidates.push(...deriveAgentCandidates(input, tableTarget.key, sectionTarget.key));
+  }
   if (input.surface === "portal.configuration") {
+    candidates.push(...deriveConfigurationOperationalCandidates(input, sectionTarget.key));
     candidates.push(...deriveConfigurationCopilotCandidates(input, sectionTarget.key));
+  }
+  if (input.surface === "admin.usage") {
+    candidates.push(...deriveAdminUsageCandidates(input, pageTarget.key, tableTarget.key));
   }
   if (options.scopeLabel === "admin") {
     candidates.push(...deriveAdminCandidates(input, pageTarget.key, sectionTarget.key));
   }
 
   return candidates.slice(0, 12);
+}
+
+function deriveAgentCandidates(
+  input: AiGuidanceRequest,
+  tableTargetKey: string,
+  sectionTargetKey: string,
+): AiInsightCandidate[] {
+  const totalAgents = numberFromRequest(input, "total_agents");
+  if (totalAgents === null || totalAgents <= 0) return [];
+
+  const candidates: AiInsightCandidate[] = [];
+  const driftedAgents = numberFromRequest(input, "drifted_agents");
+  if (driftedAgents !== null && driftedAgents > 0) {
+    const driftRatio = driftedAgents / totalAgents;
+    if (driftedAgents >= 3 || driftRatio >= warningDriftGapRatio) {
+      candidates.push({
+        signal: "visible_agent_drift",
+        evidence_level: "policy_threshold",
+        rationale:
+          "Visible agent guidance is based on explicit desired/current config hash mismatch counts, not a historical regression claim.",
+        item: {
+          target_key: tableTargetKey,
+          headline: `${driftedAgents} collector${driftedAgents === 1 ? "" : "s"} drifted`,
+          detail:
+            "Visible collectors are reporting a current config hash that differs from desired. Check rollout completion and collector apply errors before changing policy.",
+          severity: driftRatio >= 0.5 ? "critical" : "warning",
+          confidence: 0.76,
+          evidence: [
+            evidence("Total collectors", totalAgents, "visible page"),
+            evidence("Drifted collectors", driftedAgents, "visible page"),
+            evidence("Drift share", `${Math.round(driftRatio * 100)}%`, "policy threshold"),
+          ],
+          action: { kind: "open_page", label: "Review configuration", href: "/portal/agents" },
+        },
+      });
+    }
+  }
+
+  const degradedAgents = numberFromRequest(input, "degraded_agents");
+  if (degradedAgents !== null && degradedAgents > 0) {
+    const degradedRatio = degradedAgents / totalAgents;
+    if (degradedRatio >= warningHealthGapRatio) {
+      candidates.push({
+        signal: "visible_agent_degraded_state",
+        evidence_level: "policy_threshold",
+        rationale:
+          "The visible collector table reports degraded runtime state above the configured triage threshold.",
+        item: {
+          target_key: sectionTargetKey,
+          headline: `${degradedAgents} collector${degradedAgents === 1 ? "" : "s"} degraded`,
+          detail:
+            "Degraded collectors are still visible but need runtime-state triage. Prioritize their last error, health state, and config sync before connectivity work.",
+          severity: degradedRatio >= 0.5 ? "critical" : "warning",
+          confidence: 0.72,
+          evidence: [
+            evidence("Total collectors", totalAgents, "visible page"),
+            evidence("Degraded collectors", degradedAgents, "visible page"),
+            evidence("Degraded share", `${Math.round(degradedRatio * 100)}%`, "policy threshold"),
+          ],
+        },
+      });
+    }
+  }
+
+  return candidates;
+}
+
+function deriveConfigurationOperationalCandidates(
+  input: AiGuidanceRequest,
+  fallbackTargetKey: string,
+): AiInsightCandidate[] {
+  const driftedAgents = numberFromRequest(input, "drifted_agents");
+  const connectedAgents =
+    numberFromRequest(input, "connected_agents") ?? numberFromRequest(input, "agents_connected");
+  if (driftedAgents === null || connectedAgents === null || connectedAgents <= 0) return [];
+
+  const driftRatio = driftedAgents / connectedAgents;
+  if (driftedAgents === 0 || driftRatio < warningDriftGapRatio) return [];
+
+  const rolloutTarget = targetForKey(input, "configuration.rollout")?.key ?? fallbackTargetKey;
+  return [
+    {
+      signal: "configuration_rollout_drift",
+      evidence_level: "policy_threshold",
+      rationale:
+        "Configuration guidance compares visible drifted collectors against currently connected collectors.",
+      item: {
+        target_key: rolloutTarget,
+        headline: `${driftedAgents} connected collector${driftedAgents === 1 ? "" : "s"} drifted`,
+        detail:
+          "A meaningful share of connected collectors has not converged to the desired config hash. Check rollout cohort state and collector apply errors before retrying rollout.",
+        severity: driftRatio >= 0.5 ? "critical" : "warning",
+        confidence: 0.74,
+        evidence: [
+          evidence("Connected collectors", connectedAgents, "visible page"),
+          evidence("Drifted collectors", driftedAgents, "visible page"),
+          evidence("Drift share", `${Math.round(driftRatio * 100)}%`, "policy threshold"),
+        ],
+        action: { kind: "none", label: "Review rollout cohort" },
+      },
+    },
+  ];
 }
 
 function deriveConfigurationCopilotCandidates(
@@ -272,6 +382,26 @@ function deriveAdminCandidates(
   sectionTargetKey: string,
 ): AiInsightCandidate[] {
   const candidates: AiInsightCandidate[] = [];
+  const healthStatus = stringFromRequest(input, "health_status").toLowerCase();
+  if (healthStatus && !["healthy", "ok", "ready", "unknown"].includes(healthStatus)) {
+    candidates.push({
+      signal: "admin_dependency_health_gap",
+      evidence_level: "correlated",
+      rationale:
+        "Admin health guidance is grounded in the explicit dependency health status exposed by the page.",
+      item: {
+        target_key: pageTargetKey,
+        headline: `System health is ${healthStatus}`,
+        detail:
+          "The admin health surface is not reporting healthy. Triage dependency checks before interpreting tenant or collector metrics.",
+        severity: "warning",
+        confidence: 0.72,
+        evidence: [evidence("Health status", healthStatus, "admin health")],
+        action: { kind: "open_page", label: "Open health", href: "/admin/health" },
+      },
+    });
+  }
+
   const planRates = arrayFromContext(input.context, "plan_zero_state_rates")
     .map((row) => ({
       plan: stringValue(row["plan"]),
@@ -422,6 +552,72 @@ function deriveAdminCandidates(
   return candidates;
 }
 
+function deriveAdminUsageCandidates(
+  input: AiGuidanceRequest,
+  pageTargetKey: string,
+  tableTargetKey: string,
+): AiInsightCandidate[] {
+  const candidates: AiInsightCandidate[] = [];
+  const sourceTargetKey = targetForKey(input, "admin.usage.sources")?.key ?? tableTargetKey;
+  const spendTargetKey = targetForKey(input, "admin.usage.spend")?.key ?? pageTargetKey;
+  const totalSources = numberFromRequest(input, "total_usage_sources");
+  const readySources = numberFromRequest(input, "ready_usage_sources");
+  if (
+    totalSources !== null &&
+    totalSources > 0 &&
+    readySources !== null &&
+    readySources < totalSources
+  ) {
+    candidates.push({
+      signal: "admin_usage_source_gap",
+      evidence_level: "correlated",
+      rationale:
+        "Usage guidance compares configured source coverage against the explicit source count on the page.",
+      item: {
+        target_key: sourceTargetKey,
+        headline: `${totalSources - readySources} usage source${totalSources - readySources === 1 ? "" : "s"} not connected`,
+        detail:
+          "Spend estimates are only as complete as the connected usage sources. Configure missing sources before using projections for planning.",
+        severity: readySources === 0 ? "warning" : "notice",
+        confidence: 0.78,
+        evidence: [
+          evidence("Ready sources", `${readySources}/${totalSources}`, "admin usage"),
+          evidence(
+            "Required env vars",
+            numberFromRequest(input, "required_env_count") ?? 0,
+            "admin usage",
+          ),
+        ],
+      },
+    });
+  }
+
+  const projectedSpend = numberFromRequest(input, "projected_month_estimated_spend_usd");
+  const monthToDateSpend = numberFromRequest(input, "month_to_date_estimated_spend_usd");
+  if (projectedSpend !== null && monthToDateSpend !== null && projectedSpend >= 1) {
+    candidates.push({
+      signal: "admin_usage_projection_visible",
+      evidence_level: "policy_threshold",
+      rationale:
+        "Usage projection guidance reports explicit estimated spend only; it does not claim a spike or anomaly.",
+      item: {
+        target_key: spendTargetKey,
+        headline: "Monthly usage projection is non-zero",
+        detail:
+          "The current usage estimate projects billable spend this month. Review service line items before changing plan or free-tier assumptions.",
+        severity: projectedSpend >= 25 ? "warning" : "notice",
+        confidence: 0.68,
+        evidence: [
+          evidence("Month-to-date estimate", `$${monthToDateSpend.toFixed(2)}`, "admin usage"),
+          evidence("Projected month", `$${projectedSpend.toFixed(2)}`, "admin usage"),
+        ],
+      },
+    });
+  }
+
+  return candidates;
+}
+
 export function candidatesToGuidanceItems(candidates: AiInsightCandidate[]): AiGuidanceItem[] {
   return candidates.map((candidate) => candidate.item);
 }
@@ -470,6 +666,12 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value : "";
 }
 
+function stringFromRequest(input: AiGuidanceRequest, key: string): string {
+  const detail = input.page_context?.details?.find((candidate) => candidate.key === key);
+  if (typeof detail?.value === "string") return detail.value.trim();
+  return stringValue(input.context[key]).trim();
+}
+
 function numberFromPageContext(input: AiGuidanceRequest, key: string): number | null {
   const metric = input.page_context?.metrics?.find((candidate) => candidate.key === key);
   if (!metric) return null;
@@ -479,6 +681,10 @@ function numberFromPageContext(input: AiGuidanceRequest, key: string): number | 
     return Number.isFinite(parsed) ? parsed : null;
   }
   return null;
+}
+
+function targetForKey(input: AiGuidanceRequest, key: string): AiGuidanceTarget | null {
+  return input.targets.find((target) => target.key === key) ?? null;
 }
 
 function deriveOfflineClusterCandidates(

@@ -1,8 +1,14 @@
 import { useMemo } from "react";
 import { useAdminUsage, type AdminUsageService } from "../../api/hooks/admin";
+import { useAdminGuidance } from "../../api/hooks/ai";
+import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
+import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
+import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { ErrorState } from "../../components/common/ErrorState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { relTime } from "../../utils/format";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 function money(value: number | undefined): string {
   return `$${(value ?? 0).toLocaleString(undefined, {
@@ -121,6 +127,99 @@ export default function UsagePage() {
     () => data?.services.filter((service) => service.status === "ready").length ?? 0,
     [data?.services],
   );
+  const insightSurface = insightSurfaces.adminUsage;
+  const pageContext = data
+    ? buildBrowserPageContext({
+        title: "Usage and spend",
+        visible_text: [
+          "Usage and spend estimates come from usage metrics and explicit pricing assumptions, not lagging Cloudflare billing totals.",
+        ],
+        metrics: [
+          pageMetric(
+            "month_to_date_estimated_spend_usd",
+            "Month-to-date estimate",
+            data.month_to_date_estimated_spend_usd,
+            { unit: "USD" },
+          ),
+          pageMetric(
+            "projected_month_estimated_spend_usd",
+            "Projected month",
+            data.projected_month_estimated_spend_usd,
+            { unit: "USD" },
+          ),
+          pageMetric("ready_usage_sources", "Ready usage sources", readyServices),
+          pageMetric("total_usage_sources", "Total usage sources", data.services.length),
+          pageMetric("required_env_count", "Required env vars", data.required_env.length),
+        ],
+        tables: [
+          pageTable(
+            "usage_services",
+            "Usage services",
+            data.services.map((service) => ({
+              id: service.id,
+              name: service.name,
+              status: service.status,
+              source: service.source,
+              month_to_date_estimated_spend_usd: service.month_to_date_estimated_spend_usd,
+              projected_month_estimated_spend_usd: service.projected_month_estimated_spend_usd,
+              line_items: service.line_items.length,
+              notes: service.notes.length,
+            })),
+            { totalRows: data.services.length },
+          ),
+        ],
+      })
+    : null;
+  const guidanceRequest: AiGuidanceRequest | null =
+    data && pageContext
+      ? buildInsightRequest(
+          insightSurface,
+          [
+            insightTarget(insightSurface, insightSurface.targets.page),
+            insightTarget(insightSurface, insightSurface.targets.spend, {
+              projected_month_estimated_spend_usd: data.projected_month_estimated_spend_usd,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.sources, {
+              ready_usage_sources: readyServices,
+              total_usage_sources: data.services.length,
+            }),
+            insightTarget(insightSurface, insightSurface.targets.services),
+          ],
+          {
+            month_to_date_estimated_spend_usd: data.month_to_date_estimated_spend_usd,
+            projected_month_estimated_spend_usd: data.projected_month_estimated_spend_usd,
+            ready_usage_sources: readyServices,
+            total_usage_sources: data.services.length,
+            required_env_count: data.required_env.length,
+            configured: data.configured,
+          },
+          { intent: "triage_state", pageContext },
+        )
+      : null;
+  const browserContext = useMemo(
+    () => ({
+      id: "admin.usage.page",
+      title: "Usage and spend",
+      surface: insightSurface.surface,
+      context: guidanceRequest?.context ?? {},
+      targets: guidanceRequest?.targets ?? [],
+      pageContext: guidanceRequest?.page_context ?? undefined,
+    }),
+    [
+      guidanceRequest?.context,
+      guidanceRequest?.page_context,
+      guidanceRequest?.targets,
+      insightSurface.surface,
+    ],
+  );
+  useRegisterBrowserContext(guidanceRequest ? browserContext : null);
+  const guidance = useAdminGuidance(guidanceRequest);
+  const spendInsight = guidance.data?.items.find(
+    (item) => item.target_key === "admin.usage.spend" || item.target_key === "admin.usage.page",
+  );
+  const sourceInsight = guidance.data?.items.find(
+    (item) => item.target_key === "admin.usage.sources",
+  );
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
@@ -147,6 +246,7 @@ export default function UsagePage() {
         <div className="stat">
           <div className="val">{money(data.month_to_date_estimated_spend_usd)}</div>
           <div className="label">Month-to-date estimate</div>
+          <GuidanceSlot item={spendInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
           <div className="val">{money(data.projected_month_estimated_spend_usd)}</div>
@@ -163,8 +263,17 @@ export default function UsagePage() {
             {readyServices}/{data.services.length}
           </div>
           <div className="label">Sources connected</div>
+          <GuidanceSlot item={sourceInsight} loading={guidance.isLoading} />
         </div>
       </div>
+
+      <GuidancePanel
+        title="Usage guidance"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+      />
 
       <section className="admin-callout mt-6">
         <strong>Estimated from usage metrics, not Cloudflare billing totals</strong>

@@ -3,9 +3,15 @@ import { useLocation } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { Bot, Sparkles } from "lucide-react";
-import type { AiGuidanceIntent, AiGuidanceRequest } from "@o11yfleet/core/ai";
-import { buildBrowserGuidanceRequest, inferAiSurface } from "@/ai/browser-context";
+import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
+import {
+  MAX_BROWSER_CONTEXT_LIGHT_FETCHES,
+  buildBrowserGuidanceRequest,
+  inferAiSurface,
+  type BrowserContextLightFetch,
+} from "@/ai/browser-context";
 import { useBrowserContextRegistry } from "@/ai/browser-context-react";
+import { includedFetch, unavailableFetch } from "@/ai/page-context";
 import { apiBase } from "@/api/client";
 import {
   Conversation,
@@ -36,6 +42,7 @@ export type PageCopilotAction = {
   label: string;
   intent: AiGuidanceIntent;
   prompt: string;
+  includeLightFetches?: boolean;
 };
 
 export const pageCopilotActions: PageCopilotAction[] = [
@@ -44,7 +51,8 @@ export const pageCopilotActions: PageCopilotAction[] = [
     label: "Ask AI about this page",
     intent: "explain_page",
     prompt:
-      "Explain the current page using only visible context. Call out the most important operational details and avoid generic advice.",
+      "Explain the current page using only visible page context and approved light fetches. Call out the most important operational details and avoid generic advice.",
+    includeLightFetches: true,
   },
   {
     id: "ai-next-step",
@@ -52,6 +60,7 @@ export const pageCopilotActions: PageCopilotAction[] = [
     intent: "suggest_next_action",
     prompt:
       "Suggest the single highest-value next action from the visible page context. Be concrete and cite the visible evidence.",
+    includeLightFetches: true,
   },
   {
     id: "ai-find-risks",
@@ -59,8 +68,11 @@ export const pageCopilotActions: PageCopilotAction[] = [
     intent: "triage_state",
     prompt:
       "Identify non-obvious operational risks from the visible page context. Return only risks supported by visible evidence.",
+    includeLightFetches: true,
   },
 ];
+
+const LIGHT_FETCH_TIMEOUT_MS = 5000;
 
 interface PageCopilotDrawerProps {
   open: boolean;
@@ -75,6 +87,10 @@ export function PageCopilotDrawer({ open, onClose, initialPrompt }: PageCopilotD
   const sentInitialPromptRef = useRef<string | null>(null);
   const sendPromptRef = useRef<(text: string, intent?: AiGuidanceIntent) => Promise<void>>(
     async () => {},
+  );
+  const actionByIntent = useMemo(
+    () => new Map(pageCopilotActions.map((action) => [action.intent, action])),
+    [],
   );
   const supportsAi = inferAiSurface(location.pathname) !== null;
   const chatPath = location.pathname.startsWith("/admin")
@@ -105,12 +121,15 @@ export function PageCopilotDrawer({ open, onClose, initialPrompt }: PageCopilotD
     async (text: string, intent: AiGuidanceIntent = "explain_page") => {
       if (!supportsAi || isBusy) return;
       const snapshot = capture(location.pathname);
-      const request = buildBrowserGuidanceRequest(snapshot, text, intent);
+      const action = actionByIntent.get(intent);
+      const lightFetches =
+        action?.includeLightFetches === true ? await runLightFetches(snapshot.lightFetches) : [];
+      const request = buildBrowserGuidanceRequest(snapshot, text, intent, { lightFetches });
       if (!request) return;
       contextRef.current = request;
       await sendMessage({ text });
     },
-    [capture, isBusy, location.pathname, sendMessage, supportsAi],
+    [actionByIntent, capture, isBusy, location.pathname, sendMessage, supportsAi],
   );
 
   useEffect(() => {
@@ -208,6 +227,41 @@ function CopilotMessage({ message }: { message: UIMessage }) {
       </MessageContent>
     </Message>
   );
+}
+
+async function runLightFetches(
+  lightFetches: BrowserContextLightFetch[] | undefined,
+): Promise<AiLightFetch[]> {
+  const selected = (lightFetches ?? []).slice(0, MAX_BROWSER_CONTEXT_LIGHT_FETCHES);
+  return Promise.all(
+    selected.map(async (fetcher) => {
+      try {
+        return includedFetch(
+          fetcher.key,
+          fetcher.label,
+          await withTimeout(fetcher.load(), LIGHT_FETCH_TIMEOUT_MS),
+        );
+      } catch (error) {
+        return unavailableFetch(
+          fetcher.key,
+          fetcher.label,
+          error instanceof Error ? error.message : "Light fetch failed",
+        );
+      }
+    }),
+  );
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | undefined;
+  return Promise.race([
+    promise,
+    new Promise<never>((_, reject) => {
+      timeout = setTimeout(() => reject(new Error("Light fetch timed out")), timeoutMs);
+    }),
+  ]).finally(() => {
+    if (timeout) clearTimeout(timeout);
+  });
 }
 
 function messageText(message: UIMessage): string {

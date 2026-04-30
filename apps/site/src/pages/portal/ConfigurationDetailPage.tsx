@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   useConfiguration,
@@ -37,6 +37,7 @@ import {
   insightTarget,
   tabInsightTarget,
 } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import {
   buildBrowserPageContext,
   includedFetch,
@@ -260,6 +261,54 @@ export default function ConfigurationDetailPage() {
           },
         )
       : null;
+  const browserContext = useMemo(
+    () => ({
+      id: "portal.configuration.detail",
+      title: c ? `Configuration: ${c.name}` : "Configuration detail",
+      surface: insightSurface.surface,
+      context: guidanceRequest?.context ?? {},
+      targets:
+        guidanceReady && c && pageContext
+          ? buildConfigurationTargets({ includeCopilotTargets: true })
+          : [],
+      pageContext: pageContext ?? undefined,
+      lightFetches:
+        guidanceReady && c
+          ? [
+              ...(id && activeTab === "versions" && versionList.length >= 2
+                ? [
+                    {
+                      key: "configuration.version_diff_latest_previous",
+                      label: "Latest versus previous configuration version",
+                      load: () => fetchConfigurationVersionDiff(id),
+                    },
+                  ]
+                : []),
+              ...(id && activeTab === "rollout"
+                ? [
+                    {
+                      key: "configuration.rollout_cohort_summary",
+                      label: "Rollout cohort summary",
+                      load: () => fetchRolloutCohortSummary(id),
+                    },
+                  ]
+                : []),
+            ]
+          : [],
+    }),
+    [
+      activeTab,
+      buildConfigurationTargets,
+      c,
+      guidanceReady,
+      guidanceRequest?.context,
+      id,
+      insightSurface.surface,
+      pageContext,
+      versionList.length,
+    ],
+  );
+  useRegisterBrowserContext(browserContext);
   const guidance = usePortalGuidance(guidanceRequest);
   const copilot = usePortalGuidance(copilotRequest, { enabled: copilotRequest !== null });
   const agentInsight = guidance.data?.items.find(

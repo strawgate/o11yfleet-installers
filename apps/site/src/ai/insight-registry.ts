@@ -139,6 +139,28 @@ export const insightSurfaces = {
       kind: "section",
     },
   }),
+  adminUsage: defineInsightSurface("admin.usage", {
+    page: {
+      key: "admin.usage.page",
+      label: "Usage and spend page",
+      kind: "page",
+    },
+    spend: {
+      key: "admin.usage.spend",
+      label: "Projected spend metric",
+      kind: "metric",
+    },
+    sources: {
+      key: "admin.usage.sources",
+      label: "Usage source coverage",
+      kind: "section",
+    },
+    services: {
+      key: "admin.usage.services",
+      label: "Usage services",
+      kind: "table",
+    },
+  }),
 } as const;
 
 export function insightTarget(

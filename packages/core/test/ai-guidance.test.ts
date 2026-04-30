@@ -673,6 +673,186 @@ describe("ai insight candidates", () => {
     );
   });
 
+  it("promotes visible agent drift from desired/current hash mismatch counts", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.agent",
+        targets: [
+          {
+            key: "agents.config-1.section",
+            label: "Production collectors",
+            surface: "portal.agent",
+            kind: "section",
+          },
+          {
+            key: "agents.config-1.table",
+            label: "Production collector table",
+            surface: "portal.agent",
+            kind: "table",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/agents",
+          metrics: [
+            { key: "total_agents", label: "Total collectors", value: 8 },
+            { key: "drifted_agents", label: "Drifted collectors", value: 3 },
+            { key: "degraded_agents", label: "Degraded collectors", value: 0 },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          signal: "visible_agent_drift",
+          item: expect.objectContaining({ target_key: "agents.config-1.table" }),
+        }),
+      ]),
+    );
+  });
+
+  it("promotes configuration rollout drift from connected collector convergence", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "portal.configuration",
+        targets: [
+          {
+            key: "configuration.page",
+            label: "Configuration",
+            surface: "portal.configuration",
+            kind: "page",
+          },
+          {
+            key: "configuration.rollout",
+            label: "Rollout",
+            surface: "portal.configuration",
+            kind: "section",
+          },
+        ],
+        context: {},
+        page_context: {
+          route: "/portal/configurations/config-1",
+          metrics: [
+            { key: "connected_agents", label: "Connected collectors", value: 10 },
+            { key: "drifted_agents", label: "Drifted collectors", value: 4 },
+          ],
+        },
+      },
+      { scopeLabel: "tenant:test" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          signal: "configuration_rollout_drift",
+          item: expect.objectContaining({ target_key: "configuration.rollout" }),
+        }),
+      ]),
+    );
+  });
+
+  it("promotes admin dependency health gaps from explicit non-fallback health status", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.overview.page",
+            label: "Admin overview",
+            surface: "admin.overview",
+            kind: "page",
+          },
+        ],
+        context: { health_status: "degraded" },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([expect.objectContaining({ signal: "admin_dependency_health_gap" })]),
+    );
+  });
+
+  it("does not promote fallback unknown admin health", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.overview",
+        targets: [
+          {
+            key: "admin.overview.page",
+            label: "Admin overview",
+            surface: "admin.overview",
+            kind: "page",
+          },
+        ],
+        context: { health_status: "unknown" },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates.some((candidate) => candidate.signal === "admin_dependency_health_gap")).toBe(
+      false,
+    );
+  });
+
+  it("targets admin usage source and spend candidates to their slots", () => {
+    const candidates = analyzeGuidanceCandidates(
+      {
+        surface: "admin.usage",
+        targets: [
+          {
+            key: "admin.usage.page",
+            label: "Usage",
+            surface: "admin.usage",
+            kind: "page",
+          },
+          {
+            key: "admin.usage.spend",
+            label: "Projected spend",
+            surface: "admin.usage",
+            kind: "metric",
+          },
+          {
+            key: "admin.usage.sources",
+            label: "Usage sources",
+            surface: "admin.usage",
+            kind: "section",
+          },
+          {
+            key: "admin.usage.services",
+            label: "Usage services",
+            surface: "admin.usage",
+            kind: "table",
+          },
+        ],
+        context: {
+          ready_usage_sources: 1,
+          total_usage_sources: 3,
+          required_env_count: 2,
+          month_to_date_estimated_spend_usd: 1.25,
+          projected_month_estimated_spend_usd: 1.34,
+        },
+      },
+      { scopeLabel: "admin" },
+    );
+
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          signal: "admin_usage_source_gap",
+          item: expect.objectContaining({ target_key: "admin.usage.sources" }),
+        }),
+        expect.objectContaining({
+          signal: "admin_usage_projection_visible",
+          item: expect.objectContaining({ target_key: "admin.usage.spend" }),
+        }),
+      ]),
+    );
+  });
+
   it("does not emit configuration YAML guidance for ambient triage", () => {
     const candidates = analyzeGuidanceCandidates(
       {

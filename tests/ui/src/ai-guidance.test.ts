@@ -204,6 +204,128 @@ test.describe("AI guidance surfaces", () => {
     expect(runtime.errors).toEqual([]);
   });
 
+  test("admin usage renders guidance from usage page context", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "admin-1",
+        email: "admin@o11yfleet.com",
+        displayName: "Admin",
+        role: "admin",
+        tenantId: null,
+      },
+    });
+    await mockJson(page, "/api/admin/usage", {
+      configured: false,
+      currency: "USD",
+      generated_at: "2026-04-28T20:00:00.000Z",
+      window: {
+        start_date: "2026-04-01",
+        end_date: "2026-04-28",
+        days_elapsed: 28,
+        days_in_month: 30,
+      },
+      pricing: {
+        source: "Fixture pricing assumptions.",
+        notes: ["Usage is estimated from source metrics."],
+      },
+      required_env: ["CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY"],
+      services: [
+        {
+          id: "workers",
+          name: "Workers",
+          status: "ready",
+          source: "GraphQL analytics",
+          daily: [
+            {
+              date: "2026-04-28",
+              estimated_spend_usd: 1.25,
+              units: { requests: 125000 },
+            },
+          ],
+          line_items: [
+            {
+              label: "Requests",
+              quantity: 125000,
+              unit: "requests",
+              included: 100000,
+              billable: 25000,
+              unit_price_usd: 0.0000003,
+              estimated_spend_usd: 1.25,
+            },
+          ],
+          month_to_date_estimated_spend_usd: 1.25,
+          projected_month_estimated_spend_usd: 1.34,
+          notes: [],
+        },
+        {
+          id: "r2",
+          name: "R2",
+          status: "not_configured",
+          source: "GraphQL analytics",
+          daily: [],
+          line_items: [],
+          month_to_date_estimated_spend_usd: 0,
+          projected_month_estimated_spend_usd: 0,
+          notes: ["Set R2 usage env vars."],
+        },
+      ],
+      month_to_date_estimated_spend_usd: 1.25,
+      projected_month_estimated_spend_usd: 1.34,
+    });
+    await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {
+      const requestBody = route.request().postDataJSON() as {
+        surface?: string;
+        page_context?: {
+          metrics?: Array<{ key: string; value: unknown }>;
+          tables?: Array<{ key: string; total_rows?: number }>;
+        };
+      };
+      expect(requestBody.surface).toBe("admin.usage");
+      expect(requestBody.page_context?.metrics).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ key: "ready_usage_sources", value: 1 }),
+          expect.objectContaining({ key: "total_usage_sources", value: 2 }),
+        ]),
+      );
+      expect(requestBody.page_context?.tables).toEqual(
+        expect.arrayContaining([expect.objectContaining({ key: "usage_services", total_rows: 2 })]),
+      );
+      expectUniqueTargetKeys(requestBody);
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "Usage guidance from test data.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "o11yfleet-guidance-fixture",
+          items: [
+            {
+              target_key: "admin.usage.sources",
+              headline: "One usage source is not connected",
+              detail: "The usage page context shows only one of two usage sources connected.",
+              severity: "notice",
+              confidence: 0.78,
+              evidence: [{ label: "Ready sources", value: "1/2" }],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto(`${UI_URL}/admin/usage?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Usage & Spend" })).toBeVisible();
+    await expect(page.getByText("Usage guidance from test data.")).toBeVisible();
+    await expect(
+      page.locator(".ai-panel").getByText("One usage source is not connected"),
+    ).toBeVisible();
+    await expect(page.locator(".stat .val", { hasText: "1/2" })).toBeVisible();
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
   test("admin overview hides empty guidance instead of rendering placeholder noise", async ({
     page,
   }) => {
@@ -456,7 +578,17 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("option", { name: /Ask AI about this page/ }).click();
     await expect.poll(() => chatRequests.length).toBe(1);
     expect(chatRequests[0]).toMatchObject({
-      context: { surface: "portal.overview", intent: "explain_page" },
+      context: {
+        surface: "portal.overview",
+        intent: "explain_page",
+        page_context: {
+          route: "/portal/overview",
+          metrics: expect.arrayContaining([
+            expect.objectContaining({ key: "total_agents", value: 2 }),
+            expect.objectContaining({ key: "configs_count", value: 0 }),
+          ]),
+        },
+      },
     });
     await expect(page.getByText("No non-obvious guidance found")).toHaveCount(0);
     await expect(page.getByRole("dialog", { name: "Page copilot" })).toBeVisible();
@@ -467,7 +599,13 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("option", { name: /Ask AI about this page/ }).click();
     await expect.poll(() => chatRequests.length).toBe(2);
     expect(chatRequests[1]).toMatchObject({
-      context: { surface: "portal.overview", intent: "explain_page" },
+      context: {
+        surface: "portal.overview",
+        intent: "explain_page",
+        page_context: {
+          route: "/portal/overview",
+        },
+      },
     });
     await page.getByRole("button", { name: "Close" }).click();
 

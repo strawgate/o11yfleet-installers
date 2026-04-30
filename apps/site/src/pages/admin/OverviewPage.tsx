@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { useAdminHealth, useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
@@ -8,6 +9,8 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
+import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
 import { buildAdminAiOverviewContext } from "./ai-context-utils";
 import { normalizePlanId } from "../../shared/plans";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -41,8 +44,42 @@ export default function OverviewPage() {
   const adminAiContext = buildAdminAiOverviewContext(tenantList, totalTenants, totalConfigs);
 
   const insightSurface = insightSurfaces.adminOverview;
+  const pageContext =
+    overview.data && tenants.data && health.data
+      ? buildBrowserPageContext({
+          title: "Admin overview",
+          visible_text: [
+            "Admin overview summarizes platform tenants, configurations, collectors, and dependency health.",
+          ],
+          metrics: [
+            pageMetric("total_tenants", "Total tenants", totalTenants),
+            pageMetric("total_configurations", "Total configurations", totalConfigs),
+            pageMetric("total_agents", "Total agents", totalAgents),
+            pageMetric(
+              "tenants_without_configs",
+              "Tenants without configurations",
+              tenantList.filter((tenant) => ((tenant["config_count"] as number) ?? 0) === 0).length,
+            ),
+          ],
+          details: [{ key: "health_status", label: "System health", value: healthStatus }],
+          tables: [
+            pageTable(
+              "recent_tenants",
+              "Recent tenants",
+              recentTenants.map((tenant) => ({
+                id: tenant.id,
+                plan: normalizePlanId(tenant.plan),
+                config_count: tenant["config_count"] ?? null,
+                user_count: tenant["user_count"] ?? null,
+                created_at: tenant.created_at ?? null,
+              })),
+              { totalRows: tenantList.length },
+            ),
+          ],
+        })
+      : null;
   const guidanceRequest: AiGuidanceRequest | null =
-    overview.data && tenants.data
+    overview.data && tenants.data && health.data && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -74,8 +111,26 @@ export default function OverviewPage() {
               created_at: tenant.created_at ?? null,
             })),
           },
+          { intent: "triage_state", pageContext },
         )
       : null;
+  const browserContext = useMemo(
+    () => ({
+      id: "admin.overview.page",
+      title: "Admin overview",
+      surface: insightSurface.surface,
+      context: guidanceRequest?.context ?? {},
+      targets: guidanceRequest?.targets ?? [],
+      pageContext: guidanceRequest?.page_context ?? undefined,
+    }),
+    [
+      guidanceRequest?.context,
+      guidanceRequest?.page_context,
+      guidanceRequest?.targets,
+      insightSurface.surface,
+    ],
+  );
+  useRegisterBrowserContext(guidanceRequest ? browserContext : null);
   const guidance = useAdminGuidance(guidanceRequest);
   const tenantInsight = guidance.data?.items.find(
     (item) => item.target_key === "admin.overview.tenants",

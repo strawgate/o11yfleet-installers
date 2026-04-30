@@ -7,6 +7,7 @@ export const aiGuidanceSurfaceSchema = z.enum([
   "portal.builder",
   "admin.overview",
   "admin.tenant",
+  "admin.usage",
 ]);
 
 export const aiGuidanceTargetKindSchema = z.enum([

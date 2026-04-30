@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import {
   useConfigurations,
@@ -22,6 +22,7 @@ import {
   hashLabel,
 } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
@@ -113,6 +114,25 @@ function AgentSection({ config }: { config: Configuration }) {
           { intent: "triage_state", pageContext },
         )
       : null;
+  const browserContext = useMemo(
+    () => ({
+      id: `portal.agents.${config.id}`,
+      title: `${config.name} collectors`,
+      surface: insightSurface.surface,
+      context: guidanceRequest?.context ?? {},
+      targets: guidanceRequest?.targets ?? [],
+      pageContext: pageContext ?? undefined,
+    }),
+    [
+      config.id,
+      config.name,
+      guidanceRequest?.context,
+      guidanceRequest?.targets,
+      insightSurface.surface,
+      pageContext,
+    ],
+  );
+  useRegisterBrowserContext(browserContext);
   const guidance = usePortalGuidance(guidanceRequest);
 
   if (isLoading) return <LoadingSpinner />;

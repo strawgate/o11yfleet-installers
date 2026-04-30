@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useMemo } from "react";
 import { useOverview, useConfigurations } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
@@ -8,6 +9,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
@@ -90,6 +92,18 @@ export default function OverviewPage() {
           { intent: "triage_state", pageContext },
         )
       : null;
+  const browserContext = useMemo(
+    () => ({
+      id: "portal.overview.page",
+      title: "Fleet overview",
+      surface: insightSurface.surface,
+      context: guidanceRequest?.context ?? {},
+      targets: guidanceRequest?.targets ?? [],
+      pageContext: pageContext ?? undefined,
+    }),
+    [guidanceRequest?.context, guidanceRequest?.targets, insightSurface.surface, pageContext],
+  );
+  useRegisterBrowserContext(browserContext);
   const guidance = usePortalGuidance(guidanceRequest);
   const configurationInsight = guidance.data?.items.find(
     (item) => item.target_key === "overview.configurations",
