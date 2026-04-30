@@ -3,6 +3,11 @@
 
 import type { Env } from "../../index.js";
 import {
+  adminCreateTenantRequestSchema,
+  adminDoQueryRequestSchema,
+  adminUpdateTenantRequestSchema,
+} from "@o11yfleet/core/api";
+import {
   AiApiError,
   handleAdminChatRequest,
   handleAdminGuidanceRequest,
@@ -128,10 +133,7 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 // ─── Tenant Handlers ────────────────────────────────────────────────
 
 async function handleCreateTenant(request: Request, env: Env): Promise<Response> {
-  const body = await validateJsonBody<{ name: string; plan?: string }>(request, {
-    name: { type: "string", required: true, trim: true, minLength: 1, maxLength: 255 },
-    plan: { type: "string" },
-  });
+  const body = await validateJsonBody(request, adminCreateTenantRequestSchema);
 
   const plan = normalizePlan(body.plan ?? DEFAULT_PLAN);
   if (!plan) {
@@ -250,10 +252,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .first();
   if (!tenant) return jsonError("Tenant not found", 404);
 
-  const body = await validateJsonBody<{ name?: string; plan?: string }>(request, {
-    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
-    plan: { type: "string" },
-  });
+  const body = await validateJsonBody(request, adminUpdateTenantRequestSchema);
   const updates: string[] = [];
   const values: unknown[] = [];
 
@@ -359,19 +358,7 @@ async function handleDoTables(env: Env, configId: string): Promise<Response> {
 }
 
 async function handleDoQuery(request: Request, env: Env, configId: string): Promise<Response> {
-  const body = await validateJsonBody<{ sql: string; params?: unknown[] }>(request, {
-    sql: { type: "string", required: true, trim: true, minLength: 1, maxLength: 4000 },
-    params: {
-      type: "array",
-      maxLength: 100,
-      validateItem: (value) =>
-        value === null ||
-        typeof value === "string" ||
-        typeof value === "number" ||
-        typeof value === "boolean",
-      itemDetail: "expected_string_number_boolean_or_null",
-    },
-  });
+  const body = await validateJsonBody(request, adminDoQueryRequestSchema);
   const stub = await getConfigDoStub(env, configId);
   return stub.fetch(
     new Request("http://internal/debug/query", {

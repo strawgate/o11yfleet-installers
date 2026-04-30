@@ -9,3 +9,4 @@ export * from "./hex.js";
 export * from "./assert-never.js";
 export * from "./ai/index.js";
 export * from "./pipeline/index.js";
+export * from "./api/index.js";

@@ -13,6 +13,7 @@
     "./codec/gen/anyvalue_pb": "./src/codec/gen/anyvalue_pb.ts",
     "./state-machine": "./src/state-machine/index.ts",
     "./auth": "./src/auth/index.ts",
+    "./api": "./src/api/index.ts",
     "./pipeline": "./src/pipeline/index.ts",
     "./events": "./src/events.ts",
     "./assert-never": "./src/assert-never.ts",

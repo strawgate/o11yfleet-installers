@@ -1,179 +1,117 @@
+import { z } from "zod";
+import type { ValidationErrorDetail } from "@o11yfleet/core/api";
 import { ApiError, parseJsonBody } from "./errors.js";
 
-type FieldBase = {
-  required?: boolean;
-};
-
-type StringField = FieldBase & {
-  type: "string";
-  maxLength?: number;
-  trim?: boolean;
-  minLength?: number;
-};
-
-type EnumField = FieldBase & {
-  type: "enum";
-  values: readonly string[];
-};
-
-type PositiveIntField = FieldBase & {
-  type: "positiveInt";
-  max?: number;
-};
-
-type UrlField = FieldBase & {
-  type: "url";
-  protocols?: readonly string[];
-  maxLength?: number;
-};
-
-type ArrayField = FieldBase & {
-  type: "array";
-  maxLength?: number;
-  validateItem?: (value: unknown) => boolean;
-  itemDetail?: string;
-};
-
-export type FieldSpec = StringField | EnumField | PositiveIntField | UrlField | ArrayField;
-export type ObjectSchema = Record<string, FieldSpec>;
-
 export class ValidationError extends ApiError {
-  constructor(message: string, field?: string, detail?: string) {
+  constructor(message: string, field?: string, detail?: ValidationErrorDetail) {
     super(message, 400, "validation_error", field, detail);
     this.name = "ValidationError";
     Object.setPrototypeOf(this, ValidationError.prototype);
   }
 }
 
-export async function validateJsonBody<T>(request: Request, schema: ObjectSchema): Promise<T> {
+export async function validateJsonBody<Schema extends z.ZodTypeAny>(
+  request: Request,
+  schema: Schema,
+): Promise<z.output<Schema>> {
   const body = await parseJsonBody<unknown>(request);
-  if (!isPlainObject(body)) {
-    throw new ValidationError("Request body must be a JSON object", "body", "expected_object");
+  const parsed = schema.safeParse(body);
+  if (!parsed.success) {
+    throw validationErrorFromZod(parsed.error);
   }
-
-  for (const field of Object.keys(body)) {
-    if (!(field in schema)) {
-      throw new ValidationError(`Unknown field: ${field}`, field, "unknown_field");
-    }
-  }
-
-  const output: Record<string, unknown> = {};
-  for (const [field, spec] of Object.entries(schema)) {
-    const value = body[field];
-    if (value === undefined) {
-      if (spec.required) {
-        throw new ValidationError(`${field} is required`, field, "required");
-      }
-      continue;
-    }
-    output[field] = validateField(field, value, spec);
-  }
-  return output as T;
+  return parsed.data;
 }
 
-function validateField(field: string, value: unknown, spec: FieldSpec): unknown {
-  switch (spec.type) {
-    case "string":
-      return validateString(field, value, spec);
-    case "enum":
-      return validateEnum(field, value, spec);
-    case "positiveInt":
-      return validatePositiveInt(field, value, spec);
-    case "url":
-      return validateUrl(field, value, spec);
+function validationErrorFromZod(error: z.ZodError): ValidationError {
+  const issue = error.issues[0];
+  if (!issue) {
+    return new ValidationError("Invalid request body", "body", "invalid_value");
+  }
+  const field = fieldForIssue(issue);
+  const detail = detailForIssue(issue);
+  return new ValidationError(messageForIssue(issue, field, detail), field, detail);
+}
+
+function fieldForIssue(issue: z.ZodIssue): string {
+  if (issue.code === z.ZodIssueCode.unrecognized_keys && issue.keys[0]) {
+    return [...issue.path.map(String), issue.keys[0]].join(".");
+  }
+  if (
+    issue.code === z.ZodIssueCode.invalid_union &&
+    typeof issue.path[issue.path.length - 1] === "number"
+  ) {
+    return issue.path.slice(0, -1).map(String).join(".") || "body";
+  }
+  if (issue.path.length > 0) {
+    return issue.path.map(String).join(".");
+  }
+  return "body";
+}
+
+function messageForIssue(issue: z.ZodIssue, field: string, detail: ValidationErrorDetail): string {
+  if (field !== "body") {
+    if (detail === "required" || detail === "too_short") return `${field} is required`;
+    if (detail === "expected_string") return `${field} must be a string`;
+    if (detail === "expected_number") return `${field} must be a number`;
+    if (detail === "expected_boolean") return `${field} must be a boolean`;
+    if (detail === "expected_array") return `${field} must be an array`;
+    if (detail === "expected_object") return `${field} must be an object`;
+    if (detail === "unknown_field") return `Unknown field: ${field}`;
+  }
+  return issue.message;
+}
+
+function detailForIssue(issue: z.ZodIssue): ValidationErrorDetail {
+  switch (issue.code) {
+    case z.ZodIssueCode.unrecognized_keys:
+      return "unknown_field";
+    case z.ZodIssueCode.invalid_enum_value:
+      return "invalid_enum";
+    case z.ZodIssueCode.invalid_string:
+      return issue.validation === "url" ? "invalid_url" : "invalid_value";
+    case z.ZodIssueCode.too_big:
+      return detailForTooBig(issue);
+    case z.ZodIssueCode.too_small:
+      return detailForTooSmall(issue);
+    case z.ZodIssueCode.invalid_type:
+      return detailForInvalidType(issue);
+    case z.ZodIssueCode.invalid_union:
+      return "invalid_item";
+    case z.ZodIssueCode.custom:
+      return "custom";
+    default:
+      return "invalid_value";
+  }
+}
+
+function detailForTooBig(issue: z.ZodTooBigIssue): ValidationErrorDetail {
+  if (issue.type === "string") return "too_long";
+  if (issue.type === "array") return "too_many_items";
+  if (issue.type === "number") return "too_large";
+  return "too_large";
+}
+
+function detailForTooSmall(issue: z.ZodTooSmallIssue): ValidationErrorDetail {
+  if (issue.type === "string") return "too_short";
+  if (issue.type === "array") return "too_few_items";
+  if (issue.type === "number") return "expected_positive_int";
+  return "too_short";
+}
+
+function detailForInvalidType(issue: z.ZodInvalidTypeIssue): ValidationErrorDetail {
+  if (issue.received === "undefined") return "required";
+  switch (issue.expected) {
     case "array":
-      return validateArray(field, value, spec);
+      return "expected_array";
+    case "boolean":
+      return "expected_boolean";
+    case "number":
+      return "expected_number";
+    case "object":
+      return "expected_object";
+    case "string":
+      return "expected_string";
+    default:
+      return "invalid_type";
   }
-}
-
-function validateString(field: string, value: unknown, spec: StringField): string {
-  if (typeof value !== "string") {
-    throw new ValidationError(`${field} must be a string`, field, "expected_string");
-  }
-  const normalized = spec.trim ? value.trim() : value;
-  if (spec.minLength !== undefined && normalized.length < spec.minLength) {
-    throw new ValidationError(`${field} is required`, field, "too_short");
-  }
-  if (spec.maxLength !== undefined && normalized.length > spec.maxLength) {
-    throw new ValidationError(
-      `${field} must be ${spec.maxLength} characters or fewer`,
-      field,
-      "too_long",
-    );
-  }
-  return normalized;
-}
-
-function validateEnum(field: string, value: unknown, spec: EnumField): string {
-  if (typeof value !== "string" || !spec.values.includes(value)) {
-    throw new ValidationError(
-      `${field} must be one of: ${spec.values.join(", ")}`,
-      field,
-      "invalid_enum",
-    );
-  }
-  return value;
-}
-
-function validatePositiveInt(field: string, value: unknown, spec: PositiveIntField): number {
-  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
-    throw new ValidationError(
-      `${field} must be a positive integer`,
-      field,
-      "expected_positive_int",
-    );
-  }
-  if (spec.max !== undefined && value > spec.max) {
-    throw new ValidationError(`${field} must be ${spec.max} or less`, field, "too_large");
-  }
-  return value;
-}
-
-function validateUrl(field: string, value: unknown, spec: UrlField): string {
-  const url = validateString(field, value, {
-    type: "string",
-    maxLength: spec.maxLength,
-    trim: true,
-    minLength: 1,
-  });
-  let parsed: URL;
-  try {
-    parsed = new URL(url);
-  } catch {
-    throw new ValidationError(`${field} must be a valid URL`, field, "invalid_url");
-  }
-  const protocols = spec.protocols ?? ["http:", "https:"];
-  if (!protocols.includes(parsed.protocol)) {
-    throw new ValidationError(`${field} must use http or https`, field, "invalid_url_protocol");
-  }
-  return url;
-}
-
-function validateArray(field: string, value: unknown, spec: ArrayField): unknown[] {
-  if (!Array.isArray(value)) {
-    throw new ValidationError(`${field} must be an array`, field, "expected_array");
-  }
-  if (spec.maxLength !== undefined && value.length > spec.maxLength) {
-    throw new ValidationError(
-      `${field} must contain ${spec.maxLength} items or fewer`,
-      field,
-      "too_many_items",
-    );
-  }
-  if (spec.validateItem) {
-    for (const item of value) {
-      if (!spec.validateItem(item)) {
-        throw new ValidationError(
-          `${field} contains an invalid value`,
-          field,
-          spec.itemDetail ?? "invalid_item",
-        );
-      }
-    }
-  }
-  return value;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

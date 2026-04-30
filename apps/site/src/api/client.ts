@@ -1,16 +1,30 @@
 // api/client.ts — Typed API client for o11yfleet.
 // Replaces the old window.FP global with a modern, typed module.
 
+import {
+  apiErrorResponseSchema,
+  authLoginResponseSchema,
+  type ApiErrorResponse,
+  type AuthLoginResponse,
+  type AuthUser,
+} from "@o11yfleet/core/api";
+
 /* ------------------------------------------------------------------ */
 /*  Error types                                                       */
 /* ------------------------------------------------------------------ */
 
 export class ApiError extends Error {
   status: number;
-  constructor(message: string, status: number) {
+  code?: string;
+  field?: string;
+  detail?: string;
+  constructor(message: string, status: number, body?: ApiErrorResponse) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.code = body?.code;
+    this.field = body?.field;
+    this.detail = body?.detail;
   }
 }
 
@@ -76,14 +90,18 @@ if (apiBase) localStorage.setItem("fp-api-base", apiBase);
 /*  Core fetch helpers                                                */
 /* ------------------------------------------------------------------ */
 
-async function extractError(method: string, path: string, res: Response): Promise<string> {
+async function extractError(
+  method: string,
+  path: string,
+  res: Response,
+): Promise<ApiErrorResponse> {
   try {
-    const body = (await res.json()) as { error?: string };
-    if (body?.error) return body.error;
+    const parsed = apiErrorResponseSchema.safeParse(await res.json());
+    if (parsed.success) return parsed.data;
   } catch {
     /* no JSON body */
   }
-  return `${method} ${path}: ${res.status}`;
+  return { error: `${method} ${path}: ${res.status}` };
 }
 
 /** Low-level fetch wrapper — adds credentials, throws on auth failures. */
@@ -93,8 +111,8 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
     throw new AuthError("Session expired");
   }
   if (res.status === 403) {
-    const msg = await extractError("", path, res);
-    throw new ApiError(msg || "Forbidden", 403);
+    const body = await extractError("", path, res);
+    throw new ApiError(body.error || "Forbidden", 403, body);
   }
   return res;
 }
@@ -102,7 +120,10 @@ export async function apiFetch(path: string, opts: RequestInit = {}): Promise<Re
 /** GET JSON */
 export async function apiGet<T>(path: string): Promise<T> {
   const res = await apiFetch(path);
-  if (!res.ok) throw new ApiError(await extractError("GET", path, res), res.status);
+  if (!res.ok) {
+    const body = await extractError("GET", path, res);
+    throw new ApiError(body.error, res.status, body);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -113,7 +134,10 @@ export async function apiPost<T>(path: string, body?: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
-  if (!res.ok) throw new ApiError(await extractError("POST", path, res), res.status);
+  if (!res.ok) {
+    const errorBody = await extractError("POST", path, res);
+    throw new ApiError(errorBody.error, res.status, errorBody);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -124,7 +148,10 @@ export async function apiPostText<T>(path: string, text: string): Promise<T> {
     headers: { "Content-Type": "text/plain" },
     body: text,
   });
-  if (!res.ok) throw new ApiError(await extractError("POST", path, res), res.status);
+  if (!res.ok) {
+    const body = await extractError("POST", path, res);
+    throw new ApiError(body.error, res.status, body);
+  }
   return res.json() as Promise<T>;
 }
 
@@ -135,14 +162,20 @@ export async function apiPut<T>(path: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  if (!res.ok) throw new ApiError(await extractError("PUT", path, res), res.status);
+  if (!res.ok) {
+    const errorBody = await extractError("PUT", path, res);
+    throw new ApiError(errorBody.error, res.status, errorBody);
+  }
   return res.json() as Promise<T>;
 }
 
 /** DELETE */
 export async function apiDel<T>(path: string): Promise<T> {
   const res = await apiFetch(path, { method: "DELETE" });
-  if (!res.ok) throw new ApiError(await extractError("DELETE", path, res), res.status);
+  if (!res.ok) {
+    const body = await extractError("DELETE", path, res);
+    throw new ApiError(body.error, res.status, body);
+  }
   if (res.status === 204) return {} as T;
   return res.json() as Promise<T>;
 }
@@ -151,39 +184,13 @@ export async function apiDel<T>(path: string): Promise<T> {
 /*  Auth helpers                                                      */
 /* ------------------------------------------------------------------ */
 
-export interface LoginResponse {
-  user: User;
-}
+export type LoginResponse = AuthLoginResponse;
 
-export interface User {
+export interface User extends AuthUser {
   id: string;
-  userId?: string;
-  email: string;
-  name?: string;
-  displayName?: string;
-  role?: string;
-  tenant_id?: string;
-  tenantId?: string;
-  isImpersonation?: boolean;
 }
 
-interface RawUser {
-  id?: string;
-  userId?: string;
-  email: string;
-  name?: string;
-  displayName?: string;
-  role?: string;
-  tenant_id?: string;
-  tenantId?: string;
-  isImpersonation?: boolean;
-}
-
-interface RawLoginResponse {
-  user: RawUser;
-}
-
-export function normalizeUser(raw: RawUser): User {
+export function normalizeUser(raw: AuthUser): User {
   const id = raw.id ?? raw.userId;
   if (!id) throw new ApiError("User response missing user id", 500);
   return {
@@ -208,16 +215,23 @@ export async function login(email: string, password: string): Promise<LoginRespo
   });
   if (!res.ok) {
     let msg = "Login failed";
+    let errorBody: ApiErrorResponse | undefined;
     try {
-      const body = (await res.json()) as { error?: string };
-      if (body?.error) msg = body.error;
+      const parsed = apiErrorResponseSchema.safeParse(await res.json());
+      if (parsed.success) {
+        errorBody = parsed.data;
+        msg = parsed.data.error;
+      }
     } catch {
       /* ignore */
     }
-    throw new ApiError(msg, res.status);
+    throw new ApiError(msg, res.status, errorBody);
   }
-  const raw = (await res.json()) as RawLoginResponse;
-  return { user: normalizeUser(raw.user) };
+  const parsed = authLoginResponseSchema.safeParse(await res.json());
+  if (!parsed.success) {
+    throw new ApiError("Invalid login response from server", 500);
+  }
+  return { user: normalizeUser(parsed.data.user) };
 }
 
 export async function logout(): Promise<void> {

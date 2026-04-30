@@ -1,6 +1,7 @@
 // Auth routes — login, logout, session management, seed accounts
 
 import type { Env } from "../index.js";
+import { authLoginRequestSchema } from "@o11yfleet/core/api";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits } from "../shared/plans.js";
 import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
@@ -131,10 +132,7 @@ export async function handleAuthRequest(request: Request, env: Env, url: URL): P
 // ─── POST /auth/login ───────────────────────────────────────────────
 
 async function handleLogin(request: Request, env: Env): Promise<Response> {
-  const body = await validateJsonBody<{ email: string; password: string }>(request, {
-    email: { type: "string", required: true, trim: true, minLength: 1, maxLength: 320 },
-    password: { type: "string", required: true, minLength: 1, maxLength: 1024 },
-  });
+  const body = await validateJsonBody(request, authLoginRequestSchema);
 
   const email = body.email;
   const password = body.password;

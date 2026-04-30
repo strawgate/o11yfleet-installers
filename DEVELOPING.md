@@ -66,6 +66,21 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 - Run `just docs-api-check` after changing API docs, public docs, route files, or
   route-heavy historical docs.
 
+## API Contract Rules
+
+- Put reusable request, response, and error contracts in `packages/core/src/api`.
+- Use Zod schemas as the trust-boundary source of truth, then export inferred
+  TypeScript types from those schemas.
+- Mutable JSON request schemas should be strict by default so unknown fields are
+  rejected instead of silently ignored.
+- Worker routes should parse request bodies with `validateJsonBody(request, schema)`
+  from `apps/worker/src/shared/validation.ts`; the adapter keeps validation
+  failures on the stable `{ error, code, field, detail }` response shape.
+- Site and CLI clients should import response/error schemas from
+  `@o11yfleet/core/api` when they need runtime validation. Avoid duplicating
+  request or response interfaces by hand unless the route does not have a core
+  contract yet.
+
 ## Auth And Seed Accounts
 
 `POST /auth/seed` creates or updates the configured seed tenant user and admin.

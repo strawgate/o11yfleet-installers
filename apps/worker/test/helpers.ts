@@ -103,6 +103,7 @@ function tenantIdFromRequest(url: string, init?: RequestInit): string | null {
 export async function apiFetch(url: string, init?: RequestInit): Promise<Response> {
   const needsAuth = url.includes("/api/");
   if (needsAuth) {
+    let requestInit = init;
     const headers = new Headers(init?.headers);
     if (url.includes("/api/admin/") && !headers.has("Cookie")) {
       headers.set("Cookie", await adminSessionCookie());
@@ -121,8 +122,25 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
           headers.set("X-Tenant-Id", tenantId);
         }
       }
+      if (
+        new URL(url).pathname === "/api/v1/configurations" &&
+        init?.method === "POST" &&
+        typeof init.body === "string"
+      ) {
+        try {
+          const body = JSON.parse(init.body) as Record<string, unknown>;
+          if (Object.prototype.hasOwnProperty.call(body, "tenant_id")) {
+            const bodyWithoutTenantId = Object.fromEntries(
+              Object.entries(body).filter(([key]) => key !== "tenant_id"),
+            );
+            requestInit = { ...init, body: JSON.stringify(bodyWithoutTenantId) };
+          }
+        } catch {
+          /* preserve malformed body for the request under test */
+        }
+      }
     }
-    const response = await exports.default.fetch(url, { ...init, headers });
+    const response = await exports.default.fetch(url, { ...requestInit, headers });
     if (
       new URL(url).pathname === "/api/v1/configurations" &&
       init?.method === "POST" &&
@@ -243,7 +261,7 @@ export async function createTenant(name: string): Promise<TenantResult> {
 export async function createConfig(tenantId: string, name: string): Promise<ConfigResult> {
   const res = await exports.default.fetch("http://localhost/api/v1/configurations", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, name }),
+    body: JSON.stringify({ name }),
     headers: authHeaders({ "Content-Type": "application/json", "X-Tenant-Id": tenantId }),
   });
   expect(res.status).toBe(201);

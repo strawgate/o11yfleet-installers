@@ -93,14 +93,14 @@ Event categories should stay small and explicit:
 
 ## Component Map
 
-| Component                              | Location                                               |
-| -------------------------------------- | ------------------------------------------------------ |
-| OpAMP codec/state machine/auth helpers | `packages/core/src/`                                   |
-| Pipeline graph/YAML/AI contracts       | `packages/core/src/pipeline/`, `packages/core/src/ai/` |
-| D1 schema                              | `packages/db/`                                         |
-| Worker entrypoint                      | `apps/worker/src/index.ts`                             |
-| Config DO                              | `apps/worker/src/durable-objects/`                     |
-| API routes                             | `apps/worker/src/routes/`                              |
-| React site                             | `apps/site/`                                           |
-| CLI                                    | `apps/cli/`                                            |
-| Terraform                              | `infra/terraform/`                                     |
+| Component                              | Location                                                                         |
+| -------------------------------------- | -------------------------------------------------------------------------------- |
+| OpAMP codec/state machine/auth helpers | `packages/core/src/`                                                             |
+| API/Pipeline graph/YAML/AI contracts   | `packages/core/src/api/`, `packages/core/src/pipeline/`, `packages/core/src/ai/` |
+| D1 schema                              | `packages/db/`                                                                   |
+| Worker entrypoint                      | `apps/worker/src/index.ts`                                                       |
+| Config DO                              | `apps/worker/src/durable-objects/`                                               |
+| API routes                             | `apps/worker/src/routes/`                                                        |
+| React site                             | `apps/site/`                                                                     |
+| CLI                                    | `apps/cli/`                                                                      |
+| Terraform                              | `infra/terraform/`                                                               |

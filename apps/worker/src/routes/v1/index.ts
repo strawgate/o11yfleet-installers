@@ -3,6 +3,12 @@
 
 import type { Env } from "../../index.js";
 import {
+  createConfigurationRequestSchema,
+  createEnrollmentTokenRequestSchema,
+  updateConfigurationRequestSchema,
+  updateTenantRequestSchema,
+} from "@o11yfleet/core/api";
+import {
   deleteConfigContentIfUnreferenced,
   uploadConfigVersion,
   validateYaml,
@@ -261,14 +267,7 @@ async function handleCreateConfiguration(
   env: Env,
   tenantId: string,
 ): Promise<Response> {
-  const body = await validateJsonBody<{ name: string; description?: string; tenant_id?: string }>(
-    request,
-    {
-      name: { type: "string", required: true, trim: true, minLength: 1, maxLength: 255 },
-      description: { type: "string", maxLength: 2048 },
-      tenant_id: { type: "string" },
-    },
-  );
+  const body = await validateJsonBody(request, createConfigurationRequestSchema);
 
   const id = crypto.randomUUID();
   const insertResult = await env.FP_DB.prepare(
@@ -313,10 +312,7 @@ async function handleUpdateConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const body = await validateJsonBody<{ name?: string; description?: string }>(request, {
-    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
-    description: { type: "string", maxLength: 2048 },
-  });
+  const body = await validateJsonBody(request, updateConfigurationRequestSchema);
   const updates: string[] = [];
   const values: unknown[] = [];
 
@@ -518,10 +514,7 @@ async function handleCreateEnrollmentToken(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const body = await validateJsonBody<{ label?: string; expires_in_hours?: number }>(request, {
-    label: { type: "string", trim: true, maxLength: 255 },
-    expires_in_hours: { type: "positiveInt", max: 8760 },
-  });
+  const body = await validateJsonBody(request, createEnrollmentTokenRequestSchema);
 
   const rawToken = generateEnrollmentToken();
   const tokenHash = await hashEnrollmentToken(rawToken);
@@ -857,9 +850,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .bind(tenantId)
     .first();
   if (!tenant) return jsonError("Tenant not found", 404);
-  const body = await validateJsonBody<{ name?: string }>(request, {
-    name: { type: "string", trim: true, minLength: 1, maxLength: 255 },
-  });
+  const body = await validateJsonBody(request, updateTenantRequestSchema);
   if (body.name) {
     await env.FP_DB.prepare(
       "UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?",

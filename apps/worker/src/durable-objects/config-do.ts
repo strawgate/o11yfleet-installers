@@ -12,6 +12,7 @@ import { FleetEventType, makeFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import { adminDoQueryRequestSchema, setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
@@ -265,23 +266,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return Response.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    const body = (await request.json().catch(() => null)) as {
-      sql?: unknown;
-      params?: unknown;
-    } | null;
-    const sql = typeof body?.sql === "string" ? body.sql.trim() : "";
-
-    if (!sql) {
-      return Response.json({ error: "sql is required" }, { status: 400 });
+    const parsed = adminDoQueryRequestSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
+    const { sql, params = [] } = parsed.data;
 
     try {
-      const params = Array.isArray(body?.params)
-        ? body.params.map((param) => this.normalizeDebugParam(param))
-        : [];
       const cursor = this.ctx.storage.sql.exec(
         this.readonlyDebugQuery(sql),
-        ...params,
+        ...params.map((param) => this.normalizeDebugParam(param)),
         MAX_DEBUG_QUERY_ROWS,
       );
       const rows = cursor.toArray() as Array<Record<string, unknown>>;
@@ -627,10 +621,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   // ─── Internal Commands ────────────────────────────────────────────
 
   private async handleSetDesiredConfig(request: Request): Promise<Response> {
-    const body = await request.json<{ config_hash: string; config_content?: string }>();
-    if (!body.config_hash) {
-      return Response.json({ error: "config_hash required" }, { status: 400 });
+    const parsed = setDesiredConfigRequestSchema.safeParse(await request.json().catch(() => null));
+    if (!parsed.success) {
+      return Response.json({ error: "Invalid request body" }, { status: 400 });
     }
+    const body = parsed.data;
 
     // Persist to SQLite (sync, ~µs)
     saveDesiredConfig(this.ctx.storage.sql, body.config_hash, body.config_content ?? null);
