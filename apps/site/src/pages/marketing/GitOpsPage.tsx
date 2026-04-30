@@ -17,6 +17,12 @@ const rows = [
 
 const pipeline = ["Commit", "Review", "Upload", "Roll out"];
 
+const visuals = [
+  ["Roadmap: Git sync", "Status: Planned", "Current: UI + CLI upload"],
+  ["Pull request approved", "Config checks: passing", "Ready for upload"],
+  ["Upload source: main branch", "Version: 2026-04-30.1", "Rollout: Manual trigger"],
+];
+
 export default function GitOpsPage() {
   return (
     <>
@@ -55,16 +61,31 @@ export default function GitOpsPage() {
               </div>
               <div
                 className="card card-pad"
-                style={{
-                  direction: "ltr",
-                  minHeight: 180,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  color: "var(--muted, #888)",
-                }}
+                style={{ direction: "ltr", minHeight: 180 }}
+                aria-label="Example illustration"
               >
-                [illustration]
+                <div style={{ display: "grid", gap: 10 }}>
+                  <span
+                    className="eyebrow"
+                    style={{ fontSize: "0.7rem", color: "var(--muted, #888)" }}
+                  >
+                    Example
+                  </span>
+                  {(visuals[i] ?? []).map((line) => (
+                    <div
+                      key={line}
+                      style={{
+                        border: "1px solid var(--border, #e2e2e2)",
+                        borderRadius: 8,
+                        padding: "10px 12px",
+                        fontFamily: "var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)",
+                        fontSize: "0.9rem",
+                      }}
+                    >
+                      {line}
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           ))}

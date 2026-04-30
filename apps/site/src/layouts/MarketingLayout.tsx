@@ -34,6 +34,10 @@ function isDocumentLink(to: string) {
   return to.startsWith("mailto:") || to.endsWith(".html");
 }
 
+function isNavActive(pathname: string, to: string) {
+  return pathname === to || pathname.startsWith(`${to}/`);
+}
+
 function FooterColumn({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
     <div className="footer-col">
@@ -68,7 +72,11 @@ export default function MarketingLayout() {
                   {n.label}
                 </a>
               ) : (
-                <Link key={n.to} to={n.to} aria-current={pathname === n.to ? "page" : undefined}>
+                <Link
+                  key={n.to}
+                  to={n.to}
+                  aria-current={isNavActive(pathname, n.to) ? "page" : undefined}
+                >
                   {n.label}
                 </Link>
               ),

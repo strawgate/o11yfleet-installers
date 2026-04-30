@@ -69,12 +69,16 @@ export default function EnterprisePage() {
       <section className="section">
         <div className="wrap">
           <div className="section-head">
-            <span className="eyebrow">Compliance</span>
+            <span className="eyebrow">Compliance planning</span>
           </div>
+          <p className="lede" style={{ marginBottom: 24 }}>
+            We do not claim current certification coverage here. These are common frameworks we can
+            discuss as requirements during evaluation.
+          </p>
           <div className="compliance-grid">
             {compliance.map((c) => (
               <div key={c} className="card card-pad" style={{ textAlign: "center" }}>
-                <strong>{c}</strong>
+                <strong>{c} requirements</strong>
               </div>
             ))}
           </div>
