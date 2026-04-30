@@ -113,7 +113,7 @@ test.describe("live AI guidance audit", () => {
 
   test.skip(
     process.env.LIVE_AI_GUIDANCE !== "1",
-    "Set LIVE_AI_GUIDANCE=1 and run against a seeded stack with a real provider key.",
+    "Set LIVE_AI_GUIDANCE=1 and provide AI_GUIDANCE_MINIMAX_API_KEY to run the live provider check.",
   );
 
   test("captures real-provider guidance artifacts and enforces objective hard gates", async ({

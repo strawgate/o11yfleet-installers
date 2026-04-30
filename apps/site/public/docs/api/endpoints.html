@@ -145,8 +145,9 @@
 
           <h2 id="authentication">Authentication</h2>
           <p>
-            Tenant portal routes accept either a portal session cookie or
-            <code class="mono">Authorization: Bearer &lt;API_SECRET&gt;</code> plus
+            Tenant portal routes use a portal session cookie. For tenant-scoped API automation
+            routes that support bearer auth, send
+            <code class="mono">Authorization: Bearer &lt;O11YFLEET_API_BEARER_SECRET&gt;</code> plus
             <code class="mono">X-Tenant-Id</code>. Admin API routes are documented inside the
             authenticated admin portal.
           </p>
@@ -158,7 +159,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>Authorization: Bearer &lt;API_SECRET&gt;</code></pre>
+          ><code>Authorization: Bearer &lt;O11YFLEET_API_BEARER_SECRET&gt;</code></pre>
 
           <h2 id="system-routes">System and auth routes</h2>
           <table

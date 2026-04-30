@@ -20,7 +20,13 @@ import {
 } from "@o11yfleet/core/ai";
 import type { Env } from "../index.js";
 
-type AiGuidanceEnv = Pick<Env, "MINIMAX_API_KEY" | "LLM_PROVIDER" | "LLM_MODEL" | "LLM_BASE_URL">;
+type AiGuidanceEnv = Pick<
+  Env,
+  | "AI_GUIDANCE_MINIMAX_API_KEY"
+  | "AI_GUIDANCE_PROVIDER"
+  | "AI_GUIDANCE_MODEL"
+  | "AI_GUIDANCE_BASE_URL"
+>;
 
 export class AiProviderError extends Error {
   constructor(message: string) {
@@ -123,23 +129,27 @@ export async function streamAiChat(
 }
 
 function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiProviderConfig {
-  const providerMode = env.LLM_PROVIDER?.trim().toLowerCase() ?? "fixture";
-  const model = env.LLM_MODEL?.trim() || "MiniMax-M2.7";
+  const providerMode = env.AI_GUIDANCE_PROVIDER?.trim().toLowerCase() ?? "fixture";
+  const model = env.AI_GUIDANCE_MODEL?.trim() || "MiniMax-M2.7";
 
-  if (providerMode === "fixture" || providerMode === "deterministic" || !env.LLM_PROVIDER) {
+  if (providerMode === "fixture" || providerMode === "deterministic" || !env.AI_GUIDANCE_PROVIDER) {
     return { mode: "fixture", model: "o11yfleet-guidance-fixture" };
   }
 
   if (!["minimax", "openai-compatible"].includes(providerMode)) {
-    throw new AiProviderError(`Unsupported LLM provider: ${env.LLM_PROVIDER}`);
+    throw new AiProviderError(`Unsupported LLM provider: ${env.AI_GUIDANCE_PROVIDER}`);
   }
-  if (!env.MINIMAX_API_KEY) {
-    throw new AiProviderError("MINIMAX_API_KEY is required when LLM_PROVIDER uses the SDK");
+  if (!env.AI_GUIDANCE_MINIMAX_API_KEY) {
+    throw new AiProviderError(
+      "AI_GUIDANCE_MINIMAX_API_KEY is required when AI_GUIDANCE_PROVIDER uses the SDK",
+    );
   }
 
-  const baseURL = env.LLM_BASE_URL?.trim();
+  const baseURL = env.AI_GUIDANCE_BASE_URL?.trim();
   if (providerMode === "openai-compatible" && !baseURL) {
-    throw new AiProviderError("LLM_BASE_URL is required when LLM_PROVIDER is openai-compatible");
+    throw new AiProviderError(
+      "AI_GUIDANCE_BASE_URL is required when AI_GUIDANCE_PROVIDER is openai-compatible",
+    );
   }
 
   return {
@@ -147,7 +157,7 @@ function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiP
     model,
     provider: createOpenAICompatible({
       name: providerMode === "minimax" ? "minimax" : "openai-compatible",
-      apiKey: env.MINIMAX_API_KEY,
+      apiKey: env.AI_GUIDANCE_MINIMAX_API_KEY,
       baseURL: (providerMode === "minimax"
         ? baseURL || "https://api.minimax.io/v1"
         : baseURL)!.replace(/\/$/, ""),

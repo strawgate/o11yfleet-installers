@@ -47,7 +47,7 @@ export interface ConfigDOEnv {
   FP_CONFIGS: R2Bucket;
   FP_EVENTS: Queue;
   FP_ANALYTICS?: AnalyticsEngineDataset;
-  CLAIM_SECRET: string;
+  O11YFLEET_CLAIM_HMAC_SECRET: string;
 }
 
 interface WSAttachment {
@@ -365,7 +365,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             iat: Math.floor(Date.now() / 1000),
             exp: Math.floor(Date.now() / 1000) + 86400, // 24h
           };
-          const assignmentToken = await signClaim(claim, this.env.CLAIM_SECRET);
+          const assignmentToken = await signClaim(claim, this.env.O11YFLEET_CLAIM_HMAC_SECRET);
 
           // Send enrollment_complete text frame to JSON clients only.
           // Real OpAMP clients (protobuf) don't understand this custom extension

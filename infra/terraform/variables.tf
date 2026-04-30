@@ -126,28 +126,27 @@ variable "worker_inherited_binding_names" {
   type        = set(string)
   description = "Existing Worker bindings to inherit from the latest deployed version, primarily secrets that should not be stored in Terraform state."
   default = [
-    "API_SECRET",
-    "CLAIM_SECRET",
-    "MINIMAX_API_KEY",
-    "SEED_ADMIN_EMAIL",
-    "SEED_ADMIN_PASSWORD",
-    "SEED_TENANT_USER_EMAIL",
-    "SEED_TENANT_USER_PASSWORD",
+    "O11YFLEET_API_BEARER_SECRET",
+    "O11YFLEET_CLAIM_HMAC_SECRET",
+    "AI_GUIDANCE_MINIMAX_API_KEY",
+    "O11YFLEET_SEED_ADMIN_EMAIL",
+    "O11YFLEET_SEED_ADMIN_PASSWORD",
+    "O11YFLEET_SEED_TENANT_USER_EMAIL",
+    "O11YFLEET_SEED_TENANT_USER_PASSWORD",
   ]
 
   validation {
     condition = alltrue([
       for name in [
-        "API_SECRET",
-        "CLAIM_SECRET",
-        "MINIMAX_API_KEY",
-        "SEED_ADMIN_EMAIL",
-        "SEED_ADMIN_PASSWORD",
-        "SEED_TENANT_USER_EMAIL",
-        "SEED_TENANT_USER_PASSWORD",
+        "O11YFLEET_API_BEARER_SECRET",
+        "O11YFLEET_CLAIM_HMAC_SECRET",
+        "O11YFLEET_SEED_ADMIN_EMAIL",
+        "O11YFLEET_SEED_ADMIN_PASSWORD",
+        "O11YFLEET_SEED_TENANT_USER_EMAIL",
+        "O11YFLEET_SEED_TENANT_USER_PASSWORD",
       ] : contains(var.worker_inherited_binding_names, name)
     ])
-    error_message = "worker_inherited_binding_names must include the Worker secrets listed in apps/worker/wrangler.jsonc secrets.required."
+    error_message = "worker_inherited_binding_names must include the required Worker secrets listed in apps/worker/wrangler.jsonc secrets.required."
   }
 }
 

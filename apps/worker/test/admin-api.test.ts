@@ -1,6 +1,12 @@
 import { env, exports } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { API_SECRET, adminSessionHeaders, apiFetch, authHeaders, setupD1 } from "./helpers.js";
+import {
+  O11YFLEET_API_BEARER_SECRET,
+  adminSessionHeaders,
+  apiFetch,
+  authHeaders,
+  setupD1,
+} from "./helpers.js";
 
 beforeAll(async () => {
   await setupD1();
@@ -96,7 +102,7 @@ describe("admin API routes", () => {
   it("sets secure cross-site cookies for HTTPS login even without an environment binding", async () => {
     await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
       method: "POST",
-      headers: { Authorization: `Bearer ${API_SECRET}` },
+      headers: { Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}` },
     });
 
     const response = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
@@ -162,7 +168,7 @@ describe("admin API routes", () => {
     expect(await response.json()).toEqual({ error: "Admin access required" });
   });
 
-  it("rejects API_SECRET bearer access to admin routes", async () => {
+  it("rejects O11YFLEET_API_BEARER_SECRET bearer access to admin routes", async () => {
     const response = await exports.default.fetch("http://localhost/api/admin/health", {
       headers: authHeaders(),
     });
@@ -569,8 +575,8 @@ describe("admin API routes", () => {
       projected_month_estimated_spend_usd: number;
     }>();
     expect(usageBody.configured).toBe(false);
-    expect(usageBody.required_env).toContain("CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY");
-    expect(usageBody.required_env).toContain("CLOUDFLARE_ACCOUNT_ID");
+    expect(usageBody.required_env).toContain("CLOUDFLARE_USAGE_API_TOKEN");
+    expect(usageBody.required_env).toContain("CLOUDFLARE_USAGE_ACCOUNT_ID");
     expect(usageBody.required_env).not.toContain("CLOUDFLARE_API_TOKEN");
     expect(usageBody.services.map((service) => service.id)).toEqual([
       "workers",

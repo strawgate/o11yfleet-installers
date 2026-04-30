@@ -4,12 +4,12 @@ const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 const SQL_API_BASE = "https://api.cloudflare.com/client/v4/accounts";
 
 type UsageEnv = Env & {
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY?: string;
-  CLOUDFLARE_WORKER_SCRIPT_NAME?: string;
-  CLOUDFLARE_D1_DATABASE_ID?: string;
-  CLOUDFLARE_R2_BUCKET_NAME?: string;
-  CLOUDFLARE_ANALYTICS_DATASET?: string;
+  CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
+  CLOUDFLARE_USAGE_API_TOKEN?: string;
+  CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
+  CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
+  CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
+  CLOUDFLARE_USAGE_ANALYTICS_DATASET?: string;
 };
 
 type ServiceId = "workers" | "durable_objects" | "d1" | "r2" | "queues";
@@ -316,17 +316,17 @@ function account<T extends { viewer?: { accounts?: unknown[] } }>(data: T): unkn
 }
 
 function configuredBase(env: UsageEnv): boolean {
-  return Boolean(env.CLOUDFLARE_ACCOUNT_ID && apiToken(env));
+  return Boolean(env.CLOUDFLARE_USAGE_ACCOUNT_ID && apiToken(env));
 }
 
 function apiToken(env: UsageEnv): string | undefined {
-  return env.CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY;
+  return env.CLOUDFLARE_USAGE_API_TOKEN;
 }
 
 function analyticsDatasetIdentifier(value: string): string {
   const dataset = value.trim();
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dataset)) {
-    throw new Error("CLOUDFLARE_ANALYTICS_DATASET must be a valid SQL identifier");
+    throw new Error("CLOUDFLARE_USAGE_ANALYTICS_DATASET must be a valid SQL identifier");
   }
   return dataset;
 }
@@ -415,14 +415,14 @@ async function workersUsage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_WORKER_SCRIPT_NAME) {
+  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME) {
     return emptyService(
       "workers",
       "Workers",
       "not_configured",
       "Cloudflare GraphQL Analytics API",
       [
-        "Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY, and CLOUDFLARE_WORKER_SCRIPT_NAME to query Worker usage.",
+        "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME to query Worker usage.",
       ],
     );
   }
@@ -446,8 +446,8 @@ async function workersUsage(
 
   try {
     const data = await graphql<WorkersQueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_ACCOUNT_ID!,
-      scriptName: env.CLOUDFLARE_WORKER_SCRIPT_NAME,
+      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
+      scriptName: env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME,
       start: window.startDatetime,
       end: window.endDatetime,
     });
@@ -504,7 +504,7 @@ async function workersUsage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Script: ${env.CLOUDFLARE_WORKER_SCRIPT_NAME}`,
+        `Script: ${env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME}`,
         `Subrequests: ${subrequests.toLocaleString()}`,
         `Errors: ${errors.toLocaleString()}`,
         "CPU spend uses p50 CPU time multiplied by requests because the public adaptive query returns quantiles, not exact monthly CPU sum.",
@@ -526,9 +526,9 @@ async function d1Usage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_D1_DATABASE_ID) {
+  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_D1_DATABASE_ID) {
     return emptyService("d1", "D1", "not_configured", "Cloudflare GraphQL Analytics API", [
-      "Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY, and CLOUDFLARE_D1_DATABASE_ID to query D1 usage.",
+      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_D1_DATABASE_ID to query D1 usage.",
     ]);
   }
 
@@ -558,8 +558,8 @@ async function d1Usage(
 
   try {
     const data = await graphql<D1QueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_ACCOUNT_ID!,
-      databaseId: env.CLOUDFLARE_D1_DATABASE_ID,
+      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
+      databaseId: env.CLOUDFLARE_USAGE_D1_DATABASE_ID,
       start: window.startDate,
       end: window.endDate,
     });
@@ -633,7 +633,7 @@ async function d1Usage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Database id: ${env.CLOUDFLARE_D1_DATABASE_ID}`,
+        `Database id: ${env.CLOUDFLARE_USAGE_D1_DATABASE_ID}`,
         `Read queries: ${readQueries.toLocaleString()}`,
         `Write queries: ${writeQueries.toLocaleString()}`,
       ],
@@ -661,7 +661,7 @@ async function durableObjectUsage(
       "not_configured",
       "Cloudflare GraphQL Analytics API",
       [
-        "Set CLOUDFLARE_ACCOUNT_ID and CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY to query Durable Object namespace usage.",
+        "Set CLOUDFLARE_USAGE_ACCOUNT_ID and CLOUDFLARE_USAGE_API_TOKEN to query Durable Object namespace usage.",
       ],
     );
   }
@@ -692,7 +692,7 @@ async function durableObjectUsage(
 
   try {
     const data = await graphql<DurableObjectQueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_ACCOUNT_ID!,
+      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
       start: window.startDate,
       end: window.endDate,
     });
@@ -783,9 +783,9 @@ async function r2Usage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_R2_BUCKET_NAME) {
+  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_R2_BUCKET_NAME) {
     return emptyService("r2", "R2", "not_configured", "Cloudflare GraphQL Analytics API", [
-      "Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY, and CLOUDFLARE_R2_BUCKET_NAME to query R2 usage.",
+      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_R2_BUCKET_NAME to query R2 usage.",
     ]);
   }
 
@@ -815,8 +815,8 @@ async function r2Usage(
 
   try {
     const data = await graphql<R2QueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_ACCOUNT_ID!,
-      bucketName: env.CLOUDFLARE_R2_BUCKET_NAME,
+      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
+      bucketName: env.CLOUDFLARE_USAGE_R2_BUCKET_NAME,
       start: window.startDatetime,
       end: window.endDatetime,
     });
@@ -891,7 +891,7 @@ async function r2Usage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Bucket: ${env.CLOUDFLARE_R2_BUCKET_NAME}`,
+        `Bucket: ${env.CLOUDFLARE_USAGE_R2_BUCKET_NAME}`,
         `Objects: ${objectCount.toLocaleString()}`,
         `Response bytes: ${responseBytes.toLocaleString()}`,
         "R2 operation class mapping is inferred from GraphQL actionType names.",
@@ -913,16 +913,16 @@ async function queuesUsage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_ANALYTICS_DATASET) {
+  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_ANALYTICS_DATASET) {
     return emptyService("queues", "Queues", "not_configured", "Workers Analytics Engine SQL API", [
-      "Set CLOUDFLARE_ACCOUNT_ID, CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY, and CLOUDFLARE_ANALYTICS_DATASET to estimate Queue usage from consumed event datapoints.",
+      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_ANALYTICS_DATASET to estimate Queue usage from consumed event datapoints.",
     ]);
   }
 
   try {
     const token = apiToken(env);
     if (!token) throw new Error("Cloudflare analytics API token is not configured");
-    const dataset = analyticsDatasetIdentifier(env.CLOUDFLARE_ANALYTICS_DATASET);
+    const dataset = analyticsDatasetIdentifier(env.CLOUDFLARE_USAGE_ANALYTICS_DATASET);
     const sql = `
       SELECT
         toDate(timestamp) AS date,
@@ -934,7 +934,7 @@ async function queuesUsage(
       ORDER BY date
       FORMAT JSON`;
     const response = await fetch(
-      `${SQL_API_BASE}/${env.CLOUDFLARE_ACCOUNT_ID}/analytics_engine/sql`,
+      `${SQL_API_BASE}/${env.CLOUDFLARE_USAGE_ACCOUNT_ID}/analytics_engine/sql`,
       {
         method: "POST",
         headers: {
@@ -979,7 +979,7 @@ async function queuesUsage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Dataset: ${env.CLOUDFLARE_ANALYTICS_DATASET}`,
+        `Dataset: ${env.CLOUDFLARE_USAGE_ANALYTICS_DATASET}`,
         "Queue operations are estimated as one write, one read, and one delete per consumed event.",
       ],
     };
@@ -1015,14 +1015,14 @@ export async function buildCloudflareUsage(
     services.reduce((sum, service) => sum + service.projected_month_estimated_spend_usd, 0),
   );
   const requiredEnv = [
-    "CLOUDFLARE_ACCOUNT_ID",
-    "CLOUDFLARE_WORKER_SCRIPT_NAME",
-    "CLOUDFLARE_D1_DATABASE_ID",
-    "CLOUDFLARE_R2_BUCKET_NAME",
-    "CLOUDFLARE_ANALYTICS_DATASET",
+    "CLOUDFLARE_USAGE_ACCOUNT_ID",
+    "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME",
+    "CLOUDFLARE_USAGE_D1_DATABASE_ID",
+    "CLOUDFLARE_USAGE_R2_BUCKET_NAME",
+    "CLOUDFLARE_USAGE_ANALYTICS_DATASET",
   ].filter((key) => !usageEnv[key as keyof UsageEnv]);
   if (!apiToken(usageEnv)) {
-    requiredEnv.unshift("CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY");
+    requiredEnv.unshift("CLOUDFLARE_USAGE_API_TOKEN");
   }
 
   return {

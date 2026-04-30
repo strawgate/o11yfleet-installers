@@ -8,7 +8,7 @@ import { RemoteConfigStatuses } from "@o11yfleet/core/codec";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
   setupD1,
-  CLAIM_SECRET,
+  O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
   uploadConfigVersion,
@@ -63,7 +63,7 @@ describe("Full Agent Lifecycle", () => {
     _instanceUid = enrollment.instance_uid;
 
     // Verify the claim is valid and parseable
-    parsedClaim = await verifyClaim(assignmentClaim, CLAIM_SECRET);
+    parsedClaim = await verifyClaim(assignmentClaim, O11YFLEET_CLAIM_HMAC_SECRET);
     expect(parsedClaim.v).toBe(1);
     expect(parsedClaim.config_id).toBe(configId);
 

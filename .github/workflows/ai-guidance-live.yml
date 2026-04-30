@@ -18,10 +18,10 @@ jobs:
       FP_URL: http://127.0.0.1:8787
       UI_URL: http://127.0.0.1:3000
       LIVE_AI_GUIDANCE: "1"
-      MINIMAX_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
-      LLM_PROVIDER: minimax
-      LLM_MODEL: MiniMax-M2.7
-      LLM_BASE_URL: https://api.minimax.io/v1
+      AI_GUIDANCE_MINIMAX_API_KEY: ${{ secrets.AI_GUIDANCE_MINIMAX_API_KEY }}
+      AI_GUIDANCE_PROVIDER: minimax
+      AI_GUIDANCE_MODEL: MiniMax-M2.7
+      AI_GUIDANCE_BASE_URL: https://api.minimax.io/v1
     steps:
       - uses: actions/checkout@v6
 
@@ -36,23 +36,28 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Check live AI secret
+        id: live-secret
         shell: bash
         run: |
-          if [ -z "${MINIMAX_API_KEY:-}" ]; then
-            echo "::error::MINIMAX_API_KEY is required for the AI Guidance Live Audit."
-            exit 1
+          if [ -z "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
+            echo "available=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::AI_GUIDANCE_MINIMAX_API_KEY is not configured; skipping live AI guidance check."
+          else
+            echo "available=true" >> "$GITHUB_OUTPUT"
           fi
 
       - name: Install Playwright browser
+        if: steps.live-secret.outputs.available == 'true'
         run: pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
 
       - name: Run live AI guidance audit
+        if: steps.live-secret.outputs.available == 'true'
         env:
           AI_GUIDANCE_AUDIT_DIR: test-results/ai-guidance-audit
         run: bash scripts/run-ai-guidance-audit.sh 20
 
       - name: Upload AI guidance audit artifacts
-        if: always()
+        if: always() && steps.live-secret.outputs.available == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: ai-guidance-live-audit

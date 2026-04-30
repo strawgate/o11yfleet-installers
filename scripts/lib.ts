@@ -10,7 +10,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const STATE_FILE = resolve(__dirname, "..", ".local-state.json");
 
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
-export const API_KEY = process.env.O11YFLEET_API_KEY ?? process.env.API_SECRET ?? "";
+export const API_KEY =
+  process.env.O11YFLEET_API_KEY ?? process.env.O11YFLEET_API_BEARER_SECRET ?? "";
 
 export interface LocalState {
   tenant_id: string;
@@ -42,7 +43,9 @@ export function stateFilePath(): string {
 
 export function requireApiKey(): string {
   if (!API_KEY) {
-    log.error("Set O11YFLEET_API_KEY to the worker API_SECRET before using local API scripts.");
+    log.error(
+      "Set O11YFLEET_API_KEY to the worker O11YFLEET_API_BEARER_SECRET before using local API scripts.",
+    );
     process.exit(1);
   }
   return API_KEY;

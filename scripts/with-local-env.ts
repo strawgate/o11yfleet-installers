@@ -93,9 +93,9 @@ export function readLocalEnv(path = defaultDevVarsPath): Record<string, string> 
 
 export function localCommandEnv(localEnv = readLocalEnv()): NodeJS.ProcessEnv {
   const merged: NodeJS.ProcessEnv = { ...localEnv, ...process.env };
-  if (merged.API_SECRET) {
-    merged.O11YFLEET_API_KEY ??= merged.API_SECRET;
-    merged.FP_API_KEY ??= merged.API_SECRET;
+  if (merged.O11YFLEET_API_BEARER_SECRET) {
+    merged.O11YFLEET_API_KEY ??= merged.O11YFLEET_API_BEARER_SECRET;
+    merged.FP_API_KEY ??= merged.O11YFLEET_API_BEARER_SECRET;
   }
   merged.FP_URL ??= "http://localhost:8787";
   return merged;

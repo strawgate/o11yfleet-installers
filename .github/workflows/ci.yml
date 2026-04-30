@@ -322,14 +322,19 @@ jobs:
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
-      TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+      TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+      TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
       TERRAFORM_STAGING_DEPLOY_ENABLED: ${{ vars.TERRAFORM_STAGING_DEPLOY_ENABLED }}
+      O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+      O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+      O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
+      O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL }}
+      O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD }}
     steps:
       - uses: actions/checkout@v6
 
@@ -351,12 +356,17 @@ jobs:
 
       - name: Check staging deploy configuration
         run: |
-          test -n "$TF_STATE_BUCKET"
-          test -n "$TF_STATE_ENDPOINT"
+          test -n "$TERRAFORM_STATE_R2_BUCKET"
+          test -n "$TERRAFORM_STATE_R2_ENDPOINT"
           test -n "$AWS_ACCESS_KEY_ID"
           test -n "$AWS_SECRET_ACCESS_KEY"
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$O11YFLEET_API_BEARER_SECRET"
+          test -n "$O11YFLEET_SEED_ADMIN_EMAIL"
+          test -n "$O11YFLEET_SEED_ADMIN_PASSWORD"
+          test -n "$O11YFLEET_SEED_TENANT_USER_EMAIL"
+          test -n "$O11YFLEET_SEED_TENANT_USER_PASSWORD"
 
       - name: Verify staging Terraform import/state readiness
         run: just tf-check-staging-readiness staging
@@ -381,7 +391,6 @@ jobs:
       - name: Smoke test
         run: |
           WORKER_URL="$(just --quiet env-api-url staging)"
-          API_SECRET="${{ secrets.API_SECRET }}"
 
           echo "=== Health check ==="
           STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL/healthz")
@@ -394,7 +403,7 @@ jobs:
           echo "=== Seed demo tenant ==="
           SEED_RESP=$(curl -s -X POST "$WORKER_URL/auth/seed" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET")
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET")
           TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
           if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
             echo "Failed to seed: $SEED_RESP"
@@ -405,7 +414,7 @@ jobs:
           echo "=== API smoke: create config (v1) ==="
           CONFIG=$(curl -s -X POST "$WORKER_URL/api/v1/configurations" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID" \
             -d '{"name":"ci-smoke-config"}')
           CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
@@ -418,7 +427,7 @@ jobs:
           echo "=== API smoke: create enrollment token (v1) ==="
           TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-token" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID" \
             -d '{"label":"ci-smoke"}')
           TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
@@ -430,7 +439,7 @@ jobs:
 
           echo "=== API smoke: config stats (v1) ==="
           HTTP_STATUS=$(curl -s -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID")
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Stats endpoint failed: HTTP $HTTP_STATUS"

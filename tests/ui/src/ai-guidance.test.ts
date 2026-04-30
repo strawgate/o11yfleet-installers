@@ -230,7 +230,7 @@ test.describe("AI guidance surfaces", () => {
         source: "Fixture pricing assumptions.",
         notes: ["Usage is estimated from source metrics."],
       },
-      required_env: ["CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY"],
+      required_env: ["CLOUDFLARE_USAGE_ACCOUNT_ID", "CLOUDFLARE_USAGE_API_TOKEN"],
       services: [
         {
           id: "workers",

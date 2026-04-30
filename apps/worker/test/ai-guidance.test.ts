@@ -313,12 +313,16 @@ describe("AI guidance routes", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(overviewRequest),
     });
-    const llmEnv = { ...env, LLM_PROVIDER: "minimax", MINIMAX_API_KEY: undefined };
+    const llmEnv = {
+      ...env,
+      AI_GUIDANCE_PROVIDER: "minimax",
+      AI_GUIDANCE_MINIMAX_API_KEY: undefined,
+    };
     const response = await handleV1Request(request, llmEnv, new URL(request.url), "tenant-ai-test");
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({
-      error: "MINIMAX_API_KEY is required when LLM_PROVIDER uses the SDK",
+      error: "AI_GUIDANCE_MINIMAX_API_KEY is required when AI_GUIDANCE_PROVIDER uses the SDK",
     });
   });
 
@@ -369,10 +373,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        LLM_PROVIDER: "minimax",
-        LLM_MODEL: "MiniMax-M2.7",
-        LLM_BASE_URL: "https://api.minimax.test/v1",
-        MINIMAX_API_KEY: "test-key",
+        AI_GUIDANCE_PROVIDER: "minimax",
+        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -435,10 +439,10 @@ describe("AI guidance routes", () => {
       },
       {
         env: {
-          LLM_PROVIDER: "minimax",
-          LLM_MODEL: "MiniMax-M2.7",
-          LLM_BASE_URL: "https://api.minimax.test/v1",
-          MINIMAX_API_KEY: "test-key",
+          AI_GUIDANCE_PROVIDER: "minimax",
+          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -476,10 +480,10 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          LLM_PROVIDER: "minimax",
-          LLM_MODEL: "MiniMax-M2.7",
-          LLM_BASE_URL: "https://api.minimax.test/v1",
-          MINIMAX_API_KEY: "test-key",
+          AI_GUIDANCE_PROVIDER: "minimax",
+          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -513,10 +517,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        LLM_PROVIDER: "minimax",
-        LLM_MODEL: "MiniMax-M2.7",
-        LLM_BASE_URL: "https://api.minimax.test/v1",
-        MINIMAX_API_KEY: "test-key",
+        AI_GUIDANCE_PROVIDER: "minimax",
+        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -537,16 +541,16 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          LLM_PROVIDER: "openai-compatible",
-          LLM_MODEL: "MiniMax-M2.7",
-          MINIMAX_API_KEY: "test-key",
+          AI_GUIDANCE_PROVIDER: "openai-compatible",
+          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: vi.fn(),
       }),
     ).rejects.toMatchObject({
       name: "AiProviderError",
-      message: "LLM_BASE_URL is required when LLM_PROVIDER is openai-compatible",
+      message: "AI_GUIDANCE_BASE_URL is required when AI_GUIDANCE_PROVIDER is openai-compatible",
     });
   });
 
@@ -590,10 +594,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        LLM_PROVIDER: "minimax",
-        LLM_MODEL: "MiniMax-M2.7",
-        LLM_BASE_URL: "https://api.minimax.test/v1",
-        MINIMAX_API_KEY: "test-key",
+        AI_GUIDANCE_PROVIDER: "minimax",
+        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -633,10 +637,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        LLM_PROVIDER: "minimax",
-        LLM_MODEL: "MiniMax-M2.7",
-        LLM_BASE_URL: "https://api.minimax.test/v1",
-        MINIMAX_API_KEY: "test-key",
+        AI_GUIDANCE_PROVIDER: "minimax",
+        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -692,10 +696,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(moderateCountOnlyRequest, {
       env: {
-        LLM_PROVIDER: "minimax",
-        LLM_MODEL: "MiniMax-M2.7",
-        LLM_BASE_URL: "https://api.minimax.test/v1",
-        MINIMAX_API_KEY: "test-key",
+        AI_GUIDANCE_PROVIDER: "minimax",
+        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -771,10 +775,10 @@ describe("AI guidance routes", () => {
       },
       {
         env: {
-          LLM_PROVIDER: "minimax",
-          LLM_MODEL: "MiniMax-M2.7",
-          LLM_BASE_URL: "https://api.minimax.test/v1",
-          MINIMAX_API_KEY: "test-key",
+          AI_GUIDANCE_PROVIDER: "minimax",
+          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -820,10 +824,10 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          LLM_PROVIDER: "minimax",
-          LLM_MODEL: "MiniMax-M2.7",
-          LLM_BASE_URL: "https://api.minimax.test/v1",
-          MINIMAX_API_KEY: "test-key",
+          AI_GUIDANCE_PROVIDER: "minimax",
+          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,

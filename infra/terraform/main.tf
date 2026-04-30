@@ -82,17 +82,17 @@ locals {
       text = local.worker_environment_name
     },
     {
-      name = "LLM_PROVIDER"
+      name = "AI_GUIDANCE_PROVIDER"
       type = "plain_text"
       text = "minimax"
     },
     {
-      name = "LLM_MODEL"
+      name = "AI_GUIDANCE_MODEL"
       type = "plain_text"
       text = "MiniMax-M2.7"
     },
     {
-      name = "LLM_BASE_URL"
+      name = "AI_GUIDANCE_BASE_URL"
       type = "plain_text"
       text = "https://api.minimax.io/v1"
     },

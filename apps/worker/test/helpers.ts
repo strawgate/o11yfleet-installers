@@ -8,14 +8,14 @@ import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 
-export const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
-export const API_SECRET = "test-api-secret-for-dev-only-32chars";
+export const O11YFLEET_CLAIM_HMAC_SECRET = "dev-secret-key-for-testing-only-32ch";
+export const O11YFLEET_API_BEARER_SECRET = "test-api-secret-for-dev-only-32chars";
 const TEST_ADMIN_USER_ID = "test-admin-user";
 const TEST_ADMIN_EMAIL = "admin@o11yfleet.test";
 
 /** Standard auth headers for API requests in tests */
 export function authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  return { Authorization: `Bearer ${API_SECRET}`, ...extra };
+  return { Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`, ...extra };
 }
 
 async function ensureAuthTables(): Promise<void> {
@@ -117,7 +117,7 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
         headers.set("Origin", "https://app.o11yfleet.com");
       }
     } else if (!headers.has("Authorization")) {
-      headers.set("Authorization", `Bearer ${API_SECRET}`);
+      headers.set("Authorization", `Bearer ${O11YFLEET_API_BEARER_SECRET}`);
     }
     if (url.includes("/api/v1/")) {
       const existingTenantId = headers.get("X-Tenant-Id")?.trim() ?? "";
@@ -420,7 +420,7 @@ export async function connectWithEnrollment(token: string): Promise<{
  * Connect a WebSocket using a signed assignment claim (reconnect path).
  */
 export async function connectWithClaim(claim: AssignmentClaim): Promise<WebSocket> {
-  const token = await signClaim(claim, CLAIM_SECRET);
+  const token = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
   const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
     headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
   });

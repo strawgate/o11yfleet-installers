@@ -9,13 +9,12 @@
   // each named environment below.
   "secrets": {
     "required": [
-      "API_SECRET",
-      "CLAIM_SECRET",
-      "MINIMAX_API_KEY",
-      "SEED_ADMIN_EMAIL",
-      "SEED_ADMIN_PASSWORD",
-      "SEED_TENANT_USER_EMAIL",
-      "SEED_TENANT_USER_PASSWORD",
+      "O11YFLEET_API_BEARER_SECRET",
+      "O11YFLEET_CLAIM_HMAC_SECRET",
+      "O11YFLEET_SEED_ADMIN_EMAIL",
+      "O11YFLEET_SEED_ADMIN_PASSWORD",
+      "O11YFLEET_SEED_TENANT_USER_EMAIL",
+      "O11YFLEET_SEED_TENANT_USER_PASSWORD",
     ],
   },
   "d1_databases": [
@@ -78,13 +77,12 @@
       },
       "secrets": {
         "required": [
-          "API_SECRET",
-          "CLAIM_SECRET",
-          "MINIMAX_API_KEY",
-          "SEED_ADMIN_EMAIL",
-          "SEED_ADMIN_PASSWORD",
-          "SEED_TENANT_USER_EMAIL",
-          "SEED_TENANT_USER_PASSWORD",
+          "O11YFLEET_API_BEARER_SECRET",
+          "O11YFLEET_CLAIM_HMAC_SECRET",
+          "O11YFLEET_SEED_ADMIN_EMAIL",
+          "O11YFLEET_SEED_ADMIN_PASSWORD",
+          "O11YFLEET_SEED_TENANT_USER_EMAIL",
+          "O11YFLEET_SEED_TENANT_USER_PASSWORD",
         ],
       },
       "observability": {
@@ -94,27 +92,29 @@
       "d1_databases": [
         {
           "binding": "FP_DB",
-          "database_name": "fp-db",
-          "database_id": "192ca9ca-bd47-4bd2-9321-fcdf62d9cf05",
+          "database_name": "o11yfleet-staging-db",
+          // Terraform supplies the real staging D1 binding for deployed Workers.
+          // Keep Wrangler dry-run/typegen from accidentally targeting production.
+          "database_id": "00000000-0000-0000-0000-000000000000",
           "migrations_dir": "../../packages/db/migrations",
         },
       ],
       "r2_buckets": [
         {
           "binding": "FP_CONFIGS",
-          "bucket_name": "fp-configs",
+          "bucket_name": "o11yfleet-staging-configs",
         },
       ],
       "queues": {
         "producers": [
           {
             "binding": "FP_EVENTS",
-            "queue": "fp-events",
+            "queue": "o11yfleet-staging-events",
           },
         ],
         "consumers": [
           {
-            "queue": "fp-events",
+            "queue": "o11yfleet-staging-events",
             "max_batch_size": 100,
             "max_batch_timeout": 5,
           },
@@ -148,13 +148,12 @@
       },
       "secrets": {
         "required": [
-          "API_SECRET",
-          "CLAIM_SECRET",
-          "MINIMAX_API_KEY",
-          "SEED_ADMIN_EMAIL",
-          "SEED_ADMIN_PASSWORD",
-          "SEED_TENANT_USER_EMAIL",
-          "SEED_TENANT_USER_PASSWORD",
+          "O11YFLEET_API_BEARER_SECRET",
+          "O11YFLEET_CLAIM_HMAC_SECRET",
+          "O11YFLEET_SEED_ADMIN_EMAIL",
+          "O11YFLEET_SEED_ADMIN_PASSWORD",
+          "O11YFLEET_SEED_TENANT_USER_EMAIL",
+          "O11YFLEET_SEED_TENANT_USER_PASSWORD",
         ],
       },
       "observability": {
@@ -219,13 +218,12 @@
       },
       "secrets": {
         "required": [
-          "API_SECRET",
-          "CLAIM_SECRET",
-          "MINIMAX_API_KEY",
-          "SEED_ADMIN_EMAIL",
-          "SEED_ADMIN_PASSWORD",
-          "SEED_TENANT_USER_EMAIL",
-          "SEED_TENANT_USER_PASSWORD",
+          "O11YFLEET_API_BEARER_SECRET",
+          "O11YFLEET_CLAIM_HMAC_SECRET",
+          "O11YFLEET_SEED_ADMIN_EMAIL",
+          "O11YFLEET_SEED_ADMIN_PASSWORD",
+          "O11YFLEET_SEED_TENANT_USER_EMAIL",
+          "O11YFLEET_SEED_TENANT_USER_PASSWORD",
         ],
       },
       "d1_databases": [

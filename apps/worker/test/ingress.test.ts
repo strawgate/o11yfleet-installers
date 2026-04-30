@@ -3,9 +3,7 @@ import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { AgentCapabilities, encodeFrame } from "@o11yfleet/core/codec";
 import type { AgentToServer } from "@o11yfleet/core/codec";
-import { apiFetch, setupD1 } from "./helpers.js";
-
-const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
+import { apiFetch, setupD1, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
 
 beforeAll(setupD1);
 
@@ -42,7 +40,7 @@ describe("Ingress Router", () => {
       iat: Math.floor(Date.now() / 1000) - 7200,
       exp: Math.floor(Date.now() / 1000) - 3600,
     };
-    const token = await signClaim(claim, CLAIM_SECRET);
+    const token = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
     const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         Upgrade: "websocket",
@@ -64,7 +62,7 @@ describe("Ingress Router", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const token = await signClaim(claim, CLAIM_SECRET);
+    const token = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
     const response = await apiFetch("http://localhost/v1/opamp", {
       headers: {
         Upgrade: "websocket",
@@ -98,7 +96,7 @@ describe("Ingress Router", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const token = await signClaim(claim, CLAIM_SECRET);
+    const token = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     // Try to spoof headers — ingress should strip them and use claim values
     const response = await apiFetch("http://localhost/v1/opamp", {
@@ -194,7 +192,7 @@ describe("Ingress Router", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const signed = await signClaim(claim, CLAIM_SECRET);
+    const signed = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     // Use query param instead of Authorization header
     const response = await apiFetch(

@@ -52,13 +52,13 @@ jobs:
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
-      TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-      TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
-      TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+      TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+      TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
       TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
     steps:
       - uses: actions/checkout@v6
@@ -83,19 +83,20 @@ jobs:
 
       - name: Check Terraform remote state configuration
         run: |
-          test -n "$TF_STATE_BUCKET"
-          test -n "$TF_STATE_ENDPOINT"
+          test -n "$TERRAFORM_STATE_R2_BUCKET"
+          test -n "$TERRAFORM_STATE_R2_ENDPOINT"
           test -n "$AWS_ACCESS_KEY_ID"
           test -n "$AWS_SECRET_ACCESS_KEY"
           test -n "$CLOUDFLARE_API_TOKEN"
-          test -n "$API_SECRET"
-          test -n "$SEED_ADMIN_EMAIL"
-          test -n "$SEED_ADMIN_PASSWORD"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          test -n "$O11YFLEET_API_BEARER_SECRET"
+          test -n "$O11YFLEET_SEED_ADMIN_EMAIL"
+          test -n "$O11YFLEET_SEED_ADMIN_PASSWORD"
           test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
         env:
-          API_SECRET: ${{ secrets.API_SECRET }}
-          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
-          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
 
       - name: Check production imports
         run: just tf-check-prod-imports prod
@@ -104,16 +105,16 @@ jobs:
         run: |
           SECRET_NAMES=$(pnpm --filter @o11yfleet/worker exec wrangler secret list --format json \
             | jq -r '.[].name')
-          for name in API_SECRET CLAIM_SECRET MINIMAX_API_KEY SEED_ADMIN_EMAIL SEED_ADMIN_PASSWORD SEED_TENANT_USER_EMAIL SEED_TENANT_USER_PASSWORD; do
+          for name in O11YFLEET_API_BEARER_SECRET O11YFLEET_CLAIM_HMAC_SECRET O11YFLEET_SEED_ADMIN_EMAIL O11YFLEET_SEED_ADMIN_PASSWORD O11YFLEET_SEED_TENANT_USER_EMAIL O11YFLEET_SEED_TENANT_USER_PASSWORD; do
             if ! printf '%s\n' "$SECRET_NAMES" | grep -Fxq "$name"; then
               echo "Missing production Worker secret: $name"
-              echo "Provision it on the Terraform-managed production script with: cd apps/worker && pnpm wrangler secret put $name"
+              echo "Provision it on the Terraform-managed production script with: cd apps/worker && pnpm wrangler versions secret put $name"
               exit 1
             fi
           done
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
 
       # Production D1 migrations are expected to be expand-only and backward
       # compatible with the currently deployed Worker. Contract/destructive
@@ -121,8 +122,8 @@ jobs:
       - name: Run D1 migrations
         run: just d1-migrate prod
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
 
       - name: Deploy worker to production with Terraform
         run: just tf-apply-worker prod
@@ -145,7 +146,7 @@ jobs:
           echo "=== Seed auth/admin ==="
           SEED_RESP=$(curl -s -X POST "$WORKER_URL/auth/seed" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET")
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET")
           TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
           if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
             echo "Failed to seed: $SEED_RESP"
@@ -160,7 +161,7 @@ jobs:
             -X POST "$WORKER_URL/auth/login" \
             -H "Origin: https://o11yfleet.com" \
             -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg email "$SEED_ADMIN_EMAIL" --arg password "$SEED_ADMIN_PASSWORD" '{email:$email,password:$password}')")
+            -d "$(jq -nc --arg email "$O11YFLEET_SEED_ADMIN_EMAIL" --arg password "$O11YFLEET_SEED_ADMIN_PASSWORD" '{email:$email,password:$password}')")
           if [ "$LOGIN_STATUS" != "200" ]; then
             echo "Admin login smoke failed: HTTP $LOGIN_STATUS"
             cat "$LOGIN_BODY"
@@ -180,7 +181,7 @@ jobs:
           echo "=== API smoke: create config (v1) ==="
           CONFIG=$(curl -s -X POST "$WORKER_URL/api/v1/configurations" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID" \
             -d '{"name":"ci-release-config"}')
           CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
@@ -193,7 +194,7 @@ jobs:
           echo "=== API smoke: create enrollment token (v1) ==="
           TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-token" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID" \
             -d '{"label":"ci-release"}')
           TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
@@ -205,7 +206,7 @@ jobs:
 
           echo "=== API smoke: config stats (v1) ==="
           HTTP_STATUS=$(curl -s -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
-            -H "Authorization: Bearer $API_SECRET" \
+            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
             -H "X-Tenant-Id: $TENANT_ID")
           if [ "$HTTP_STATUS" != "200" ]; then
             echo "Stats endpoint failed: HTTP $HTTP_STATUS"
@@ -217,9 +218,9 @@ jobs:
 
           echo "✓ Production smoke tests passed"
         env:
-          API_SECRET: ${{ secrets.API_SECRET }}
-          SEED_ADMIN_EMAIL: ${{ secrets.SEED_ADMIN_EMAIL }}
-          SEED_ADMIN_PASSWORD: ${{ secrets.SEED_ADMIN_PASSWORD }}
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
 
   deploy-pages:
     needs: [test]
@@ -249,8 +250,8 @@ jobs:
       - name: Deploy and smoke test Pages projects
         uses: ./.github/actions/deploy-pages
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
         with:
           projects: |
             o11yfleet-site

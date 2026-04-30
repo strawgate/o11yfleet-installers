@@ -129,7 +129,7 @@ remove_worker_env_file() {
 }
 
 write_worker_env_file() {
-  [ -n "${MINIMAX_API_KEY:-}" ] || return 0
+  [ -n "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ] || return 0
 
   WORKER_ENV_FILE="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/o11yfleet-worker-env.XXXXXX")"
   chmod 600 "$WORKER_ENV_FILE"
@@ -138,7 +138,7 @@ write_worker_env_file() {
   cat apps/worker/.dev.vars >"$WORKER_ENV_FILE"
   {
     printf '\n'
-    printf 'MINIMAX_API_KEY=%s\n' "$MINIMAX_API_KEY"
+    printf 'AI_GUIDANCE_MINIMAX_API_KEY=%s\n' "$AI_GUIDANCE_MINIMAX_API_KEY"
   } >>"$WORKER_ENV_FILE"
 }
 
@@ -155,14 +155,12 @@ ensure_dev_vars() {
       printf '%s=%s\n' "$key" "$value" >>"$vars_file"
   }
 
-  ensure_dev_var API_SECRET dev-local-api-secret-1234567890x
-  ensure_dev_var CLAIM_SECRET dev-local-claim-secret-12345678x
-  ensure_dev_var MINIMAX_API_KEY dev-local-minimax-placeholder
-  ensure_dev_var LLM_PROVIDER fixture
-  ensure_dev_var SEED_TENANT_USER_EMAIL demo@o11yfleet.com
-  ensure_dev_var SEED_TENANT_USER_PASSWORD demo-password
-  ensure_dev_var SEED_ADMIN_EMAIL admin@o11yfleet.com
-  ensure_dev_var SEED_ADMIN_PASSWORD admin-password
+  ensure_dev_var O11YFLEET_API_BEARER_SECRET dev-local-api-secret-1234567890x
+  ensure_dev_var O11YFLEET_CLAIM_HMAC_SECRET dev-local-claim-secret-12345678x
+  ensure_dev_var O11YFLEET_SEED_TENANT_USER_EMAIL demo@o11yfleet.com
+  ensure_dev_var O11YFLEET_SEED_TENANT_USER_PASSWORD demo-password
+  ensure_dev_var O11YFLEET_SEED_ADMIN_EMAIL admin@o11yfleet.com
+  ensure_dev_var O11YFLEET_SEED_ADMIN_PASSWORD admin-password
 
   chmod 600 "$vars_file"
 }
@@ -227,11 +225,11 @@ trap cleanup_on_exit EXIT
 stop_stack
 
 WORKER_VAR_ARGS=()
-if [ -n "${MINIMAX_API_KEY:-}" ]; then
+if [ -n "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
   write_worker_env_file
-  WORKER_VAR_ARGS+=(--var "LLM_PROVIDER:${LLM_PROVIDER:-minimax}")
-  WORKER_VAR_ARGS+=(--var "LLM_MODEL:${LLM_MODEL:-MiniMax-M2.7}")
-  WORKER_VAR_ARGS+=(--var "LLM_BASE_URL:${LLM_BASE_URL:-https://api.minimax.io/v1}")
+  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_PROVIDER:${AI_GUIDANCE_PROVIDER:-minimax}")
+  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_MODEL:${AI_GUIDANCE_MODEL:-MiniMax-M2.7}")
+  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_BASE_URL:${AI_GUIDANCE_BASE_URL:-https://api.minimax.io/v1}")
 fi
 
 echo "Starting worker at $FP_URL"

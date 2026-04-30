@@ -7,6 +7,12 @@ on:
       - ".github/workflows/terraform-deploy.yml"
       - "infra/terraform/**"
       - "justfile"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/workflows/terraform-deploy.yml"
+      - "infra/terraform/**"
+      - "justfile"
   workflow_dispatch:
     inputs:
       environment:
@@ -34,12 +40,12 @@ permissions:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
-  TF_STATE_ENDPOINT: ${{ vars.TF_STATE_ENDPOINT }}
-  TF_STATE_REGION: ${{ vars.TF_STATE_REGION || 'auto' }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
   TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
 
 jobs:
@@ -62,6 +68,7 @@ jobs:
     needs: [validate]
     if: >-
       ${{
+        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
         vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true' &&
         (
           github.event_name == 'pull_request' ||
@@ -90,14 +97,28 @@ jobs:
           fi
 
       - name: Check remote state configuration
+        id: remote-state
         run: |
-          test -n "$TF_STATE_BUCKET"
-          test -n "$TF_STATE_ENDPOINT"
-          test -n "$AWS_ACCESS_KEY_ID"
-          test -n "$AWS_SECRET_ACCESS_KEY"
-          test -n "$CLOUDFLARE_API_TOKEN"
+          missing=()
+          [ -n "$TERRAFORM_STATE_R2_BUCKET" ] || missing+=(TERRAFORM_STATE_R2_BUCKET)
+          [ -n "$TERRAFORM_STATE_R2_ENDPOINT" ] || missing+=(TERRAFORM_STATE_R2_ENDPOINT)
+          [ -n "$AWS_ACCESS_KEY_ID" ] || missing+=(TERRAFORM_STATE_R2_ACCESS_KEY_ID)
+          [ -n "$AWS_SECRET_ACCESS_KEY" ] || missing+=(TERRAFORM_STATE_R2_SECRET_ACCESS_KEY)
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing+=(CLOUDFLARE_DEPLOY_API_TOKEN)
+          if [ "${#missing[@]}" -gt 0 ]; then
+            names="$(IFS=', '; echo "${missing[*]}")"
+            if [ "${{ github.event_name }}" = "pull_request" ]; then
+              echo "::notice::Skipping Terraform plan because deployment settings are not configured: ${names}"
+              echo "configured=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+            echo "::error::Missing required Terraform deployment settings: ${names}"
+            exit 1
+          fi
+          echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Terraform plan
+        if: ${{ steps.remote-state.outputs.configured == 'true' }}
         run: |
           if [ "$TERRAFORM_PROVIDER_V5_STATE_READY" != "true" ]; then
             just tf-plan-empty-state ${{ steps.target.outputs.env }}
@@ -111,8 +132,8 @@ jobs:
       ${{
         vars.TERRAFORM_PROVIDER_V5_STATE_READY == 'true' &&
         (
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_APPLY_ENABLED == 'true') ||
-          (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply && vars.TERRAFORM_APPLY_ENABLED == 'true')
+          (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true') ||
+          (github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.apply && vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true')
         )
       }}
     runs-on: ubicloud-standard-2-arm

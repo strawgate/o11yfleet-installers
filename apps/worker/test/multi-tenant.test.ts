@@ -6,7 +6,7 @@ import { verifyClaim } from "@o11yfleet/core/auth";
 import {
   apiFetch,
   setupD1,
-  CLAIM_SECRET,
+  O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
   uploadConfigVersion,
@@ -138,7 +138,7 @@ describe("Multi-Tenant Isolation", () => {
     const { ws, enrollment } = await connectWithEnrollment(tokenA.token);
 
     // Claims are 2-part HMAC format: base64url(payload).base64url(sig)
-    const claim = await verifyClaim(enrollment.assignment_claim, CLAIM_SECRET);
+    const claim = await verifyClaim(enrollment.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
     expect(claim.tenant_id).toBe(tenantA.id);
     expect(claim.config_id).toBe(configA.id);
 

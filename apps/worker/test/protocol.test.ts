@@ -9,9 +9,7 @@ import {
   ServerCapabilities,
 } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
-import { apiFetch } from "./helpers.js";
-
-const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
+import { apiFetch, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
 
 beforeAll(async () => {
   await env.FP_DB.exec(
@@ -55,7 +53,7 @@ async function makeSignedClaim(): Promise<{ claim: AssignmentClaim; token: strin
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
   };
-  const token = await signClaim(claim, CLAIM_SECRET);
+  const token = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
   return { claim, token };
 }
 

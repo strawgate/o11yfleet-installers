@@ -11,7 +11,7 @@ import {
 import { apiFetch } from "./helpers.js";
 import type { ServerToAgent, AgentToServer } from "@o11yfleet/core/codec";
 
-const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
+const O11YFLEET_CLAIM_HMAC_SECRET = env.O11YFLEET_CLAIM_HMAC_SECRET;
 
 async function setupD1() {
   await env.FP_DB.exec(
@@ -195,7 +195,7 @@ describe("E2E Scenario #2: Reconnect with claim", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const signed = await signClaim(claim, CLAIM_SECRET);
+    const signed = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: { Upgrade: "websocket", Authorization: `Bearer ${signed}` },
@@ -301,7 +301,7 @@ describe("E2E Scenario #5: Disconnect tracking", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const signed = await signClaim(claim, CLAIM_SECRET);
+    const signed = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: { Upgrade: "websocket", Authorization: `Bearer ${signed}` },
@@ -455,7 +455,7 @@ describe("E2E Scenario #10: Auth failures", () => {
       iat: Math.floor(Date.now() / 1000),
       exp: Math.floor(Date.now() / 1000) + 3600,
     };
-    const signed = await signClaim(claim, CLAIM_SECRET);
+    const signed = await signClaim(claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     const wsRes = await apiFetch("http://localhost/v1/opamp", {
       headers: {

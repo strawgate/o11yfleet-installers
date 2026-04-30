@@ -42,10 +42,11 @@ the legacy project.
 
 Add these in GitHub repo Settings > Secrets and variables > Actions:
 
-| Secret                  | Value                              | Notes                 |
-| ----------------------- | ---------------------------------- | --------------------- |
-| `CLOUDFLARE_API_TOKEN`  | (create in CF Dashboard)           | See permissions below |
-| `CLOUDFLARE_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` |                       |
+| Secret                         | Value                              | Notes                                                |
+| ------------------------------ | ---------------------------------- | ---------------------------------------------------- |
+| `CLOUDFLARE_DEPLOY_API_TOKEN`  | (create in CF Dashboard)           | See permissions below                                |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` | Workflows map this to `CLOUDFLARE_ACCOUNT_ID`        |
+| `O11YFLEET_API_BEARER_SECRET`  | (same as staging Worker secret)    | Staging API smoke; prefer staging environment secret |
 
 ### CF API Token Permissions
 
@@ -67,12 +68,12 @@ Zone resources: Include all zones in account.
 
 Do not put runtime secrets in `wrangler.jsonc` `vars`; Wrangler uploads `vars`
 as plaintext Worker configuration. Provision these as Worker secrets for each
-deployed environment. Terraform-managed Worker versions inherit `API_SECRET`,
-`CLAIM_SECRET`, and seed-account secrets from the latest Worker version by
+deployed environment. Terraform-managed Worker versions inherit `O11YFLEET_API_BEARER_SECRET`,
+`O11YFLEET_CLAIM_HMAC_SECRET`, and seed-account secrets from the latest Worker version by
 default. Provision them before Terraform Worker deployments so the uploaded
-version can inherit the secret bindings. AI guidance also inherits
-`MINIMAX_API_KEY`; Terraform provides the non-secret `LLM_PROVIDER`, `LLM_MODEL`,
-and `LLM_BASE_URL` Worker bindings.
+version can inherit the secret bindings. AI guidance can also inherit the optional
+`AI_GUIDANCE_MINIMAX_API_KEY`; Terraform provides the non-secret `AI_GUIDANCE_PROVIDER`, `AI_GUIDANCE_MODEL`,
+and `AI_GUIDANCE_BASE_URL` Worker bindings.
 
 `apps/worker/wrangler.jsonc` also declares these names under
 `secrets.required` for the base, staging, and production Worker environments.
@@ -85,23 +86,21 @@ non-secret build-time values such as `VITE_O11YFLEET_API_URL`.
 
 ```bash
 cd apps/worker
-pnpm wrangler versions secret put CLAIM_SECRET --env staging
-pnpm wrangler versions secret put API_SECRET --env staging
-pnpm wrangler versions secret put MINIMAX_API_KEY --env staging
-pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL --env staging
-pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD --env staging
-pnpm wrangler versions secret put SEED_ADMIN_EMAIL --env staging
-pnpm wrangler versions secret put SEED_ADMIN_PASSWORD --env staging
+pnpm wrangler versions secret put O11YFLEET_CLAIM_HMAC_SECRET --env staging
+pnpm wrangler versions secret put O11YFLEET_API_BEARER_SECRET --env staging
+pnpm wrangler versions secret put O11YFLEET_SEED_TENANT_USER_EMAIL --env staging
+pnpm wrangler versions secret put O11YFLEET_SEED_TENANT_USER_PASSWORD --env staging
+pnpm wrangler versions secret put O11YFLEET_SEED_ADMIN_EMAIL --env staging
+pnpm wrangler versions secret put O11YFLEET_SEED_ADMIN_PASSWORD --env staging
 
 # Production Worker deploys are Terraform-managed and use the base
 # o11yfleet-worker script identity, not Wrangler's -production script.
-pnpm wrangler versions secret put CLAIM_SECRET
-pnpm wrangler versions secret put API_SECRET
-pnpm wrangler versions secret put MINIMAX_API_KEY
-pnpm wrangler versions secret put SEED_TENANT_USER_EMAIL
-pnpm wrangler versions secret put SEED_TENANT_USER_PASSWORD
-pnpm wrangler versions secret put SEED_ADMIN_EMAIL
-pnpm wrangler versions secret put SEED_ADMIN_PASSWORD
+pnpm wrangler versions secret put O11YFLEET_CLAIM_HMAC_SECRET
+pnpm wrangler versions secret put O11YFLEET_API_BEARER_SECRET
+pnpm wrangler versions secret put O11YFLEET_SEED_TENANT_USER_EMAIL
+pnpm wrangler versions secret put O11YFLEET_SEED_TENANT_USER_PASSWORD
+pnpm wrangler versions secret put O11YFLEET_SEED_ADMIN_EMAIL
+pnpm wrangler versions secret put O11YFLEET_SEED_ADMIN_PASSWORD
 ```
 
 Use `wrangler versions secret put` for Terraform-managed scripts so secret

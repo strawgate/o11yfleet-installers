@@ -1,0 +1,106 @@
+name: Deploy Environment
+
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Environment to deploy.
+        required: true
+        default: staging
+        type: choice
+        options:
+          - dev
+          - staging
+          - prod
+      require_state_ready:
+        description: Require existing Terraform state/imports before deploying.
+        required: true
+        default: true
+        type: boolean
+
+concurrency:
+  group: deploy-${{ inputs.environment }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+  TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
+  TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
+  REQUIRE_TERRAFORM_STATE_READY: ${{ inputs.require_state_ready }}
+
+jobs:
+  deploy:
+    runs-on: ubicloud-standard-2-arm
+    timeout-minutes: 25
+    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --prefer-offline
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Check deployment configuration
+        run: |
+          test -n "$TERRAFORM_STATE_R2_BUCKET"
+          test -n "$TERRAFORM_STATE_R2_ENDPOINT"
+          test -n "$AWS_ACCESS_KEY_ID"
+          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+
+          if [ "${{ inputs.environment }}" = "prod" ]; then
+            test "${{ github.ref }}" = "refs/heads/main"
+            test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
+            test "$TERRAFORM_PRODUCTION_APPLY_ENABLED" = "true"
+          fi
+
+      - name: Deploy environment
+        run: just deploy-env ${{ inputs.environment }}
+
+      - name: Resolve Pages smoke targets
+        id: pages-smoke
+        run: |
+          {
+            echo 'targets<<TARGETS'
+            just --quiet env-pages-smoke-targets ${{ inputs.environment }}
+            echo 'TARGETS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test Pages
+        uses: ./.github/actions/deploy-pages
+        with:
+          smoke-targets: ${{ steps.pages-smoke.outputs.targets }}
+
+      - name: Smoke test Worker health
+        run: |
+          WORKER_URL="$(just --quiet env-api-url ${{ inputs.environment }})"
+          STATUS=$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/worker-health.json -w "%{http_code}" "$WORKER_URL/healthz" || true)
+          if [ "$STATUS" != "200" ]; then
+            echo "Worker health check failed: $STATUS"
+            cat /tmp/worker-health.json
+            exit 1
+          fi

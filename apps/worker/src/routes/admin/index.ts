@@ -613,7 +613,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
       ? "Live Worker binding probes for D1, R2, Durable Objects, and Queues"
       : `Needs attention: ${degradedBindings.map(([key]) => key).join(", ")}`;
   const cloudflareAccountMetricsConfigured = Boolean(
-    env.CLOUDFLARE_ACCOUNT_ID && env.CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY,
+    env.CLOUDFLARE_USAGE_ACCOUNT_ID && env.CLOUDFLARE_USAGE_API_TOKEN,
   );
   const sources: Record<string, HealthDataSource> = {
     app_database: {

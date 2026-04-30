@@ -9,7 +9,7 @@ export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 export const API_KEY =
   process.env.FP_API_KEY ??
   process.env.O11YFLEET_API_KEY ??
-  process.env.API_SECRET ??
+  process.env.O11YFLEET_API_BEARER_SECRET ??
   "test-api-secret-for-dev-only-32chars";
 
 const configTenantIds = new Map<string, string>();

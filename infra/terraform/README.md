@@ -86,18 +86,24 @@ Planning and applying use shared remote state in R2. Export Cloudflare and R2
 credentials first:
 
 ```bash
-export CLOUDFLARE_API_TOKEN=...
-export CLOUDFLARE_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
-export TF_STATE_BUCKET=o11yfleet-terraform-state
-export TF_STATE_ENDPOINT=https://417e8c0fd8f1a64e9f2c4845afa6dc56.r2.cloudflarestorage.com
-export AWS_ACCESS_KEY_ID=...
-export AWS_SECRET_ACCESS_KEY=...
+export CLOUDFLARE_DEPLOY_API_TOKEN=...
+export CLOUDFLARE_DEPLOY_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
+export TERRAFORM_STATE_R2_BUCKET=o11yfleet-terraform-state
+export TERRAFORM_STATE_R2_ENDPOINT=https://417e8c0fd8f1a64e9f2c4845afa6dc56.r2.cloudflarestorage.com
+export TERRAFORM_STATE_R2_ACCESS_KEY_ID=...
+export TERRAFORM_STATE_R2_SECRET_ACCESS_KEY=...
+
+# Tool-required conventional names.
+export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_DEPLOY_API_TOKEN"
+export CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_DEPLOY_ACCOUNT_ID"
+export AWS_ACCESS_KEY_ID="$TERRAFORM_STATE_R2_ACCESS_KEY_ID"
+export AWS_SECRET_ACCESS_KEY="$TERRAFORM_STATE_R2_SECRET_ACCESS_KEY"
 ```
 
-`CLOUDFLARE_API_TOKEN`, `AWS_ACCESS_KEY_ID`, and `AWS_SECRET_ACCESS_KEY` are
-credentials. Do not place them in `.tfvars` files or backend config files.
-Terraform's S3 backend reads the R2 credentials from the AWS environment
-variables above.
+`CLOUDFLARE_DEPLOY_API_TOKEN`, `TERRAFORM_STATE_R2_ACCESS_KEY_ID`, and
+`TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` are credentials. Do not place them in
+`.tfvars` files or backend config files. Terraform's S3 backend still reads the
+R2 credentials from the conventional `AWS_*` environment variables above.
 
 The committed `envs/*.tfvars` files contain stable, non-secret identifiers and
 environment-specific names. If you need private or experimental variable values,
@@ -121,30 +127,43 @@ The production tfvars intentionally point D1/R2/Queue at the existing names so t
 - Pushes to `main` run the same plan and apply production only when explicitly enabled.
 - Manual dispatch can plan `dev`, `staging`, or `prod`; applying is restricted to the `main` branch and uses the matching GitHub environment.
 
+`.github/workflows/deploy-environment.yml` is the manual full-environment
+deploy path. It runs `just deploy-env <env>`, which applies Terraform control
+plane resources, uploads a Terraform-managed Worker version, runs D1
+migrations, builds the site for the target API URL, deploys all Pages projects,
+and smoke-tests Pages plus `/healthz`.
+
+`main` also has an automatic staging deploy in `.github/workflows/ci.yml`, but
+only when `TERRAFORM_STAGING_DEPLOY_ENABLED=true`. Keep that disabled until
+staging has been bootstrapped or imported, Worker secrets are provisioned, and
+the manual full deploy is healthy.
+
 Repository secrets:
 
-| Secret                       | Purpose                              |
-| ---------------------------- | ------------------------------------ |
-| `CLOUDFLARE_API_TOKEN`       | Cloudflare Terraform provider access |
-| `TF_STATE_ACCESS_KEY_ID`     | R2 S3 access key for Terraform state |
-| `TF_STATE_SECRET_ACCESS_KEY` | R2 S3 secret key for Terraform state |
+| Secret                                 | Purpose                                                               |
+| -------------------------------------- | --------------------------------------------------------------------- |
+| `CLOUDFLARE_DEPLOY_API_TOKEN`          | Cloudflare Terraform provider and Wrangler deploy access              |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID`         | Cloudflare account used by Wrangler deploy helpers                    |
+| `TERRAFORM_STATE_R2_ACCESS_KEY_ID`     | R2 S3 access key for Terraform state                                  |
+| `TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` | R2 S3 secret key for Terraform state                                  |
+| `O11YFLEET_API_BEARER_SECRET`          | Staging smoke-test bearer secret; prefer a staging environment secret |
 
 Repository variables:
 
-| Variable                            | Purpose                                                                            |
-| ----------------------------------- | ---------------------------------------------------------------------------------- |
-| `TF_STATE_BUCKET`                   | R2 bucket that stores Terraform state                                              |
-| `TF_STATE_ENDPOINT`                 | R2 S3 endpoint URL for the Cloudflare account                                      |
-| `TF_STATE_REGION`                   | Optional; defaults to `auto`                                                       |
-| `TERRAFORM_REMOTE_STATE_ENABLED`    | Set to `true` after the state bucket exists                                        |
-| `TERRAFORM_PROVIDER_V5_STATE_READY` | Set to `true` after the remote state is migrated/imported for provider v5          |
-| `TERRAFORM_APPLY_ENABLED`           | Set to `true` only after production imports                                        |
-| `TERRAFORM_STAGING_DEPLOY_ENABLED`  | Set to `true` only after staging state and Worker secrets are ready for CI deploys |
+| Variable                             | Purpose                                                                            |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `TERRAFORM_STATE_R2_BUCKET`          | R2 bucket that stores Terraform state                                              |
+| `TERRAFORM_STATE_R2_ENDPOINT`        | R2 S3 endpoint URL for the Cloudflare account                                      |
+| `TERRAFORM_STATE_R2_REGION`          | Optional; defaults to `auto`                                                       |
+| `TERRAFORM_REMOTE_STATE_ENABLED`     | Set to `true` after the state bucket exists                                        |
+| `TERRAFORM_PROVIDER_V5_STATE_READY`  | Set to `true` after the remote state is migrated/imported for provider v5          |
+| `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Set to `true` only after production imports                                        |
+| `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Set to `true` only after staging state and Worker secrets are ready for CI deploys |
 
 The `production` GitHub environment should require reviewer approval when the
 GitHub plan supports it. If required reviewers are not available, restrict the
 environment to the `main` deployment branch policy and leave
-`TERRAFORM_APPLY_ENABLED` unset until the first production imports are complete
+`TERRAFORM_PRODUCTION_APPLY_ENABLED` unset until the first production imports are complete
 and the plan shows no replacement for D1, R2, or Queue.
 
 Provider v5 cannot refresh every provider v4 state shape directly. Leave
@@ -230,9 +249,9 @@ tag Terraform sends with new Worker versions. Change it only when the Durable
 Object migration list changes, such as adding, renaming, or deleting Durable
 Object classes.
 
-Terraform-managed Worker versions inherit `API_SECRET`, `CLAIM_SECRET`,
-`MINIMAX_API_KEY`, and seed-account secrets from the latest Worker version by default. Keep
-provisioning secret values with Wrangler until the project adopts Cloudflare
+Terraform-managed Worker versions inherit `O11YFLEET_API_BEARER_SECRET`, `O11YFLEET_CLAIM_HMAC_SECRET`,
+seed-account secrets, and the optional `AI_GUIDANCE_MINIMAX_API_KEY` from the latest Worker version by
+default. Keep provisioning secret values with Wrangler until the project adopts Cloudflare
 Secrets Store or another Terraform-managed secret source. If a production Worker
 relies on additional dashboard/Wrangler-managed bindings, add their names to
 `worker_inherited_binding_names` before the first Terraform Worker deployment.
@@ -242,7 +261,7 @@ plans cannot accidentally drop one of the required secret bindings.
 
 Cloudflare's Terraform Worker version resource also supports `secret_text`
 bindings, but those values are Terraform inputs and therefore become part of
-Terraform state history. Do not switch to `secret_text` for `API_SECRET` or
+Terraform state history. Do not switch to `secret_text` for `O11YFLEET_API_BEARER_SECRET` or
 seed credentials unless the remote state access model, rotation policy, and
 review process have been designed around secrets in state.
 
@@ -262,13 +281,16 @@ project settings and both production and preview `deployment_configs`. If Pages
 Functions later need bindings or secrets, add them to this Terraform stack so a
 plan can show the full runtime config drift.
 
-The `deploy-staging` just recipe uses Terraform for staging control-plane
+The `deploy-env` just recipe uses Terraform for environment control-plane
 resources and Worker rollout, then Wrangler only for D1 migrations and Pages
-asset upload. The preferred staging cutover is to retire/delete any
-Wrangler-created staging Worker and let Terraform create
-`o11yfleet-worker-staging`; import the old Worker only if its identity must be
-preserved. Provision the required Worker secrets before enabling the CI staging
-deploy.
+asset upload. `deploy-staging` is the CI-safe wrapper around
+`deploy-env staging`: it requires `TERRAFORM_STAGING_DEPLOY_ENABLED=true` and
+checks staging state before applying.
+
+The preferred staging cutover is to retire/delete any Wrangler-created staging
+Worker and let Terraform create `o11yfleet-worker-staging`; import the old
+Worker only if its identity must be preserved. Provision the required Worker
+secrets before enabling the CI staging deploy.
 
 ### Staging Worker Terraform preflight and rollout
 
@@ -308,6 +330,18 @@ just tf-plan staging
 Then run `just tf-plan-worker staging` to verify the Worker version/deployment
 changes. If Terraform wants to replace the Worker identity unexpectedly, stop
 and repair imports/state before apply.
+
+For a first manual bootstrap where staging resources do not exist yet, run the
+manual **Deploy Environment** workflow for `staging` with
+`require_state_ready=false`, or run locally:
+
+```bash
+just deploy-env staging
+```
+
+After that succeeds, run `just tf-check-staging-readiness staging`, set
+`TERRAFORM_STAGING_DEPLOY_ENABLED=true`, and let the automatic `main` staging
+deploy take over.
 
 ## Admin Access
 

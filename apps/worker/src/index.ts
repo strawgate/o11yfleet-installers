@@ -15,30 +15,28 @@ export interface Env {
   FP_EVENTS: Queue;
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS?: AnalyticsEngineDataset;
-  CLAIM_SECRET: string;
-  API_SECRET?: string;
+  O11YFLEET_CLAIM_HMAC_SECRET: string;
+  O11YFLEET_API_BEARER_SECRET?: string;
   ENVIRONMENT?: "staging" | "dev" | "production";
-  MINIMAX_API_KEY?: string;
-  LLM_PROVIDER?: string;
-  LLM_MODEL?: string;
-  LLM_BASE_URL?: string;
-  SEED_TENANT_USER_EMAIL?: string;
-  SEED_TENANT_USER_PASSWORD?: string;
-  SEED_ADMIN_EMAIL?: string;
-  SEED_ADMIN_PASSWORD?: string;
-  CLOUDFLARE_ACCOUNT_ID?: string;
-  CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY?: string;
-  CLOUDFLARE_WORKER_SCRIPT_NAME?: string;
-  CLOUDFLARE_D1_DATABASE_ID?: string;
-  CLOUDFLARE_R2_BUCKET_NAME?: string;
-  CLOUDFLARE_ANALYTICS_DATASET?: string;
+  AI_GUIDANCE_MINIMAX_API_KEY?: string;
+  AI_GUIDANCE_PROVIDER?: string;
+  AI_GUIDANCE_MODEL?: string;
+  AI_GUIDANCE_BASE_URL?: string;
+  O11YFLEET_SEED_TENANT_USER_EMAIL?: string;
+  O11YFLEET_SEED_TENANT_USER_PASSWORD?: string;
+  O11YFLEET_SEED_ADMIN_EMAIL?: string;
+  O11YFLEET_SEED_ADMIN_PASSWORD?: string;
+  CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
+  CLOUDFLARE_USAGE_API_TOKEN?: string;
+  CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
+  CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
+  CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
+  CLOUDFLARE_USAGE_ANALYTICS_DATASET?: string;
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   GITHUB_APP_ID?: string;
   GITHUB_APP_WEBHOOK_SECRET?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
-  GITHUB_OAUTH_CLIENT_ID?: string;
-  GITHUB_OAUTH_CLIENT_SECRET?: string;
 }
 
 // Production CORS origins (always allowed)
@@ -315,13 +313,13 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // API routes — with auth + CORS
   if (url.pathname.startsWith("/api/")) {
-    // Check Bearer token first (programmatic API access). API_SECRET is intentionally
+    // Check Bearer token first (programmatic API access). O11YFLEET_API_BEARER_SECRET is intentionally
     // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
     let hasApiSecretBearer = false;
-    if (env.API_SECRET) {
+    if (env.O11YFLEET_API_BEARER_SECRET) {
       const auth = request.headers.get("Authorization");
       const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (token && timingSafeEqual(token, env.API_SECRET)) {
+      if (token && timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)) {
         hasApiSecretBearer = true;
       }
     }
@@ -333,7 +331,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     // Admin routes — /api/admin/*
     if (url.pathname.startsWith("/api/admin/")) {
-      // Require an authenticated admin browser session. API_SECRET must not act as
+      // Require an authenticated admin browser session. O11YFLEET_API_BEARER_SECRET must not act as
       // a broad employee/admin credential for human-facing support operations.
       if (!sessionAuth || sessionAuth.role !== "admin") {
         const body = hasApiSecretBearer
@@ -375,8 +373,10 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // OpAMP WebSocket endpoint
   if (url.pathname === "/v1/opamp") {
-    if (!env.CLAIM_SECRET) {
-      return new Response("Server misconfigured: CLAIM_SECRET not set", { status: 500 });
+    if (!env.O11YFLEET_CLAIM_HMAC_SECRET) {
+      return new Response("Server misconfigured: O11YFLEET_CLAIM_HMAC_SECRET not set", {
+        status: 500,
+      });
     }
     return handleOpampRequest(request, env);
   }
@@ -422,7 +422,7 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   // Try hot path: signed assignment claim
   if (!token.startsWith("fp_enroll_")) {
     try {
-      const claim = await verifyClaim(token, env.CLAIM_SECRET);
+      const claim = await verifyClaim(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
       // Route to DO based on claim
       const doName = `${claim.tenant_id}:${claim.config_id}`;
       const doId = env.CONFIG_DO.idFromName(doName);

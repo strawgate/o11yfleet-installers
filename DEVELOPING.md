@@ -8,11 +8,11 @@ deployment details in `DEPLOY.md`.
 
 o11yFleet has three runtime planes:
 
-| Plane               | Owner  | Stores / APIs                                                                                                        |
-| ------------------- | ------ | -------------------------------------------------------------------------------------------------------------------- |
-| Agent control plane | Worker | `/v1/opamp`, per-`tenant:config` Durable Objects, DO SQLite, WebSockets                                              |
-| Management API      | Worker | `/api/v1/*`, `/api/admin/*`, D1 metadata, R2 config blobs, Queue events                                              |
-| Auth                | Worker | `/auth/*`, D1 users/sessions, HTTP-only `fp_session`, bearer `API_SECRET` for bootstrap and tenant-scoped automation |
+| Plane               | Owner  | Stores / APIs                                                                                                                         |
+| ------------------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Agent control plane | Worker | `/v1/opamp`, per-`tenant:config` Durable Objects, DO SQLite, WebSockets                                                               |
+| Management API      | Worker | `/api/v1/*`, `/api/admin/*`, D1 metadata, R2 config blobs, Queue events                                                               |
+| Auth                | Worker | `/auth/*`, D1 users/sessions, HTTP-only `fp_session`, bearer `O11YFLEET_API_BEARER_SECRET` for bootstrap and tenant-scoped automation |
 
 The customer portal and admin console call the real API. Remaining product gaps
 are mostly depth: signup/password reset, team invites, richer RBAC, audit-event
@@ -72,22 +72,22 @@ The manual **AI Guidance Live Check** workflow starts a local seeded
 Worker/site stack and runs the Playwright live-provider check against the
 MiniMax-backed guidance route.
 
-| Name              | Where                 | Purpose                                                        |
-| ----------------- | --------------------- | -------------------------------------------------------------- |
-| `MINIMAX_API_KEY` | GitHub Actions secret | Passed to the local Worker as `MINIMAX_API_KEY` during checks. |
+| Name                          | Where                 | Purpose                                                                    |
+| ----------------------------- | --------------------- | -------------------------------------------------------------------------- |
+| `AI_GUIDANCE_MINIMAX_API_KEY` | GitHub Actions secret | Passed to the local Worker as `AI_GUIDANCE_MINIMAX_API_KEY` during checks. |
 
 The workflow sets non-secret provider env vars itself. `scripts/serve-explore.sh`
-passes them to `wrangler dev` as Worker vars and bridges `MINIMAX_API_KEY`
+passes them to `wrangler dev` as Worker vars and bridges `AI_GUIDANCE_MINIMAX_API_KEY`
 through a short-lived dotenv file outside the repo, then removes that file once
 the Worker is healthy.
 
-| Name           | Value                       |
-| -------------- | --------------------------- |
-| `LLM_PROVIDER` | `minimax`                   |
-| `LLM_MODEL`    | `MiniMax-M2.7`              |
-| `LLM_BASE_URL` | `https://api.minimax.io/v1` |
+| Name                   | Value                       |
+| ---------------------- | --------------------------- |
+| `AI_GUIDANCE_PROVIDER` | `minimax`                   |
+| `AI_GUIDANCE_MODEL`    | `MiniMax-M2.7`              |
+| `AI_GUIDANCE_BASE_URL` | `https://api.minimax.io/v1` |
 
-If `MINIMAX_API_KEY` is absent, the workflow exits successfully with a notice
+If `AI_GUIDANCE_MINIMAX_API_KEY` is absent, the workflow exits successfully with a notice
 instead of silently falling back to fixture guidance.
 
 ## API Contract Rules
@@ -108,16 +108,16 @@ instead of silently falling back to fixture guidance.
 ## Auth And Seed Accounts
 
 `POST /auth/seed` creates or updates the configured seed tenant user and admin.
-The route is guarded by `API_SECRET`.
+The route is guarded by `O11YFLEET_API_BEARER_SECRET`.
 
 Runtime auth behavior:
 
-| Surface        | Auth path                                                                    |
-| -------------- | ---------------------------------------------------------------------------- |
-| Browser portal | GitHub social auth through `/auth/github/start`, then HTTP-only `fp_session` |
-| Tenant API     | Cookie tenant scope, or `Authorization: Bearer <API_SECRET>` + `X-Tenant-Id` |
-| Admin API      | Cookie user with `role = admin`; `API_SECRET` is rejected                    |
-| OpAMP ingress  | Enrollment tokens and signed assignment claims, not browser sessions         |
+| Surface        | Auth path                                                                                     |
+| -------------- | --------------------------------------------------------------------------------------------- |
+| Browser portal | GitHub social auth through `/auth/github/start`, then HTTP-only `fp_session`                  |
+| Tenant API     | Cookie tenant scope, or `Authorization: Bearer <O11YFLEET_API_BEARER_SECRET>` + `X-Tenant-Id` |
+| Admin API      | Cookie user with `role = admin`; `O11YFLEET_API_BEARER_SECRET` is rejected                    |
+| OpAMP ingress  | Enrollment tokens and signed assignment claims, not browser sessions                          |
 
 Use `GET /auth/github/app-manifest` on the local Worker to create the GitHub App and return the
 runtime secret values. User signup/login uses `GITHUB_APP_CLIENT_ID` and

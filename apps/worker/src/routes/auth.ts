@@ -263,11 +263,11 @@ async function createSessionResponse(
 }
 
 function githubClientId(env: Env): string | null {
-  return env.GITHUB_APP_CLIENT_ID?.trim() || env.GITHUB_OAUTH_CLIENT_ID?.trim() || null;
+  return env.GITHUB_APP_CLIENT_ID?.trim() || null;
 }
 
 function githubClientSecret(env: Env): string | null {
-  return env.GITHUB_APP_CLIENT_SECRET?.trim() || env.GITHUB_OAUTH_CLIENT_SECRET?.trim() || null;
+  return env.GITHUB_APP_CLIENT_SECRET?.trim() || null;
 }
 
 // ─── Auth context (used by middleware) ──────────────────────────────
@@ -333,10 +333,14 @@ export async function handleAuthRequest(request: Request, env: Env, url: URL): P
       return await handleGitHubManifestCallback(request, env);
     }
     if (path === "/auth/seed" && method === "POST") {
-      // Require Bearer API_SECRET to prevent unauthorized account creation
+      // Require Bearer O11YFLEET_API_BEARER_SECRET to prevent unauthorized account creation
       const auth = request.headers.get("Authorization");
       const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (!token || !env.API_SECRET || !timingSafeEqual(token, env.API_SECRET)) {
+      if (
+        !token ||
+        !env.O11YFLEET_API_BEARER_SECRET ||
+        !timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)
+      ) {
         return jsonError("Unauthorized", 401);
       }
       return await handleSeed(env);
@@ -429,7 +433,7 @@ async function handleGitHubStart(request: Request, env: Env): Promise<Response> 
     iat: Date.now(),
     exp: Date.now() + OAUTH_STATE_TTL_MS,
   };
-  const signedState = await signState(state, env.CLAIM_SECRET);
+  const signedState = await signState(state, env.O11YFLEET_CLAIM_HMAC_SECRET);
   const callbackUrl = `${requestOrigin(request)}/auth/github/callback`;
   const authorizeUrl = new URL("https://github.com/login/oauth/authorize");
   authorizeUrl.searchParams.set("client_id", clientId);
@@ -471,7 +475,7 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
 
   let state: OAuthState;
   try {
-    state = await verifyState(rawState, env.CLAIM_SECRET, "github_login");
+    state = await verifyState(rawState, env.O11YFLEET_CLAIM_HMAC_SECRET, "github_login");
   } catch {
     return jsonError("Invalid GitHub login state", 400);
   }
@@ -653,7 +657,7 @@ async function handleGitHubManifestStart(request: Request, env: Env): Promise<Re
     iat: Date.now(),
     exp: Date.now() + OAUTH_STATE_TTL_MS,
   };
-  const signedState = await signState(state, env.CLAIM_SECRET);
+  const signedState = await signState(state, env.O11YFLEET_CLAIM_HMAC_SECRET);
   const callbackUrls = Array.from(
     new Set([
       `${origin}/auth/github/callback`,
@@ -724,7 +728,7 @@ async function handleGitHubManifestCallback(request: Request, env: Env): Promise
 
   let state: OAuthState;
   try {
-    state = await verifyState(rawState, env.CLAIM_SECRET, "github_manifest");
+    state = await verifyState(rawState, env.O11YFLEET_CLAIM_HMAC_SECRET, "github_manifest");
   } catch {
     return jsonError("Invalid GitHub manifest state", 400);
   }
@@ -835,10 +839,10 @@ function setupPageCss(): string {
 // Creates hardcoded accounts from env vars. Idempotent.
 
 interface SeedEnv extends Env {
-  SEED_TENANT_USER_EMAIL?: string;
-  SEED_TENANT_USER_PASSWORD?: string;
-  SEED_ADMIN_EMAIL?: string;
-  SEED_ADMIN_PASSWORD?: string;
+  O11YFLEET_SEED_TENANT_USER_EMAIL?: string;
+  O11YFLEET_SEED_TENANT_USER_PASSWORD?: string;
+  O11YFLEET_SEED_ADMIN_EMAIL?: string;
+  O11YFLEET_SEED_ADMIN_PASSWORD?: string;
 }
 
 async function handleSeed(env: Env): Promise<Response> {
@@ -863,8 +867,8 @@ async function handleSeed(env: Env): Promise<Response> {
   }
 
   // Seed tenant user
-  const tenantEmail = e.SEED_TENANT_USER_EMAIL ?? "demo@o11yfleet.com";
-  const tenantPassword = e.SEED_TENANT_USER_PASSWORD ?? "demo-password";
+  const tenantEmail = e.O11YFLEET_SEED_TENANT_USER_EMAIL ?? "demo@o11yfleet.com";
+  const tenantPassword = e.O11YFLEET_SEED_TENANT_USER_PASSWORD ?? "demo-password";
   const existingTenantUser = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
     .bind(tenantEmail)
     .first();
@@ -887,8 +891,8 @@ async function handleSeed(env: Env): Promise<Response> {
   }
 
   // Seed admin user
-  const adminEmail = e.SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
-  const adminPassword = e.SEED_ADMIN_PASSWORD ?? "admin-password";
+  const adminEmail = e.O11YFLEET_SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+  const adminPassword = e.O11YFLEET_SEED_ADMIN_PASSWORD ?? "admin-password";
   const existingAdmin = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
     .bind(adminEmail)
     .first();

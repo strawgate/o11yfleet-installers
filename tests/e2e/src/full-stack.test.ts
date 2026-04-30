@@ -24,7 +24,7 @@ import {
   healthz,
 } from "./helpers.js";
 
-const CLAIM_SECRET = "dev-secret-key-for-testing-only-32ch";
+const O11YFLEET_CLAIM_HMAC_SECRET = process.env.O11YFLEET_CLAIM_HMAC_SECRET ?? "";
 
 // Track agents for cleanup
 const liveAgents: FakeOpampAgent[] = [];
@@ -52,6 +52,9 @@ afterEach(() => {
 // ────────────────────────────────────────────────────────────────────
 
 beforeAll(async () => {
+  if (!O11YFLEET_CLAIM_HMAC_SECRET) {
+    throw new Error("Set O11YFLEET_CLAIM_HMAC_SECRET before running full-stack tests");
+  }
   await waitForServer();
 }, 20_000);
 
@@ -142,7 +145,7 @@ describe("Agent Enrollment", () => {
     expect(enrollment.instance_uid).toBeTruthy();
 
     // Verify the claim is valid
-    const claim = await verifyClaim(enrollment.assignment_claim, CLAIM_SECRET);
+    const claim = await verifyClaim(enrollment.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
     expect(claim.tenant_id).toBe(tenantId);
     expect(claim.config_id).toBe(configId);
   });
@@ -295,8 +298,8 @@ describe("Multi-Tenant Isolation", () => {
     const enrollA = await agentA.connectAndEnroll();
     const enrollB = await agentB.connectAndEnroll();
 
-    const claimA = await verifyClaim(enrollA.assignment_claim, CLAIM_SECRET);
-    const claimB = await verifyClaim(enrollB.assignment_claim, CLAIM_SECRET);
+    const claimA = await verifyClaim(enrollA.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
+    const claimB = await verifyClaim(enrollB.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
 
     expect(claimA.tenant_id).toBe(tenantA.id);
     expect(claimB.tenant_id).toBe(tenantB.id);

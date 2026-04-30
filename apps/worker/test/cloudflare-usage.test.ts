@@ -3,12 +3,12 @@ import { buildCloudflareUsage } from "../src/cloudflare-usage.js";
 import type { Env } from "../src/index.js";
 
 const baseEnv = {
-  CLOUDFLARE_ACCOUNT_ID: "account-1",
-  CLOUDFLARE_ACCOUNT_ANALYTICS_API_KEY: "token-1",
-  CLOUDFLARE_WORKER_SCRIPT_NAME: "worker-1",
-  CLOUDFLARE_D1_DATABASE_ID: "database-1",
-  CLOUDFLARE_R2_BUCKET_NAME: "bucket-1",
-  CLOUDFLARE_ANALYTICS_DATASET: "queue_events",
+  CLOUDFLARE_USAGE_ACCOUNT_ID: "account-1",
+  CLOUDFLARE_USAGE_API_TOKEN: "token-1",
+  CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME: "worker-1",
+  CLOUDFLARE_USAGE_D1_DATABASE_ID: "database-1",
+  CLOUDFLARE_USAGE_R2_BUCKET_NAME: "bucket-1",
+  CLOUDFLARE_USAGE_ANALYTICS_DATASET: "queue_events",
 } as unknown as Env;
 
 function jsonResponse(body: unknown): Response {
@@ -50,7 +50,7 @@ describe("Cloudflare usage", () => {
     const usage = await buildCloudflareUsage(
       {
         ...baseEnv,
-        CLOUDFLARE_ANALYTICS_DATASET: "queue_events; DROP TABLE queue_events",
+        CLOUDFLARE_USAGE_ANALYTICS_DATASET: "queue_events; DROP TABLE queue_events",
       } as unknown as Env,
       new Date("2026-04-29T12:34:56.000Z"),
     );

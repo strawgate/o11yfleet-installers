@@ -196,7 +196,7 @@
           <h2 id="bearer-api-access">Bearer API access</h2>
           <p>
             Programmatic API access currently uses one deployment-level bearer secret,
-            <code class="mono">API_SECRET</code>. Tenant-scoped requests to
+            <code class="mono">O11YFLEET_API_BEARER_SECRET</code>. Tenant-scoped requests to
             <code class="mono">/api/v1/*</code> must also include
             <code class="mono">X-Tenant-Id</code>. Fine-grained tenant API keys and per-key
             read/write/admin permissions are not implemented yet.
@@ -211,7 +211,7 @@
               overflow-x: auto;
               font-size: 13px;
             "
-          ><code>curl -H "Authorization: Bearer &lt;API_SECRET&gt;" \
+          ><code>curl -H "Authorization: Bearer &lt;O11YFLEET_API_BEARER_SECRET&gt;" \
      -H "X-Tenant-Id: &lt;tenant-id&gt;" \
      https://api.o11yfleet.com/api/v1/configurations</code></pre>
           <p>
@@ -223,8 +223,8 @@
           <h2 id="seed-auth">Seed route</h2>
           <p>
             <code class="mono">POST /auth/seed</code> creates configured demo users and is guarded
-            by <code class="mono">Authorization: Bearer &lt;API_SECRET&gt;</code>. It is intended
-            for local setup and controlled deployment bootstrap, not public signup.
+            by <code class="mono">Authorization: Bearer &lt;O11YFLEET_API_BEARER_SECRET&gt;</code>.
+            It is intended for local setup and controlled deployment bootstrap, not public signup.
           </p>
 
           <h2 id="tenant-isolation">Tenant isolation</h2>

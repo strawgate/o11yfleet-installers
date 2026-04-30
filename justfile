@@ -41,19 +41,19 @@ doctor:
             ' apps/worker/.dev.vars
         }
 
-        API_SECRET=$(read_dev_var API_SECRET)
-        if [ -z "$API_SECRET" ] || [[ "$API_SECRET" == dev-local* ]]; then
-            echo "✗ API_SECRET missing or placeholder — update .dev.vars with a real value"
+        O11YFLEET_API_BEARER_SECRET=$(read_dev_var O11YFLEET_API_BEARER_SECRET)
+        if [ -z "$O11YFLEET_API_BEARER_SECRET" ] || [[ "$O11YFLEET_API_BEARER_SECRET" == dev-local* ]]; then
+            echo "✗ O11YFLEET_API_BEARER_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
-            echo "✓ API_SECRET set in .dev.vars"
+            echo "✓ O11YFLEET_API_BEARER_SECRET set in .dev.vars"
         fi
-        CLAIM_SECRET=$(read_dev_var CLAIM_SECRET)
-        if [ -z "$CLAIM_SECRET" ] || [[ "$CLAIM_SECRET" == dev-local* ]]; then
-            echo "✗ CLAIM_SECRET missing or placeholder — update .dev.vars with a real value"
+        O11YFLEET_CLAIM_HMAC_SECRET=$(read_dev_var O11YFLEET_CLAIM_HMAC_SECRET)
+        if [ -z "$O11YFLEET_CLAIM_HMAC_SECRET" ] || [[ "$O11YFLEET_CLAIM_HMAC_SECRET" == dev-local* ]]; then
+            echo "✗ O11YFLEET_CLAIM_HMAC_SECRET missing or placeholder — update .dev.vars with a real value"
             FAIL=1
         else
-            echo "✓ CLAIM_SECRET set in .dev.vars"
+            echo "✓ O11YFLEET_CLAIM_HMAC_SECRET set in .dev.vars"
         fi
     fi
 
@@ -443,27 +443,27 @@ tf-init:
 tf-init-remote env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
-    : "${TF_STATE_BUCKET:?Set TF_STATE_BUCKET to the R2 state bucket name}"
-    : "${TF_STATE_ENDPOINT:?Set TF_STATE_ENDPOINT to the R2 S3 endpoint URL}"
+    : "${TERRAFORM_STATE_R2_BUCKET:?Set TERRAFORM_STATE_R2_BUCKET to the R2 state bucket name}"
+    : "${TERRAFORM_STATE_R2_ENDPOINT:?Set TERRAFORM_STATE_R2_ENDPOINT to the R2 S3 endpoint URL}"
     : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID to the R2 access key ID}"
     : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY to the R2 secret access key}"
     cd infra/terraform
     shared_backend_args=(
-        -backend-config="bucket=${TF_STATE_BUCKET}"
+        -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}"
         -backend-config="key=o11yfleet/{{env}}/terraform.tfstate"
-        -backend-config="region=${TF_STATE_REGION:-auto}"
+        -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}"
         -backend-config="skip_credentials_validation=true"
         -backend-config="skip_metadata_api_check=true"
         -backend-config="skip_region_validation=true"
     )
     modern_backend_args=(
-        -backend-config="endpoints={s3=\"${TF_STATE_ENDPOINT}\"}"
+        -backend-config="endpoints={s3=\"${TERRAFORM_STATE_R2_ENDPOINT}\"}"
         -backend-config="skip_requesting_account_id=true"
         -backend-config="skip_s3_checksum=true"
         -backend-config="use_path_style=true"
     )
     legacy_backend_args=(
-        -backend-config="endpoint=${TF_STATE_ENDPOINT}"
+        -backend-config="endpoint=${TERRAFORM_STATE_R2_ENDPOINT}"
         -backend-config="force_path_style=true"
     )
     set +e
@@ -699,7 +699,36 @@ tf-apply-worker env="prod": (tf-init-remote env)
         -var="worker_bundle_path=$BUNDLE_PATH" \
         -auto-approve
 
-# Deploy staging control-plane resources, Worker code, D1 migrations, and Pages.
+# Deploy control-plane resources, Worker code, D1 migrations, and Pages.
+deploy-env env="staging":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production)
+        TARGET="prod"
+        just tf-check-prod-imports prod
+        ;;
+      staging)
+        TARGET="staging"
+        if [ "${REQUIRE_TERRAFORM_STATE_READY:-false}" = "true" ]; then
+            just tf-check-staging-readiness staging
+        fi
+        ;;
+      dev)
+        TARGET="dev"
+        ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+    just tf-apply "$TARGET"
+    just tf-apply-worker "$TARGET"
+    just d1-migrate "$TARGET"
+    just site-build "$TARGET"
+    just pages-deploy "$TARGET"
+
+# Deploy staging from CI after staging has been bootstrapped/imported.
 deploy-staging:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -707,12 +736,7 @@ deploy-staging:
         echo "deploy-staging is disabled; set TERRAFORM_STAGING_DEPLOY_ENABLED=true to enable it." >&2
         exit 1
     fi
-    just tf-check-staging-readiness staging
-    just tf-apply staging
-    just tf-apply-worker staging
-    just d1-migrate staging
-    just site-build staging
-    just pages-deploy staging
+    REQUIRE_TERRAFORM_STATE_READY=true just deploy-env staging
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
 # Run the extended local gate, including workerd and browser tests
