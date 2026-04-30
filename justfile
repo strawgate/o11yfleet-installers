@@ -206,6 +206,10 @@ serve-explore collectors="55":
 explore-down:
     bash scripts/serve-explore.sh down
 
+# Check health for the local stack started by serve-explore
+explore-status:
+    bash scripts/serve-explore.sh status
+
 # Reset local D1 and seed data while just dev is already running
 dev-reset: db-migrate seed-reset
     @echo "Local dev reset complete."

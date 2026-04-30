@@ -46,6 +46,18 @@ stop_stack() {
   return "$failed"
 }
 
+disown_stack() {
+  local pid
+  for pid in "$worker_pid" "$site_pid"; do
+    [ -n "$pid" ] || continue
+    disown "$pid" 2>/dev/null || true
+  done
+  while IFS= read -r pid; do
+    [ -n "$pid" ] || continue
+    disown "$pid" 2>/dev/null || true
+  done <"$LOG_DIR/collectors.pid"
+}
+
 process_matches() {
   local pid="$1"
   local expected="$2"
@@ -128,15 +140,8 @@ ensure_dev_vars() {
   chmod 600 "$vars_file"
 }
 
-if [ "${1:-}" = "down" ]; then
-  stop_stack
-  echo "Stopped explore stack."
-  exit 0
-fi
-
 FP_URL="${FP_URL:-http://localhost:8787}"
 UI_URL="${UI_URL:-http://127.0.0.1:3000}"
-COLLECTOR_COUNT="${1:-55}"
 WORKER_LISTEN=$(
   FP_URL="$FP_URL" node -e 'const u = new URL(process.env.FP_URL); const host = u.hostname === "localhost" ? "127.0.0.1" : u.hostname; const port = u.port || (u.protocol === "https:" ? "443" : "80"); console.log(host + " " + port);'
 )
@@ -147,6 +152,34 @@ read -r WORKER_HOST WORKER_PORT <<<"$WORKER_LISTEN"
 read -r SITE_HOST SITE_PORT <<<"$SITE_LISTEN"
 
 mkdir -p "$LOG_DIR/collectors"
+
+if [ "${1:-}" = "down" ]; then
+  stop_stack
+  echo "Stopped explore stack."
+  exit 0
+fi
+
+if [ "${1:-}" = "status" ]; then
+  failed=0
+  if curl -fsS "$FP_URL/healthz" >/dev/null; then
+    echo "Worker healthy: $FP_URL/healthz"
+  else
+    echo "Worker unhealthy: $FP_URL/healthz" >&2
+    [ -f "$LOG_DIR/worker.log" ] && tail -40 "$LOG_DIR/worker.log" >&2
+    failed=1
+  fi
+
+  if curl -fsS "$UI_URL/" >/dev/null; then
+    echo "Site healthy: $UI_URL/"
+  else
+    echo "Site unhealthy: $UI_URL/" >&2
+    [ -f "$LOG_DIR/site.log" ] && tail -40 "$LOG_DIR/site.log" >&2
+    failed=1
+  fi
+  exit "$failed"
+fi
+
+COLLECTOR_COUNT="${1:-0}"
 ensure_dev_vars
 
 trap cleanup_on_exit EXIT
@@ -229,36 +262,46 @@ TOKEN=$(
 )
 
 : >"$LOG_DIR/collectors.pid"
-for i in $(seq -w 1 "$COLLECTOR_COUNT"); do
-  FP_URL="$FP_URL" pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/fake-collector.ts --token "$TOKEN" --name "collector-$i" >"$LOG_DIR/collectors/collector-$i.log" 2>&1 &
-  echo "$!" >>"$LOG_DIR/collectors.pid"
-done
 
-echo "Waiting for collectors..."
-for _ in $(seq 1 30); do
-  alive=0
-  ready=0
-  collector_index=1
-  while IFS= read -r pid; do
-    [ -n "$pid" ] || continue
-    collector_name=$(printf "%0${#COLLECTOR_COUNT}d" "$collector_index")
-    collector_log="$LOG_DIR/collectors/collector-$collector_name.log"
-    if process_matches "$pid" "$COLLECTOR_PROCESS_MARKER"; then
-      alive=$((alive + 1))
+if [ "$COLLECTOR_COUNT" -gt 0 ]; then
+  for i in $(seq -w 1 "$COLLECTOR_COUNT"); do
+    FP_URL="$FP_URL" pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/fake-collector.ts --token "$TOKEN" --name "collector-$i" >"$LOG_DIR/collectors/collector-$i.log" 2>&1 &
+    echo "$!" >>"$LOG_DIR/collectors.pid"
+  done
+
+  echo "Waiting for collectors..."
+  for _ in $(seq 1 30); do
+    alive=0
+    ready=0
+    collector_index=1
+    while IFS= read -r pid; do
+      [ -n "$pid" ] || continue
+      collector_name=$(printf "%0${#COLLECTOR_COUNT}d" "$collector_index")
+      collector_log="$LOG_DIR/collectors/collector-$collector_name.log"
+      if process_matches "$pid" "$COLLECTOR_PROCESS_MARKER"; then
+        alive=$((alive + 1))
+      fi
       if grep -Fq "$COLLECTOR_READY_MARKER" "$collector_log" 2>/dev/null; then
         ready=$((ready + 1))
       fi
-    fi
-    collector_index=$((collector_index + 1))
-  done <"$LOG_DIR/collectors.pid"
-  [ "$alive" -eq "$COLLECTOR_COUNT" ] && [ "$ready" -eq "$COLLECTOR_COUNT" ] && break
-  sleep 1
-done
+      collector_index=$((collector_index + 1))
+    done <"$LOG_DIR/collectors.pid"
+    [ "$alive" -eq "$COLLECTOR_COUNT" ] && [ "$ready" -eq "$COLLECTOR_COUNT" ] && break
+    sleep 1
+  done
 
-if [ "${alive:-0}" -ne "$COLLECTOR_COUNT" ] || [ "${ready:-0}" -ne "$COLLECTOR_COUNT" ]; then
-  echo "Collector startup incomplete: expected $COLLECTOR_COUNT, alive ${alive:-0}, ready ${ready:-0}"
-  tail -80 "$LOG_DIR"/collectors/collector-*.log 2>/dev/null || true
-  exit 1
+  if [ "${alive:-0}" -ne "$COLLECTOR_COUNT" ] || [ "${ready:-0}" -ne "$COLLECTOR_COUNT" ]; then
+    echo "Collector startup incomplete: expected $COLLECTOR_COUNT, alive ${alive:-0}, ready ${ready:-0}"
+    ls -la "$LOG_DIR/collectors" 2>/dev/null || true
+    for log in "$LOG_DIR"/collectors/collector-*.log; do
+      [ -f "$log" ] || continue
+      echo "--- $log ---"
+      tail -80 "$log"
+    done
+    exit 1
+  fi
+else
+  echo "Skipping fake collectors."
 fi
 
 echo "Explore stack ready:"
@@ -267,4 +310,5 @@ echo "  Worker: $FP_URL"
 echo "  Logs:   $LOG_DIR"
 echo "  Demo:   demo@o11yfleet.com / demo-password"
 echo "  Admin:  admin@o11yfleet.com / admin-password"
+disown_stack
 trap - EXIT
