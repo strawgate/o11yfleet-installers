@@ -11,15 +11,7 @@ export default function AboutPage() {
           OpenTelemetry is open.
           <br /> Collector management should be too.
         </h1>
-        <div
-          style={{
-            marginTop: 48,
-            display: "grid",
-            gridTemplateColumns: "1fr 1fr",
-            gap: 64,
-            maxWidth: 1000,
-          }}
-        >
+        <div className="about-lede-grid">
           <p className="lede">
             OpenTelemetry Collector has become the standard way to receive, process, and export
             telemetry. But the operational experience around collector fleets is still too manual.
@@ -35,13 +27,7 @@ export default function AboutPage() {
 
       <section className="section section-tight">
         <div className="wrap">
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 2fr",
-              gap: 64,
-            }}
-          >
+          <div className="about-manifesto-grid">
             <div>
               <span className="eyebrow">Manifesto</span>
             </div>
@@ -59,13 +45,7 @@ export default function AboutPage() {
           <div className="section-head">
             <span className="eyebrow">What we believe</span>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr 1fr",
-              gap: 0,
-            }}
-          >
+          <div className="about-beliefs-grid">
             {[
               {
                 title: "Open standards over proprietary agents",
@@ -92,14 +72,7 @@ export default function AboutPage() {
                 desc: "Rollouts are explicit and immediate today; progressive rollout controls are planned.",
               },
             ].map((v) => (
-              <div
-                key={v.title}
-                style={{
-                  padding: "32px 28px",
-                  borderRight: "1px solid var(--border, #e2e2e2)",
-                  borderBottom: "1px solid var(--border, #e2e2e2)",
-                }}
-              >
+              <div key={v.title} className="about-belief-card">
                 <h3>{v.title}</h3>
                 <p>{v.desc}</p>
               </div>

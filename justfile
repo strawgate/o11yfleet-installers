@@ -196,6 +196,14 @@ dev-up:
 dev-up-reset:
     pnpm tsx scripts/dev-up.ts --reset
 
+# Start a seeded local stack for interactive explore agents
+serve-explore collectors="55":
+    bash scripts/serve-explore.sh {{collectors}}
+
+# Stop the local stack started by serve-explore
+explore-down:
+    bash scripts/serve-explore.sh down
+
 # Reset local D1 and seed data while just dev is already running
 dev-reset: db-migrate seed-reset
     @echo "Local dev reset complete."

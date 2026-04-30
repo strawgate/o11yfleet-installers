@@ -71,13 +71,7 @@ export default function EnterprisePage() {
           <div className="section-head">
             <span className="eyebrow">Compliance</span>
           </div>
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns: "repeat(5, 1fr)",
-              gap: 24,
-            }}
-          >
+          <div className="compliance-grid">
             {compliance.map((c) => (
               <div key={c} className="card card-pad" style={{ textAlign: "center" }}>
                 <strong>{c}</strong>
