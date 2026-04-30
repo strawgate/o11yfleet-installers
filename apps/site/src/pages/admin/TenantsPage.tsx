@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useAdminTenants, useCreateTenant } from "../../api/hooks/admin";
+import { useAdminTenantsPage, useCreateTenant } from "../../api/hooks/admin";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -11,12 +11,21 @@ import { relTime } from "../../utils/format";
 import { PLAN_OPTIONS } from "../../shared/plans";
 
 export default function TenantsPage() {
-  const { data: tenants, isLoading, error, refetch } = useAdminTenants();
+  const [page, setPage] = useState(1);
+  const [planFilter, setPlanFilter] = useState("all");
+  const [filter, setFilter] = useState("");
+  const deferredFilter = useDeferredValue(filter);
+  const { data, isLoading, error, refetch } = useAdminTenantsPage({
+    q: deferredFilter,
+    plan: planFilter,
+    page,
+    limit: 25,
+    sort: "newest",
+  });
   const createTenant = useCreateTenant();
   const { toast } = useToast();
   const navigate = useNavigate();
 
-  const [filter, setFilter] = useState("");
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [plan, setPlan] = useState("starter");
@@ -24,12 +33,8 @@ export default function TenantsPage() {
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
 
-  const tenantList = tenants ?? [];
-  const filtered = filter
-    ? tenantList.filter((t) =>
-        `${t.name} ${t.id} ${t.plan ?? ""}`.toLowerCase().includes(filter.toLowerCase()),
-      )
-    : tenantList;
+  const tenantList = data?.tenants ?? [];
+  const pagination = data?.pagination;
   const totalConfigs = tenantList.reduce((sum, tenant) => sum + (tenant.config_count ?? 0), 0);
   const totalAgents = tenantList.reduce((sum, tenant) => sum + (tenant.agent_count ?? 0), 0);
 
@@ -63,8 +68,8 @@ export default function TenantsPage() {
 
       <div className="tenant-summary-grid">
         <div className="stat">
-          <div className="val">{tenantList.length}</div>
-          <div className="label">Tenants</div>
+          <div className="val">{pagination?.total ?? 0}</div>
+          <div className="label">Matching tenants</div>
         </div>
         <div className="stat">
           <div className="val">{totalConfigs}</div>
@@ -83,21 +88,43 @@ export default function TenantsPage() {
             aria-label="Filter tenants by name, ID, or plan"
             placeholder="Filter by name, ID, or plan…"
             value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            onChange={(e) => {
+              setFilter(e.target.value);
+              setPage(1);
+            }}
             style={{ maxWidth: 280 }}
           />
+          <select
+            className="input"
+            aria-label="Filter by plan"
+            value={planFilter}
+            onChange={(e) => {
+              setPlanFilter(e.target.value);
+              setPage(1);
+            }}
+            style={{ maxWidth: 180 }}
+          >
+            <option value="all">All plans</option>
+            {PLAN_OPTIONS.map((option) => (
+              <option key={option.id} value={option.id}>
+                {option.label}
+              </option>
+            ))}
+          </select>
         </div>
-        {filtered.length === 0 ? (
+        {tenantList.length === 0 ? (
           <EmptyState
             icon={filter ? "search" : "users"}
-            title={filter ? "No tenants match your filter" : "No tenants yet"}
+            title={
+              filter || planFilter !== "all" ? "No tenants match your filter" : "No tenants yet"
+            }
             description={
-              filter
+              filter || planFilter !== "all"
                 ? "Try a different name, tenant ID, or plan."
                 : "Create a tenant to start onboarding a workspace."
             }
           >
-            {!filter ? (
+            {!filter && planFilter === "all" ? (
               <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
                 Create tenant
               </button>
@@ -105,7 +132,7 @@ export default function TenantsPage() {
           </EmptyState>
         ) : (
           <div className="tenant-list">
-            {filtered.map((t) => {
+            {tenantList.map((t) => {
               const configCount = t.config_count ?? 0;
               const maxAgentsPerConfig = t.max_agents_per_config ?? 0;
               const totalAgentCapacity = configCount * maxAgentsPerConfig;
@@ -147,6 +174,30 @@ export default function TenantsPage() {
             })}
           </div>
         )}
+        {pagination ? (
+          <div className="support-list-footer mt-3">
+            <span className="meta">
+              Page {pagination.page} · Showing {tenantList.length} of {pagination.total} matching
+              tenants
+            </span>
+            <div style={{ display: "flex", gap: 8 }}>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={pagination.page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                Previous
+              </button>
+              <button
+                className="btn btn-ghost btn-sm"
+                disabled={!pagination.has_more}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       <Modal

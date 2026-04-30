@@ -1,33 +1,35 @@
-import { useState } from "react";
+import { useDeferredValue, useState } from "react";
 import { Link } from "react-router-dom";
-import { useAdminHealth, useAdminTenants } from "../../api/hooks/admin";
+import { useAdminHealth, useAdminTenantsPage } from "../../api/hooks/admin";
 import { useToast } from "../../components/common/Toast";
 import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
-import { SYMPTOMS, buildSupportBrief, healthLabel, healthTone, normalize } from "./support-model";
+import { SYMPTOMS, buildSupportBrief, healthLabel, healthTone } from "./support-model";
 
 export default function SupportPage() {
-  const tenantsQuery = useAdminTenants();
+  const [tenantQuery, setTenantQuery] = useState("");
+  const deferredTenantQuery = useDeferredValue(tenantQuery);
+  const tenantsQuery = useAdminTenantsPage({
+    q: deferredTenantQuery,
+    page: 1,
+    limit: 25,
+    sort: "name_asc",
+  });
   const healthQuery = useAdminHealth();
   const { toast } = useToast();
 
-  const [tenantQuery, setTenantQuery] = useState("");
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [selectedSymptomId, setSelectedSymptomId] = useState(SYMPTOMS[0]?.id ?? "");
-  const [visibleTenantCount, setVisibleTenantCount] = useState(12);
 
-  const tenants = tenantsQuery.data ?? [];
+  const tenants = tenantsQuery.data?.tenants ?? [];
+  const tenantPagination = tenantsQuery.data?.pagination;
   const selectedTenant = tenants.find((tenant) => tenant.id === selectedTenantId) ?? null;
   const selectedSymptom =
     SYMPTOMS.find((symptom) => symptom.id === selectedSymptomId) ?? SYMPTOMS[0] ?? null;
   const health = healthQuery.data;
   const healthChecks = health?.checks ?? {};
-  const query = normalize(tenantQuery);
-  const filteredTenants = query
-    ? tenants.filter((tenant) => normalize(`${tenant.name} ${tenant.id}`).includes(query))
-    : tenants;
   async function copyBrief() {
     try {
       await navigator.clipboard.writeText(supportBrief);
@@ -46,8 +48,6 @@ export default function SupportPage() {
     return <ErrorState error={new Error("No symptoms configured")} />;
   }
 
-  const displayedTenants = filteredTenants.slice(0, visibleTenantCount);
-  const moreTenantMatches = filteredTenants.length > displayedTenants.length;
   const supportBrief = buildSupportBrief({
     tenant: selectedTenant,
     symptom: selectedSymptom,
@@ -82,21 +82,20 @@ export default function SupportPage() {
               value={tenantQuery}
               onChange={(event) => {
                 setTenantQuery(event.target.value);
-                setVisibleTenantCount(12);
               }}
               placeholder="acme, tenant id"
             />
           </div>
 
           <div className="support-tenant-list mt-4">
-            {filteredTenants.length === 0 ? (
+            {tenants.length === 0 ? (
               <EmptyState
                 icon="search"
                 title="No tenant matches"
                 description="Try a broader name or clear the search term."
               />
             ) : (
-              displayedTenants.map((tenant) => (
+              tenants.map((tenant) => (
                 <button
                   key={tenant.id}
                   type="button"
@@ -112,20 +111,12 @@ export default function SupportPage() {
               ))
             )}
           </div>
-          {filteredTenants.length > 0 ? (
+          {tenants.length > 0 ? (
             <div className="support-list-footer mt-3">
               <span className="meta">
-                Showing {displayedTenants.length} of {filteredTenants.length} matching tenants.
+                Showing {tenants.length} of {tenantPagination?.total ?? tenants.length} matching
+                tenants.
               </span>
-              {moreTenantMatches ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setVisibleTenantCount((count) => count + 12)}
-                >
-                  Show more
-                </button>
-              ) : null}
             </div>
           ) : null}
         </section>

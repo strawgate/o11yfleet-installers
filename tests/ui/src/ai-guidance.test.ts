@@ -154,7 +154,7 @@ test.describe("AI guidance surfaces", () => {
       },
       timestamp: "2026-04-28T20:00:00.000Z",
     });
-    await mockJson(page, "/api/admin/tenants", {
+    await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", {
       tenants: [
         {
           id: "tenant-1",
@@ -352,7 +352,7 @@ test.describe("AI guidance surfaces", () => {
       checks: { worker: { status: "healthy" } },
       timestamp: "2026-04-28T20:00:00.000Z",
     });
-    await mockJson(page, "/api/admin/tenants", { tenants: [] });
+    await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", { tenants: [] });
     let guidanceResponses = 0;
     const guidanceRequestCounts = new Map<string, number>();
     await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {

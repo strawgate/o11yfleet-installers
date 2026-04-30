@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
-import { useAdminHealth, useAdminOverview, useAdminTenants } from "../../api/hooks/admin";
+import { useAdminHealth, useAdminOverview, useAdminTenantsPage } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -17,10 +17,11 @@ import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
   const overview = useAdminOverview();
-  const tenants = useAdminTenants();
+  const tenants = useAdminTenantsPage({ page: 1, limit: 25, sort: "newest" });
   const health = useAdminHealth();
   const ov = overview.data;
-  const tenantList = tenants.data ?? [];
+  const tenantList = tenants.data?.tenants ?? [];
+  const tenantPagination = tenants.data?.pagination;
   const totalTenants = ov?.total_tenants ?? ov?.tenants ?? tenantList.length;
   const totalConfigs =
     ov?.total_configurations ?? (ov?.["total_configs"] as number | undefined) ?? 0;
@@ -163,7 +164,11 @@ export default function OverviewPage() {
       <div className="stat-grid">
         <div className="stat">
           <div className="val">{totalTenants}</div>
-          <div className="label">Total tenants</div>
+          <div className="label">
+            {ov?.total_tenants !== undefined || ov?.tenants !== undefined
+              ? "Total tenants"
+              : `Tenants in page ${tenantPagination?.page ?? 1}`}
+          </div>
           <GuidanceSlot item={tenantInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">

@@ -19,6 +19,80 @@ beforeAll(async () => {
 });
 
 describe("admin API routes", () => {
+  it("filters, sorts, and paginates tenant lists consistently", async () => {
+    const names = [
+      { name: "Alpha Search", plan: "starter" },
+      { name: "Beta Search", plan: "pro" },
+      { name: "Gamma Ops", plan: "pro" },
+    ];
+    for (const entry of names) {
+      const res = await apiFetch("http://localhost/api/admin/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const searchRes = await apiFetch(
+      "http://localhost/api/admin/tenants?q=search&plan=pro&limit=1&page=1",
+    );
+    expect(searchRes.status).toBe(200);
+    const searchBody = await searchRes.json<{
+      tenants: Array<{ name: string; plan: string }>;
+      pagination: { total: number; limit: number; page: number; has_more: boolean };
+      filters: { q: string; plan: string; sort: string };
+    }>();
+    expect(searchBody.tenants).toHaveLength(1);
+    expect(searchBody.pagination.total).toBe(1);
+    expect(searchBody.pagination.limit).toBe(1);
+    expect(searchBody.pagination.page).toBe(1);
+    expect(searchBody.pagination.has_more).toBe(false);
+    expect(searchBody.filters.q).toBe("search");
+    expect(searchBody.filters.plan).toBe("pro");
+    expect(searchBody.filters.sort).toBe("newest");
+    expect(searchBody.tenants[0]?.name).toBe("Beta Search");
+
+    const sortRes = await apiFetch("http://localhost/api/admin/tenants?sort=name_asc&limit=2");
+    const sortBody = await sortRes.json<{ tenants: Array<{ name: string }> }>();
+    expect(sortBody.tenants.map((tenant) => tenant.name)).toEqual(["Alpha Search", "Beta Search"]);
+
+    const invalidRes = await apiFetch(
+      "http://localhost/api/admin/tenants?plan=invalid&sort=hack&page=-1&limit=9999",
+    );
+    const invalidBody = await invalidRes.json<{
+      pagination: { page: number; limit: number };
+      filters: { plan: string; sort: string };
+    }>();
+    expect(invalidBody.filters.plan).toBe("all");
+    expect(invalidBody.filters.sort).toBe("newest");
+    expect(invalidBody.pagination.page).toBe(1);
+    expect(invalidBody.pagination.limit).toBe(500);
+  });
+  it("treats LIKE wildcards in q as literal characters", async () => {
+    for (const entry of [
+      { name: "Underscore_Tenant", plan: "starter" },
+      { name: "Percent%Tenant", plan: "starter" },
+      { name: "PlainTenantX", plan: "starter" },
+    ]) {
+      const res = await apiFetch("http://localhost/api/admin/tenants", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(entry),
+      });
+      expect(res.status).toBe(201);
+    }
+
+    const underscoreRes = await apiFetch(
+      "http://localhost/api/admin/tenants?q=Underscore_Tenant&limit=10",
+    );
+    const underscoreBody = await underscoreRes.json<{ tenants: Array<{ name: string }> }>();
+    expect(underscoreBody.tenants.map((t) => t.name)).toEqual(["Underscore_Tenant"]);
+
+    const percentRes = await apiFetch("http://localhost/api/admin/tenants?q=%25Tenant&limit=10");
+    const percentBody = await percentRes.json<{ tenants: Array<{ name: string }> }>();
+    expect(percentBody.tenants.map((t) => t.name)).toEqual(["Percent%Tenant"]);
+  });
   it("sets secure cross-site cookies for HTTPS login even without an environment binding", async () => {
     await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
       method: "POST",

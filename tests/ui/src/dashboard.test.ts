@@ -223,7 +223,7 @@ test.describe("admin operations coverage", () => {
       total_active_tokens: 1,
       total_users: 4,
     });
-    await mockJson(page, "/api/admin/tenants", {
+    await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", {
       tenants: [
         {
           id: "tenant-1",

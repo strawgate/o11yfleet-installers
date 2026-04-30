@@ -103,6 +103,25 @@ export interface AdminUsage {
   projected_month_estimated_spend_usd: number;
 }
 
+export interface AdminTenantsPagination {
+  page: number;
+  limit: number;
+  total: number;
+  has_more: boolean;
+}
+
+export interface AdminTenantsFilters {
+  q: string;
+  plan: string;
+  sort: string;
+}
+
+export interface AdminTenantsPage {
+  tenants: AdminTenant[];
+  pagination: AdminTenantsPagination;
+  filters: AdminTenantsFilters;
+}
+
 export interface AdminDoQueryResponse {
   rows: Array<Record<string, unknown>>;
   row_count: number;
@@ -126,14 +145,36 @@ export function useAdminOverview() {
   });
 }
 
+export function useAdminTenantsPage(params?: {
+  q?: string;
+  plan?: string;
+  sort?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const query = new URLSearchParams();
+  if (params?.q) query.set("q", params.q);
+  if (params?.plan) query.set("plan", params.plan);
+  if (params?.sort) query.set("sort", params.sort);
+  if (params?.page) query.set("page", String(params.page));
+  if (params?.limit) query.set("limit", String(params.limit));
+  const search = query.toString();
+  const path = search.length > 0 ? `/api/admin/tenants?${search}` : "/api/admin/tenants";
+
+  return useQuery({
+    queryKey: ["admin", "tenants", params ?? {}],
+    queryFn: async () => apiGet<AdminTenantsPage>(path),
+    refetchInterval: 10_000,
+  });
+}
+
 export function useAdminTenants() {
   return useQuery({
-    queryKey: ["admin", "tenants"],
-    queryFn: async () =>
-      unwrapList<AdminTenant>(
-        await apiGet<AdminTenant[] | { tenants: AdminTenant[] }>("/api/admin/tenants"),
-        "tenants",
-      ),
+    queryKey: ["admin", "tenants", "legacy"],
+    queryFn: async () => {
+      const payload = await apiGet<AdminTenantsPage>("/api/admin/tenants?limit=500");
+      return payload.tenants;
+    },
     refetchInterval: 10_000,
   });
 }

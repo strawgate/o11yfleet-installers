@@ -156,13 +156,50 @@ function boundedPositiveInt(value: string | null, fallback: number, max: number)
   return Math.min(Math.floor(parsed), max);
 }
 
+const TENANT_SORTS = {
+  newest: "t.created_at DESC, t.id DESC",
+  oldest: "t.created_at ASC, t.id ASC",
+  name_asc: "t.name COLLATE NOCASE ASC, t.id ASC",
+  name_desc: "t.name COLLATE NOCASE DESC, t.id DESC",
+} as const;
+
+type TenantSort = keyof typeof TENANT_SORTS;
+
+function normalizeTenantSort(value: string | null): TenantSort {
+  if (!value) return "newest";
+  if (value in TENANT_SORTS) return value as TenantSort;
+  return "newest";
+}
+
 async function handleListTenants(env: Env, url: URL): Promise<Response> {
+  const qRaw = url.searchParams.get("q")?.trim() ?? "";
+  const q = qRaw.slice(0, 200);
+  const requestedPlan = url.searchParams.get("plan");
+  const plan = requestedPlan ? (normalizePlan(requestedPlan) ?? "all") : "all";
+  const sort = normalizeTenantSort(url.searchParams.get("sort"));
   const limit = boundedPositiveInt(url.searchParams.get("limit"), 100, 500);
   const page = boundedPositiveInt(url.searchParams.get("page"), 1, 10_000);
   const offset = (page - 1) * limit;
-  const totalRow = await env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants").first<{
-    count: number;
-  }>();
+
+  const whereClauses: string[] = [];
+  const whereParams: unknown[] = [];
+  if (q.length > 0) {
+    whereClauses.push(
+      "(LOWER(t.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(t.id) LIKE LOWER(?) ESCAPE '\\')",
+    );
+    const escaped = q.replace(/[\\%_]/g, "\\$&");
+    const qLike = `%${escaped}%`;
+    whereParams.push(qLike, qLike);
+  }
+  if (plan !== "all") {
+    whereClauses.push("t.plan = ?");
+    whereParams.push(plan);
+  }
+  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+
+  const totalRow = await env.FP_DB.prepare(`SELECT COUNT(*) as count FROM tenants t ${whereSql}`)
+    .bind(...whereParams)
+    .first<{ count: number }>();
   const result = await env.FP_DB.prepare(
     `SELECT
       t.*,
@@ -185,15 +222,17 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
        FROM agent_summaries
        GROUP BY tenant_id
      ) a ON a.tenant_id = t.id
-     ORDER BY t.created_at DESC
+     ${whereSql}
+     ORDER BY ${TENANT_SORTS[sort]}
      LIMIT ? OFFSET ?`,
   )
-    .bind(limit, offset)
+    .bind(...whereParams, limit, offset)
     .all();
   const total = totalRow?.count ?? 0;
   return Response.json({
     tenants: result.results,
     pagination: { page, limit, total, has_more: offset + result.results.length < total },
+    filters: { q, plan, sort },
   });
 }
 
