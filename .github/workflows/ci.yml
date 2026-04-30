@@ -322,6 +322,9 @@ jobs:
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
+      - name: Verify staging Terraform import/state readiness
+        run: just tf-check-staging-readiness staging
+
       - name: Deploy staging infrastructure, Worker, migrations, and Pages
         run: just deploy-staging
 

@@ -270,6 +270,45 @@ Wrangler-created staging Worker and let Terraform create
 preserved. Provision the required Worker secrets before enabling the CI staging
 deploy.
 
+### Staging Worker Terraform preflight and rollout
+
+Before enabling `TERRAFORM_STAGING_DEPLOY_ENABLED=true` in CI, confirm staging
+remote state has the required imports:
+
+```bash
+just tf-check-staging-readiness staging
+```
+
+If the check fails, the CI deploy job stops before any apply. Import the missing
+resources or recreate the Wrangler-owned staging Worker/route under Terraform,
+then rerun the preflight.
+
+The preflight only validates Terraform state. Verify required Worker secrets
+exist on the base Worker identity as a separate operator step before flipping
+the deploy flag.
+
+Plan/apply commands for local staging rollout:
+
+```bash
+just tf-plan-worker staging
+just tf-apply-worker staging
+```
+
+Both commands build the Worker module using Wrangler dry-run output, then pass
+`manage_worker_deployment=true` and `worker_bundle_path=...` to Terraform.
+This ensures staging exercises the same Worker version/deployment resources that
+production rollout (#230) will rely on.
+
+For drift recovery, run a normal control-plane plan first:
+
+```bash
+just tf-plan staging
+```
+
+Then run `just tf-plan-worker staging` to verify the Worker version/deployment
+changes. If Terraform wants to replace the Worker identity unexpectedly, stop
+and repair imports/state before apply.
+
 ## Admin Access
 
 Set `enable_admin_access = true` only with at least one identity rule:

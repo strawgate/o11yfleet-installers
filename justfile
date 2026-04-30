@@ -497,6 +497,21 @@ tf-plan-empty-state env="staging":
     terraform init -backend=false
     terraform plan -refresh=false -var-file=envs/{{env}}.tfvars
 
+# Shared Terraform state addresses required before Worker rollout checks.
+# Consumed by tf-check-prod-imports and tf-check-staging-readiness so both
+# environments stay in sync.
+tf-required-imports:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf '%s\n' \
+        cloudflare_d1_database.fleet \
+        cloudflare_r2_bucket.configs \
+        cloudflare_queue.events \
+        cloudflare_dns_record.api \
+        cloudflare_worker.fleet \
+        cloudflare_workers_route.api \
+        cloudflare_queue_consumer.events
+
 # Verify production imports are in remote state before enabling v5 apply paths.
 tf-check-prod-imports env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
@@ -504,15 +519,7 @@ tf-check-prod-imports env="prod": (tf-init-remote env)
     cd infra/terraform
     # These production resources must be adopted before cutover; split Pages
     # projects/domains may still be created by Terraform during rollout.
-    required=(
-        cloudflare_d1_database.fleet
-        cloudflare_r2_bucket.configs
-        cloudflare_queue.events
-        cloudflare_dns_record.api
-        cloudflare_worker.fleet
-        cloudflare_workers_route.api
-        cloudflare_queue_consumer.events
-    )
+    mapfile -t required < <(just --quiet tf-required-imports)
     missing=()
     for resource in "${required[@]}"; do
         if ! terraform state show "$resource" >/dev/null 2>&1; then
@@ -523,6 +530,25 @@ tf-check-prod-imports env="prod": (tf-init-remote env)
         printf 'Missing required imported resources in %s remote state:\n' "{{env}}" >&2
         printf ' - %s\n' "${missing[@]}" >&2
         printf 'Import these before setting TERRAFORM_PROVIDER_V5_STATE_READY=true.\n' >&2
+        exit 1
+    fi
+
+# Verify staging imports/state are ready before Terraform-managed Worker deploys.
+tf-check-staging-readiness env="staging": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd infra/terraform
+    mapfile -t required < <(just --quiet tf-required-imports)
+    missing=()
+    for resource in "${required[@]}"; do
+        if ! terraform state show "$resource" >/dev/null 2>&1; then
+            missing+=("$resource")
+        fi
+    done
+    if [ "${#missing[@]}" -ne 0 ]; then
+        printf 'Staging Terraform state is not ready for Worker deploys. Missing imports in %s state:\n' "{{env}}" >&2
+        printf ' - %s\n' "${missing[@]}" >&2
+        printf 'Run terraform import (or retire the Wrangler-managed staging Worker/route and apply once) before CI deploy.\n' >&2
         exit 1
     fi
 
@@ -671,6 +697,7 @@ deploy-staging:
         echo "deploy-staging is disabled; set TERRAFORM_STAGING_DEPLOY_ENABLED=true to enable it." >&2
         exit 1
     fi
+    just tf-check-staging-readiness staging
     just tf-apply staging
     just tf-apply-worker staging
     just d1-migrate staging
