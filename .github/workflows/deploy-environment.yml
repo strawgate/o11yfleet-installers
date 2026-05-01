@@ -128,4 +128,4 @@ jobs:
           O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
 
       - name: Smoke test public aliases
-        run: just smoke-aliases ${{ inputs.environment }}
+        run: just smoke-aliases-ci ${{ inputs.environment }}

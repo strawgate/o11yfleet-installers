@@ -112,4 +112,4 @@ jobs:
           O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
 
       - name: Smoke test production public aliases
-        run: just smoke-aliases prod
+        run: just smoke-aliases-ci prod

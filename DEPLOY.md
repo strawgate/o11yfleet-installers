@@ -375,6 +375,11 @@ just smoke-aliases staging
 just smoke-aliases prod
 ```
 
+This is the hard operator check for public custom-domain routing. GitHub and
+third-party CI runner IPs can receive Cloudflare managed challenges or WAF 403s
+even when the aliases are healthy from normal networks, so CI uses a
+best-effort wrapper after the blocking workers.dev smoke tests.
+
 For public marketing changes, verify the live bundle on the custom domain, not
 just the deploy job result.
 
@@ -462,6 +467,7 @@ This file is ignored by git and should be `0600`.
 | `just env-site-smoke-targets <env>`       | Prints static site smoke-test targets. Non-prod smoke uses workers.dev URLs to avoid zone-level security challenges from CI runner IPs.                             |
 | `just env-site-alias-smoke-targets <env>` | Prints custom-domain site smoke targets for public environment aliases.                                                                                             |
 | `just smoke-aliases <env>`                | Checks the custom API alias `/healthz` plus the custom site/app/admin aliases for one deployed environment.                                                         |
+| `just smoke-aliases-ci <env>`             | Best-effort CI wrapper for public alias smoke; emits a warning instead of failing when runner IPs are blocked by Cloudflare.                                        |
 
 Reusable GitHub composite actions keep deploy jobs aligned:
 
@@ -474,9 +480,12 @@ Reusable GitHub composite actions keep deploy jobs aligned:
   configuration creation, enrollment-token creation, and stats smoke tests.
   Production uses the custom API domain; dev and staging use workers.dev for the
   same CI-runner challenge reason.
-- Deploy and release workflows also run `just smoke-aliases <env>` after the
+- Deploy and release workflows also run `just smoke-aliases-ci <env>` after the
   deploy-grade smoke tests. This catches missing DNS, Worker routes, or static
-  site routes for the public custom-domain aliases.
+  site routes when runner IPs can reach the public custom-domain aliases, and it
+  warns instead of failing when Cloudflare blocks the runner. Use
+  `just smoke-aliases <env>` from an operator network as the blocking
+  custom-domain verification.
 
 ## Rollback And Recovery
 

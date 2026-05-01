@@ -393,4 +393,4 @@ jobs:
           O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
 
       - name: Smoke test staging public aliases
-        run: just smoke-aliases staging
+        run: just smoke-aliases-ci staging

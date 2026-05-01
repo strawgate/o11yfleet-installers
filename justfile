@@ -719,7 +719,15 @@ smoke-aliases env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
     api_url="$(just --quiet env-api-url "{{env}}")"
-    curl -fsS --connect-timeout 5 --max-time 20 "$api_url/healthz" >/dev/null
+    tmp="$(mktemp)"
+    status="$(curl -sS --connect-timeout 5 --max-time 20 -o "$tmp" -w '%{http_code}' "$api_url/healthz" || true)"
+    if [ "$status" != "200" ]; then
+        echo "api alias failed: $status $api_url/healthz" >&2
+        cat "$tmp" >&2
+        rm -f "$tmp"
+        exit 1
+    fi
+    rm -f "$tmp"
     echo "api alias ok: $api_url/healthz"
     targets="$(just --quiet env-site-alias-smoke-targets "{{env}}")"
     printf '%s\n' "$targets" | while IFS='|' read -r surface url; do
@@ -740,6 +748,19 @@ smoke-aliases env="prod":
         rm -f "$tmp"
         echo "$surface alias ok: $url"
     done
+
+# Best-effort public alias smoke for GitHub-hosted or third-party CI runners.
+smoke-aliases-ci env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Some Cloudflare managed challenges/WAF rules can return 403 to runner IPs
+    # even while the same aliases are healthy from normal networks. Keep
+    # `smoke-aliases` as the hard operator check.
+    if just --quiet smoke-aliases "{{env}}"; then
+        exit 0
+    fi
+    status=$?
+    echo "::warning title=Public alias smoke was blocked::just smoke-aliases {{env}} failed with exit ${status}. Deploy-grade workers.dev/API smoke passed separately; rerun just smoke-aliases {{env}} from an operator network to verify public custom domains."
 
 # Build the site bundle for a deployment environment.
 site-build env="prod":
