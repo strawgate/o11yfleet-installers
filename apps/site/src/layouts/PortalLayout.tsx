@@ -357,7 +357,12 @@ export default function PortalLayout() {
 
   // Redirect pending approval users
   useEffect(() => {
-    if (!isLoading && user && user.tenantStatus === "pending" && location.pathname !== "/portal/pending-approval") {
+    if (
+      !isLoading &&
+      user &&
+      user.tenantStatus === "pending" &&
+      location.pathname !== "/portal/pending-approval"
+    ) {
       void navigate("/portal/pending-approval", { replace: true });
     }
   }, [isLoading, user, location.pathname, navigate]);

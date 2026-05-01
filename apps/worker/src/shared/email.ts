@@ -1,4 +1,5 @@
 // Email utility for sending tenant approval notifications
+// Uses Cloudflare Email Service (CLOUDFLARE_EMAIL_SENDER binding)
 
 import type { Env } from "../index.js";
 
@@ -9,6 +10,12 @@ export interface EmailOptions {
   text?: string;
 }
 
+export interface EmailResult {
+  success: boolean;
+  messageId?: string;
+  error?: string;
+}
+
 export interface TenantApprovalEmail {
   tenantName: string;
   tenantEmail: string;
@@ -16,14 +23,42 @@ export interface TenantApprovalEmail {
   reason?: string;
 }
 
-function isSmtpConfigured(env: Env): boolean {
-  return Boolean(
-    env.SMTP_ENABLED === "true" &&
-      env.SMTP_HOST?.trim() &&
-      env.SMTP_PORT?.trim() &&
-      env.SMTP_USER?.trim() &&
-      env.SMTP_PASSWORD?.trim()
-  );
+/**
+ * Email category types for sender address selection
+ * Best practice: use different addresses for different notification types
+ */
+export type EmailCategory = "accounts" | "fleet" | "support" | "default";
+
+/**
+ * EmailService interface for testability
+ * Allows mocking the email service in tests
+ */
+export interface EmailService {
+  send(options: EmailOptions): Promise<EmailResult>;
+  isConfigured(): boolean;
+}
+
+/**
+ * Get the from address for a given email category
+ * Falls back to the default address if category-specific one is not configured
+ */
+function getFromAddress(env: Env, category: EmailCategory): string {
+  // Category-specific addresses (for future use with Cloudflare Email Routing)
+  const categoryAddresses: Record<EmailCategory, string | undefined> = {
+    accounts: undefined, // e.g., "accounts@o11yfleet.com"
+    fleet: undefined, // e.g., "fleet@o11yfleet.com"
+    support: undefined, // e.g., "support@o11yfleet.com"
+    default: env.CLOUDFLARE_EMAIL_FROM, // the configured default
+  };
+
+  return categoryAddresses[category] ?? env.CLOUDFLARE_EMAIL_FROM ?? "noreply@o11yfleet.com";
+}
+
+/**
+ * Check if Cloudflare Email Service is configured
+ */
+export function isEmailConfigured(env: Env): boolean {
+  return Boolean(env.CLOUDFLARE_EMAIL_SENDER && env.CLOUDFLARE_EMAIL_FROM);
 }
 
 function htmlEncode(str: string): string {
@@ -70,7 +105,9 @@ export function buildApprovalEmailHtml(data: TenantApprovalEmail): string {
               <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
                 Your workspace <strong style="color:${color};">${htmlEncode(data.tenantName)}</strong> has been ${statusText}.
               </p>
-              ${isApproved ? `
+              ${
+                isApproved
+                  ? `
               <p style="margin:0 0 24px;font-size:16px;line-height:1.5;">
                 You can now log in and start using O11yFleet to manage your collector fleet.
               </p>
@@ -83,22 +120,28 @@ export function buildApprovalEmailHtml(data: TenantApprovalEmail): string {
                   </td>
                 </tr>
               </table>
-              ` : `
+              `
+                  : `
               <p style="margin:0 0 24px;font-size:16px;line-height:1.5;">
                 Unfortunately, your workspace application was not approved at this time.
               </p>
-              ${data.reason ? `
+              ${
+                data.reason
+                  ? `
               <div style="background:#1a1d24;border-radius:8px;padding:16px;margin:16px 0;">
                 <p style="margin:0;font-size:14px;color:#b9c0cc;">
                   <strong>Reason:</strong> ${htmlEncode(data.reason)}
                 </p>
               </div>
-              ` : ""}
+              `
+                  : ""
+              }
               <p style="margin:0 0 16px;font-size:16px;line-height:1.5;">
                 If you believe this was a mistake or have questions, please contact us at
                 <a href="mailto:support@o11yfleet.com" style="color:${color};">support@o11yfleet.com</a>.
               </p>
-              `}
+              `
+              }
               <hr style="border:none;border-top:1px solid #252b35;margin:32px 0;" />
               <p style="margin:0;font-size:13px;color:#8993a3;">
                 O11yFleet — OpenTelemetry fleet management
@@ -143,34 +186,40 @@ O11yFleet — OpenTelemetry fleet management`;
   }
 }
 
-export async function sendEmail(env: Env, options: EmailOptions): Promise<{ success: boolean; error?: string }> {
-  if (!isSmtpConfigured(env)) {
-    console.log("[email] SMTP not configured, skipping email:", options.subject);
-    return { success: false, error: "SMTP not configured" };
+export async function sendEmail(
+  env: Env,
+  options: EmailOptions,
+  category: EmailCategory = "default",
+): Promise<{ success: boolean; error?: string }> {
+  if (!isEmailConfigured(env)) {
+    console.warn("[email] Cloudflare Email Service not configured, skipping:", options.subject);
+    return { success: false, error: "Email service not configured" };
   }
 
-  const fromAddress = env.SMTP_FROM?.trim() || "noreply@o11yfleet.com";
+  try {
+    const fromAddress = getFromAddress(env, category);
+    const toAddresses = Array.isArray(options.to) ? options.to : [options.to];
 
-  // Log the email for now (in production, integrate with your email provider)
-  // SMTP credentials would be used here:
-  // - env.SMTP_HOST, env.SMTP_PORT, env.SMTP_USER, env.SMTP_PASSWORD
-  console.log("[email] Would send email:", {
-    from: fromAddress,
-    to: options.to,
-    subject: options.subject,
-  });
+    await env.CLOUDFLARE_EMAIL_SENDER!.send({
+      to: toAddresses,
+      from: fromAddress,
+      subject: options.subject,
+      body: options.html,
+      bodyType: "html",
+    });
 
-  // Placeholder: In production, use Resend, SendGrid, or Mailgun API here
-  // Example with Resend:
-  // const resend = new Resend(env.RESEND_API_KEY);
-  // await resend.emails.send({ from: fromAddress, to: options.to, subject: options.subject, html: options.html });
-
-  return { success: true };
+    console.warn("[email] Sent:", { from: fromAddress, to: toAddresses, subject: options.subject });
+    return { success: true };
+  } catch (err) {
+    const errorMessage = err instanceof Error ? err.message : String(err);
+    console.error("[email] Send failed:", errorMessage);
+    return { success: false, error: errorMessage };
+  }
 }
 
 export async function sendTenantApprovalEmail(
   env: Env,
-  data: TenantApprovalEmail
+  data: TenantApprovalEmail,
 ): Promise<{ success: boolean; error?: string }> {
   const isApproved = data.action === "approved";
   const subject = isApproved
@@ -186,5 +235,5 @@ export async function sendTenantApprovalEmail(
 }
 
 export function isAutoApproveEnabled(env: Env): boolean {
-  return env.O11YFLEET_AUTO_APPROVE_SIGNUPS === "true";
+  return env.FP_SIGNUP_AUTO_APPROVE === "true";
 }

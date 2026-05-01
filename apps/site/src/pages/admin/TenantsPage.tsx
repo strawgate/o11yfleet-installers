@@ -172,9 +172,7 @@ export default function TenantsPage() {
             onClick={() => setBulkConfirmOpen(true)}
             disabled={selectedTenants.size === 0 || bulkApprove.isPending}
           >
-            {bulkApprove.isPending
-              ? "Approving..."
-              : `Approve Selected (${selectedTenants.size})`}
+            {bulkApprove.isPending ? "Approving..." : `Approve Selected (${selectedTenants.size})`}
           </button>
           <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
             Create tenant
@@ -399,7 +397,9 @@ export default function TenantsPage() {
               onClick={() => void handleBulkApprove()}
               disabled={bulkApprove.isPending}
             >
-              {bulkApprove.isPending ? "Approving..." : `Approve ${selectedTenants.size} tenant${selectedTenants.size !== 1 ? "s" : ""}`}
+              {bulkApprove.isPending
+                ? "Approving..."
+                : `Approve ${selectedTenants.size} tenant${selectedTenants.size !== 1 ? "s" : ""}`}
             </button>
           </>
         }

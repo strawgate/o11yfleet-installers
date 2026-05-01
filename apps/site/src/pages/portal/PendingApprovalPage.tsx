@@ -49,12 +49,9 @@ export default function PendingApprovalPage() {
         </div>
 
         <h1 style={{ marginBottom: 12 }}>Pending approval</h1>
-        <p
-          className="sub"
-          style={{ marginBottom: 24, lineHeight: 1.6 }}
-        >
-          Your workspace is awaiting review. We typically approve new signups
-          within 1-2 business days.
+        <p className="sub" style={{ marginBottom: 24, lineHeight: 1.6 }}>
+          Your workspace is awaiting review. We typically approve new signups within 1-2 business
+          days.
         </p>
 
         <div
@@ -66,9 +63,7 @@ export default function PendingApprovalPage() {
             textAlign: "left",
           }}
         >
-          <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 500 }}>
-            What happens next?
-          </h4>
+          <h4 style={{ margin: "0 0 12px", fontSize: 14, fontWeight: 500 }}>What happens next?</h4>
           <ul
             style={{
               margin: 0,

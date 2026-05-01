@@ -661,7 +661,14 @@ async function findOrCreateGitHubUser(
     await env.FP_DB.batch([
       env.FP_DB.prepare(
         "INSERT INTO tenants (id, name, plan, status, max_configs, max_agents_per_config, approved_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-      ).bind(tenantId, `${profile.login}'s workspace`, plan, tenantStatus, max_configs, max_agents_per_config),
+      ).bind(
+        tenantId,
+        `${profile.login}'s workspace`,
+        plan,
+        tenantStatus,
+        max_configs,
+        max_agents_per_config,
+      ),
       env.FP_DB.prepare(
         "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, 'member', ?)",
       ).bind(userId, email, `external:github:${providerUserId}`, displayName, tenantId),

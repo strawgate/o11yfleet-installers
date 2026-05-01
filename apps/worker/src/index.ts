@@ -41,16 +41,20 @@ export interface Env {
   O11YFLEET_OIDC_ALLOWED_REPOS?: string;
   /** OIDC audience claim (defaults to "o11yfleet"). */
   O11YFLEET_OIDC_AUDIENCE?: string;
-  /** Enable auto-approval of new tenant signups (for post-soft-launch). Set to "true" to enable. */
-  O11YFLEET_AUTO_APPROVE_SIGNUPS?: string;
-  /** SMTP configuration for sending approval emails. */
-  SMTP_HOST?: string;
-  SMTP_PORT?: string;
-  SMTP_USER?: string;
-  SMTP_PASSWORD?: string;
-  SMTP_FROM?: string;
-  /** Enable email sending. Set to "true" when SMTP is configured. */
-  SMTP_ENABLED?: string;
+  /** Enable auto-approval of new tenant signups. Set to "true" to auto-approve (post-soft-launch). */
+  FP_SIGNUP_AUTO_APPROVE?: string;
+  /** Cloudflare Email Service binding for sending emails. */
+  CLOUDFLARE_EMAIL_SENDER?: {
+    send(options: {
+      to: string[];
+      from: string;
+      subject: string;
+      body: string;
+      bodyType: "text" | "html";
+    }): Promise<void>;
+  };
+  /** Default email from address for outgoing emails. */
+  CLOUDFLARE_EMAIL_FROM?: string;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

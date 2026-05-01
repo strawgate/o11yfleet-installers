@@ -159,21 +159,15 @@ variable "worker_inherited_binding_names" {
   }
 }
 
-variable "enable_auto_approve_signups" {
+variable "signup_auto_approve" {
   type        = bool
   description = "When true, new tenant signups are auto-approved without admin review. Set to false for soft-launch gating."
   default     = false
 }
 
-variable "resend_api_key_secret_name" {
+variable "email_from" {
   type        = string
-  description = "Secret name in Cloudflare Workers secrets for the Resend API key. Defaults to auto-generated based on environment."
-  default     = null
-}
-
-variable "email_from_address" {
-  type        = string
-  description = "From address for outgoing emails (e.g. 'O11yFleet <noreply@yourdomain.com>')."
+  description = "From address for outgoing emails bound to CLOUDFLARE_EMAIL_FROM (e.g. 'O11yFleet <noreply@yourdomain.com>')."
   default     = null
 }
 

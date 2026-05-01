@@ -939,7 +939,10 @@ interface TenantWithUser {
   tenant_status: string | null;
 }
 
-async function getTenantWithPrimaryUser(env: Env, tenantId: string): Promise<TenantWithUser | null> {
+async function getTenantWithPrimaryUser(
+  env: Env,
+  tenantId: string,
+): Promise<TenantWithUser | null> {
   const tenant = await env.FP_DB.prepare(
     `SELECT t.id, t.name, u.email
      FROM tenants t
@@ -998,9 +1001,7 @@ async function handleApproveTenant(
     return Response.json({ success: true, status: "active", tenantId });
   } else if (body.action === "reject") {
     // Mark as suspended (or you could delete the tenant)
-    await env.FP_DB.prepare(
-      `UPDATE tenants SET status = 'suspended' WHERE id = ?`,
-    )
+    await env.FP_DB.prepare(`UPDATE tenants SET status = 'suspended' WHERE id = ?`)
       .bind(tenantId)
       .run();
 
@@ -1083,7 +1084,7 @@ async function handleUpdateSettings(_request: Request, _env: Env): Promise<Respo
   // This endpoint is primarily for reading current state
   // In a full implementation, you might persist settings to D1 or KV
   return jsonError(
-    "Settings must be updated via environment variables (O11YFLEET_AUTO_APPROVE_SIGNUPS)",
+    "Settings must be updated via environment variables (FP_SIGNUP_AUTO_APPROVE)",
     400,
   );
 }

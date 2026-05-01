@@ -108,14 +108,19 @@ locals {
       text = cloudflare_r2_bucket.configs.name
     },
     {
-      name = "O11YFLEET_AUTO_APPROVE_SIGNUPS"
+      name = "FP_SIGNUP_AUTO_APPROVE"
       type = "plain_text"
-      text = var.enable_auto_approve_signups ? "true" : "false"
+      text = var.signup_auto_approve ? "true" : "false"
     },
     {
-      name = "EMAIL_FROM_ADDRESS"
+      name = "CLOUDFLARE_EMAIL_FROM"
       type = "plain_text"
-      text = coalesce(var.email_from_address, "O11yFleet <noreply@o11yfleet.com>")
+      text = coalesce(var.email_from, "O11yFleet <noreply@o11yfleet.com>")
+    },
+    {
+      name         = "CLOUDFLARE_EMAIL_SENDER"
+      type         = "send_email"
+      email_domain = local.api_domain
     },
   ]
 

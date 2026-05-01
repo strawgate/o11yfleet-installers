@@ -156,10 +156,12 @@ export type AdminBulkApproveRequest = z.infer<typeof adminBulkApproveRequestSche
 export const adminBulkApproveResponseSchema = z
   .object({
     approved: z.array(z.string()),
-    failed: z.array(z.object({
-      id: z.string(),
-      error: z.string(),
-    })),
+    failed: z.array(
+      z.object({
+        id: z.string(),
+        error: z.string(),
+      }),
+    ),
   })
   .strict();
 export type AdminBulkApproveResponse = z.infer<typeof adminBulkApproveResponseSchema>;
