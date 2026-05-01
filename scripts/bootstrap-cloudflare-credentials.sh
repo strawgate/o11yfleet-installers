@@ -19,6 +19,8 @@ Options:
   --repo OWNER/REPO       GitHub repo. Default: detected by gh.
   --state-bucket NAME     R2 bucket for Terraform state. Default: gh variable or env.
   --include-zero-trust    Add Access app/policy write permission for admin Access.
+  --usage-tokens          Create usage API tokens (GraphQL Analytics read-only).
+  --usage-output FILE     Write usage tokens to a JSON file for wrangler ingestion.
   -h, --help              Show this help.
 
 Required bootstrap env:
@@ -37,6 +39,8 @@ ENV_FILE="${HOME}/Documents/repos/cloudflare/.env"
 REPO=""
 STATE_BUCKET="${TERRAFORM_STATE_R2_BUCKET:-}"
 INCLUDE_ZERO_TRUST=false
+USAGE_TOKENS=false
+USAGE_OUTPUT=""
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
@@ -63,6 +67,14 @@ while [ "$#" -gt 0 ]; do
     --include-zero-trust)
       INCLUDE_ZERO_TRUST=true
       shift
+      ;;
+    --usage-tokens)
+      USAGE_TOKENS=true
+      shift
+      ;;
+    --usage-output)
+      USAGE_OUTPUT="${2:?--usage-output requires a value}"
+      shift 2
       ;;
     -h|--help)
       usage
@@ -302,6 +314,10 @@ if [ "$APPLY" = true ]; then
   if [ "$INCLUDE_ZERO_TRUST" = true ]; then
     ACCOUNT_ACCESS_ID="$(resolve_permission_group_id "$GROUPS_JSON" "com.cloudflare.api.account" "Access: Apps and Policies Write|Access: Apps and Policies Edit|Zero Trust Write|Zero Trust Edit")"
   fi
+  if [ "$USAGE_TOKENS" = true ]; then
+    ACCOUNT_ANALYTICS_READ_ID="$(resolve_permission_group_id "$GROUPS_JSON" "com.cloudflare.api.account" "Analytics Read|Account Analytics Read")"
+    D1_ANALYTICS_READ_ID="$(resolve_permission_group_id "$GROUPS_JSON" "com.cloudflare.api.account" "D1 Analytics Read|D1 Read")"
+  fi
 fi
 
 for target_env in $TARGET_ENVS; do
@@ -330,6 +346,9 @@ for target_env in $TARGET_ENVS; do
     log "  would create deploy token scoped to Workers, D1, R2, Queues, DNS, Workers Routes"
     log "  would create R2 state token scoped to bucket ${STATE_BUCKET}"
     log "  would write CLOUDFLARE_DEPLOY_* and TERRAFORM_STATE_R2_* secrets"
+    if [ "$USAGE_TOKENS" = true ]; then
+      log "  would create usage API token scoped to Account Analytics, D1 Analytics"
+    fi
     continue
   fi
 
@@ -396,6 +415,34 @@ for target_env in $TARGET_ENVS; do
   set_github_secret "$gh_env" CLOUDFLARE_DEPLOY_ACCOUNT_ID "$env_account_id"
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_ACCESS_KEY_ID "$r2_access_key_id"
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_SECRET_ACCESS_KEY "$r2_secret_access_key"
+
+  if [ "$USAGE_TOKENS" = true ]; then
+    account_resource="com.cloudflare.api.account.${env_account_id}"
+    usage_groups="$(permission_group_objects "$ACCOUNT_ANALYTICS_READ_ID" "$D1_ANALYTICS_READ_ID")"
+    usage_policies="$(
+      jq -n \
+        --arg account_resource "$account_resource" \
+        --argjson usage_groups "$usage_groups" \
+        '[
+          {
+            effect: "allow",
+            resources: {($account_resource): "*"},
+            permission_groups: $usage_groups
+          }
+        ]'
+    )"
+    usage_response="$(create_token "o11yfleet ${target_env} usage ${suffix}" "$usage_policies")"
+    usage_token="$(jq -r '.result.value' <<<"$usage_response")"
+    [ -n "$usage_token" ] && [ "$usage_token" != "null" ] || die "Cloudflare did not return usage token value"
+
+    if [ -n "$USAGE_OUTPUT" ]; then
+      jq -n \
+        --arg env "$target_env" \
+        --arg token "$usage_token" \
+        '{($env): {token: $token}}' >> "$USAGE_OUTPUT"
+    fi
+    log "  created usage API token for ${target_env}"
+  fi
 done
 
 log ""

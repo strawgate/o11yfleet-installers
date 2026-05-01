@@ -55,11 +55,7 @@ Environment-level Worker and smoke-test secrets, configured separately for the
 | `O11YFLEET_SEED_ADMIN_EMAIL`          | `/auth/seed` admin email; required in dev/staging/prod            |
 | `O11YFLEET_SEED_ADMIN_PASSWORD`       | `/auth/seed` admin password; required in dev/staging/prod         |
 | `AI_GUIDANCE_MINIMAX_API_KEY`         | Optional; only required for SDK-backed AI guidance provider modes |
-| `CLOUDFLARE_USAGE_ACCOUNT_ID`         | Optional admin usage/spend estimates                              |
-| `CLOUDFLARE_USAGE_API_TOKEN`          | Optional admin usage/spend estimates                              |
-| `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Optional admin usage/spend estimates                              |
-| `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Optional admin usage/spend estimates                              |
-| `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_API_TOKEN`          | Admin usage/spend: GraphQL Analytics API (Terraform-inherited)    |
 
 ### CF API Token Permissions
 
@@ -138,6 +134,32 @@ Use `wrangler versions secret put` for Terraform-managed scripts so secret
 updates create a Worker version without immediately shifting traffic. Use
 `wrangler secret put` only for bootstrap/recovery cases where an immediate
 Wrangler deployment is intentional.
+
+## Usage & Spend Bindings
+
+The admin portal's Usage & Spend page auto-derives all service identifiers from Terraform:
+
+| Binding                               | Source    | Notes                                                |
+| ------------------------------------- | --------- | ---------------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID`               | Terraform | From `cloudflare_account_id` variable                |
+| `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Terraform | Worker script name (`o11yfleet-worker`)              |
+| `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Terraform | D1 database UUID from `cloudflare_d1_database.fleet` |
+| `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Terraform | R2 bucket name from `cloudflare_r2_bucket.configs`   |
+
+The only secret required is `CLOUDFLARE_USAGE_API_TOKEN` for GraphQL Analytics API access.
+Create a read-only usage token and set it as a Worker secret:
+
+```bash
+# Dry-run first to see what would be created
+just cloudflare-usage-credentials-dry-run "staging prod"
+
+# Create usage tokens and set them as Worker secrets
+just cloudflare-usage-secrets "staging prod"
+```
+
+This creates a token with only Account Analytics and D1 Analytics read permissions,
+scoped to the o11yFleet account. Terraform inherits the secret and makes it
+available to deployed Worker versions.
 
 ## Analytics Engine
 

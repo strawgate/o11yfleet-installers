@@ -96,6 +96,26 @@ locals {
       type    = "analytics_engine"
       dataset = var.worker_analytics_engine_dataset
     },
+    {
+      name = "CLOUDFLARE_ACCOUNT_ID"
+      type = "plain_text"
+      text = var.cloudflare_account_id
+    },
+    {
+      name = "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME"
+      type = "plain_text"
+      text = local.worker_name
+    },
+    {
+      name = "CLOUDFLARE_USAGE_D1_DATABASE_ID"
+      type = "plain_text"
+      text = cloudflare_d1_database.fleet.uuid
+    },
+    {
+      name = "CLOUDFLARE_USAGE_R2_BUCKET_NAME"
+      type = "plain_text"
+      text = cloudflare_r2_bucket.configs.name
+    },
   ]
 
   worker_durable_object_bindings = var.worker_include_durable_object_binding ? [

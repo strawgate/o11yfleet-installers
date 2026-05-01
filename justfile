@@ -1309,6 +1309,49 @@ cloudflare-credentials-apply envs="dev staging prod" env_file="":
         args+=(--env-file "{{env_file}}")
     fi
     ./scripts/bootstrap-cloudflare-credentials.sh "${args[@]}"
+
+# Dry-run usage API token creation (read-only GraphQL Analytics).
+cloudflare-usage-credentials-dry-run envs="dev staging prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    ./scripts/bootstrap-cloudflare-credentials.sh --usage-tokens --envs "{{envs}}"
+
+# Create usage API tokens and write to a JSON file for wrangler ingestion.
+cloudflare-usage-credentials-apply envs="dev staging prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    set -euo pipefail
+    tmpfile="$(mktemp)"
+    trap 'rm -f "$tmpfile"' EXIT
+    ./scripts/bootstrap-cloudflare-credentials.sh --usage-tokens --usage-output "$tmpfile" --apply --envs "{{envs}}"
+    echo ""
+    echo "Usage tokens written to $tmpfile:"
+    cat "$tmpfile"
+
+# Set usage API tokens as Worker secrets for each environment.
+cloudflare-usage-secrets envs="dev staging prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    tmpfile="$(mktemp)"
+    trap 'rm -f "$tmpfile"' EXIT
+    ./scripts/bootstrap-cloudflare-credentials.sh --usage-tokens --usage-output "$tmpfile" --apply --envs "{{envs}}"
+    echo ""
+    echo "Setting CLOUDFLARE_USAGE_API_TOKEN secrets..."
+    cd apps/worker
+    while IFS= read -r line; do
+        env_name="$(echo "$line" | jq -r 'keys[0]')"
+        token="$(echo "$line" | jq -r '.[].token')"
+        if [ "$env_name" = "prod" ] || [ "$env_name" = "production" ]; then
+            echo "Setting CLOUDFLARE_USAGE_API_TOKEN for production..."
+            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_USAGE_API_TOKEN --name o11yfleet-worker 2>&1
+        else
+            echo "Setting CLOUDFLARE_USAGE_API_TOKEN for $env_name..."
+            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_USAGE_API_TOKEN --env "$env_name" 2>&1
+        fi
+    done < <(jq -c '.' "$tmpfile")
+    echo ""
+    echo "Done setting usage API token secrets."
+
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
 # Run the extended local gate, including workerd and browser tests
