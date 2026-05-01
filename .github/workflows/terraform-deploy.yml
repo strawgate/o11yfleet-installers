@@ -123,10 +123,10 @@ jobs:
           just tf-init-remote ${{ steps.target.outputs.env }}
           cd infra/terraform
           # Remove known orphaned resource types from v4 provider state
+          # Note: cloudflare_workers_route.api and cloudflare_dns_record.api are now
+          # properly imported and should not be removed
           orphaned_patterns=(
             "^cloudflare_pages_"
-            "^cloudflare_record\\."
-            "^cloudflare_workers_route\\."
           )
           for resource in $(terraform state list 2>/dev/null); do
             for pattern in "${orphaned_patterns[@]}"; do
