@@ -55,6 +55,36 @@ jobs:
           fi
 
           echo ""
+          echo "=== Importing cloudflare_dns_record.site (admin) ==="
+          if terraform state show 'cloudflare_dns_record.site["admin"]' >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              'cloudflare_dns_record.site["admin"]' \
+              "2650adcd696a6e400201a68323e90c5e/952a7166fde37597293e51a052e5d5ad"
+          fi
+
+          echo ""
+          echo "=== Importing cloudflare_dns_record.site (app) ==="
+          if terraform state show 'cloudflare_dns_record.site["app"]' >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              'cloudflare_dns_record.site["app"]' \
+              "2650adcd696a6e400201a68323e90c5e/ee52377c6ef3402ddbeb99d4e5257d06"
+          fi
+
+          echo ""
+          echo "=== Importing cloudflare_dns_record.site (site) ==="
+          if terraform state show 'cloudflare_dns_record.site["site"]' >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              'cloudflare_dns_record.site["site"]' \
+              "2650adcd696a6e400201a68323e90c5e/d01b0cbe9b13f41b3b5576ba902132b1"
+          fi
+
+          echo ""
           echo "=== Importing cloudflare_workers_route.api ==="
           if terraform state show "cloudflare_workers_route.api" >/dev/null 2>&1; then
             echo "Already imported"
@@ -94,7 +124,7 @@ jobs:
           done
           echo ""
           echo "--- Resources imported this run ---"
-          for resource in "cloudflare_dns_record.api" "cloudflare_worker.fleet" "cloudflare_workers_cron_trigger.fleet" "cloudflare_workers_route.api"; do
+          for resource in "cloudflare_dns_record.api" 'cloudflare_dns_record.site["admin"]' 'cloudflare_dns_record.site["app"]' 'cloudflare_dns_record.site["site"]' "cloudflare_worker.fleet" "cloudflare_workers_cron_trigger.fleet" "cloudflare_workers_route.api"; do
             if terraform state show "$resource" >/dev/null 2>&1; then
               echo "✓ $resource"
             else
