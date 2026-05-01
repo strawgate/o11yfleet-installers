@@ -191,6 +191,8 @@
           "O11YFLEET_SEED_TENANT_USER_PASSWORD",
           "CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID",
           "CLOUDFLARE_ANALYTICS_SQL_API_TOKEN",
+          "GITHUB_APP_CLIENT_ID",
+          "GITHUB_APP_CLIENT_SECRET",
         ],
       },
       "d1_databases": [
