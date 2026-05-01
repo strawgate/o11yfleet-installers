@@ -139,6 +139,9 @@ variable "worker_inherited_binding_names" {
     "O11YFLEET_SEED_TENANT_USER_EMAIL",
     "O11YFLEET_SEED_TENANT_USER_PASSWORD",
     "CLOUDFLARE_USAGE_API_TOKEN",
+    "RESEND_API_KEY",
+    "EMAIL_FROM_ADDRESS",
+    "O11YFLEET_AUTO_APPROVE_SIGNUPS",
   ]
 
   validation {
@@ -154,6 +157,24 @@ variable "worker_inherited_binding_names" {
     ])
     error_message = "worker_inherited_binding_names must include the required Worker secrets listed in apps/worker/wrangler.jsonc secrets.required."
   }
+}
+
+variable "enable_auto_approve_signups" {
+  type        = bool
+  description = "When true, new tenant signups are auto-approved without admin review. Set to false for soft-launch gating."
+  default     = false
+}
+
+variable "resend_api_key_secret_name" {
+  type        = string
+  description = "Secret name in Cloudflare Workers secrets for the Resend API key. Defaults to auto-generated based on environment."
+  default     = null
+}
+
+variable "email_from_address" {
+  type        = string
+  description = "From address for outgoing emails (e.g. 'O11yFleet <noreply@yourdomain.com>')."
+  default     = null
 }
 
 variable "worker_durable_object_migration_tag" {
@@ -172,28 +193,6 @@ variable "worker_include_durable_object_migration" {
   type        = bool
   description = "Whether Terraform-managed Worker versions apply the ConfigDurableObject class migration. Enable only for the first-time Durable Object migration bootstrap."
   default     = false
-}
-
-variable "worker_queue_consumer_batch_size" {
-  type        = number
-  description = "Maximum number of messages delivered to the Worker queue consumer per batch."
-  default     = 100
-
-  validation {
-    condition     = var.worker_queue_consumer_batch_size >= 1 && var.worker_queue_consumer_batch_size <= 100 && floor(var.worker_queue_consumer_batch_size) == var.worker_queue_consumer_batch_size
-    error_message = "worker_queue_consumer_batch_size must be an integer between 1 and 100."
-  }
-}
-
-variable "worker_queue_consumer_max_wait_time_ms" {
-  type        = number
-  description = "Maximum time the queue waits for a batch to fill before invoking the Worker, in milliseconds."
-  default     = 5000
-
-  validation {
-    condition     = var.worker_queue_consumer_max_wait_time_ms >= 0 && var.worker_queue_consumer_max_wait_time_ms <= 60000 && floor(var.worker_queue_consumer_max_wait_time_ms) == var.worker_queue_consumer_max_wait_time_ms
-    error_message = "worker_queue_consumer_max_wait_time_ms must be an integer between 0 and 60000."
-  }
 }
 
 variable "site_worker_script_name" {
@@ -279,12 +278,6 @@ variable "r2_bucket_name" {
   default     = null
 }
 
-variable "queue_name" {
-  type        = string
-  description = "Override Queue name, mainly for importing existing production resources."
-  default     = null
-}
-
 variable "site_domain" {
   type        = string
   description = "Override marketing/docs custom domain."
@@ -307,51 +300,6 @@ variable "api_domain" {
   type        = string
   description = "Override API custom domain."
   default     = null
-}
-
-variable "enable_admin_access" {
-  type        = bool
-  description = "Whether Terraform should manage a Cloudflare Access application and allow policy for the admin domain."
-  default     = false
-}
-
-variable "admin_access_allowed_emails" {
-  type        = list(string)
-  description = "Explicit email addresses allowed through Cloudflare Access for the admin app."
-  default     = []
-
-  validation {
-    condition     = alltrue([for email in var.admin_access_allowed_emails : length(trimspace(email)) > 0 && email == trimspace(email)])
-    error_message = "admin_access_allowed_emails entries must not be blank or padded with whitespace."
-  }
-}
-
-variable "admin_access_allowed_email_domains" {
-  type        = list(string)
-  description = "Email domains allowed through Cloudflare Access for the admin app."
-  default     = []
-
-  validation {
-    condition     = alltrue([for domain in var.admin_access_allowed_email_domains : length(trimspace(domain)) > 0 && domain == trimspace(domain)])
-    error_message = "admin_access_allowed_email_domains entries must not be blank or padded with whitespace."
-  }
-}
-
-variable "admin_access_session_duration" {
-  type        = string
-  description = "Cloudflare Access admin session duration."
-  default     = "12h"
-}
-
-check "admin_access_has_identity_rule" {
-  assert {
-    condition = (
-      !var.enable_admin_access ||
-      length(local.admin_access_allowed_emails) > 0 ||
-      length(local.admin_access_allowed_email_domains) > 0
-    )
-    error_message = "enable_admin_access requires admin_access_allowed_emails or admin_access_allowed_email_domains."
-  }
 }
 
 check "worker_deployment_has_bundle" {

@@ -8,6 +8,3 @@ environment           = "prod"
 # Existing production data-bearing resources. Import these before first apply.
 d1_database_name = "fp-db"
 r2_bucket_name   = "fp-configs"
-
-# Enable after the Access identity allow-list is final.
-enable_admin_access = false

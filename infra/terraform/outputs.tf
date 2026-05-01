@@ -18,16 +18,6 @@ output "r2_bucket_id" {
   description = "R2 bucket Terraform/provider ID."
 }
 
-output "queue_name" {
-  value       = cloudflare_queue.events.queue_name
-  description = "Queue name for Wrangler FP_EVENTS producer and consumer bindings."
-}
-
-output "queue_id" {
-  value       = cloudflare_queue.events.queue_id
-  description = "Queue Terraform/provider ID."
-}
-
 output "api_domain" {
   value       = local.api_domain
   description = "API hostname routed to the Worker."
@@ -63,12 +53,3 @@ output "site_surfaces" {
   description = "Static site surfaces routed to the static-assets Worker."
 }
 
-output "admin_access_application_id" {
-  value       = var.enable_admin_access ? cloudflare_zero_trust_access_application.admin[0].id : null
-  description = "Cloudflare Access application ID for admin."
-}
-
-output "admin_access_aud" {
-  value       = var.enable_admin_access ? cloudflare_zero_trust_access_application.admin[0].aud : null
-  description = "Cloudflare Access AUD tag for admin."
-}

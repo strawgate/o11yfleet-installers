@@ -521,12 +521,10 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
     fi
     targets=(
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker.site
-        -target=cloudflare_zero_trust_access_application.admin
     )
     cd infra/terraform
     terraform plan "${refresh_arg[@]}" "${targets[@]}" -var-file=envs/{{env}}.tfvars
@@ -555,8 +553,6 @@ tf-required-rollout-state:
 
 # Production imports required before enabling provider v5 apply paths. These
 # include the already-routed production Worker traffic resources.
-# Note: cloudflare_queue_consumer.events does not support import in provider v5
-# and will be created/managed by Terraform apply.
 tf-required-imports:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -612,12 +608,10 @@ tf-apply env="prod": (tf-init-remote env)
     set -euo pipefail
     targets=(
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker.site
-        -target=cloudflare_zero_trust_access_application.admin
     )
     cd infra/terraform
     terraform apply "${targets[@]}" -var-file=envs/{{env}}.tfvars -auto-approve
@@ -1004,18 +998,16 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
 
 # Terraform apply for long-lived control-plane resources only. Deployment
 # resources are intentionally handled by tf-apply-worker and tf-apply-site.
+# Note: D1 database excluded due to provider API issues
 tf-apply-control-plane env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker.site
-        -target=cloudflare_zero_trust_access_application.admin
     )
     cd infra/terraform
     terraform apply "${targets[@]}" -var-file=envs/{{env}}.tfvars -auto-approve
@@ -1035,16 +1027,13 @@ tf-plan-worker env="prod": (tf-init-remote env)
     fi
     cd infra/terraform
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker_version.fleet
         -target=cloudflare_workers_deployment.fleet
         -target=cloudflare_workers_cron_trigger.fleet
         -target=cloudflare_workers_route.api
-        -target=cloudflare_queue_consumer.events
     )
     terraform plan \
         "${targets[@]}" \
@@ -1070,9 +1059,7 @@ tf-apply-worker-do-migration env="prod": (tf-init-remote env)
     fi
     cd infra/terraform
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker_version.fleet
         -target=cloudflare_workers_deployment.fleet
@@ -1184,14 +1171,12 @@ tf-apply-worker env="prod": (tf-init-remote env)
     cd infra/terraform
     targets=(
         -target=cloudflare_r2_bucket.configs
-        -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
         -target=cloudflare_worker.fleet
         -target=cloudflare_worker_version.fleet
         -target=cloudflare_workers_deployment.fleet
         -target=cloudflare_workers_cron_trigger.fleet
         -target=cloudflare_workers_route.api
-        -target=cloudflare_queue_consumer.events
     )
     terraform apply \
         "${targets[@]}" \
