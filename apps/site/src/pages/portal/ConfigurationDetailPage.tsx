@@ -91,9 +91,9 @@ export default function ConfigurationDetailPage() {
   const rollout = useRolloutConfig(id ?? "");
 
   const c = config.data;
-  const agentList = agents.data?.agents ?? EMPTY_AGENTS;
-  const versionList = versions.data ?? EMPTY_VERSIONS;
-  const tokenList = tokens.data ?? EMPTY_TOKENS;
+  const agentList = useMemo(() => agents.data?.agents ?? EMPTY_AGENTS, [agents.data?.agents]);
+  const versionList = useMemo(() => versions.data ?? EMPTY_VERSIONS, [versions.data]);
+  const tokenList = useMemo(() => tokens.data ?? EMPTY_TOKENS, [tokens.data]);
   const model = useMemo(
     () =>
       c

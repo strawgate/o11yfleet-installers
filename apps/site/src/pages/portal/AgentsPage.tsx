@@ -57,7 +57,7 @@ function AgentSection({
     q: filter || undefined,
     enabled: expanded,
   });
-  const agents = agentsPage?.agents ?? EMPTY_AGENTS;
+  const agents = useMemo(() => agentsPage?.agents ?? EMPTY_AGENTS, [agentsPage?.agents]);
   const stats = useConfigurationStats(config.stats || !expanded ? undefined : config.id);
   const statsData = config.stats ?? stats.data;
   const insightSurface = insightSurfaces.portalAgent;
