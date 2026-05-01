@@ -520,7 +520,6 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
         refresh_arg=(-refresh=false)
     fi
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
@@ -1183,7 +1182,6 @@ tf-apply-worker env="prod": (tf-init-remote env)
     fi
     cd infra/terraform
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
