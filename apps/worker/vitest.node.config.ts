@@ -8,6 +8,7 @@ export default defineConfig({
       "test/yaml-validation.test.ts",
       "test/errors.test.ts",
       "test/data-source-policy.test.ts",
+      "test/text-diff.test.ts",
     ],
   },
 });

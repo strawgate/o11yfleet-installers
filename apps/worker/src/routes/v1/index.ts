@@ -824,11 +824,34 @@ function summarizeTextDiff(previous: string, latest: string) {
     previous_line_count: previousLines.length,
     latest_line_count: latestLines.length,
     line_count_delta: latestLines.length - previousLines.length,
-    size_bytes_delta:
-      new TextEncoder().encode(latest).byteLength - new TextEncoder().encode(previous).byteLength,
+    size_bytes_delta: utf8ByteLength(latest) - utf8ByteLength(previous),
     added_lines: addedLines,
     removed_lines: removedLines,
   };
+}
+
+/**
+ * Counts UTF-8 byte length without allocating a Uint8Array.
+ * Avoids the heap allocation of `new TextEncoder().encode(str)` which copies
+ * the full string into a Uint8Array just to read `.byteLength`.
+ */
+function utf8ByteLength(str: string): number {
+  let len = 0;
+  for (let i = 0; i < str.length; i++) {
+    const code = str.charCodeAt(i);
+    if (code < 0x80) {
+      len += 1;
+    } else if (code < 0x800) {
+      len += 2;
+    } else if (code < 0xd800 || code > 0xdfff) {
+      len += 3;
+    } else {
+      // Surrogate pair: consume both code units
+      i++;
+      len += 4;
+    }
+  }
+  return len;
 }
 
 function orderedLineDiffCounts(previousLines: string[], latestLines: string[]) {
