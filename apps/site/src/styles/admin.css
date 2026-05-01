@@ -312,6 +312,66 @@
   border-radius: 0;
 }
 
+/* Table buttons */
+.do-table-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.do-table-btn {
+  border: 1px solid var(--line);
+  background: var(--bg-elev-2);
+  color: var(--fg-2);
+  padding: 6px 12px;
+  font-size: 12px;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease;
+}
+
+.do-table-btn:hover {
+  border-color: var(--accent-line);
+  background: var(--accent-soft);
+  color: var(--fg);
+}
+
+.do-table-btn.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* Results summary */
+.do-results-summary {
+  margin-bottom: 12px;
+  color: var(--fg-2);
+  font-size: 13px;
+}
+
+/* Results table */
+.do-results-table {
+  max-height: 600px;
+  overflow: auto;
+}
+
+.do-results-table .do-cell {
+  display: block;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+.do-results-table .do-cell.is-null {
+  color: var(--fg-3);
+  font-style: italic;
+}
+
 .support-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
