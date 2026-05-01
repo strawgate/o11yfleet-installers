@@ -57,7 +57,9 @@ export default function EnterprisePage() {
           <div className="grid-3">
             {features.map((f) => (
               <div key={f.title} className="card card-pad">
-                <div style={{ fontSize: "2rem", marginBottom: 12 }}>{f.icon}</div>
+                <div aria-hidden="true" style={{ fontSize: "2rem", marginBottom: 12 }}>
+                  {f.icon}
+                </div>
                 <h3>{f.title}</h3>
                 <p>{f.desc}</p>
               </div>

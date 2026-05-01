@@ -61,7 +61,14 @@ export default function BillingPage() {
                 {usedConfigs} / {maxConfigsLabel}
               </span>
             </div>
-            <div className="bar mt-2">
+            <div
+              className="bar mt-2"
+              role="progressbar"
+              aria-valuenow={configPct}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label={`${usedConfigs} of ${maxConfigsLabel} policies used`}
+            >
               <i style={{ width: `${configPct}%` }} />
             </div>
           </div>

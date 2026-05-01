@@ -185,7 +185,9 @@ export default function OverviewPage() {
               <th>Collectors</th>
               <th>Desired config</th>
               <th>Updated</th>
-              <th />
+              <th>
+                <span className="sr-only">Open</span>
+              </th>
             </tr>
           </thead>
           <tbody>

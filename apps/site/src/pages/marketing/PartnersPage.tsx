@@ -207,6 +207,7 @@ export default function PartnersPage() {
               >
                 <span className="eyebrow">{tier.tagline}</span>
                 <h3 style={{ marginTop: 8 }}>{tier.name}</h3>
+                {tier.featured && <span className="sr-only">Recommended</span>}
                 <ul style={{ marginTop: 16, paddingLeft: 18, lineHeight: 1.7 }}>
                   {tier.items.map((item) => (
                     <li key={item}>{item}</li>

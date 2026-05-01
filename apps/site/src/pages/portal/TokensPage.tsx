@@ -88,7 +88,9 @@ function TokenSection({ config }: { config: Configuration }) {
               <th>Label</th>
               <th>Status</th>
               <th>Created</th>
-              <th />
+              <th>
+                <span className="sr-only">Open</span>
+              </th>
             </tr>
           </thead>
           <tbody>

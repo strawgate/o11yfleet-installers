@@ -8,6 +8,7 @@ export function PlanTag({ plan }: { plan: string }) {
       style={isPremium ? { color: "var(--accent)", borderColor: "var(--accent-line)" } : undefined}
     >
       {planLabel(plan)}
+      {isPremium && <span className="sr-only"> (premium)</span>}
     </span>
   );
 }
