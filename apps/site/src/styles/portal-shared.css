@@ -560,6 +560,11 @@ body::before {
   color: var(--fg);
   font: inherit;
 }
+.cmd-search input:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
 .cmd-search kbd {
   border: 1px solid var(--line);
   border-radius: 4px;
@@ -1676,6 +1681,10 @@ body.auth {
 }
 .inline-edit:hover {
   border-color: var(--line);
+}
+.inline-edit:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 .inline-edit:focus {
   border-color: var(--accent);

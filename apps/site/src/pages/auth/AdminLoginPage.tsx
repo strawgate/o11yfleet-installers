@@ -40,10 +40,10 @@ export default function AdminLoginPage() {
           Sign in with an O11yFleet admin account to access the internal operations console.
           Activity is logged.
         </p>
-        <div className="auth-notice">
+        <aside className="auth-notice" aria-label="Notice">
           This page is for O11yFleet employees. Tenant workspace users should use the regular
           workspace sign-in page.
-        </div>
+        </aside>
 
         {error && (
           <div

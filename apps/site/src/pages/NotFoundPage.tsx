@@ -8,7 +8,8 @@ export default function NotFoundPage() {
   return (
     <div className="auth-shell" style={{ minHeight: "100vh" }}>
       <div className="auth-card" style={{ textAlign: "center" }}>
-        <h1 style={{ fontSize: "4rem", fontWeight: 700, margin: 0 }}>404</h1>
+        <p style={{ fontSize: "4rem", fontWeight: 700, margin: "0 0 8px" }}>404</p>
+        <h1>Page not found</h1>
         <p className="sub">
           The page you&rsquo;re looking for doesn&rsquo;t exist or has been moved.
         </p>
