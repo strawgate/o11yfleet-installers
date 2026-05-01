@@ -854,34 +854,46 @@ function utf8ByteLength(str: string): number {
   return len;
 }
 
+/**
+ * Computes the count of added and removed lines between two YAML texts.
+ *
+ * Uses a hybrid approach to balance accuracy and performance:
+ * - For small diffs (middle section ≤200 lines each): exact LCS algorithm
+ * - For large diffs: reports all middle lines as changed to avoid O(N×M) worst case
+ *
+ * The common prefix/suffix are excluded from the change count since they're
+ * unchanged between the two versions.
+ */
 function orderedLineDiffCounts(previousLines: string[], latestLines: string[]) {
   const prefixLength = commonPrefixLength(previousLines, latestLines);
   const suffixLength = commonSuffixLength(previousLines, latestLines, prefixLength);
   const previousMiddle = previousLines.slice(prefixLength, previousLines.length - suffixLength);
   const latestMiddle = latestLines.slice(prefixLength, latestLines.length - suffixLength);
-  const commonMiddleLines = longestCommonSubsequenceLength(previousMiddle, latestMiddle);
+
+  // For small middle sections, use exact LCS which is fast enough.
+  // For large sections, fall back to a simpler approximation to avoid O(N×M) worst case.
+  // The threshold of 200 was chosen to keep worst-case under ~40K operations
+  // while still providing accurate results for typical diffs.
+  if (previousMiddle.length <= 200 && latestMiddle.length <= 200) {
+    const commonMiddleLines = longestCommonSubsequenceLength(previousMiddle, latestMiddle);
+    return {
+      addedLines: latestMiddle.length - commonMiddleLines,
+      removedLines: previousMiddle.length - commonMiddleLines,
+    };
+  }
+
+  // For large diffs, report the middle sections as changed without exact counts.
+  // This is a performance trade-off: we lose precision but avoid blocking the worker.
   return {
-    addedLines: latestMiddle.length - commonMiddleLines,
-    removedLines: previousMiddle.length - commonMiddleLines,
+    addedLines: latestMiddle.length,
+    removedLines: previousMiddle.length,
   };
 }
 
-function commonPrefixLength(left: string[], right: string[]) {
-  const max = Math.min(left.length, right.length);
-  let index = 0;
-  while (index < max && left[index] === right[index]) index += 1;
-  return index;
-}
-
-function commonSuffixLength(left: string[], right: string[], prefixLength: number) {
-  const max = Math.min(left.length, right.length) - prefixLength;
-  let count = 0;
-  while (count < max && left[left.length - 1 - count] === right[right.length - 1 - count]) {
-    count += 1;
-  }
-  return count;
-}
-
+/**
+ * Standard LCS using DP. O(N×M) time, O(min(N,M)) space.
+ * For small arrays (<=200 elements), this is fast enough (~40K ops worst case).
+ */
 function longestCommonSubsequenceLength(left: string[], right: string[]): number {
   const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
   let previous = new Uint32Array(shorter.length + 1);
@@ -900,6 +912,22 @@ function longestCommonSubsequenceLength(left: string[], right: string[]): number
   }
 
   return previous[shorter.length] ?? 0;
+}
+
+function commonPrefixLength(left: string[], right: string[]) {
+  const max = Math.min(left.length, right.length);
+  let index = 0;
+  while (index < max && left[index] === right[index]) index += 1;
+  return index;
+}
+
+function commonSuffixLength(left: string[], right: string[], prefixLength: number) {
+  const max = Math.min(left.length, right.length) - prefixLength;
+  let count = 0;
+  while (count < max && left[left.length - 1 - count] === right[right.length - 1 - count]) {
+    count += 1;
+  }
+  return count;
 }
 
 function stringValue(value: unknown): string | null {
