@@ -166,6 +166,67 @@ test.describe("portal smoke coverage", () => {
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
+
+  test("portal agents keeps summaries cheap until a collector table is opened", async ({
+    page,
+  }) => {
+    const runtime = collectRuntimeErrors(page);
+    let agentRequests = 0;
+
+    await mockPortalSession(page);
+    await mockPortalOverview(page);
+    await page.route(`${API_URL}/api/v1/configurations/config-1/agents?*`, async (route) => {
+      agentRequests += 1;
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          agents: [
+            {
+              instance_uid: "agent-prod-1",
+              hostname: "collector-1",
+              status: "connected",
+              healthy: true,
+              capabilities: 2,
+              current_config_hash: "abcdef1234567890",
+              last_seen_at: "2026-04-28T20:00:00.000Z",
+            },
+            {
+              instance_uid: "agent-prod-2",
+              hostname: "collector-2",
+              status: "degraded",
+              healthy: false,
+              capabilities: 2,
+              current_config_hash: "stalehash",
+              last_seen_at: "2026-04-28T19:58:00.000Z",
+            },
+          ],
+          pagination: { has_more: false },
+        }),
+      });
+    });
+
+    await page.goto(`${UI_URL}/portal/agents?api=${encodeURIComponent(API_URL)}`);
+
+    await expect(page.getByRole("heading", { name: "Collectors", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Total" }).getByText("4")).toBeVisible();
+    await expect(page.getByText("Collector rows load only when you open")).toBeVisible();
+    expect(agentRequests).toBe(0);
+
+    await page.getByRole("button", { name: "View collectors" }).click();
+
+    await expect(
+      page.getByRole("textbox", { name: "Filter agents for prod-collectors" }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "agent-prod-1" })).toBeVisible();
+    await expect(page.getByText("collector-2")).toBeVisible();
+    await expect(page.getByText("drift", { exact: true })).toBeVisible();
+    expect(agentRequests).toBe(1);
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
 });
 
 test.describe("admin operations coverage", () => {

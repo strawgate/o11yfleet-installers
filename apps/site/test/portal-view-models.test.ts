@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import type { Overview } from "../src/api/hooks/portal";
+import type { Agent, Overview } from "../src/api/hooks/portal";
 import { buildBillingView } from "../src/pages/portal/billing-model";
+import {
+  agentConnectionTone,
+  agentHealthView,
+  agentSyncView,
+} from "../src/pages/portal/agent-view-model";
 import { initials, memberDisplayName, roleTone } from "../src/pages/portal/team-model";
 
 function overviewFixture(overrides: Partial<Overview> = {}): Overview {
@@ -57,4 +62,44 @@ test("team view helpers normalize display names, initials, and role tones", () =
   assert.equal(roleTone("owner"), "warn");
   assert.equal(roleTone("operator"), "ok");
   assert.equal(roleTone("viewer"), "neutral");
+});
+
+test("agent view helpers normalize status, health, and config sync labels", () => {
+  const baseAgent = {
+    instance_uid: "agent_1",
+    status: "connected",
+    healthy: true,
+    capabilities: 0x02,
+    current_config_hash: "abcdef1234567890",
+  } as Agent;
+
+  assert.equal(agentConnectionTone("connected"), "ok");
+  assert.equal(agentConnectionTone("degraded"), "warn");
+  assert.equal(agentConnectionTone("disconnected"), "error");
+
+  assert.deepEqual(agentHealthView(baseAgent), { label: "healthy", tone: "ok" });
+  assert.deepEqual(agentHealthView({ ...baseAgent, healthy: false }), {
+    label: "unhealthy",
+    tone: "error",
+  });
+  assert.deepEqual(agentHealthView({ ...baseAgent, healthy: undefined }), {
+    label: "unknown",
+    tone: "neutral",
+  });
+
+  assert.deepEqual(agentSyncView(baseAgent, "abcdef1234567890"), {
+    label: "in sync",
+    tone: "ok",
+    hashLabel: "abcdef123456…",
+  });
+  assert.deepEqual(agentSyncView(baseAgent, "different"), {
+    label: "drift",
+    tone: "warn",
+    hashLabel: "abcdef123456…",
+  });
+  assert.deepEqual(agentSyncView({ ...baseAgent, capabilities: 0 }, "different"), {
+    label: "not reported",
+    tone: "neutral",
+    hashLabel: "abcdef123456…",
+  });
 });

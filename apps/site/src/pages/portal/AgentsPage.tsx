@@ -9,23 +9,26 @@ import {
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel } from "../../components/ai";
-import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
-import {
-  agentCurrentHash,
-  agentHasDrift,
-  agentHost,
-  agentIsHealthy,
-  agentLastSeen,
-  agentUid,
-  hashLabel,
-} from "../../utils/agents";
+import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
 import { configurationAgentMetrics } from "../../utils/config-stats";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../../ai/page-context";
+import {
+  DataTable,
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  type ColumnDef,
+} from "@/components/app";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { agentConnectionTone, agentHealthView, agentSyncView } from "./agent-view-model";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 const EMPTY_AGENTS: Agent[] = [];
@@ -59,7 +62,6 @@ function AgentSection({
   const stats = useConfigurationStats(config.stats || !expanded ? undefined : config.id);
   const statsData = config.stats ?? stats.data;
   const list = agents;
-  const visible = list;
   const fallbackHash = config.current_config_hash ?? undefined;
   const agentMetrics = useMemo(
     () => configurationAgentMetrics(statsData, agents, fallbackHash),
@@ -76,6 +78,8 @@ function AgentSection({
   const hasDriftStats = typeof statsData?.drifted_agents === "number";
   const aggregateStatsReady = Boolean(config.stats) || (stats.isFetched && !stats.error);
   const sectionId = `agents-${config.id}`;
+  const filterId = `agents-filter-${config.id}`;
+  const columns = useMemo(() => agentColumns(config.id, desiredHash), [config.id, desiredHash]);
   const guidanceTargets = useMemo(
     () => [
       insightTarget(insightSurface, {
@@ -151,18 +155,19 @@ function AgentSection({
             pageTable(
               "agents",
               "Visible collectors",
-              visible.map((agent) => ({
-                id: agentUid(agent),
-                hostname: agentHost(agent),
-                status: agent.status ?? null,
-                health: agentIsHealthy(agent),
-                drift:
-                  Number(agent.capabilities ?? 0) & 0x02
-                    ? (agent.is_drifted ?? agentHasDrift(agent, desiredHash))
-                    : false,
-                current_hash: agentCurrentHash(agent),
-                last_seen: agentLastSeen(agent) ?? null,
-              })),
+              list.map((agent) => {
+                const health = agentHealthView(agent);
+                const sync = agentSyncView(agent, desiredHash);
+                return {
+                  id: agentUid(agent),
+                  hostname: agentHost(agent),
+                  status: agent.status ?? null,
+                  health: health.label,
+                  config_sync: sync.label,
+                  current_hash: sync.hashLabel,
+                  last_seen: agentLastSeen(agent) ?? null,
+                };
+              }),
               { totalRows: list.length, maxRows: 20 },
             ),
           ],
@@ -196,66 +201,67 @@ function AgentSection({
   const guidance = usePortalGuidance(guidanceRequest);
 
   return (
-    <div className="dt-card mt-6">
-      <div className="dt-toolbar">
-        <h3>
-          {config.name}{" "}
-          <span className="count">
+    <section className="mt-6 rounded-md border border-border bg-card">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
+        <div>
+          <h3 className="text-sm font-medium text-foreground">{config.name}</h3>
+          <p className="mt-1 text-xs text-muted-foreground">
             {expanded && list.length !== agentMetrics.totalAgents
               ? `${list.length} visible / ${agentMetrics.totalAgents} total`
               : `${agentMetrics.totalAgents} total`}
-          </span>
-        </h3>
-        <div className="spacer" />
-        {expanded ? (
-          <input
-            className="input"
-            aria-label={`Filter agents for ${config.name}`}
-            placeholder="Filter agents…"
-            value={filter}
-            onChange={(e) => setFilterAndResetCursor(e.target.value)}
-          />
-        ) : null}
-        <button
-          className={expanded ? "btn btn-ghost btn-sm" : "btn btn-secondary btn-sm"}
-          type="button"
-          aria-expanded={expanded}
-          aria-controls={sectionId}
-          onClick={onToggle}
-        >
-          {expanded ? "Hide collectors" : "View collectors"}
-        </button>
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          {expanded ? (
+            <label className="grid gap-1">
+              <span className="sr-only">Filter agents for {config.name}</span>
+              <Input
+                id={filterId}
+                aria-label={`Filter agents for ${config.name}`}
+                placeholder="Filter agents…"
+                value={filter}
+                onChange={(e) => setFilterAndResetCursor(e.target.value)}
+              />
+            </label>
+          ) : null}
+          <Button
+            variant={expanded ? "ghost" : "secondary"}
+            size="sm"
+            aria-expanded={expanded}
+            aria-controls={sectionId}
+            onClick={onToggle}
+          >
+            {expanded ? "Hide collectors" : "View collectors"}
+          </Button>
+        </div>
       </div>
 
       {!expanded ? (
-        <div className="agent-summary" id={sectionId}>
-          <div className="agent-summary-grid" aria-label={`${config.name} collector summary`}>
-            <div>
-              <span className="meta">Total</span>
-              <strong>{hasSnapshotStats ? agentMetrics.totalAgents.toLocaleString() : "—"}</strong>
-            </div>
-            <div>
-              <span className="meta">Connected</span>
-              <strong>{hasSnapshotStats ? connectedCount.toLocaleString() : "—"}</strong>
-            </div>
-            <div>
-              <span className="meta">Healthy</span>
-              <strong>{hasSnapshotStats ? healthyCount.toLocaleString() : "—"}</strong>
-            </div>
+        <div id={sectionId} className="grid gap-4 p-4">
+          <div
+            className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]"
+            aria-label={`${config.name} collector summary`}
+          >
+            <MetricCard
+              label="Total"
+              value={hasSnapshotStats ? agentMetrics.totalAgents.toLocaleString() : "—"}
+            />
+            <MetricCard
+              label="Connected"
+              value={hasSnapshotStats ? connectedCount.toLocaleString() : "—"}
+            />
+            <MetricCard
+              label="Healthy"
+              value={hasSnapshotStats ? healthyCount.toLocaleString() : "—"}
+            />
             {hasDegradedStats ? (
-              <div>
-                <span className="meta">Degraded</span>
-                <strong>{degradedCount.toLocaleString()}</strong>
-              </div>
+              <MetricCard label="Degraded" value={degradedCount.toLocaleString()} tone="warn" />
             ) : null}
             {hasDriftStats ? (
-              <div>
-                <span className="meta">Drifted</span>
-                <strong>{driftedCount.toLocaleString()}</strong>
-              </div>
+              <MetricCard label="Drifted" value={driftedCount.toLocaleString()} tone="warn" />
             ) : null}
           </div>
-          <p className="meta">
+          <p className="text-sm text-muted-foreground">
             {hasSnapshotStats
               ? "Summary uses the fleet metrics snapshot. Collector rows load only when you open this configuration."
               : "Metrics snapshot unavailable. Open this configuration to query its live agent page."}
@@ -276,116 +282,116 @@ function AgentSection({
             <ErrorState error={error} />
           ) : (
             <>
-              <table className="dt">
-                <thead>
-                  <tr>
-                    <th>Instance UID</th>
-                    <th>Hostname</th>
-                    <th>Status</th>
-                    <th>Health</th>
-                    <th>Config sync</th>
-                    <th>Last seen</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {list.length === 0 ? (
-                    <tr>
-                      <td colSpan={6}>
-                        <EmptyState
-                          icon="plug"
-                          title={filter ? "No agents match your filter" : "No agents connected"}
-                          description={
-                            filter
-                              ? "Clear the filter to see all collectors for this configuration."
-                              : "Enroll a collector from the configuration page to start reporting status."
-                          }
-                        >
-                          {!filter ? (
-                            <Link
-                              to={`/portal/configurations/${config.id}`}
-                              className="btn btn-primary btn-sm"
-                            >
-                              Enroll agent
-                            </Link>
-                          ) : null}
-                        </EmptyState>
-                      </td>
-                    </tr>
-                  ) : (
-                    visible.map((a) => {
-                      const uid = agentUid(a);
-                      const healthy = agentIsHealthy(a);
-                      const hasConfigCap = Boolean(Number(a.capabilities ?? 0) & 0x02);
-                      const drift = hasConfigCap
-                        ? (a.is_drifted ?? agentHasDrift(a, desiredHash))
-                        : false;
-                      return (
-                        <tr key={uid} className="clickable">
-                          <td className="mono-cell">
-                            <Link to={`/portal/agents/${config.id}/${uid}`}>{uid}</Link>
-                          </td>
-                          <td>{agentHost(a)}</td>
-                          <td>
-                            <span
-                              className={`tag ${
-                                a.status === "connected"
-                                  ? "tag-ok"
-                                  : a.status === "degraded"
-                                    ? "tag-warn"
-                                    : "tag-err"
-                              }`}
-                            >
-                              {a.status ?? "unknown"}
-                            </span>
-                          </td>
-                          <td>
-                            <span
-                              className={`tag ${healthy === false ? "tag-err" : healthy === true ? "tag-ok" : ""}`}
-                            >
-                              {healthy === false
-                                ? "unhealthy"
-                                : healthy === true
-                                  ? "healthy"
-                                  : "unknown"}
-                            </span>
-                          </td>
-                          <td>
-                            <span className={`tag ${drift ? "tag-warn" : ""}`}>
-                              {drift ? "drift" : agentCurrentHash(a) ? "in sync" : "not reported"}
-                            </span>
-                            <span className="mono-cell" style={{ marginLeft: 6 }}>
-                              {hashLabel(agentCurrentHash(a))}
-                            </span>
-                          </td>
-                          <td className="meta">{relTime(agentLastSeen(a))}</td>
-                        </tr>
-                      );
-                    })
-                  )}
-                </tbody>
-              </table>
-              <div className="meta" style={{ padding: "12px 16px", display: "flex", gap: 12 }}>
-                <button
-                  className="btn btn-ghost btn-sm"
+              <DataTable
+                columns={columns}
+                data={list}
+                getRowId={(agent) => agentUid(agent)}
+                emptyState={
+                  <EmptyState
+                    icon="plug"
+                    title={filter ? "No agents match your filter" : "No agents connected"}
+                    description={
+                      filter
+                        ? "Clear the filter to see all collectors for this configuration."
+                        : "Enroll a collector from the configuration page to start reporting status."
+                    }
+                  >
+                    {!filter ? (
+                      <Button asChild size="sm">
+                        <Link to={`/portal/configurations/${config.id}`}>Enroll agent</Link>
+                      </Button>
+                    ) : null}
+                  </EmptyState>
+                }
+              />
+              <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
                   disabled={!cursor}
                   onClick={() => setCursor(undefined)}
                 >
                   First page
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={!agentsPage?.pagination?.has_more}
                   onClick={() => setCursor(agentsPage?.pagination?.next_cursor ?? undefined)}
                 >
                   Next page
-                </button>
+                </Button>
               </div>
             </>
           )}
         </div>
       )}
-    </div>
+    </section>
   );
+}
+
+function agentColumns(configId: string, desiredHash: string | null): ColumnDef<Agent>[] {
+  return [
+    {
+      id: "instance_uid",
+      header: "Instance UID",
+      cell: ({ row }) => {
+        const uid = agentUid(row.original);
+        return (
+          <Link
+            className="font-mono text-xs text-foreground hover:text-primary"
+            to={`/portal/agents/${configId}/${uid}`}
+          >
+            {uid}
+          </Link>
+        );
+      },
+    },
+    {
+      id: "hostname",
+      header: "Hostname",
+      cell: ({ row }) => agentHost(row.original),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <StatusBadge tone={agentConnectionTone(row.original.status)}>
+          {row.original.status ?? "unknown"}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "health",
+      header: "Health",
+      cell: ({ row }) => {
+        const health = agentHealthView(row.original);
+        return <StatusBadge tone={health.tone}>{health.label}</StatusBadge>;
+      },
+    },
+    {
+      id: "config_sync",
+      header: "Config sync",
+      cell: ({ row }) => {
+        const sync = agentSyncView(row.original, desiredHash);
+        return (
+          <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <StatusBadge tone={sync.tone}>{sync.label}</StatusBadge>
+            <span className="font-mono text-xs text-muted-foreground">{sync.hashLabel}</span>
+          </div>
+        );
+      },
+    },
+    {
+      id: "last_seen",
+      header: "Last seen",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {relTime(agentLastSeen(row.original))}
+        </span>
+      ),
+    },
+  ];
 }
 
 function hasMaterialAgentGuidanceSignal(input: {
@@ -418,33 +424,27 @@ export default function AgentsPage() {
   const cfgList = overview.data?.configurations ?? [];
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <div>
-          <h1>Collectors</h1>
-          <p className="meta">
-            Each row is one managed OpAMP agent identity for a running OpenTelemetry Collector.
-            Status is connectivity; health is collector runtime state; drift is config hash
-            mismatch.
-          </p>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Collectors"
+        description="Each row is one managed OpAMP agent identity for a running OpenTelemetry Collector. Status is connectivity; health is collector runtime state; drift is config hash mismatch."
+      />
 
       {cfgList.length === 0 ? (
-        <div className="card card-pad">
+        <section className="rounded-md border border-border bg-card">
           <EmptyState
             icon="file"
             title="No configurations yet"
             description="Create a configuration first, then enroll collectors into it."
           >
-            <Link to="/portal/configurations" className="btn btn-primary btn-sm">
-              Create configuration
-            </Link>
-            <Link to="/portal/getting-started" className="btn btn-ghost btn-sm">
-              Guided setup
-            </Link>
+            <Button asChild size="sm">
+              <Link to="/portal/configurations">Create configuration</Link>
+            </Button>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/portal/getting-started">Guided setup</Link>
+            </Button>
           </EmptyState>
-        </div>
+        </section>
       ) : (
         cfgList.map((c) => (
           <AgentSection
@@ -455,6 +455,6 @@ export default function AgentsPage() {
           />
         ))
       )}
-    </div>
+    </PageShell>
   );
 }

@@ -146,7 +146,7 @@ test("[C7] AgentsPage filter input has aria-label or <label>", () => {
   //   - a sibling <label> whose visible text or htmlFor associates it (we
   //     accept any <label> that contains the text "Filter agents", since
   //     that's the only label such an element would have in this file).
-  const inputBlock = src.match(/<input\b[^>]*placeholder="Filter agents…"[^>]*\/>/s);
+  const inputBlock = src.match(/<(?:input|Input)\b[^>]*placeholder="Filter agents…"[^>]*\/>/s);
   assert.ok(inputBlock, "could not locate the agents filter input");
   const inputMarkup = inputBlock![0];
   // Reject empty / whitespace-only programmatic names: aria-label="" and
@@ -181,10 +181,10 @@ test("[C7] AgentsPage filter input has aria-label or <label>", () => {
       ).test(src)
     : false;
   const hasWrappingLabel =
-    /<label\b[^>]*>[\s\S]{0,400}?Filter agents[\s\S]{0,400}?<input\b[^>]*placeholder="Filter agents…"/i.test(
+    /<label\b[^>]*>[\s\S]{0,400}?Filter agents[\s\S]{0,400}?<(?:input|Input)\b[^>]*placeholder="Filter agents…"/i.test(
       src,
     ) ||
-    /<label\b[^>]*>[\s\S]{0,400}?<input\b[^>]*placeholder="Filter agents…"[\s\S]{0,200}?Filter agents/i.test(
+    /<label\b[^>]*>[\s\S]{0,400}?<(?:input|Input)\b[^>]*placeholder="Filter agents…"[\s\S]{0,200}?Filter agents/i.test(
       src,
     );
   assert.ok(
