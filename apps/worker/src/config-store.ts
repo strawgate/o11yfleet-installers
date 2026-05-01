@@ -81,15 +81,11 @@ export async function uploadConfigVersion(
     ).bind(hash, configId, tenantId),
   ]);
 
-  if (deduplicated) {
-    await env.FP_CONFIGS.put(r2Key, yamlBytes, {
-      httpMetadata: { contentType: "text/yaml" },
-      customMetadata: {
-        tenant_id: tenantId,
-        config_id: configId,
-      },
-    });
-  }
+  // Note: an earlier version of this function did a second
+  // `FP_CONFIGS.put` here in the `deduplicated` branch. That was
+  // backwards — `deduplicated=true` means the bytes are already in R2
+  // and the upload at line 59 was correctly skipped. Re-PUTting on the
+  // dedup path was wasted bandwidth + a needless write op per upload.
 
   return {
     hash,

@@ -112,8 +112,26 @@ function containsSemicolonOutsideStrings(sql: string): boolean {
 
 const MAX_DEBUG_QUERY_ROWS = 500;
 const MAX_DEBUG_SQL_LENGTH = 4_000;
+// Total serialized response bytes for the admin debug query. Caps memory
+// pressure on the DO when an individual row materializes a large value
+// (e.g. effective_config_body, blob columns) — `LIMIT 500` only counts
+// rows, not bytes.
+const MAX_DEBUG_RESPONSE_BYTES = 1_048_576; // 1 MiB
 const MAX_MESSAGES_PER_MINUTE = 60;
 const MAX_AGENTS_PER_CONFIG = 50_000;
+
+/**
+ * Parse the `x-fp-max-agents-per-config` header set by the worker.
+ * Returns null if the header is missing or not a positive integer.
+ */
+function parseTenantAgentLimit(header: string | null): number | null {
+  if (!header) return null;
+  const parsed = Number(header);
+  if (!Number.isFinite(parsed) || parsed <= 0 || !Number.isInteger(parsed)) {
+    return null;
+  }
+  return parsed;
+}
 
 // Stale agent detection: agents not seen for this long are marked disconnected.
 // With zero-wake model, this only applies to agents whose SQLite last_seen_at
@@ -147,15 +165,25 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.initialized = true;
   }
 
-  /** Get desired config from SQLite (~µs). */
-  private getDesiredConfig(): { hash: string | null; content: string | null } {
-    return loadDesiredConfig(this.ctx.storage.sql);
-  }
-
-  /** Get encoded config bytes from SQLite + TextEncoder. */
-  private getConfigBytes(): Uint8Array | null {
-    const config = this.getDesiredConfig();
-    return config.content ? new TextEncoder().encode(config.content) : null;
+  /**
+   * Get desired config from SQLite (~µs). The returned shape includes the
+   * pre-encoded `bytes`, so callers don't need to run `TextEncoder.encode`
+   * per WS message — that work happens exactly once on `set-desired-config`.
+   *
+   * For older rows written before the encoded-bytes column existed, fall
+   * back to encoding on read; the next `set-desired-config` upgrades the
+   * row.
+   */
+  private getDesiredConfig(): {
+    hash: string | null;
+    content: string | null;
+    bytes: Uint8Array | null;
+  } {
+    const config = loadDesiredConfig(this.ctx.storage.sql);
+    if (config.bytes === null && config.content !== null) {
+      return { ...config, bytes: new TextEncoder().encode(config.content) };
+    }
+    return config;
   }
 
   /** Schedule one deferred aggregate metrics snapshot after state changes. */
@@ -239,6 +267,26 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (!/^select\b/i.test(sql) || containsSemicolonOutsideStrings(sql)) {
       throw new Error("Only single SELECT queries are allowed");
     }
+    // The outer LIMIT only caps returned rows. Without these keyword
+    // bans, an admin could materialize the full agents table before the
+    // limit applies (JOIN/UNION/WITH) or reorder it in memory (ORDER BY
+    // / GROUP BY / HAVING). Reject those keywords so the debug viewer
+    // stays a debug viewer and not a wholesale scan tool. Operators
+    // who need aggregation should run it offline against an Analytics
+    // Engine export.
+    if (/\b(join|union|with|group\s+by|order\s+by|having|recursive)\b/i.test(sql)) {
+      throw new Error(
+        "Debug queries cannot use JOIN, UNION, WITH, GROUP BY, ORDER BY, HAVING, or RECURSIVE",
+      );
+    }
+    // Reject SQLite functions that can materialize huge values per row
+    // regardless of LIMIT (e.g. `SELECT zeroblob(1<<27)` or
+    // `SELECT printf('%.*c', 50000000, 'a')`).
+    if (/\b(zeroblob|randomblob|printf|char|replicate)\s*\(/i.test(sql)) {
+      throw new Error(
+        "Debug queries cannot use blob/string-amplification functions (zeroblob, randomblob, printf, char, replicate)",
+      );
+    }
     return `SELECT * FROM (${sql}) LIMIT ?`;
   }
 
@@ -276,8 +324,27 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         ...params.map((param) => this.normalizeDebugParam(param)),
         MAX_DEBUG_QUERY_ROWS,
       );
-      const rows = cursor.toArray() as Array<Record<string, unknown>>;
-      return Response.json({ rows, row_count: rows.length });
+      // Stream rows out of the cursor and stop accumulating once we
+      // would exceed the response byte budget. The estimate is the
+      // length of `JSON.stringify(row)`; it's cheap and good enough.
+      const rows: Array<Record<string, unknown>> = [];
+      let bytes = 2; // `[]`
+      let truncated = false;
+      for (const row of cursor) {
+        const rowBytes = JSON.stringify(row).length + 1; // + comma
+        if (bytes + rowBytes > MAX_DEBUG_RESPONSE_BYTES) {
+          truncated = true;
+          break;
+        }
+        bytes += rowBytes;
+        rows.push(row as Record<string, unknown>);
+      }
+      return Response.json({
+        rows,
+        row_count: rows.length,
+        truncated,
+        response_bytes_estimate: bytes,
+      });
     } catch (error) {
       return Response.json(
         { error: error instanceof Error ? error.message : "Query failed" },
@@ -294,9 +361,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
 
-    // Enforce max agents per config
+    // Enforce per-tenant plan limit if the worker resolved one.
+    // Falls back to the global MAX_AGENTS_PER_CONFIG when the header is
+    // missing/invalid — the worker never sets a value larger than the
+    // global cap, so taking the min keeps both bounds.
+    const tenantLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
+    const limit =
+      tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
     const count = getAgentCount(this.ctx.storage.sql);
-    if (count >= MAX_AGENTS_PER_CONFIG && !agentExists(this.ctx.storage.sql, instanceUid)) {
+    if (count >= limit && !agentExists(this.ctx.storage.sql, instanceUid)) {
       return Response.json(
         { error: "Agent limit reached for this configuration" },
         { status: 429 },
@@ -420,9 +493,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    // Load config from SQLite (~µs)
+    // Load config from SQLite (~µs). Single read; the encoded bytes ride
+    // along on the same row, so the WS hot path doesn't run
+    // `TextEncoder.encode()` per heartbeat.
     const config = this.getDesiredConfig();
-    const configBytes = this.getConfigBytes();
+    const configBytes = config.bytes;
 
     const span = startWsMessageSpan(
       attachment.instance_uid,

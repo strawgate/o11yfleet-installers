@@ -46,6 +46,7 @@ export function initSchema(sql: SqlStorage): void {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       desired_config_hash TEXT,
       desired_config_content TEXT,
+      desired_config_bytes BLOB,
       tenant_id TEXT NOT NULL DEFAULT '',
       config_id TEXT NOT NULL DEFAULT '',
       last_sweep_at INTEGER NOT NULL DEFAULT 0,
@@ -82,6 +83,11 @@ function migrateSchema(sql: SqlStorage): void {
   };
   addDoConfigColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
   addDoConfigColumn("config_id", "config_id TEXT NOT NULL DEFAULT ''");
+  // Migration: pre-encoded YAML bytes for the WS hot path. New rows get
+  // this column populated by `saveDesiredConfig`. Existing rows fall
+  // back to encoding-on-read in `loadDesiredConfig` until the next
+  // `set-desired-config` overwrites them.
+  addDoConfigColumn("desired_config_bytes", "desired_config_bytes BLOB");
   // Migration 1: add stale sweep tracking columns to do_config
   for (const column of [
     "last_sweep_at",
@@ -115,29 +121,61 @@ function migrateSchema(sql: SqlStorage): void {
 export interface DesiredConfig {
   hash: string | null;
   content: string | null;
+  /**
+   * UTF-8 encoded bytes of `content`, computed once on `set-desired-config`
+   * and persisted alongside the content so the WS hot path doesn't run
+   * `TextEncoder.encode()` per heartbeat. `null` when no content is set.
+   */
+  bytes: Uint8Array | null;
 }
 
 /**
  * Load desired config from SQLite (sync, ~µs).
+ *
+ * The encoded `bytes` column is populated by `saveDesiredConfig` on every
+ * write. Older rows that were saved before the column existed will return
+ * `bytes: null` even when content is present — callers can fall back to
+ * encoding on read; the next `set-desired-config` write upgrades the row.
  */
 export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
   const row = sql
-    .exec(`SELECT desired_config_hash, desired_config_content FROM do_config WHERE id = 1`)
+    .exec(
+      `SELECT desired_config_hash, desired_config_content, desired_config_bytes
+       FROM do_config WHERE id = 1`,
+    )
     .one();
+  const stored = row["desired_config_bytes"];
+  let bytes: Uint8Array | null = null;
+  if (stored instanceof Uint8Array) {
+    bytes = stored;
+  } else if (stored instanceof ArrayBuffer) {
+    bytes = new Uint8Array(stored);
+  }
   return {
     hash: (row["desired_config_hash"] as string) ?? null,
     content: (row["desired_config_content"] as string) ?? null,
+    bytes,
   };
 }
 
 /**
  * Save desired config to SQLite (sync, ~µs).
+ *
+ * Pre-encodes `content` as UTF-8 bytes and stores them in the same row so
+ * the WS hot path can avoid running `TextEncoder.encode()` on every
+ * heartbeat. The encode happens exactly once per rollout.
  */
 export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string | null): void {
+  const encoded = content === null ? null : new TextEncoder().encode(content);
   sql.exec(
-    `UPDATE do_config SET desired_config_hash = ?, desired_config_content = ? WHERE id = 1`,
+    `UPDATE do_config
+       SET desired_config_hash = ?,
+           desired_config_content = ?,
+           desired_config_bytes = ?
+       WHERE id = 1`,
     hash,
     content,
+    encoded,
   );
 }
 
@@ -358,6 +396,7 @@ export function getCohortBreakdown(
   sql: SqlStorage,
   desiredConfigHash: string | null,
   topHashCount = 5,
+  topStatusCount = 16,
 ): {
   drifted: number;
   status_counts: Record<string, number>;
@@ -377,10 +416,18 @@ export function getCohortBreakdown(
     drifted = (row["drifted"] ?? 0) as number;
   }
 
+  // Bounded cardinality: ingest already truncates `status` to 32 chars
+  // (see `truncate` in state-machine/processor.ts), but defense-in-depth
+  // here too — only return the top N statuses ordered by count, so a
+  // misbehaving fleet can never make this aggregation unbounded.
   const statusRows = sql
     .exec(
       `SELECT COALESCE(status, 'unknown') as status, COUNT(*) as count
-       FROM agents GROUP BY status`,
+       FROM agents
+       GROUP BY status
+       ORDER BY count DESC, status ASC
+       LIMIT ?`,
+      topStatusCount,
     )
     .toArray() as Array<{ status: string; count: number }>;
   const status_counts: Record<string, number> = {};

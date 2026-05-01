@@ -122,13 +122,17 @@ function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   };
 }
 
-// Headers we use internally — MUST be stripped from external requests
+// Headers we use internally — MUST be stripped from external requests.
+// Anything an external client could spoof has to be listed here so the
+// strip pass in `handleOpampRequest` removes it before forwarding to the
+// Config DO.
 const INTERNAL_HEADERS = [
   "x-fp-tenant-id",
   "x-fp-config-id",
   "x-fp-instance-uid",
   "x-fp-enrollment",
   "x-fp-codec",
+  "x-fp-max-agents-per-config",
 ];
 
 const CRON_SWEEP_CONCURRENCY = 100;
@@ -508,10 +512,17 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
       const doId = env.CONFIG_DO.idFromName(doName);
       const stub = env.CONFIG_DO.get(doId);
 
-      // Set internal headers for DO
+      // Set internal headers for DO. `x-fp-max-agents-per-config` is
+      // resolved from D1 here so the DO doesn't have to call back to
+      // the worker — the DO trusts this header because external x-fp-*
+      // headers are stripped above.
       cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
       cleanHeaders.set("x-fp-config-id", claim.config_id);
       cleanHeaders.set("x-fp-instance-uid", claim.instance_uid);
+      const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
+      if (tenantLimit !== null) {
+        cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
+      }
 
       return stub.fetch(
         new Request(request.url, {
@@ -561,6 +572,10 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   cleanHeaders.set("x-fp-config-id", enrollment.config_id);
   cleanHeaders.set("x-fp-instance-uid", instanceUid);
   cleanHeaders.set("x-fp-enrollment", "true");
+  const tenantLimit = await resolveTenantAgentLimit(env, enrollment.tenant_id);
+  if (tenantLimit !== null) {
+    cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
+  }
 
   return stub.fetch(
     new Request(request.url, {
@@ -568,4 +583,24 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
       headers: cleanHeaders,
     }),
   );
+}
+
+/**
+ * Look up the tenant's `max_agents_per_config` plan limit so the
+ * Config DO can enforce the per-tenant cap rather than only the global
+ * MAX_AGENTS_PER_CONFIG constant. Returns `null` if the tenant row is
+ * missing or the value is not a positive integer — the DO falls back
+ * to the global cap in that case.
+ */
+async function resolveTenantAgentLimit(env: Env, tenantId: string): Promise<number | null> {
+  const row = await env.FP_DB.prepare(
+    `SELECT max_agents_per_config FROM tenants WHERE id = ? LIMIT 1`,
+  )
+    .bind(tenantId)
+    .first<{ max_agents_per_config: number | null }>();
+  const value = row?.max_agents_per_config;
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return Math.floor(value);
 }

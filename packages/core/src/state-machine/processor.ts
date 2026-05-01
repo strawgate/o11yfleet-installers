@@ -14,6 +14,16 @@ import { FleetEventType, makeFleetEvent } from "../events.js";
 import type { AnyFleetEvent } from "../events.js";
 import { uint8ToHex } from "../hex.js";
 
+/**
+ * Truncate an agent-supplied string to a maximum length so unbounded
+ * input cannot blow up event payload sizes or aggregation cardinality.
+ * Empty strings (never-supplied case) pass through unchanged.
+ */
+function truncate(value: string, max: number): string {
+  if (value.length <= max) return value;
+  return value.slice(0, max);
+}
+
 function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
   if (a === null && b === null) return true;
   if (a === null || b === null) return false;
@@ -213,14 +223,22 @@ export function processFrame(
 
   // Process health
   if (msg.health) {
+    // Cap agent-controlled strings at ingest. `status` becomes a SQL
+    // GROUP BY key in the cohort breakdown aggregation, so unbounded
+    // cardinality from a misbehaving fleet would amplify into expensive
+    // /stats responses. `last_error` is included in dedupe_key + event
+    // payloads — cap so a single oversized string can't blow up queue
+    // message size or the AE blob limits.
+    const status = truncate(msg.health.status, 32);
+    const lastError = truncate(msg.health.last_error, 4096);
     const healthChanged =
       msg.health.healthy !== state.healthy ||
-      msg.health.status !== state.status ||
-      msg.health.last_error !== state.last_error;
+      status !== state.status ||
+      lastError !== state.last_error;
     if (healthChanged) {
       newState.healthy = msg.health.healthy;
-      newState.status = msg.health.status;
-      newState.last_error = msg.health.last_error;
+      newState.status = status;
+      newState.last_error = lastError;
       shouldPersist = true;
       events.push(
         makeFleetEvent({
@@ -230,12 +248,12 @@ export function processFrame(
           instance_uid: instanceUid,
           timestamp: now,
           healthy: msg.health.healthy,
-          status: msg.health.status,
-          last_error: msg.health.last_error,
+          status,
+          last_error: lastError,
           // Include the current connection generation so a reused
           // sequence_num after a reconnect does not collide with a prior
           // session's health event.
-          dedupe_key: `health:${state.tenant_id}:${state.config_id}:${instanceUid}:${newState.connected_at}:${msg.sequence_num}:${msg.health.healthy}:${msg.health.status}:${msg.health.last_error}`,
+          dedupe_key: `health:${state.tenant_id}:${state.config_id}:${instanceUid}:${newState.connected_at}:${msg.sequence_num}:${msg.health.healthy}:${status}:${lastError}`,
         }),
       );
     }

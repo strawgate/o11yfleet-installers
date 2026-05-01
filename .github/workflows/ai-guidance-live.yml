@@ -14,11 +14,15 @@ jobs:
   live-guidance-audit:
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 20
+    # AI_GUIDANCE_MINIMAX_API_KEY is intentionally NOT in this job-wide
+    # env block. Job env is inherited by every step including
+    # `pnpm install --frozen-lockfile`, where a malicious lifecycle
+    # script in any transitive dependency could read it. The secret is
+    # scoped at step level on the two steps that actually need it.
     env:
       FP_URL: http://127.0.0.1:8787
       UI_URL: http://127.0.0.1:3000
       LIVE_AI_GUIDANCE: "1"
-      AI_GUIDANCE_MINIMAX_API_KEY: ${{ secrets.AI_GUIDANCE_MINIMAX_API_KEY }}
       AI_GUIDANCE_PROVIDER: minimax
       AI_GUIDANCE_MODEL: MiniMax-M2.7
       AI_GUIDANCE_BASE_URL: https://api.minimax.io/v1
@@ -38,6 +42,8 @@ jobs:
       - name: Check live AI secret
         id: live-secret
         shell: bash
+        env:
+          AI_GUIDANCE_MINIMAX_API_KEY: ${{ secrets.AI_GUIDANCE_MINIMAX_API_KEY }}
         run: |
           if [ -z "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
             echo "available=false" >> "$GITHUB_OUTPUT"
@@ -54,6 +60,7 @@ jobs:
         if: steps.live-secret.outputs.available == 'true'
         env:
           AI_GUIDANCE_AUDIT_DIR: test-results/ai-guidance-audit
+          AI_GUIDANCE_MINIMAX_API_KEY: ${{ secrets.AI_GUIDANCE_MINIMAX_API_KEY }}
         run: bash scripts/run-ai-guidance-audit.sh 20
 
       - name: Upload AI guidance audit artifacts

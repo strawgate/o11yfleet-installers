@@ -21,6 +21,19 @@ import {
 } from "../../ai/guidance.js";
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { validateJsonBody } from "../../shared/validation.js";
+import {
+  countConfigsForTenant,
+  findOwnedConfig,
+  findTenantById,
+  listConfigsForTenant,
+  type ConfigurationRow,
+} from "../../shared/db-helpers.js";
+import {
+  AnalyticsSqlNotConfiguredError,
+  isAnalyticsSqlConfigured,
+  runAnalyticsSql,
+} from "../../analytics-sql.js";
+import { latestSnapshotForTenant } from "@o11yfleet/core/metrics";
 
 // ─── Router ─────────────────────────────────────────────────────────
 
@@ -185,17 +198,18 @@ async function routeV1Request(
 // ─── Helpers ────────────────────────────────────────────────────────
 
 /** Verify config belongs to tenant and return it */
+/**
+ * Look up a configuration row scoped to a tenant, returning `null` if
+ * the config doesn't exist or belongs to another tenant. Wraps the
+ * shared `findOwnedConfig` helper so existing handler code continues
+ * to read naturally; new code should call the helper directly.
+ */
 async function getOwnedConfig(
   env: Env,
   tenantId: string,
   configId: string,
-): Promise<Record<string, unknown> | null> {
-  const config = await env.FP_DB.prepare(
-    `SELECT * FROM configurations WHERE id = ? AND tenant_id = ?`,
-  )
-    .bind(configId, tenantId)
-    .first();
-  return config;
+): Promise<ConfigurationRow | null> {
+  return findOwnedConfig(env, tenantId, configId);
 }
 
 function getDoName(tenantId: string, configId: string): string {
@@ -205,27 +219,19 @@ function getDoName(tenantId: string, configId: string): string {
 // ─── Tenant Handler ─────────────────────────────────────────────────
 
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
+  const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
   return Response.json(tenant);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
+  const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
 
-  const configs = await env.FP_DB.prepare(
-    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
-  )
-    .bind(tenantId)
-    .first<{ count: number }>();
-  if (configs && configs.count > 0) {
+  const configCount = await countConfigsForTenant(env, tenantId);
+  if (configCount > 0) {
     return jsonError(
-      `Cannot delete tenant with ${configs.count} configuration(s). Delete configurations first.`,
+      `Cannot delete tenant with ${configCount} configuration(s). Delete configurations first.`,
       409,
     );
   }
@@ -254,12 +260,8 @@ async function handleGetTeam(env: Env, tenantId: string): Promise<Response> {
 // ─── Configuration Handlers ─────────────────────────────────────────
 
 async function handleListConfigurations(env: Env, tenantId: string): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT * FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(tenantId)
-    .all();
-  return Response.json({ configurations: result.results });
+  const configurations = await listConfigsForTenant(env, tenantId);
+  return Response.json({ configurations });
 }
 
 async function handleCreateConfiguration(
@@ -363,9 +365,14 @@ async function handleDeleteConfiguration(
     ),
   ]);
 
-  for (const { r2_key: r2Key } of versions.results) {
-    await deleteConfigContentIfUnreferenced(env, r2Key);
-  }
+  // Delete the unreferenced R2 objects in parallel — each call does its
+  // own ownership check + delete and is independent. The previous
+  // sequential `for await` made `DELETE /configurations/:id` linear in
+  // the number of historical versions, which on a long-lived config
+  // could mean dozens of round-trips before the response finalizes.
+  await Promise.all(
+    versions.results.map(({ r2_key: r2Key }) => deleteConfigContentIfUnreferenced(env, r2Key)),
+  );
 
   return new Response(null, { status: 204 });
 }
@@ -801,20 +808,120 @@ function numberValue(value: unknown): number | null {
 
 // ─── Overview (aggregate stats) ─────────────────────────────────────
 
+interface AeSnapshotRow {
+  tenant_id: string;
+  config_id: string;
+  interval: string;
+  timestamp: string | number;
+  agent_count: number;
+  connected_count: number;
+  disconnected_count: number;
+  healthy_count: number;
+  unhealthy_count: number;
+  connected_healthy_count: number;
+  config_up_to_date: number;
+  config_pending: number;
+  agents_with_errors: number;
+  agents_stale: number;
+  websocket_count: number;
+  // Index signature so the row matches the AnalyticsSqlRow base shape;
+  // every named column above is one of these.
+  [column: string]: string | number | null;
+}
+
+/**
+ * Build the Overview payload by reading the latest fleet metrics snapshot
+ * for the tenant from Analytics Engine. Each Config DO writes one snapshot
+ * per `(tenant_id, config_id)` per alarm tick; we sum across configs in
+ * the route handler. Single AE round-trip replaces the previous
+ * per-config DO `/stats` fan-out (PERF-CRIT-11 / #329).
+ *
+ * Falls back to the per-DO fan-out when AE is not configured (e.g. in
+ * dev) or when AE returns an error — Overview must never hard-fail on
+ * a metrics-store outage.
+ */
 async function handleGetOverview(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first();
+  const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
 
   const configs = await env.FP_DB.prepare(
     "SELECT id, name, current_config_hash, created_at, updated_at FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC",
   )
     .bind(tenantId)
-    .all();
+    .all<{
+      id: string;
+      name: string;
+      current_config_hash: string | null;
+      created_at: string;
+      updated_at: string;
+    }>();
 
+  let configStats: Array<Record<string, unknown>>;
+  const totals = { totalAgents: 0, connectedAgents: 0, healthyAgents: 0 };
+
+  if (isAnalyticsSqlConfigured(env)) {
+    try {
+      const rows = await runAnalyticsSql<AeSnapshotRow>(env, latestSnapshotForTenant(tenantId));
+      const byConfig = new Map<string, AeSnapshotRow>();
+      for (const row of rows) byConfig.set(row.config_id, row);
+      configStats = configs.results.map((config) => {
+        const snapshot = byConfig.get(config.id);
+        const stats = snapshot
+          ? {
+              total_agents: snapshot.agent_count,
+              connected_agents: snapshot.connected_count,
+              healthy_agents: snapshot.healthy_count,
+              websockets: snapshot.websocket_count,
+              snapshot_at: snapshot.timestamp,
+            }
+          : {
+              total_agents: 0,
+              connected_agents: 0,
+              healthy_agents: 0,
+              websockets: 0,
+              snapshot_at: null,
+            };
+        totals.totalAgents += stats.total_agents;
+        totals.connectedAgents += stats.connected_agents;
+        totals.healthyAgents += stats.healthy_agents;
+        return { ...config, stats };
+      });
+    } catch (err) {
+      if (!(err instanceof AnalyticsSqlNotConfiguredError)) {
+        console.error(
+          `handleGetOverview: AE snapshot read failed for tenant ${tenantId}, falling back to per-DO stats:`,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      configStats = await fanOutPerDoStats(env, tenantId, configs.results, totals);
+    }
+  } else {
+    configStats = await fanOutPerDoStats(env, tenantId, configs.results, totals);
+  }
+
+  return Response.json({
+    tenant,
+    total_agents: totals.totalAgents,
+    connected_agents: totals.connectedAgents,
+    healthy_agents: totals.healthyAgents,
+    configs_count: configs.results.length,
+    configurations: configStats,
+  });
+}
+
+/**
+ * Legacy per-config DO `/stats` fan-out, kept as a fallback for
+ * environments without Analytics Engine read credentials. Mutates
+ * `totals` in place.
+ */
+async function fanOutPerDoStats(
+  env: Env,
+  tenantId: string,
+  configs: Array<Record<string, unknown>>,
+  totals: { totalAgents: number; connectedAgents: number; healthyAgents: number },
+): Promise<Array<Record<string, unknown>>> {
   const statsResults = await Promise.all(
-    configs.results.map(async (config) => {
+    configs.map(async (config) => {
       const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, config["id"] as string));
       const stub = env.CONFIG_DO.get(doId);
       try {
@@ -829,47 +936,37 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
       }
     }),
   );
-
-  let totalAgents = 0;
-  let connectedAgents = 0;
-  let healthyAgents = 0;
-  const configStats: Array<Record<string, unknown>> = [];
+  const out: Array<Record<string, unknown>> = [];
   for (const { config, stats } of statsResults) {
-    totalAgents += stats["total_agents"] ?? stats["total"] ?? 0;
-    connectedAgents += stats["connected_agents"] ?? stats["connected"] ?? 0;
-    healthyAgents += stats["healthy_agents"] ?? stats["healthy"] ?? 0;
-    configStats.push({ ...config, stats });
+    totals.totalAgents += stats["total_agents"] ?? stats["total"] ?? 0;
+    totals.connectedAgents += stats["connected_agents"] ?? stats["connected"] ?? 0;
+    totals.healthyAgents += stats["healthy_agents"] ?? stats["healthy"] ?? 0;
+    out.push({ ...config, stats });
   }
-
-  return Response.json({
-    tenant,
-    total_agents: totalAgents,
-    connected_agents: connectedAgents,
-    healthy_agents: healthyAgents,
-    configs_count: configs.results.length,
-    configurations: configStats,
-  });
+  return out;
 }
 
 // ─── Update Tenant ──────────────────────────────────────────────────
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
   const body = await validateJsonBody(request, updateTenantRequestSchema);
   if (body.name) {
-    await env.FP_DB.prepare(
-      "UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ?",
+    // Single round-trip: UPDATE ... RETURNING * combines the existence
+    // check, the mutation, and the post-update read. A missing tenant
+    // returns no rows and we surface 404 from that.
+    const updated = await env.FP_DB.prepare(
+      "UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ? RETURNING *",
     )
       .bind(body.name, tenantId)
-      .run();
+      .first();
+    if (!updated) return jsonError("Tenant not found", 404);
+    return Response.json(updated);
   }
-  const updated = await env.FP_DB.prepare("SELECT * FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first();
-  return Response.json(updated);
+  // No-op path: the body had no fields to change. Just return the
+  // current row.
+  const tenant = await findTenantById(env, tenantId);
+  if (!tenant) return jsonError("Tenant not found", 404);
+  return Response.json(tenant);
 }
 
 // ─── Agent Detail ───────────────────────────────────────────────────

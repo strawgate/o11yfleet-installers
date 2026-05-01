@@ -23,6 +23,7 @@ import {
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
 import { validateJsonBody } from "../../shared/validation.js";
+import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -186,8 +187,13 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   const whereClauses: string[] = [];
   const whereParams: unknown[] = [];
   if (q.length > 0) {
+    // SQLite's LIKE is case-insensitive by default for ASCII when both
+    // sides have the same case folding behavior; `COLLATE NOCASE`
+    // lets the planner use indexes on `t.name`/`t.id` instead of
+    // recomputing `LOWER(...)` for every row. The previous shape
+    // (`LOWER(t.name) LIKE LOWER(?)`) forced a full table scan.
     whereClauses.push(
-      "(LOWER(t.name) LIKE LOWER(?) ESCAPE '\\' OR LOWER(t.id) LIKE LOWER(?) ESCAPE '\\')",
+      "(t.name LIKE ? ESCAPE '\\' COLLATE NOCASE OR t.id LIKE ? ESCAPE '\\' COLLATE NOCASE)",
     );
     const escaped = q.replace(/[\\%_]/g, "\\$&");
     const qLike = `%${escaped}%`;
@@ -202,28 +208,21 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   const totalRow = await env.FP_DB.prepare(`SELECT COUNT(*) as count FROM tenants t ${whereSql}`)
     .bind(...whereParams)
     .first<{ count: number }>();
+  // Use correlated scalar subqueries instead of derived-table JOINs.
+  // The previous LEFT JOIN (SELECT tenant_id, COUNT(*) ... GROUP BY
+  // tenant_id) shape forced D1 to materialize the full configurations
+  // and agent_summaries aggregates into intermediate tables before
+  // applying the outer LIMIT — even when listing one page of 25
+  // tenants on a fleet with thousands of agents. Correlated subqueries
+  // let the planner use per-tenant indexes for each row.
   const result = await env.FP_DB.prepare(
     `SELECT
       t.*,
-      COALESCE(c.config_count, 0) as config_count,
-      COALESCE(a.agent_count, 0) as agent_count,
-      COALESCE(a.connected_agents, 0) as connected_agents,
-      COALESCE(a.healthy_agents, 0) as healthy_agents
+      (SELECT COUNT(*) FROM configurations WHERE tenant_id = t.id) as config_count,
+      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id) as agent_count,
+      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id AND status = 'connected') as connected_agents,
+      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id AND healthy = 1) as healthy_agents
      FROM tenants t
-     LEFT JOIN (
-       SELECT tenant_id, COUNT(*) as config_count
-       FROM configurations
-       GROUP BY tenant_id
-     ) c ON c.tenant_id = t.id
-     LEFT JOIN (
-       SELECT
-         tenant_id,
-         COUNT(*) as agent_count,
-         COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
-         COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents
-       FROM agent_summaries
-       GROUP BY tenant_id
-     ) a ON a.tenant_id = t.id
      ${whereSql}
      ORDER BY ${TENANT_SORTS[sort]}
      LIMIT ? OFFSET ?`,
@@ -239,19 +238,14 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
 }
 
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
+  const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
   return Response.json(tenant);
 }
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
-
+  // Validate the body BEFORE the existence check so a 400 doesn't cost
+  // an unnecessary D1 read.
   const body = await validateJsonBody(request, adminUpdateTenantRequestSchema);
   const updates: string[] = [];
   const values: unknown[] = [];
@@ -281,21 +275,24 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
   updates.push("updated_at = datetime('now')");
   values.push(tenantId);
 
-  await env.FP_DB.prepare(`UPDATE tenants SET ${updates.join(", ")} WHERE id = ?`)
+  // One round-trip: D1 supports `UPDATE ... RETURNING *`, so we can
+  // collapse the previous existence-check SELECT, the UPDATE, and the
+  // post-update SELECT into a single statement. A missing tenant
+  // returns zero rows and we surface 404 from that.
+  const updated = await env.FP_DB.prepare(
+    `UPDATE tenants SET ${updates.join(", ")} WHERE id = ? RETURNING *`,
+  )
     .bind(...values)
-    .run();
-
-  const updated = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
     .first();
+  if (!updated) return jsonError("Tenant not found", 404);
   return Response.json(updated);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
+  // Cheap existence check — we don't need any tenant columns post-check.
+  if (!(await tenantExists(env, tenantId))) {
+    return jsonError("Tenant not found", 404);
+  }
 
   const configs = await env.FP_DB.prepare(
     `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
@@ -309,7 +306,7 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
     );
   }
 
-  await env.FP_DB.prepare(`DELETE FROM tenants WHERE id = ?`).bind(tenantId).run();
+  await deleteTenantById(env, tenantId);
   return new Response(null, { status: 204 });
 }
 
@@ -325,10 +322,9 @@ async function handleListConfigurations(env: Env, tenantId: string): Promise<Res
 // ─── Tenant Users ───────────────────────────────────────────────────
 
 async function handleListTenantUsers(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT id FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first();
-  if (!tenant) return jsonError("Tenant not found", 404);
+  if (!(await tenantExists(env, tenantId))) {
+    return jsonError("Tenant not found", 404);
+  }
 
   const result = await env.FP_DB.prepare(
     `SELECT id, email, display_name, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC`,
