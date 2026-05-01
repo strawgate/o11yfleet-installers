@@ -98,7 +98,7 @@ describe("Cost Guardrails", () => {
 // ========================
 describe("Error Types", () => {
   it("AppError serializes to JSON", () => {
-    const err = new AppError("test error", "TEST", 500, "req-123");
+    const err = new AppError("test error", "TEST", 500, { requestId: "req-123" });
     const json = err.toJSON();
     expect(json.error).toBe("test error");
     expect(json.code).toBe("TEST");

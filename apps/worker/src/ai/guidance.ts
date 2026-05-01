@@ -11,8 +11,9 @@ export class AiApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, { cause });
     this.name = "AiApiError";
     Object.setPrototypeOf(this, AiApiError.prototype);
   }
@@ -99,7 +100,7 @@ async function generateGuidanceResponse(input: AiGuidanceRequest, env: Env, scop
     return await generateAiGuidance(input, { env, scopeLabel });
   } catch (err) {
     if (err instanceof AiProviderError) {
-      throw new AiApiError(err.message, 502);
+      throw new AiApiError(err.message, 502, err);
     }
     throw err;
   }
@@ -110,7 +111,7 @@ async function generateChatResponse(input: AiChatRequest, env: Env, scopeLabel: 
     return await streamAiChat(input, { env, scopeLabel });
   } catch (err) {
     if (err instanceof AiProviderError) {
-      throw new AiApiError(err.message, 502);
+      throw new AiApiError(err.message, 502, err);
     }
     throw err;
   }

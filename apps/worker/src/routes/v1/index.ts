@@ -820,7 +820,11 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
       try {
         const resp = await stub.fetch(new Request("http://internal/stats"));
         return { config, stats: (await resp.json()) as Record<string, number> };
-      } catch {
+      } catch (err) {
+        console.error(
+          `handleGetOverview: stats fetch failed for config ${config["id"]} (tenant ${tenantId}):`,
+          err instanceof Error ? err.message : String(err),
+        );
         return { config, stats: { total: 0, connected: 0, healthy: 0 } as Record<string, number> };
       }
     }),

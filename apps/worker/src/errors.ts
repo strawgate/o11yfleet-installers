@@ -1,14 +1,17 @@
 // Typed error classes for o11yfleet
 
 export class AppError extends Error {
+  public readonly requestId?: string;
   constructor(
     message: string,
     public readonly code: string,
     public readonly statusCode: number,
-    public readonly requestId?: string,
+    options?: ErrorOptions & { requestId?: string },
   ) {
-    super(message);
+    super(message, options);
     this.name = "AppError";
+    this.requestId = options?.requestId;
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 
   toJSON() {
@@ -22,35 +25,35 @@ export class AppError extends Error {
 
 export class AuthError extends AppError {
   constructor(message: string, requestId?: string) {
-    super(message, "AUTH_ERROR", 401, requestId);
+    super(message, "AUTH_ERROR", 401, { requestId });
     this.name = "AuthError";
   }
 }
 
 export class ProtocolError extends AppError {
   constructor(message: string, requestId?: string) {
-    super(message, "PROTOCOL_ERROR", 400, requestId);
+    super(message, "PROTOCOL_ERROR", 400, { requestId });
     this.name = "ProtocolError";
   }
 }
 
 export class RateLimitError extends AppError {
   constructor(message: string, requestId?: string) {
-    super(message, "RATE_LIMIT", 429, requestId);
+    super(message, "RATE_LIMIT", 429, { requestId });
     this.name = "RateLimitError";
   }
 }
 
 export class StorageError extends AppError {
   constructor(message: string, requestId?: string) {
-    super(message, "STORAGE_ERROR", 500, requestId);
+    super(message, "STORAGE_ERROR", 500, { requestId });
     this.name = "StorageError";
   }
 }
 
 export class NotFoundError extends AppError {
   constructor(message: string, requestId?: string) {
-    super(message, "NOT_FOUND", 404, requestId);
+    super(message, "NOT_FOUND", 404, { requestId });
     this.name = "NotFoundError";
   }
 }

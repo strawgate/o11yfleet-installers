@@ -22,10 +22,11 @@ export class ApiError extends Error {
     public code?: string,
     public field?: string,
     public detail?: string,
+    options?: ErrorOptions,
   ) {
-    super(message);
+    super(message, options);
     this.name = "ApiError";
-    Object.setPrototypeOf(this, ApiError.prototype);
+    Object.setPrototypeOf(this, new.target.prototype);
   }
 }
 

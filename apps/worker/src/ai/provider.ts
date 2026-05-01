@@ -29,8 +29,8 @@ type AiGuidanceEnv = Pick<
 >;
 
 export class AiProviderError extends Error {
-  constructor(message: string) {
-    super(message);
+  constructor(message: string, cause?: unknown) {
+    super(message, { cause });
     this.name = "AiProviderError";
     Object.setPrototypeOf(this, AiProviderError.prototype);
   }
@@ -88,7 +88,7 @@ export async function generateAiGuidance(
       "AI guidance provider failed:",
       err instanceof Error ? `${err.name}: ${err.message}` : String(err),
     );
-    throw new AiProviderError("AI guidance provider failed");
+    throw new AiProviderError("AI guidance provider failed", err);
   }
 }
 
@@ -124,7 +124,7 @@ export async function streamAiChat(
       throw err;
     }
     console.error("AI chat provider failed:", err);
-    throw new AiProviderError("AI chat provider failed");
+    throw new AiProviderError("AI chat provider failed", err);
   }
 }
 

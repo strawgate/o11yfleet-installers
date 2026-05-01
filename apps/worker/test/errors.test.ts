@@ -25,7 +25,7 @@ describe("AppError", () => {
   });
 
   it("toJSON includes request_id when provided", () => {
-    const err = new AppError("oops", "BAD_REQUEST", 400, "req-123");
+    const err = new AppError("oops", "BAD_REQUEST", 400, { requestId: "req-123" });
     expect(err.toJSON()).toEqual({ error: "oops", code: "BAD_REQUEST", request_id: "req-123" });
   });
 });
