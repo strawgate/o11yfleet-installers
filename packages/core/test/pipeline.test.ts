@@ -392,4 +392,71 @@ service:
       "Host monitor: 3 components, 2 wires, 1 service pipelines (metrics)",
     );
   });
+
+  describe("expandPipelineConfig", () => {
+    it("throws when config has a nested key that conflicts with a dotted sibling", () => {
+      expect(() =>
+        expandPipelineConfig({
+          tls: { insecure: false },
+          "tls.insecure": true,
+        }),
+      ).toThrow(/Conflicting pipeline config keys/);
+    });
+
+    it("throws when config has a dotted key that conflicts with a nested ancestor", () => {
+      expect(() =>
+        expandPipelineConfig({
+          "tls.insecure": true,
+          tls: { insecure: false },
+        }),
+      ).toThrow(/Conflicting pipeline config keys/);
+    });
+  });
+
+  describe("renderCollectorYaml", () => {
+    it("propagates expandPipelineConfig throw on conflicting component keys", () => {
+      const graph: PipelineGraph = {
+        id: "conflict-test",
+        label: "Conflict test",
+        components: [
+          {
+            id: "r1",
+            role: "receiver",
+            type: "otlp",
+            name: "otlp",
+            signals: ["logs"],
+            config: {
+              tls: { insecure: false },
+              "tls.insecure": true,
+            },
+          },
+        ],
+        wires: [],
+      };
+
+      expect(() => renderCollectorYaml(graph)).toThrow(/Conflicting pipeline config keys/);
+    });
+
+    it("does not throw on configs without conflicts", () => {
+      const graph: PipelineGraph = {
+        id: "no-conflict-test",
+        label: "No conflict test",
+        components: [
+          {
+            id: "r1",
+            role: "receiver",
+            type: "otlp",
+            name: "otlp",
+            signals: ["logs"],
+            config: {
+              protocols: { grpc: { endpoint: "0.0.0.0:4317" } },
+            },
+          },
+        ],
+        wires: [],
+      };
+
+      expect(() => renderCollectorYaml(graph)).not.toThrow();
+    });
+  });
 });

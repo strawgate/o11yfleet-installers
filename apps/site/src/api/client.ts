@@ -9,6 +9,8 @@ import {
   type AuthUser,
 } from "@o11yfleet/core/api";
 
+import { stripUrlParam } from "./strip-url-param.js";
+
 /* ------------------------------------------------------------------ */
 /*  Error types                                                       */
 /* ------------------------------------------------------------------ */
@@ -40,26 +42,27 @@ export class AuthError extends ApiError {
 /*  API base detection                                                */
 /* ------------------------------------------------------------------ */
 
+function isLocalOverride(url: string | null): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
 export function detectApiBase(): string {
   const host = window.location.hostname;
   const buildApiUrl = import.meta.env.VITE_O11YFLEET_API_URL?.trim();
 
-  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") {
+  if (host === "localhost" || host === "127.0.0.1") {
     const params = new URLSearchParams(window.location.search);
     const apiParam = params.get("api");
     if (apiParam) {
-      try {
-        const url = new URL(apiParam, "http://localhost");
-        if (
-          url.hostname === "localhost" ||
-          url.hostname === "127.0.0.1" ||
-          url.hostname === "[::1]"
-        ) {
-          return apiParam;
-        }
-      } catch {
-        // ignore
-      }
+      const url = stripUrlParam(window.location.href, "api");
+      window.history.replaceState({}, "", url);
+      if (isLocalOverride(apiParam)) return apiParam;
     }
     return buildApiUrl || `http://${host}:8787`;
   }
@@ -95,7 +98,9 @@ export function detectApiBase(): string {
   return "";
 }
 
-export const apiBase: string = detectApiBase();
+const _apiBase = detectApiBase();
+localStorage.removeItem("fp-api-base");
+export const apiBase: string = _apiBase;
 
 export function apiUrl(path: string): string {
   return apiBase + path;

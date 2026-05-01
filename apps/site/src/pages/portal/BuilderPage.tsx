@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
@@ -57,6 +57,7 @@ export default function BuilderPage() {
   const [exampleId, setExampleId] = useState(DEFAULT_EXAMPLE_ID);
   const [yamlInput, setYamlInput] = useState("");
   const [importResult, setImportResult] = useState<CollectorYamlImportResult | null>(null);
+  const [yamlPreviewError, setYamlPreviewError] = useState<string | null>(null);
 
   const insightSurface = insightSurfaces.portalBuilder;
   const exampleEntries = Object.entries(PIPELINE_EXAMPLES);
@@ -70,7 +71,16 @@ export default function BuilderPage() {
     [importResult],
   );
   const validation = useMemo(() => validatePipelineGraph(graph), [graph]);
-  const yamlPreview = useMemo(() => renderCollectorYaml(graph), [graph]);
+  const [yamlPreview, setYamlPreview] = useState<string>("");
+  useEffect(() => {
+    setYamlPreviewError(null);
+    try {
+      setYamlPreview(renderCollectorYaml(graph));
+    } catch (err) {
+      setYamlPreviewError(err instanceof Error ? err.message : String(err));
+      setYamlPreview("");
+    }
+  }, [graph]);
   const componentsById = useMemo(
     () => new Map(graph.components.map((component) => [component.id, component])),
     [graph],
@@ -348,10 +358,19 @@ export default function BuilderPage() {
               <h3>Generated YAML</h3>
               <div className="pipe-panel-actions">
                 <span className="tag">artifact preview</span>
-                <CopyButton value={yamlPreview} label="copy YAML" />
+                {yamlPreview ? <CopyButton value={yamlPreview} label="copy YAML" /> : null}
               </div>
             </div>
-            <pre className="code-block mt-4 pipe-yaml">{yamlPreview}</pre>
+            {yamlPreviewError ? (
+              <div className="banner warn mt-4">
+                <div>
+                  <div className="b-title">YAML preview unavailable</div>
+                  <div className="b-body">{yamlPreviewError}</div>
+                </div>
+              </div>
+            ) : (
+              <pre className="code-block mt-4 pipe-yaml">{yamlPreview}</pre>
+            )}
           </section>
         ) : null}
       </div>
