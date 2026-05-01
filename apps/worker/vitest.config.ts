@@ -25,6 +25,8 @@ export default defineConfig({
         bindings: {
           ...requiredWorkerSecretTestBindings,
           ENVIRONMENT: "dev",
+          CLOUDFLARE_ANALYTICS_SQL_API_TOKEN: "",
+          CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID: "",
           CLOUDFLARE_USAGE_API_TOKEN: "",
           CLOUDFLARE_USAGE_ACCOUNT_ID: "",
           CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME: "",
