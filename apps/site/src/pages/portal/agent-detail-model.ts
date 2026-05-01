@@ -153,6 +153,8 @@ export function buildAgentDetailModel({
     hasSyncSignal: hasConfigSyncSignal,
   });
   const degradedAgents = healthy === false || agent?.status === "degraded" ? 1 : 0;
+  const connectedAgents = isConnected === true ? 1 : isConnected === false ? 0 : null;
+  const healthyAgents = healthy === true ? 1 : healthy === false ? 0 : null;
 
   const pageContext = buildBrowserPageContext({
     title: `${hostname} collector`,
@@ -162,8 +164,8 @@ export function buildAgentDetailModel({
     ],
     metrics: [
       pageMetric("total_agents", "Total collectors", 1),
-      pageMetric("connected_agents", "Connected collectors", isConnected === true ? 1 : 0),
-      pageMetric("healthy_agents", "Healthy collectors", healthy === true ? 1 : 0),
+      pageMetric("connected_agents", "Connected collectors", connectedAgents),
+      pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
       pageMetric("degraded_agents", "Degraded collectors", degradedAgents),
       pageMetric(
         "drifted_agents",
@@ -185,12 +187,24 @@ export function buildAgentDetailModel({
       pageDetail("config_sync", "Config sync", configSync.label),
       pageDetail("desired_config_hash", "Desired config hash", desiredHash ?? null),
       pageDetail("current_config_hash", "Current config hash", currentHash ?? null),
-      pageDetail(
-        "effective_config_hash",
-        "Effective config hash",
-        (agent?.effective_config_hash as string | undefined) ?? null,
-      ),
-      pageDetail("last_error", "Last error", (agent?.last_error as string | undefined) || null),
+      ...(tab !== "pipeline"
+        ? [
+            pageDetail(
+              "effective_config_hash",
+              "Effective config hash",
+              (agent?.effective_config_hash as string | undefined) ?? null,
+            ),
+          ]
+        : []),
+      ...(tab === "overview"
+        ? [
+            pageDetail(
+              "last_error",
+              "Last error",
+              (agent?.last_error as string | undefined) || null,
+            ),
+          ]
+        : []),
     ],
     tables:
       tab === "pipeline" && topology
@@ -232,8 +246,8 @@ export function buildAgentDetailModel({
       current_config_hash: currentHash ?? null,
       effective_config_hash: (agent?.effective_config_hash as string | undefined) ?? null,
       total_agents: 1,
-      connected_agents: isConnected === true ? 1 : 0,
-      healthy_agents: healthy === true ? 1 : 0,
+      connected_agents: connectedAgents,
+      healthy_agents: healthyAgents,
       degraded_agents: degradedAgents,
       drifted_agents: hasConfigSyncSignal ? (drift ? 1 : 0) : null,
       pipeline_components: componentCounts.total,
