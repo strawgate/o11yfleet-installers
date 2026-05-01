@@ -544,7 +544,7 @@ describe("admin API routes", () => {
     expect(healthBody.checks.r2?.status).toBe("healthy");
     expect(healthBody.checks.durable_objects?.status).toBe("healthy");
     expect(healthBody.checks.queue).toBeUndefined();
-    expect(healthBody.checks.d1?.detail).toContain("fleet counters");
+    expect(healthBody.checks.d1?.detail).toContain("Core admin entity tables");
     expect(healthBody.metrics.total_tenants).toBeTypeOf("number");
     expect(healthBody.metrics.total_configurations).toBeTypeOf("number");
     expect(healthBody.metrics.total_users).toBeTypeOf("number");
@@ -565,8 +565,10 @@ describe("admin API routes", () => {
     expect(["connected", "degraded", "unavailable"]).toContain(
       healthBody.sources.binding_probes?.status,
     );
-    expect(["write_only", "not_bound"]).toContain(healthBody.sources.analytics_engine?.status);
-    expect(healthBody.sources.analytics_engine?.detail).toContain("write datapoints");
+    expect(["connected", "error", "write_only", "not_bound"]).toContain(
+      healthBody.sources.analytics_engine?.status,
+    );
+    expect(healthBody.sources.analytics_engine?.detail).toContain("fleet metrics");
     expect(healthBody.sources.cloudflare_account_metrics?.status).toBe("not_configured");
     expect(healthBody.sources.cloudflare_account_metrics?.detail).toContain("No Cloudflare");
 

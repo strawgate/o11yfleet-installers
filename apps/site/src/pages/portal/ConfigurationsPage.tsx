@@ -1,15 +1,16 @@
 import { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useConfigurations, useCreateConfiguration } from "../../api/hooks/portal";
+import { useOverview, useCreateConfiguration } from "../../api/hooks/portal";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime, trunc } from "../../utils/format";
+import { configurationAgentMetrics } from "../../utils/config-stats";
 
 export default function ConfigurationsPage() {
-  const { data: configs, isLoading, error, refetch } = useConfigurations();
+  const overview = useOverview();
   const createConfig = useCreateConfiguration();
   const { toast } = useToast();
   const navigate = useNavigate();
@@ -18,10 +19,12 @@ export default function ConfigurationsPage() {
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
 
-  if (isLoading) return <LoadingSpinner />;
-  if (error) return <ErrorState error={error} retry={() => void refetch()} />;
+  if (overview.isLoading) return <LoadingSpinner />;
+  if (overview.error)
+    return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
 
-  const cfgList = configs ?? [];
+  const cfgList = overview.data?.configurations ?? [];
+  const metricsAvailable = overview.data?.metrics_source === "analytics_engine";
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -61,6 +64,7 @@ export default function ConfigurationsPage() {
             <tr>
               <th>Name</th>
               <th>Config hash</th>
+              <th>Collectors</th>
               <th>Description</th>
               <th>Updated</th>
               <th>
@@ -71,7 +75,7 @@ export default function ConfigurationsPage() {
           <tbody>
             {cfgList.length === 0 ? (
               <tr>
-                <td colSpan={5}>
+                <td colSpan={6}>
                   <EmptyState
                     icon="file"
                     title="No configurations yet"
@@ -84,21 +88,39 @@ export default function ConfigurationsPage() {
                 </td>
               </tr>
             ) : (
-              cfgList.map((c) => (
-                <tr key={c.id} className="clickable">
-                  <td className="name">
-                    <Link to={`/portal/configurations/${c.id}`}>{c.name}</Link>
-                  </td>
-                  <td className="mono-cell">
-                    {trunc(c["current_config_hash"] as string | undefined, 12)}
-                  </td>
-                  <td className="meta">{trunc(c["description"] as string | undefined, 40)}</td>
-                  <td className="meta">{relTime(c.updated_at)}</td>
-                  <td style={{ width: 32 }}>
-                    <Link to={`/portal/configurations/${c.id}`}>→</Link>
-                  </td>
-                </tr>
-              ))
+              cfgList.map((c) => {
+                const metrics = configurationAgentMetrics(
+                  c.stats,
+                  [],
+                  c.current_config_hash ?? undefined,
+                );
+                const hasSnapshot =
+                  metricsAvailable &&
+                  (typeof c.stats?.snapshot_at === "string" ||
+                    typeof c.stats?.snapshot_at === "number");
+                return (
+                  <tr key={c.id} className="clickable">
+                    <td className="name">
+                      <Link to={`/portal/configurations/${c.id}`}>{c.name}</Link>
+                    </td>
+                    <td className="mono-cell">{trunc(c.current_config_hash ?? undefined, 12)}</td>
+                    <td>
+                      {hasSnapshot ? (
+                        <span className="tag">
+                          {metrics.connectedAgents} / {metrics.totalAgents} connected
+                        </span>
+                      ) : (
+                        <span className="tag tag-warn">Metrics unavailable</span>
+                      )}
+                    </td>
+                    <td className="meta">{trunc(c.description, 40)}</td>
+                    <td className="meta">{relTime(c.updated_at)}</td>
+                    <td style={{ width: 32 }}>
+                      <Link to={`/portal/configurations/${c.id}`}>→</Link>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

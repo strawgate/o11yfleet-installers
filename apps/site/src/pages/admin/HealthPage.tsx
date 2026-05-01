@@ -47,6 +47,7 @@ const emptyHealthMetrics: HealthMetrics = {
   unhealthy_agents: 0,
   stale_agents: 0,
   last_agent_seen_at: null,
+  latest_fleet_snapshot_at: null,
   latest_configuration_updated_at: null,
   plan_counts: {},
 };
@@ -166,7 +167,8 @@ export default function HealthPage() {
             </div>
           )}
           <p className="meta mt-4">
-            Latest collector heartbeat: {relTime(metrics.last_agent_seen_at)}
+            Latest fleet metrics snapshot:{" "}
+            {relTime(metrics.latest_fleet_snapshot_at ?? metrics.last_agent_seen_at)}
           </p>
           <p className="meta mt-2">
             Active impersonation sessions: {numberMetric(metrics.impersonation_sessions)}

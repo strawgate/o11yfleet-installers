@@ -32,6 +32,7 @@ import {
   agentUid,
   hashLabel,
 } from "../../utils/agents";
+import { configurationAgentMetrics } from "../../utils/config-stats";
 import {
   buildInsightRequest,
   insightSurfaces,
@@ -58,17 +59,9 @@ export default function ConfigurationDetailPage() {
   const { toast } = useToast();
 
   const config = useConfiguration(id);
-  const hasConfigContent = Boolean(config.data?.["current_config_hash"]);
+  const hasConfigContent = Boolean(config.data?.current_config_hash);
   const yaml = useConfigurationYaml(id, hasConfigContent);
   const [agentCursor, setAgentCursor] = useState<string | undefined>(undefined);
-  const agents = useConfigurationAgents(id, { limit: 50, cursor: agentCursor });
-  const versions = useConfigurationVersions(id);
-  const tokens = useConfigurationTokens(id);
-  const stats = useConfigurationStats(id);
-  const deleteConfig = useDeleteConfiguration();
-  const createEnrollmentToken = useCreateEnrollmentToken(id ?? "");
-  const rollout = useRolloutConfig(id ?? "");
-
   const [activeTab, setActiveTab] = useState<Tab>("agents");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [enrollOpen, setEnrollOpen] = useState(false);
@@ -79,24 +72,38 @@ export default function ConfigurationDetailPage() {
   const [copilotRequest, setCopilotRequest] = useState<AiGuidanceRequest | null>(null);
   const [copilotTitle, setCopilotTitle] = useState("Configuration copilot");
   const latestCopilotRunRef = useRef(0);
+  const agents = useConfigurationAgents(id, {
+    limit: 50,
+    cursor: agentCursor,
+    enabled: activeTab === "agents",
+  });
+  const versions = useConfigurationVersions(id);
+  const tokens = useConfigurationTokens(id);
+  const stats = useConfigurationStats(id);
+  const deleteConfig = useDeleteConfiguration();
+  const createEnrollmentToken = useCreateEnrollmentToken(id ?? "");
+  const rollout = useRolloutConfig(id ?? "");
 
   const c = config.data;
   const agentList = agents.data?.agents ?? [];
   const versionList = versions.data ?? [];
   const tokenList = tokens.data ?? [];
-  const connectedAgents = stats.data?.connected_agents ?? stats.data?.agents_connected ?? 0;
-  const totalAgents = stats.data?.total_agents ?? agentList.length;
-  const healthyAgents = stats.data?.healthy_agents ?? 0;
-  const activeWebSockets = stats.data?.active_websockets;
-  const desiredHash =
-    stats.data?.desired_config_hash ?? (c?.["current_config_hash"] as string | undefined) ?? null;
-  // Drift and connection counts are derived from server-side aggregates so they
-  // remain accurate when the agents tab paginates beyond the first page.
-  const driftedAgents = stats.data?.drifted_agents ?? 0;
+  const agentMetrics = useMemo(
+    () => configurationAgentMetrics(stats.data, agentList, c?.current_config_hash ?? undefined),
+    [agentList, c, stats.data],
+  );
+  const connectedAgents = agentMetrics.connectedAgents;
+  const totalAgents = agentMetrics.totalAgents;
+  const healthyAgents = agentMetrics.healthyAgents;
+  const activeWebSockets = agentMetrics.activeWebSockets;
+  const desiredHash = agentMetrics.desiredConfigHash;
+  // Drift and connection counts are derived from server-side aggregates when
+  // available so they remain accurate beyond the first paginated agents page.
+  const driftedAgents = agentMetrics.driftedAgents;
   const connectedCount = connectedAgents;
   const guidanceReady =
     Boolean(c) &&
-    agents.isFetched &&
+    (activeTab !== "agents" || agents.isFetched) &&
     versions.isFetched &&
     tokens.isFetched &&
     stats.isFetched &&

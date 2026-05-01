@@ -1,9 +1,5 @@
 import { Link, useParams } from "react-router-dom";
-import {
-  useConfiguration,
-  useConfigurationAgent,
-  useConfigurationStats,
-} from "../../api/hooks/portal";
+import { useConfiguration, useConfigurationAgent } from "../../api/hooks/portal";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
@@ -25,7 +21,6 @@ export default function AgentDetailPage() {
   }>();
   const config = useConfiguration(configId);
   const agentQuery = useConfigurationAgent(configId, routeAgentUid);
-  const stats = useConfigurationStats(configId);
 
   if (config.isLoading || agentQuery.isLoading) return <LoadingSpinner />;
   if (config.error) return <ErrorState error={config.error} retry={() => void config.refetch()} />;
@@ -33,10 +28,7 @@ export default function AgentDetailPage() {
     return <ErrorState error={agentQuery.error} retry={() => void agentQuery.refetch()} />;
 
   const agent = agentQuery.data;
-  const desiredHash =
-    agent?.desired_config_hash ??
-    stats.data?.desired_config_hash ??
-    (config.data?.["current_config_hash"] as string | undefined);
+  const desiredHash = agent?.desired_config_hash ?? undefined;
   const currentHash = agent ? agentCurrentHash(agent) : undefined;
   const healthy = agent ? agentIsHealthy(agent) : null;
   const drift = agent ? agentHasDrift(agent, desiredHash) : false;

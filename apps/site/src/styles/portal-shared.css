@@ -859,6 +859,28 @@ body::before {
   flex: 1;
 }
 
+.agent-summary {
+  display: grid;
+  gap: 12px;
+  padding: 14px;
+}
+.agent-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 10px;
+}
+.agent-summary-grid > div {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.agent-summary-grid strong {
+  font-family: var(--font-mono);
+  font-size: 18px;
+  font-weight: 650;
+  color: var(--fg);
+}
+
 /* ---------- Tabs ---------- */
 .tabs {
   display: flex;

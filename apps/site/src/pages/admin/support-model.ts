@@ -22,6 +22,7 @@ export type HealthMetrics = {
   unhealthy_agents: number;
   stale_agents: number;
   last_agent_seen_at: string | null;
+  latest_fleet_snapshot_at?: string | null;
   latest_configuration_updated_at: string | null;
   plan_counts: Record<string, number>;
 };

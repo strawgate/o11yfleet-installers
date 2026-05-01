@@ -50,7 +50,12 @@ async function mockPortalOverview(page: Page) {
     current_config_hash: "abcdef1234567890",
     description: "Production collector group",
     updated_at: "2026-04-28T20:00:00.000Z",
-    stats: { connected: 2, total: 4, healthy: 2 },
+    stats: {
+      connected: 2,
+      total: 4,
+      healthy: 2,
+      snapshot_at: "2026-04-28T20:00:00.000Z",
+    },
   };
 
   await mockJson(page, "/api/v1/overview", {
@@ -60,10 +65,12 @@ async function mockPortalOverview(page: Page) {
     connected_agents: 2,
     healthy_agents: 2,
     active_rollouts: 0,
+    metrics_source: "analytics_engine",
+    metrics_error: null,
     configurations: [configuration],
   });
-  await mockJson(page, "/api/v1/configurations", { configurations: [configuration] });
   await mockEmptyGuidance(page);
+  return configuration;
 }
 
 function collectRuntimeErrors(page: Page): { errors: string[]; dispose: () => void } {
@@ -101,7 +108,8 @@ test.describe("portal smoke coverage", () => {
     const runtime = collectRuntimeErrors(page);
 
     await mockPortalSession(page);
-    await mockPortalOverview(page);
+    const configuration = await mockPortalOverview(page);
+    await mockJson(page, "/api/v1/configurations", { configurations: [configuration] });
 
     await page.goto(`${UI_URL}/login?api=${encodeURIComponent(API_URL)}`);
     await expect(page.getByRole("heading", { name: "Sign in to your workspace" })).toBeVisible();
@@ -144,18 +152,7 @@ test.describe("portal smoke coverage", () => {
     const runtime = collectRuntimeErrors(page);
 
     await mockPortalSession(page);
-    await mockJson(page, "/api/v1/configurations", {
-      configurations: [
-        {
-          id: "config-1",
-          name: "prod-collectors",
-          status: "active",
-          current_config_hash: "abcdef1234567890",
-          description: "Production collector group",
-          updated_at: "2026-04-28T20:00:00.000Z",
-        },
-      ],
-    });
+    await mockPortalOverview(page);
 
     await page.goto(`${UI_URL}/portal/configurations?api=${encodeURIComponent(API_URL)}`);
 

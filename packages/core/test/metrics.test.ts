@@ -5,7 +5,11 @@ import {
   configHistory,
   configSummary,
   configsWithMostDisconnections,
+  currentFleetSummary,
+  currentFleetSummaryByTenant,
   FLEET_CONFIG_SNAPSHOT_INTERVAL,
+  FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS,
+  latestSnapshotsForAllTenants,
   latestSnapshotForTenant,
   latestSnapshotForConfig,
   tenantAggregatedHistory,
@@ -186,10 +190,53 @@ describe("fleet metric query helpers", () => {
   it("returns only the newest tenant snapshot set", () => {
     const sql = latestSnapshotForTenant("tenant-1");
 
-    expect(sql).toContain("SELECT max(timestamp)");
+    expect(sql).toContain("argMax(double1, timestamp) AS agent_count");
+    expect(sql).toContain("GROUP BY");
     expect(sql).toContain("ORDER BY blob2 ASC");
     expect(sql).toContain(`blob3 = '${FLEET_CONFIG_SNAPSHOT_INTERVAL}'`);
+    expect(sql).toContain(
+      `timestamp >= NOW() - INTERVAL '${FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS}' DAY`,
+    );
     expect(sql).not.toContain("'5m'");
+  });
+
+  it("builds latest snapshot queries across all tenants", () => {
+    const sql = latestSnapshotsForAllTenants();
+
+    expect(sql).toContain("argMax(double2, timestamp) AS connected_count");
+    expect(sql).toContain("GROUP BY");
+    expect(sql).toContain("ORDER BY blob1 ASC, blob2 ASC");
+    expect(sql).toContain(
+      `timestamp >= NOW() - INTERVAL '${FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS}' DAY`,
+    );
+    expect(sql).not.toContain("WHERE blob1 =");
+  });
+
+  it("allows current snapshot freshness windows to be bounded explicitly", () => {
+    const sql = latestSnapshotsForAllTenants(2);
+
+    expect(sql).toContain("timestamp >= NOW() - INTERVAL '2' DAY");
+    expect(() => latestSnapshotsForAllTenants(0)).toThrow(
+      "maxAgeDays must be an integer between 1 and 90",
+    );
+  });
+
+  it("builds current fleet summary queries from latest snapshots", () => {
+    const sql = currentFleetSummary();
+
+    expect(sql).toContain("WITH latest AS");
+    expect(sql).toContain("sum(agent_count) AS total_agents");
+    expect(sql).toContain("countIf(agent_count > 0) AS configurations_with_agents");
+    expect(sql).not.toContain("agent_summaries");
+  });
+
+  it("builds tenant fleet summary queries from latest snapshots", () => {
+    const sql = currentFleetSummaryByTenant();
+
+    expect(sql).toContain("WITH latest AS");
+    expect(sql).toContain("GROUP BY tenant_id");
+    expect(sql).toContain("sum(agent_count) AS agent_count");
+    expect(sql).not.toContain("agent_summaries");
   });
 
   it("aggregates tenant history at tenant-wide timestamp grain without time-weighted averages", () => {

@@ -16,6 +16,7 @@ export const FLEET_CONFIG_SNAPSHOT_BLOBS = {
 } as const;
 
 export const FLEET_CONFIG_SNAPSHOT_INTERVAL = "activity";
+export const FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS = 7;
 
 export const FLEET_CONFIG_SNAPSHOT_DOUBLES = {
   AGENT_COUNT: "double1",
@@ -71,20 +72,111 @@ function boundedInteger(name: string, value: number, min: number, max: number): 
 /**
  * Latest activity-driven snapshot for all configs of a tenant.
  */
-export function latestSnapshotForTenant(tenantId: string): string {
+export function latestSnapshotForTenant(
+  tenantId: string,
+  maxAgeDays = FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS,
+): string {
   const tenant = sqlStringLiteral(tenantId);
+  const windowDays = boundedInteger("maxAgeDays", maxAgeDays, 1, 90);
   return `
-    SELECT ${FLEET_CONFIG_SNAPSHOT_COLUMNS}
+    SELECT
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID} AS tenant_id,
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID} AS config_id,
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL} AS interval,
+      max(timestamp) AS timestamp,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENT_COUNT}, timestamp) AS agent_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONNECTED_COUNT}, timestamp) AS connected_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.DISCONNECTED_COUNT}, timestamp) AS disconnected_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.HEALTHY_COUNT}, timestamp) AS healthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.UNHEALTHY_COUNT}, timestamp) AS unhealthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONNECTED_HEALTHY_COUNT}, timestamp) AS connected_healthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONFIG_UP_TO_DATE}, timestamp) AS config_up_to_date,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONFIG_PENDING}, timestamp) AS config_pending,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENTS_WITH_ERRORS}, timestamp) AS agents_with_errors,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENTS_STALE}, timestamp) AS agents_stale,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.WEBSOCKET_COUNT}, timestamp) AS websocket_count
     FROM fleet_metrics
     WHERE ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID} = ${tenant}
       AND ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL} = '${FLEET_CONFIG_SNAPSHOT_INTERVAL}'
-      AND timestamp = (
-        SELECT max(timestamp)
-        FROM fleet_metrics
-        WHERE ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID} = ${tenant}
-          AND ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL} = '${FLEET_CONFIG_SNAPSHOT_INTERVAL}'
-      )
+      AND timestamp >= NOW() - INTERVAL '${windowDays}' DAY
+    GROUP BY
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID},
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID},
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL}
     ORDER BY ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID} ASC
+  `;
+}
+
+/**
+ * Latest activity-driven snapshot for every config in every tenant.
+ */
+export function latestSnapshotsForAllTenants(
+  maxAgeDays = FLEET_CURRENT_SNAPSHOT_MAX_AGE_DAYS,
+): string {
+  const windowDays = boundedInteger("maxAgeDays", maxAgeDays, 1, 90);
+  return `
+    SELECT
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID} AS tenant_id,
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID} AS config_id,
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL} AS interval,
+      max(timestamp) AS timestamp,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENT_COUNT}, timestamp) AS agent_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONNECTED_COUNT}, timestamp) AS connected_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.DISCONNECTED_COUNT}, timestamp) AS disconnected_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.HEALTHY_COUNT}, timestamp) AS healthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.UNHEALTHY_COUNT}, timestamp) AS unhealthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONNECTED_HEALTHY_COUNT}, timestamp) AS connected_healthy_count,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONFIG_UP_TO_DATE}, timestamp) AS config_up_to_date,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.CONFIG_PENDING}, timestamp) AS config_pending,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENTS_WITH_ERRORS}, timestamp) AS agents_with_errors,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.AGENTS_STALE}, timestamp) AS agents_stale,
+      argMax(${FLEET_CONFIG_SNAPSHOT_DOUBLES.WEBSOCKET_COUNT}, timestamp) AS websocket_count
+    FROM fleet_metrics
+    WHERE ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL} = '${FLEET_CONFIG_SNAPSHOT_INTERVAL}'
+      AND timestamp >= NOW() - INTERVAL '${windowDays}' DAY
+    GROUP BY
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID},
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID},
+      ${FLEET_CONFIG_SNAPSHOT_BLOBS.INTERVAL}
+    ORDER BY ${FLEET_CONFIG_SNAPSHOT_BLOBS.TENANT_ID} ASC, ${FLEET_CONFIG_SNAPSHOT_BLOBS.CONFIG_ID} ASC
+  `;
+}
+
+/**
+ * Current fleet counters across the latest snapshot for every config.
+ */
+export function currentFleetSummary(): string {
+  return `
+    WITH latest AS (${latestSnapshotsForAllTenants()})
+    SELECT
+      sum(agent_count) AS total_agents,
+      sum(connected_count) AS connected_agents,
+      sum(disconnected_count) AS disconnected_agents,
+      sum(healthy_count) AS healthy_agents,
+      sum(unhealthy_count) AS unhealthy_agents,
+      sum(agents_stale) AS stale_agents,
+      countIf(agent_count > 0) AS configurations_with_agents,
+      max(timestamp) AS latest_snapshot_at
+    FROM latest
+  `;
+}
+
+/**
+ * Current fleet counters per tenant across each config's latest snapshot.
+ */
+export function currentFleetSummaryByTenant(): string {
+  return `
+    WITH latest AS (${latestSnapshotsForAllTenants()})
+    SELECT
+      tenant_id,
+      sum(agent_count) AS agent_count,
+      sum(connected_count) AS connected_agents,
+      sum(healthy_count) AS healthy_agents,
+      countIf(agent_count > 0) AS configurations_with_agents,
+      max(timestamp) AS latest_snapshot_at
+    FROM latest
+    GROUP BY tenant_id
+    ORDER BY tenant_id ASC
   `;
 }
 

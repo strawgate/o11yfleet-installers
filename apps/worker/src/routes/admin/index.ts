@@ -12,6 +12,7 @@ import {
   handleAdminChatRequest,
   handleAdminGuidanceRequest,
 } from "../../ai/guidance.js";
+import { isAnalyticsSqlConfigured, runAnalyticsSql } from "../../analytics-sql.js";
 import { buildCloudflareUsage, cloudflareUsageRequiredEnv } from "../../cloudflare-usage.js";
 import {
   DEFAULT_PLAN,
@@ -24,6 +25,7 @@ import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
+import { currentFleetSummary, currentFleetSummaryByTenant } from "@o11yfleet/core/metrics";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -208,20 +210,10 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   const totalRow = await env.FP_DB.prepare(`SELECT COUNT(*) as count FROM tenants t ${whereSql}`)
     .bind(...whereParams)
     .first<{ count: number }>();
-  // Use correlated scalar subqueries instead of derived-table JOINs.
-  // The previous LEFT JOIN (SELECT tenant_id, COUNT(*) ... GROUP BY
-  // tenant_id) shape forced D1 to materialize the full configurations
-  // and agent_summaries aggregates into intermediate tables before
-  // applying the outer LIMIT — even when listing one page of 25
-  // tenants on a fleet with thousands of agents. Correlated subqueries
-  // let the planner use per-tenant indexes for each row.
   const result = await env.FP_DB.prepare(
     `SELECT
       t.*,
-      (SELECT COUNT(*) FROM configurations WHERE tenant_id = t.id) as config_count,
-      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id) as agent_count,
-      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id AND status = 'connected') as connected_agents,
-      (SELECT COUNT(*) FROM agent_summaries WHERE tenant_id = t.id AND healthy = 1) as healthy_agents
+      (SELECT COUNT(*) FROM configurations WHERE tenant_id = t.id) as config_count
      FROM tenants t
      ${whereSql}
      ORDER BY ${TENANT_SORTS[sort]}
@@ -229,11 +221,25 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   )
     .bind(...whereParams, limit, offset)
     .all();
+  const tenantMetrics = await readTenantFleetSummaries(env);
+  const tenants = result.results.map((tenant) => {
+    const tenantId = String(tenant["id"] ?? "");
+    const metrics = tenantMetrics.byTenant.get(tenantId);
+    return {
+      ...tenant,
+      agent_count: numberMetric(metrics?.agent_count),
+      connected_agents: numberMetric(metrics?.connected_agents),
+      healthy_agents: numberMetric(metrics?.healthy_agents),
+      metrics_source: tenantMetrics.available ? "analytics_engine" : "unavailable",
+    };
+  });
   const total = totalRow?.count ?? 0;
   return Response.json({
-    tenants: result.results,
+    tenants,
     pagination: { page, limit, total, has_more: offset + result.results.length < total },
     filters: { q, plan, sort },
+    metrics_source: tenantMetrics.available ? "analytics_engine" : "unavailable",
+    metrics_error: tenantMetrics.error,
   });
 }
 
@@ -394,6 +400,7 @@ interface HealthMetrics {
   unhealthy_agents: number;
   stale_agents: number;
   last_agent_seen_at: string | null;
+  latest_fleet_snapshot_at: string | null;
   latest_configuration_updated_at: string | null;
   plan_counts: Record<string, number>;
 }
@@ -401,6 +408,42 @@ interface HealthMetrics {
 interface HealthDataSource {
   status: string;
   detail: string;
+}
+
+interface FleetMetricsSummary {
+  available: boolean;
+  error: string | null;
+  total_agents: number;
+  connected_agents: number;
+  disconnected_agents: number;
+  unknown_agents: number;
+  healthy_agents: number;
+  unhealthy_agents: number;
+  stale_agents: number;
+  configurations_with_agents: number;
+  latest_snapshot_at: string | null;
+}
+
+interface FleetSummaryRow {
+  total_agents: number | null;
+  connected_agents: number | null;
+  disconnected_agents: number | null;
+  healthy_agents: number | null;
+  unhealthy_agents: number | null;
+  stale_agents: number | null;
+  configurations_with_agents: number | null;
+  latest_snapshot_at: string | number | null;
+  [column: string]: string | number | null;
+}
+
+interface TenantFleetSummaryRow {
+  tenant_id: string | null;
+  agent_count: number | null;
+  connected_agents: number | null;
+  healthy_agents: number | null;
+  configurations_with_agents: number | null;
+  latest_snapshot_at: string | number | null;
+  [column: string]: string | number | null;
 }
 
 const EMPTY_HEALTH_METRICS: HealthMetrics = {
@@ -420,6 +463,7 @@ const EMPTY_HEALTH_METRICS: HealthMetrics = {
   unhealthy_agents: 0,
   stale_agents: 0,
   last_agent_seen_at: null,
+  latest_fleet_snapshot_at: null,
   latest_configuration_updated_at: null,
   plan_counts: {},
 };
@@ -428,9 +472,93 @@ function emptyHealthMetrics(): HealthMetrics {
   return { ...EMPTY_HEALTH_METRICS, plan_counts: {} };
 }
 
+function numberMetric(value: number | null | undefined): number {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0;
+}
+
+function timestampMetric(value: string | number | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return String(value);
+}
+
+async function readFleetMetricsSummary(env: Env): Promise<FleetMetricsSummary> {
+  const empty: FleetMetricsSummary = {
+    available: false,
+    error: null,
+    total_agents: 0,
+    connected_agents: 0,
+    disconnected_agents: 0,
+    unknown_agents: 0,
+    healthy_agents: 0,
+    unhealthy_agents: 0,
+    stale_agents: 0,
+    configurations_with_agents: 0,
+    latest_snapshot_at: null,
+  };
+
+  if (!isAnalyticsSqlConfigured(env)) return empty;
+
+  try {
+    const rows = await runAnalyticsSql<FleetSummaryRow>(env, currentFleetSummary());
+    const row = rows[0];
+    if (!row) return { ...empty, available: true };
+    const totalAgents = numberMetric(row.total_agents);
+    const connectedAgents = numberMetric(row.connected_agents);
+    const disconnectedAgents = numberMetric(row.disconnected_agents);
+    return {
+      available: true,
+      error: null,
+      total_agents: totalAgents,
+      connected_agents: connectedAgents,
+      disconnected_agents: disconnectedAgents,
+      unknown_agents: Math.max(totalAgents - connectedAgents - disconnectedAgents, 0),
+      healthy_agents: numberMetric(row.healthy_agents),
+      unhealthy_agents: numberMetric(row.unhealthy_agents),
+      stale_agents: numberMetric(row.stale_agents),
+      configurations_with_agents: numberMetric(row.configurations_with_agents),
+      latest_snapshot_at: timestampMetric(row.latest_snapshot_at),
+    };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("readFleetMetricsSummary: AE query failed:", error);
+    return { ...empty, error };
+  }
+}
+
+async function readTenantFleetSummaries(env: Env): Promise<{
+  available: boolean;
+  error: string | null;
+  byTenant: Map<string, TenantFleetSummaryRow>;
+}> {
+  const empty: {
+    available: boolean;
+    error: string | null;
+    byTenant: Map<string, TenantFleetSummaryRow>;
+  } = {
+    available: false,
+    error: null,
+    byTenant: new Map<string, TenantFleetSummaryRow>(),
+  };
+  if (!isAnalyticsSqlConfigured(env)) return empty;
+
+  try {
+    const rows = await runAnalyticsSql<TenantFleetSummaryRow>(env, currentFleetSummaryByTenant());
+    const byTenant = new Map<string, TenantFleetSummaryRow>();
+    for (const row of rows) {
+      if (row.tenant_id) byTenant.set(row.tenant_id, row);
+    }
+    return { available: true, error: null, byTenant };
+  } catch (err) {
+    const error = err instanceof Error ? err.message : String(err);
+    console.error("readTenantFleetSummaries: AE query failed:", error);
+    return { ...empty, error };
+  }
+}
+
 async function handleHealthCheck(env: Env): Promise<Response> {
   const checks: Record<string, HealthCheck> = {};
   let metrics: HealthMetrics = emptyHealthMetrics();
+  const fleetMetrics = await readFleetMetricsSummary(env);
 
   checks["worker"] = { status: "healthy", detail: "Worker request handler is responding" };
 
@@ -438,7 +566,6 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   const d1Start = Date.now();
   try {
     const nowIso = new Date().toISOString();
-    const staleAgentCutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
     const results = await env.FP_DB.batch([
       env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants"),
       env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
@@ -448,30 +575,12 @@ async function handleHealthCheck(env: Env): Promise<Response> {
          LEFT JOIN configurations c ON c.tenant_id = t.id
          WHERE c.id IS NULL`,
       ),
-      env.FP_DB.prepare(
-        `SELECT COUNT(*) as count
-         FROM configurations c
-         LEFT JOIN agent_summaries a ON a.config_id = c.id
-         WHERE a.instance_uid IS NULL`,
-      ),
       env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
       env.FP_DB.prepare("SELECT COUNT(*) as count FROM sessions WHERE expires_at > ?").bind(nowIso),
       env.FP_DB.prepare(
         "SELECT COUNT(*) as count FROM sessions WHERE is_impersonation = 1 AND expires_at > ?",
       ).bind(nowIso),
       env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
-      env.FP_DB.prepare(
-        `SELECT
-          COUNT(*) as total_agents,
-          COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
-          COALESCE(SUM(CASE WHEN status = 'disconnected' THEN 1 ELSE 0 END), 0) as disconnected_agents,
-          COALESCE(SUM(CASE WHEN status = 'unknown' THEN 1 ELSE 0 END), 0) as unknown_agents,
-          COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents,
-          COALESCE(SUM(CASE WHEN healthy = 0 THEN 1 ELSE 0 END), 0) as unhealthy_agents,
-          COALESCE(SUM(CASE WHEN last_seen_at IS NOT NULL AND last_seen_at < ? THEN 1 ELSE 0 END), 0) as stale_agents,
-          MAX(last_seen_at) as last_agent_seen_at
-         FROM agent_summaries`,
-      ).bind(staleAgentCutoff),
       env.FP_DB.prepare(
         "SELECT MAX(updated_at) as latest_configuration_updated_at FROM configurations",
       ),
@@ -483,22 +592,10 @@ async function handleHealthCheck(env: Env): Promise<Response> {
       return row?.count ?? 0;
     }
 
-    const agentRow = results[8]?.results?.[0] as
-      | {
-          total_agents?: number;
-          connected_agents?: number;
-          disconnected_agents?: number;
-          unknown_agents?: number;
-          healthy_agents?: number;
-          unhealthy_agents?: number;
-          stale_agents?: number;
-          last_agent_seen_at?: string | null;
-        }
-      | undefined;
-    const latestConfigRow = results[9]?.results?.[0] as
+    const latestConfigRow = results[7]?.results?.[0] as
       | { latest_configuration_updated_at?: string | null }
       | undefined;
-    const planRows = (results[10]?.results ?? []) as Array<{ plan?: string; count?: number }>;
+    const planRows = (results[8]?.results ?? []) as Array<{ plan?: string; count?: number }>;
     const planCounts: Record<string, number> = {};
     for (const row of planRows) {
       if (row.plan) planCounts[row.plan] = row.count ?? 0;
@@ -508,19 +605,22 @@ async function handleHealthCheck(env: Env): Promise<Response> {
       total_tenants: countAt(0),
       total_configurations: countAt(1),
       tenants_without_configurations: countAt(2),
-      configurations_without_agents: countAt(3),
-      total_users: countAt(4),
-      active_sessions: countAt(5),
-      impersonation_sessions: countAt(6),
-      active_tokens: countAt(7),
-      total_agents: agentRow?.total_agents ?? 0,
-      connected_agents: agentRow?.connected_agents ?? 0,
-      disconnected_agents: agentRow?.disconnected_agents ?? 0,
-      unknown_agents: agentRow?.unknown_agents ?? 0,
-      healthy_agents: agentRow?.healthy_agents ?? 0,
-      unhealthy_agents: agentRow?.unhealthy_agents ?? 0,
-      stale_agents: agentRow?.stale_agents ?? 0,
-      last_agent_seen_at: agentRow?.last_agent_seen_at ?? null,
+      configurations_without_agents: fleetMetrics.available
+        ? Math.max(countAt(1) - fleetMetrics.configurations_with_agents, 0)
+        : 0,
+      total_users: countAt(3),
+      active_sessions: countAt(4),
+      impersonation_sessions: countAt(5),
+      active_tokens: countAt(6),
+      total_agents: fleetMetrics.total_agents,
+      connected_agents: fleetMetrics.connected_agents,
+      disconnected_agents: fleetMetrics.disconnected_agents,
+      unknown_agents: fleetMetrics.unknown_agents,
+      healthy_agents: fleetMetrics.healthy_agents,
+      unhealthy_agents: fleetMetrics.unhealthy_agents,
+      stale_agents: fleetMetrics.stale_agents,
+      last_agent_seen_at: null,
+      latest_fleet_snapshot_at: fleetMetrics.latest_snapshot_at,
       latest_configuration_updated_at: latestConfigRow?.latest_configuration_updated_at ?? null,
       plan_counts: planCounts,
     };
@@ -528,7 +628,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
     checks["d1"] = {
       status: "healthy",
       latency_ms: Date.now() - d1Start,
-      detail: "Core admin tables and fleet counters are queryable",
+      detail: "Core admin entity tables are queryable",
     };
   } catch (e) {
     checks["d1"] = {
@@ -598,17 +698,25 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   const sources: Record<string, HealthDataSource> = {
     app_database: {
       status: checks["d1"]?.status === "healthy" ? "connected" : "unavailable",
-      detail:
-        "O11yFleet D1 tables: tenants, configurations, users, sessions, tokens, and agent summaries",
+      detail: "O11yFleet D1 entity tables: tenants, configurations, users, sessions, and tokens",
     },
     binding_probes: {
       status: bindingProbeStatus,
       detail: bindingProbeDetail,
     },
     analytics_engine: {
-      status: env.FP_ANALYTICS ? "write_only" : "not_bound",
-      detail:
-        "Config and product metrics can write datapoints when the binding exists; this health endpoint does not query Analytics Engine yet",
+      status: fleetMetrics.available
+        ? "connected"
+        : isAnalyticsSqlConfigured(env)
+          ? "error"
+          : env.FP_ANALYTICS
+            ? "write_only"
+            : "not_bound",
+      detail: fleetMetrics.available
+        ? "Analytics Engine SQL returned current fleet metrics"
+        : fleetMetrics.error
+          ? `Analytics Engine SQL failed: ${fleetMetrics.error}`
+          : "Analytics Engine SQL credentials are not configured; fleet metrics are unavailable",
     },
     cloudflare_account_metrics: {
       status: cloudflareAccountMetricsConfigured ? "configured" : "not_configured",
@@ -657,31 +765,24 @@ async function handleAdminOverview(env: Env): Promise<Response> {
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
     env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
-    env.FP_DB.prepare(
-      `SELECT
-        COUNT(*) as total_agents,
-        COALESCE(SUM(CASE WHEN status = 'connected' THEN 1 ELSE 0 END), 0) as connected_agents,
-        COALESCE(SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END), 0) as healthy_agents
-       FROM agent_summaries`,
-    ),
   ]);
+  const fleetMetrics = await readFleetMetricsSummary(env);
 
   function getCount(idx: number): number {
     const row = results[idx]?.results?.[0] as { count?: number } | undefined;
     return row?.count ?? 0;
   }
-  const fleetStats = results[4]?.results?.[0] as
-    | { total_agents?: number; connected_agents?: number; healthy_agents?: number }
-    | undefined;
 
   return Response.json({
     total_tenants: getCount(0),
     total_configurations: getCount(1),
     total_active_tokens: getCount(2),
     total_users: getCount(3),
-    total_agents: fleetStats?.total_agents ?? 0,
-    connected_agents: fleetStats?.connected_agents ?? 0,
-    healthy_agents: fleetStats?.healthy_agents ?? 0,
+    total_agents: fleetMetrics.total_agents,
+    connected_agents: fleetMetrics.connected_agents,
+    healthy_agents: fleetMetrics.healthy_agents,
+    metrics_source: fleetMetrics.available ? "analytics_engine" : "unavailable",
+    metrics_error: fleetMetrics.error,
   });
 }
 

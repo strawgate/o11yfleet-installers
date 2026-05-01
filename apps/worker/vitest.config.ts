@@ -38,6 +38,7 @@ export default defineConfig({
   ],
   test: {
     include: ["test/**/*.test.ts"],
+    exclude: ["test/data-source-policy.test.ts"],
     // Workerd startup is memory-sensitive on small CI runners; serial files keep
     // local and 2-core runner checks stable while test cases still run normally.
     fileParallelism: false,

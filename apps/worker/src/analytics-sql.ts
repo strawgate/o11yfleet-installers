@@ -57,9 +57,8 @@ export function isAnalyticsSqlConfigured(env: AnalyticsSqlEnv): boolean {
  *
  * Throws `AnalyticsSqlNotConfiguredError` if the runtime env is missing
  * the AE credentials. Throws `AnalyticsSqlError` on non-2xx responses or
- * malformed payloads. Routes that have a usable fallback (e.g. the
- * Overview route's per-DO `/stats` fan-out) should catch
- * `AnalyticsSqlNotConfiguredError` specifically and degrade.
+ * malformed payloads. Routes should surface unavailable metrics explicitly
+ * rather than fanning out across Durable Objects to rebuild aggregate pages.
  */
 export async function runAnalyticsSql<T extends AnalyticsSqlRow = AnalyticsSqlRow>(
   env: AnalyticsSqlEnv,

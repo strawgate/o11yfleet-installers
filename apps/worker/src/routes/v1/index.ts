@@ -28,11 +28,7 @@ import {
   listConfigsForTenant,
   type ConfigurationRow,
 } from "../../shared/db-helpers.js";
-import {
-  AnalyticsSqlNotConfiguredError,
-  isAnalyticsSqlConfigured,
-  runAnalyticsSql,
-} from "../../analytics-sql.js";
+import { isAnalyticsSqlConfigured, runAnalyticsSql } from "../../analytics-sql.js";
 import { latestSnapshotForTenant } from "@o11yfleet/core/metrics";
 
 // ─── Router ─────────────────────────────────────────────────────────
@@ -830,15 +826,10 @@ interface AeSnapshotRow {
 }
 
 /**
- * Build the Overview payload by reading the latest fleet metrics snapshot
- * for the tenant from Analytics Engine. Each Config DO writes one snapshot
- * per `(tenant_id, config_id)` per alarm tick; we sum across configs in
- * the route handler. Single AE round-trip replaces the previous
- * per-config DO `/stats` fan-out (PERF-CRIT-11 / #329).
- *
- * Falls back to the per-DO fan-out when AE is not configured (e.g. in
- * dev) or when AE returns an error — Overview must never hard-fail on
- * a metrics-store outage.
+ * Build the Overview payload from Analytics Engine fleet metrics snapshots.
+ * Overview intentionally does not fan out across Config DOs as a fallback:
+ * missing metrics should be visible as unavailable/stale data, not converted
+ * into a very expensive page render.
  */
 async function handleGetOverview(env: Env, tenantId: string): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
@@ -856,48 +847,47 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
       updated_at: string;
     }>();
 
-  let configStats: Array<Record<string, unknown>>;
+  let metricsSource: "analytics_engine" | "unavailable" = "unavailable";
+  let metricsError: string | null = null;
   const totals = { totalAgents: 0, connectedAgents: 0, healthyAgents: 0 };
+  const byConfig = new Map<string, AeSnapshotRow>();
 
   if (isAnalyticsSqlConfigured(env)) {
     try {
       const rows = await runAnalyticsSql<AeSnapshotRow>(env, latestSnapshotForTenant(tenantId));
-      const byConfig = new Map<string, AeSnapshotRow>();
       for (const row of rows) byConfig.set(row.config_id, row);
-      configStats = configs.results.map((config) => {
-        const snapshot = byConfig.get(config.id);
-        const stats = snapshot
-          ? {
-              total_agents: snapshot.agent_count,
-              connected_agents: snapshot.connected_count,
-              healthy_agents: snapshot.healthy_count,
-              websockets: snapshot.websocket_count,
-              snapshot_at: snapshot.timestamp,
-            }
-          : {
-              total_agents: 0,
-              connected_agents: 0,
-              healthy_agents: 0,
-              websockets: 0,
-              snapshot_at: null,
-            };
-        totals.totalAgents += stats.total_agents;
-        totals.connectedAgents += stats.connected_agents;
-        totals.healthyAgents += stats.healthy_agents;
-        return { ...config, stats };
-      });
+      metricsSource = "analytics_engine";
     } catch (err) {
-      if (!(err instanceof AnalyticsSqlNotConfiguredError)) {
-        console.error(
-          `handleGetOverview: AE snapshot read failed for tenant ${tenantId}, falling back to per-DO stats:`,
-          err instanceof Error ? err.message : String(err),
-        );
-      }
-      configStats = await fanOutPerDoStats(env, tenantId, configs.results, totals);
+      metricsError = err instanceof Error ? err.message : String(err);
+      console.error(
+        `handleGetOverview: AE snapshot read failed for tenant ${tenantId}:`,
+        metricsError,
+      );
     }
-  } else {
-    configStats = await fanOutPerDoStats(env, tenantId, configs.results, totals);
   }
+
+  const configStats = configs.results.map((config) => {
+    const snapshot = byConfig.get(config.id);
+    const stats = snapshot
+      ? {
+          total_agents: snapshot.agent_count,
+          connected_agents: snapshot.connected_count,
+          healthy_agents: snapshot.healthy_count,
+          websockets: snapshot.websocket_count,
+          snapshot_at: snapshot.timestamp,
+        }
+      : {
+          total_agents: 0,
+          connected_agents: 0,
+          healthy_agents: 0,
+          websockets: 0,
+          snapshot_at: null,
+        };
+    totals.totalAgents += stats.total_agents;
+    totals.connectedAgents += stats.connected_agents;
+    totals.healthyAgents += stats.healthy_agents;
+    return { ...config, stats };
+  });
 
   return Response.json({
     tenant,
@@ -906,44 +896,9 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     healthy_agents: totals.healthyAgents,
     configs_count: configs.results.length,
     configurations: configStats,
+    metrics_source: metricsSource,
+    metrics_error: metricsError,
   });
-}
-
-/**
- * Legacy per-config DO `/stats` fan-out, kept as a fallback for
- * environments without Analytics Engine read credentials. Mutates
- * `totals` in place.
- */
-async function fanOutPerDoStats(
-  env: Env,
-  tenantId: string,
-  configs: Array<Record<string, unknown>>,
-  totals: { totalAgents: number; connectedAgents: number; healthyAgents: number },
-): Promise<Array<Record<string, unknown>>> {
-  const statsResults = await Promise.all(
-    configs.map(async (config) => {
-      const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, config["id"] as string));
-      const stub = env.CONFIG_DO.get(doId);
-      try {
-        const resp = await stub.fetch(new Request("http://internal/stats"));
-        return { config, stats: (await resp.json()) as Record<string, number> };
-      } catch (err) {
-        console.error(
-          `handleGetOverview: stats fetch failed for config ${config["id"]} (tenant ${tenantId}):`,
-          err instanceof Error ? err.message : String(err),
-        );
-        return { config, stats: { total: 0, connected: 0, healthy: 0 } as Record<string, number> };
-      }
-    }),
-  );
-  const out: Array<Record<string, unknown>> = [];
-  for (const { config, stats } of statsResults) {
-    totals.totalAgents += stats["total_agents"] ?? stats["total"] ?? 0;
-    totals.connectedAgents += stats["connected_agents"] ?? stats["connected"] ?? 0;
-    totals.healthyAgents += stats["healthy_agents"] ?? stats["healthy"] ?? 0;
-    out.push({ ...config, stats });
-  }
-  return out;
 }
 
 // ─── Update Tenant ──────────────────────────────────────────────────

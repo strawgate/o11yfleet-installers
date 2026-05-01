@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   useConfigurations,
@@ -10,6 +10,7 @@ import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { configurationAgentMetrics } from "../../utils/config-stats";
 import installScriptSource from "../../../install.sh?raw";
 
 const INSTALL_SH = (token: string) =>
@@ -40,6 +41,7 @@ export default function GettingStartedPage() {
   const tokenConfigId = selectedConfigId || "__none__";
   const createToken = useCreateEnrollmentToken(tokenConfigId);
   const stats = useConfigurationStats(step >= 4 ? selectedConfigId : undefined);
+  const agentMetrics = useMemo(() => configurationAgentMetrics(stats.data, [], null), [stats.data]);
 
   // Auto-select first config
   useEffect(() => {
@@ -51,10 +53,10 @@ export default function GettingStartedPage() {
   // Poll for agent connection in step 4
   useEffect(() => {
     if (step !== 4 || !stats.data) return;
-    if ((stats.data.agents_connected ?? 0) > 0) {
+    if (agentMetrics.connectedAgents > 0) {
       setConnected(true);
     }
-  }, [step, stats.data]);
+  }, [agentMetrics.connectedAgents, step, stats.data]);
 
   const refetchStats = useCallback(() => {
     void stats.refetch();

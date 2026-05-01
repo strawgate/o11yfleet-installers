@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
-import { useOverview, useConfigurations } from "../../api/hooks/portal";
+import { useOverview } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -8,6 +8,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
+import { configurationAgentMetrics } from "../../utils/config-stats";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
@@ -15,9 +16,8 @@ import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
   const overview = useOverview();
-  const configs = useConfigurations();
   const ov = overview.data;
-  const cfgList = Array.isArray(ov?.configurations) ? ov.configurations : (configs.data ?? []);
+  const cfgList = Array.isArray(ov?.configurations) ? ov.configurations : [];
   const totalConfigs =
     typeof ov?.configs_count === "number"
       ? ov.configs_count
@@ -34,38 +34,37 @@ export default function OverviewPage() {
   const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
   const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
   const insightSurface = insightSurfaces.portalOverview;
-  const pageContext =
-    overview.data && configs.data
-      ? buildBrowserPageContext({
-          title: "Fleet overview",
-          visible_text: [
-            "Collector status, health, and drift are separate signals.",
-            "A collector can be connected and still report unhealthy runtime state.",
-          ],
-          metrics: [
-            pageMetric("configs_count", "Configurations", totalConfigs),
-            pageMetric("total_agents", "Total collectors", totalAgents),
-            pageMetric("connected_agents", "Connected collectors", connectedAgents),
-            pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
-            pageMetric("active_rollouts", "Active rollouts", activeRollouts),
-          ],
-          tables: [
-            pageTable(
-              "recent_configurations",
-              "Recent configurations",
-              cfgList.slice(0, 8).map((config) => ({
-                id: config.id,
-                name: config.name,
-                status: config.status ?? null,
-                updated_at: config.updated_at ?? null,
-              })),
-              { totalRows: cfgList.length },
-            ),
-          ],
-        })
-      : null;
+  const pageContext = overview.data
+    ? buildBrowserPageContext({
+        title: "Fleet overview",
+        visible_text: [
+          "Collector status, health, and drift are separate signals.",
+          "A collector can be connected and still report unhealthy runtime state.",
+        ],
+        metrics: [
+          pageMetric("configs_count", "Configurations", totalConfigs),
+          pageMetric("total_agents", "Total collectors", totalAgents),
+          pageMetric("connected_agents", "Connected collectors", connectedAgents),
+          pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
+          pageMetric("active_rollouts", "Active rollouts", activeRollouts),
+        ],
+        tables: [
+          pageTable(
+            "recent_configurations",
+            "Recent configurations",
+            cfgList.slice(0, 8).map((config) => ({
+              id: config.id,
+              name: config.name,
+              status: config.status ?? null,
+              updated_at: config.updated_at ?? null,
+            })),
+            { totalRows: cfgList.length },
+          ),
+        ],
+      })
+    : null;
   const guidanceRequest: AiGuidanceRequest | null =
-    overview.data && configs.data && pageContext
+    overview.data && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -112,11 +111,9 @@ export default function OverviewPage() {
   );
   const agentInsight = guidance.data?.items.find((item) => item.target_key === "overview.agents");
 
-  if (overview.isLoading || configs.isLoading) return <LoadingSpinner />;
+  if (overview.isLoading) return <LoadingSpinner />;
   if (overview.error)
     return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
-  if (configs.error)
-    return <ErrorState error={configs.error} retry={() => void configs.refetch()} />;
 
   return (
     <div className="main-wide">
@@ -207,22 +204,41 @@ export default function OverviewPage() {
               </tr>
             ) : (
               cfgList.slice(0, 5).map((c) => {
-                const stats = c.stats;
-                const desiredHash = c["current_config_hash"] as string | undefined;
+                const metrics = configurationAgentMetrics(
+                  c.stats,
+                  [],
+                  c.current_config_hash ?? undefined,
+                );
+                const hasSnapshot =
+                  typeof c.stats?.snapshot_at === "string" ||
+                  typeof c.stats?.snapshot_at === "number";
+                const healthyTagClass =
+                  metrics.totalAgents === 0
+                    ? "tag"
+                    : metrics.healthyAgents === metrics.totalAgents
+                      ? "tag tag-ok"
+                      : metrics.healthyAgents > 0
+                        ? "tag tag-warn"
+                        : "tag tag-err";
+                const desiredHash = c.current_config_hash ?? undefined;
                 return (
-                  <tr key={c.id} className="clickable" onClick={() => {}}>
+                  <tr key={c.id}>
                     <td className="name">
                       <Link to={`/portal/configurations/${c.id}`}>{c.name}</Link>
                     </td>
                     <td>
-                      <span className="tag">
-                        {stats ? `${stats.connected ?? 0} / ${stats.total ?? 0} connected` : "—"}
-                      </span>
-                      {typeof stats?.healthy === "number" ? (
-                        <span className="tag tag-ok" style={{ marginLeft: 6 }}>
-                          {stats.healthy} healthy
-                        </span>
-                      ) : null}
+                      {hasSnapshot ? (
+                        <>
+                          <span className="tag">
+                            {metrics.connectedAgents} / {metrics.totalAgents} connected
+                          </span>
+                          <span className={healthyTagClass} style={{ marginLeft: 6 }}>
+                            {metrics.healthyAgents} healthy
+                          </span>
+                        </>
+                      ) : (
+                        <span className="tag">Snapshot unavailable</span>
+                      )}
                     </td>
                     <td className="mono-cell">{hashLabel(desiredHash)}</td>
                     <td className="meta">{relTime(c.updated_at)}</td>

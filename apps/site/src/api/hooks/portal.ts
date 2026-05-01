@@ -13,6 +13,8 @@ export interface Overview {
   connected_agents?: number;
   healthy_agents?: number;
   active_rollouts?: number | null;
+  metrics_source?: "analytics_engine" | "unavailable";
+  metrics_error?: string | null;
   [key: string]: unknown;
 }
 
@@ -22,11 +24,9 @@ export interface Configuration {
   status?: string;
   created_at?: string;
   updated_at?: string;
-  stats?: {
-    total?: number;
-    connected?: number;
-    healthy?: number;
-  };
+  stats?: ConfigStats;
+  current_config_hash?: string | null;
+  description?: string;
   [key: string]: unknown;
 }
 
@@ -73,6 +73,9 @@ export interface EnrollmentToken {
 }
 
 export interface ConfigStats {
+  total?: number;
+  connected?: number;
+  healthy?: number;
   total_agents?: number;
   agents_connected?: number;
   connected_agents?: number;
@@ -82,6 +85,7 @@ export interface ConfigStats {
   current_hash_counts?: Array<{ value: string; count: number }>;
   desired_config_hash?: string | null;
   active_websockets?: number;
+  snapshot_at?: string | number | null;
   [key: string]: unknown;
 }
 
@@ -153,6 +157,9 @@ export function useOverview() {
   });
 }
 
+// Appropriate D1 entity metadata list. Use this for explicit picker/token workflows, not
+// dashboard counts or fleet-state rollups. Use `useOverview` when config rows need aggregate
+// collector metrics.
 export function useConfigurations() {
   return useQuery({
     queryKey: ["configurations"],
@@ -163,7 +170,7 @@ export function useConfigurations() {
         ),
         "configurations",
       ),
-    refetchInterval: 10_000,
+    refetchInterval: false,
   });
 }
 
@@ -201,6 +208,8 @@ export function useConfigurationAgent(
   });
 }
 
+// Cheap for one active Config DO, very expensive when called once per config. Use only when
+// rendering a visible single-config agents table/page, never to calculate summary counts.
 export function useConfigurationAgents(
   id: string | undefined,
   params?: {
@@ -210,18 +219,20 @@ export function useConfigurationAgents(
     status?: string;
     health?: string;
     sort?: string;
+    enabled?: boolean;
   },
 ) {
+  const { enabled = true, ...queryParams } = params ?? {};
   return useQuery({
-    queryKey: ["configuration", id, "agents", params],
+    queryKey: ["configuration", id, "agents", queryParams],
     queryFn: async () => {
       const query = new URLSearchParams();
-      if (params?.limit) query.set("limit", String(params.limit));
-      if (params?.cursor) query.set("cursor", params.cursor);
-      if (params?.q) query.set("q", params.q);
-      if (params?.status) query.set("status", params.status);
-      if (params?.health) query.set("health", params.health);
-      if (params?.sort) query.set("sort", params.sort);
+      if (queryParams.limit) query.set("limit", String(queryParams.limit));
+      if (queryParams.cursor) query.set("cursor", queryParams.cursor);
+      if (queryParams.q) query.set("q", queryParams.q);
+      if (queryParams.status) query.set("status", queryParams.status);
+      if (queryParams.health) query.set("health", queryParams.health);
+      if (queryParams.sort) query.set("sort", queryParams.sort);
       const data = await apiGet<AgentPage>(
         `/api/v1/configurations/${id}/agents${query.toString() ? `?${query.toString()}` : ""}`,
       );
@@ -234,7 +245,7 @@ export function useConfigurationAgents(
       }
       return data;
     },
-    enabled: !!id,
+    enabled: !!id && enabled,
   });
 }
 
@@ -266,6 +277,8 @@ export function useConfigurationTokens(id: string | undefined) {
   });
 }
 
+// Cheap for one active Config DO. Prefer `useOverview` for page-level dashboards because overview
+// reads very cheap metrics snapshots and intentionally does not fan out across Config DOs.
 export function useConfigurationStats(id: string | undefined) {
   return useQuery({
     queryKey: ["configuration", id, "stats"],
