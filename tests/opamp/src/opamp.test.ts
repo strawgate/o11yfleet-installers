@@ -41,7 +41,7 @@ function createAgent(opts: Record<string, unknown> = {}) {
   const agent = new FakeOpampAgent({
     endpoint: WS_URL,
     ...opts,
-  } as any);
+  } as Record<string, unknown>);
   agents.push(agent);
   return agent;
 }
@@ -75,14 +75,14 @@ async function setupTenantAndConfig(): Promise<{
   const { data: config } = await api<{ id: string }>("/api/v1/configurations", {
     method: "POST",
     body: JSON.stringify({ tenant_id: tenant.id, name: "test-config" }),
-    headers: { "X-Tenant-Id": tenant.id } as any,
+    headers: { "X-Tenant-Id": tenant.id } as Record<string, string>,
   });
   const { data: tokenData } = await api<{ token: string }>(
     `/api/v1/configurations/${config.id}/enrollment-token`,
     {
       method: "POST",
       body: JSON.stringify({ label: "opamp-test" }),
-      headers: { "X-Tenant-Id": tenant.id } as any,
+      headers: { "X-Tenant-Id": tenant.id } as Record<string, string>,
     },
   );
   return { tenantId: tenant.id, configId: config.id, token: tokenData.token };
@@ -464,7 +464,7 @@ describe("Health Reporting (§5.2)", () => {
     const { data } = await api<{
       agents: Array<{ health_status?: string; healthy?: boolean; status?: string }>;
     }>(`/api/v1/configurations/${configId}/agents`, {
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const found = data.agents?.find((a) => a.healthy === true);
@@ -484,7 +484,7 @@ describe("Health Reporting (§5.2)", () => {
     const { data } = await api<{
       agents: Array<{ healthy?: boolean; last_error?: string; status?: string }>;
     }>(`/api/v1/configurations/${configId}/agents`, {
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const found = data.agents?.find((a) => a.healthy === false);
@@ -517,7 +517,7 @@ describe("Remote Configuration (§5.3)", () => {
     // Trigger rollout
     await api(`/api/v1/configurations/${configId}/rollout`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     // Wait for config push
@@ -549,7 +549,7 @@ describe("Remote Configuration (§5.3)", () => {
     // Rollout config
     await api(`/api/v1/configurations/${configId}/rollout`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const configMsg = await agent.waitForRemoteConfig(10_000);
@@ -669,7 +669,7 @@ describe("Capacity and Rate Limiting (§5.6)", () => {
     // Check DO stats endpoint — server must track connected agents to know capacity
     const { status, data } = await api<{ connected_agents?: number; active_websockets?: number }>(
       `/api/v1/configurations/${configId}/stats`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
     // Server must at minimum track connection count (prerequisite for capacity limiting)
@@ -691,7 +691,7 @@ describe("Server-Initiated Disconnect (§5.7)", () => {
     // Try the disconnect API (may not exist yet)
     const { status } = await api(`/api/v1/configurations/${configId}/disconnect`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     if (status === 200) {
@@ -739,13 +739,13 @@ describe("Enrollment (§6.1)", () => {
     // Revoke the token
     const { data: tokens } = await api<{ tokens: Array<{ id: string }> }>(
       `/api/v1/configurations/${configId}/enrollment-tokens`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     const tokenId = tokens.tokens[0]?.id;
     if (tokenId) {
       await api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
         method: "DELETE",
-        headers: { "X-Tenant-Id": tenantId } as any,
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
       });
     }
 
@@ -776,13 +776,13 @@ describe("Enrollment (§6.1)", () => {
     // Revoke
     const { data: tokens } = await api<{ tokens: Array<{ id: string }> }>(
       `/api/v1/configurations/${configId}/enrollment-tokens`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     const tokenId = tokens.tokens[0]?.id;
     if (tokenId) {
       await api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
         method: "DELETE",
-        headers: { "X-Tenant-Id": tenantId } as any,
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
       });
     }
 
@@ -929,7 +929,7 @@ describe("Config Hash Consistency (§5.3.1)", () => {
 
     await api(`/api/v1/configurations/${configId}/rollout`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const configMsg = await agent.waitForRemoteConfig(10_000);
@@ -1150,7 +1150,7 @@ describe("Component Health Map (§5.2.1)", () => {
     // Query API for this agent's component health
     const { data } = await api<{ agents: Array<Record<string, unknown>> }>(
       `/api/v1/configurations/${configId}/agents`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
     // Find our agent and check component-level health is stored
@@ -1240,7 +1240,7 @@ describe("Component Health Map (§5.2.1)", () => {
 
     const { data } = await api<{ agents: Array<Record<string, unknown>> }>(
       `/api/v1/configurations/${configId}/agents`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
     const found = data.agents?.[0];
@@ -1286,7 +1286,7 @@ describe("Config Applying Status (§5.3.2)", () => {
     // Rollout
     await api(`/api/v1/configurations/${configId}/rollout`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const configMsg = await agent.waitForRemoteConfig(10_000);
@@ -1426,13 +1426,13 @@ describe("Token Revocation (§6.1.1)", () => {
     // Revoke immediately
     const { data: tokens } = await api<{ tokens: Array<{ id: string }> }>(
       `/api/v1/configurations/${configId}/enrollment-tokens`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     const tokenId = tokens.tokens[0]?.id;
     if (tokenId) {
       await api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
         method: "DELETE",
-        headers: { "X-Tenant-Id": tenantId } as any,
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
       });
     }
     await settle(300);
@@ -1471,13 +1471,13 @@ describe("Token Revocation (§6.1.1)", () => {
     // Revoke the enrollment token
     const { data: tokens } = await api<{ tokens: Array<{ id: string }> }>(
       `/api/v1/configurations/${configId}/enrollment-tokens`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     const tokenId = tokens.tokens[0]?.id;
     if (tokenId) {
       await api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
         method: "DELETE",
-        headers: { "X-Tenant-Id": tenantId } as any,
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
       });
     }
     await settle(300);
@@ -1580,7 +1580,7 @@ describe("Multi-File Config Map (§5.3.3)", () => {
 
     await api(`/api/v1/configurations/${configId}/rollout`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     const configMsg = await agent.waitForRemoteConfig(10_000);
@@ -1687,7 +1687,7 @@ describe("Available Components (§5.2.2)", () => {
     // Query API
     const { data } = await api<{ agents: Array<Record<string, unknown>> }>(
       `/api/v1/configurations/${configId}/agents`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
     expect(data.agents?.length).toBeGreaterThanOrEqual(1);
@@ -1783,7 +1783,7 @@ describe("Available Components (§5.2.2)", () => {
     // Check API for stored components
     const { data } = await api<{ agents: Array<Record<string, unknown>> }>(
       `/api/v1/configurations/${configId}/agents`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
     const agentRecord = data.agents?.[0];
@@ -1855,7 +1855,7 @@ describe("Restart Command (§5.9)", () => {
     // Try the restart API (if it exists)
     const { status } = await api(`/api/v1/configurations/${configId}/restart`, {
       method: "POST",
-      headers: { "X-Tenant-Id": tenantId } as any,
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     if (status === 200) {
@@ -2071,13 +2071,13 @@ describe("Token Revocation - Rust Worker (§6.1.2)", () => {
     // Revoke the token
     const { data: tokens } = await api<{ tokens: Array<{ id: string }> }>(
       `/api/v1/configurations/${configId}/enrollment-tokens`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     const tokenId = tokens.tokens[0]?.id;
     if (tokenId) {
       await api(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`, {
         method: "DELETE",
-        headers: { "X-Tenant-Id": tenantId } as any,
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
       });
     }
     await settle(500);
@@ -2170,7 +2170,7 @@ describe("Connection Settings Status (§4.6)", () => {
     await settle(300);
     const { data: stats } = await api<{ connected_agents: number }>(
       `/api/v1/configurations/${configId}/stats`,
-      { headers: { "X-Tenant-Id": tenantId } as any },
+      { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
     expect(stats.connected_agents).toBeGreaterThanOrEqual(1);
   });
