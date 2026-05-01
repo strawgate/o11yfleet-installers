@@ -1,61 +1,34 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiGet, apiPost, apiPostText, apiPut, apiDel, apiFetch, ApiError } from "../client";
+import type {
+  OverviewResponse as Overview,
+  ConfigurationWithStats as Configuration,
+  Agent,
+  AgentDetail,
+  AgentPage,
+  AgentDescriptionResponse as AgentDescription,
+  ConfigStats,
+  Tenant,
+} from "@o11yfleet/core/api";
 
 /* ------------------------------------------------------------------ */
-/*  Response types                                                    */
+/*  Re-export shared types for consumers                              */
 /* ------------------------------------------------------------------ */
 
-export interface Overview {
-  configurations?: Configuration[];
-  configs_count?: number;
-  agents?: number;
-  total_agents?: number;
-  connected_agents?: number;
-  healthy_agents?: number;
-  active_rollouts?: number | null;
-  metrics_source?: "analytics_engine" | "unavailable";
-  metrics_error?: string | null;
-  [key: string]: unknown;
-}
+export type {
+  Overview,
+  Configuration,
+  Agent,
+  AgentDetail,
+  AgentPage,
+  AgentDescription,
+  ConfigStats,
+  Tenant,
+};
 
-export interface Configuration {
-  id: string;
-  name: string;
-  status?: string;
-  created_at?: string;
-  updated_at?: string;
-  stats?: ConfigStats;
-  current_config_hash?: string | null;
-  description?: string;
-  [key: string]: unknown;
-}
-
-export interface Agent {
-  id?: string;
-  instance_uid?: string;
-  hostname?: string;
-  status?: string;
-  last_seen?: string;
-  healthy?: boolean | number;
-  current_config_hash?: string | null;
-  desired_config_hash?: string | null;
-  last_seen_at?: string | number;
-  connected_at?: string | number;
-  last_error?: string | null;
-  agent_description?: string;
-  capabilities?: number | string | null;
-  [key: string]: unknown;
-}
-export interface AgentPage {
-  agents: Agent[];
-  pagination: {
-    limit: number;
-    next_cursor: string | null;
-    has_more: boolean;
-    sort: "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
-  };
-  filters: { q?: string; status?: string; health?: "healthy" | "unhealthy" | "unknown" };
-}
+/* ------------------------------------------------------------------ */
+/*  Local types (no shared schema yet)                                */
+/* ------------------------------------------------------------------ */
 
 export interface ConfigVersion {
   id: string;
@@ -69,23 +42,6 @@ export interface EnrollmentToken {
   id: string;
   token?: string;
   created_at?: string;
-  [key: string]: unknown;
-}
-
-export interface ConfigStats {
-  total?: number;
-  connected?: number;
-  healthy?: number;
-  total_agents?: number;
-  agents_connected?: number;
-  connected_agents?: number;
-  healthy_agents?: number;
-  drifted_agents?: number;
-  status_counts?: Record<string, number>;
-  current_hash_counts?: Array<{ value: string; count: number }>;
-  desired_config_hash?: string | null;
-  active_websockets?: number;
-  snapshot_at?: string | number | null;
   [key: string]: unknown;
 }
 
@@ -123,13 +79,6 @@ export interface RolloutCohortSummary {
   desired_config_hash: string | null;
   status_counts: Record<string, number>;
   current_hash_counts: Array<{ value: string; count: number }>;
-}
-
-export interface Tenant {
-  id: string;
-  name: string;
-  plan?: string;
-  [key: string]: unknown;
 }
 
 export interface TeamMember {
@@ -201,7 +150,7 @@ export function useConfigurationAgent(
   return useQuery({
     queryKey: ["configuration", configId, "agent", instanceUid],
     queryFn: () =>
-      apiGet<Agent>(
+      apiGet<AgentDetail>(
         `/api/v1/configurations/${configId}/agents/${encodeURIComponent(instanceUid ?? "")}`,
       ),
     enabled: !!configId && !!instanceUid,
@@ -239,13 +188,26 @@ export function useConfigurationAgents(
       if (!Array.isArray(data.agents)) {
         throw new ApiError("GET agents: unexpected response shape", 500);
       }
-      const missingIdentity = data.agents.some((agent) => !agent.instance_uid && !agent.id);
+      const missingIdentity = data.agents.some((agent) => !agent.instance_uid);
       if (missingIdentity) {
         throw new ApiError("GET agents: missing agent identity", 500);
       }
       return data;
     },
     enabled: !!id && enabled,
+  });
+}
+
+export function useAgentDetail(configId: string | undefined, agentUid: string | undefined) {
+  return useQuery({
+    queryKey: ["configuration", configId, "agent-detail", agentUid],
+    queryFn: async () => {
+      return apiGet<AgentDetail>(
+        `/api/v1/configurations/${configId}/agents/${encodeURIComponent(agentUid!)}`,
+      );
+    },
+    enabled: !!configId && !!agentUid,
+    refetchInterval: 10_000,
   });
 }
 

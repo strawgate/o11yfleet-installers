@@ -24,7 +24,8 @@
     "lint": "oxlint src test",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "bench": "vitest bench"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.50.0",

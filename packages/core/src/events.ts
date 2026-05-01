@@ -16,6 +16,7 @@ interface FleetEventIdentityInput {
   config_id: string;
   instance_uid: string;
   timestamp?: number;
+  event_id?: string;
   dedupe_key?: string;
 }
 
@@ -28,7 +29,7 @@ export function makeFleetEvent<T extends FleetEventType, Extra extends object = 
   input: FleetEventInput<T, Extra>,
 ): FleetEvent & { type: T } & Extra {
   const timestamp = input.timestamp ?? Date.now();
-  const eventId = crypto.randomUUID();
+  const eventId = input.event_id ?? crypto.randomUUID();
   const extraFields = input as Record<string, unknown>;
   const defaultDedupeParts = [
     input.type,

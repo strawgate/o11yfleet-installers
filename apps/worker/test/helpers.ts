@@ -7,6 +7,13 @@ import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
+import {
+  buildHello,
+  buildHeartbeat,
+  buildHealthReport,
+  buildConfigAck,
+  buildDescriptionReport,
+} from "@o11yfleet/test-utils";
 
 export const O11YFLEET_CLAIM_HMAC_SECRET = "dev-secret-key-for-testing-only-32ch";
 export const O11YFLEET_API_BEARER_SECRET = "test-api-secret-for-dev-only-32chars";
@@ -374,6 +381,7 @@ export async function getAgentSummaries(
 export async function connectWithEnrollment(token: string): Promise<{
   ws: WebSocket;
   enrollment: { type: string; assignment_claim: string; instance_uid: string };
+  instanceUid: string;
 }> {
   const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
     headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
@@ -383,37 +391,21 @@ export async function connectWithEnrollment(token: string): Promise<{
   ws.accept();
 
   // Per OpAMP spec: client sends first. Send hello to trigger enrollment.
-  const hello: AgentToServer = {
-    instance_uid: new Uint8Array(16),
-    sequence_num: 0,
-    capabilities:
-      AgentCapabilities.ReportsStatus |
-      AgentCapabilities.AcceptsRemoteConfig |
-      AgentCapabilities.ReportsHealth |
-      AgentCapabilities.ReportsRemoteConfig,
-    flags: 0,
-    health: {
-      healthy: true,
-      start_time_unix_nano: 0n,
-      last_error: "",
-      status: "running",
-    },
-    agent_description: {
-      identifying_attributes: [{ key: "service.name", value: { string_value: "test-agent" } }],
-      non_identifying_attributes: [],
-    },
-  };
-  ws.send(encodeFrame(hello));
+  // buildHello() defaults include CONFIGURABLE_CAPABILITIES (ReportsStatus,
+  // AcceptsRemoteConfig, ReportsEffectiveConfig, ReportsHealth,
+  // ReportsRemoteConfig) which is the expected capability set for enrollment.
+  ws.send(encodeFrame(buildHello()));
 
   // Receive enrollment_complete text message (response to our hello)
   const enrollEvent = await waitForMsg(ws);
   const enrollment = JSON.parse(enrollEvent.data as string);
   expect(enrollment.type).toBe("enrollment_complete");
+  expect(enrollment.instance_uid).toBeDefined();
 
   // Receive OpAMP binary response (from state machine processing our hello)
   await waitForMsg(ws);
 
-  return { ws, enrollment };
+  return { ws, enrollment, instanceUid: enrollment.instance_uid as string };
 }
 
 /**
@@ -437,27 +429,10 @@ export async function sendHello(
   ws: WebSocket,
   opts: { seqNum?: number; capabilities?: number } = {},
 ): Promise<ServerToAgent> {
-  const hello: AgentToServer = {
-    instance_uid: new Uint8Array(16),
-    sequence_num: opts.seqNum ?? 0,
-    capabilities:
-      opts.capabilities ??
-      AgentCapabilities.ReportsStatus |
-        AgentCapabilities.AcceptsRemoteConfig |
-        AgentCapabilities.ReportsHealth |
-        AgentCapabilities.ReportsRemoteConfig,
-    flags: 0,
-    health: {
-      healthy: true,
-      start_time_unix_nano: 0n,
-      last_error: "",
-      status: "running",
-    },
-    agent_description: {
-      identifying_attributes: [{ key: "service.name", value: "test-agent" }],
-      non_identifying_attributes: [],
-    },
-  };
+  const hello = buildHello({
+    sequenceNum: opts.seqNum,
+    capabilities: opts.capabilities,
+  });
   ws.send(encodeFrame(hello));
 
   const msg = await waitForMsg(ws);
@@ -469,13 +444,7 @@ export async function sendHello(
  * Send an OpAMP heartbeat and return the server response.
  */
 export async function sendHeartbeat(ws: WebSocket, seqNum: number): Promise<ServerToAgent> {
-  const hb: AgentToServer = {
-    instance_uid: new Uint8Array(16),
-    sequence_num: seqNum,
-    capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-    flags: 0,
-  };
-  ws.send(encodeFrame(hb));
+  ws.send(encodeFrame(buildHeartbeat({ sequenceNum: seqNum })));
 
   const msg = await waitForMsg(ws);
   const buf = await msgToBuffer(msg);
@@ -491,3 +460,12 @@ export {
   type ServerToAgent,
   type AssignmentClaim,
 };
+
+// Re-export message builders for convenience
+export {
+  buildHello,
+  buildHeartbeat,
+  buildHealthReport,
+  buildConfigAck,
+  buildDescriptionReport,
+} from "@o11yfleet/test-utils";

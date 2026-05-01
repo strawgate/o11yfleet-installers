@@ -31,12 +31,7 @@ export default function BillingPage() {
       ? Math.min(100, Math.round((usedConfigs / maxConfigs) * 100))
       : 0;
   const maxConfigsLabel = maxConfigs === null ? "Custom" : maxConfigs;
-  const totalAgents =
-    typeof ov?.total_agents === "number"
-      ? ov.total_agents
-      : typeof ov?.agents === "number"
-        ? ov.agents
-        : 0;
+  const totalAgents = typeof ov?.total_agents === "number" ? ov.total_agents : 0;
 
   return (
     <div className="main-wide">

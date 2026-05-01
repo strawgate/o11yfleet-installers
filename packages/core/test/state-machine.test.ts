@@ -60,7 +60,7 @@ describe("state-machine/processFrame", () => {
     expect(result.newState.connected_at).toBeGreaterThan(0);
   });
 
-  it("handles heartbeat with no changes — no persist", () => {
+  it("handles heartbeat with no changes — always persists (seq + last_seen_at)", () => {
     const state = makeDefaultState({
       sequence_num: 5,
       connected_at: Date.now() - 10000,

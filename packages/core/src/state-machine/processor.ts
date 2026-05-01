@@ -1,7 +1,8 @@
 // OpAMP state machine — processFrame
 // Pure function: (state, msg) → { newState, response, events, shouldPersist }
 
-import type { AgentState, ProcessResult } from "./types.js";
+import type { AgentState, ProcessResult, ProcessContext } from "./types.js";
+import { defaultProcessContext } from "./types.js";
 import type { AgentToServer, ServerToAgent } from "../codec/types.js";
 import {
   ServerCapabilities,
@@ -133,10 +134,12 @@ export function processFrame(
   msg: AgentToServer,
   configContentBytes?: Uint8Array | null,
   heartbeatIntervalNs?: number,
+  ctx?: ProcessContext,
 ): ProcessResult {
+  const context = ctx ?? defaultProcessContext();
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
-  const now = Date.now();
+  const now = context.now;
   const instanceUid = uint8ToHex(state.instance_uid);
 
   // Clone state
@@ -149,7 +152,8 @@ export function processFrame(
     capabilities:
       ServerCapabilities.AcceptsStatus |
       ServerCapabilities.OffersRemoteConfig |
-      ServerCapabilities.AcceptsEffectiveConfig,
+      ServerCapabilities.AcceptsEffectiveConfig |
+      ServerCapabilities.OffersConnectionSettings,
     heart_beat_interval: heartbeatIntervalNs ?? DEFAULT_HEARTBEAT_INTERVAL_NS,
   };
 
@@ -186,6 +190,7 @@ export function processFrame(
         config_id: state.config_id,
         instance_uid: instanceUid,
         timestamp: now,
+        event_id: context.randomId(),
         reason: "agent_disconnect_message",
         dedupe_key: `disconnected:${state.tenant_id}:${state.config_id}:${instanceUid}:agent_disconnect_message:${sessionGeneration}:${msg.sequence_num}`,
       }),
@@ -199,6 +204,8 @@ export function processFrame(
   const isHello = msg.sequence_num === 0 || state.connected_at === 0;
 
   if (isHello) {
+    // Per OpAMP spec §4.2: request full agent state on first connection
+    response.flags |= ServerToAgentFlags.ReportFullState;
     newState.connected_at = now;
     shouldPersist = true;
     events.push(
@@ -208,6 +215,7 @@ export function processFrame(
         config_id: state.config_id,
         instance_uid: instanceUid,
         timestamp: now,
+        event_id: context.randomId(),
         dedupe_key: `connected:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${now}`,
       }),
     );
@@ -247,6 +255,7 @@ export function processFrame(
           config_id: state.config_id,
           instance_uid: instanceUid,
           timestamp: now,
+          event_id: context.randomId(),
           healthy: msg.health.healthy,
           status,
           last_error: lastError,
@@ -257,6 +266,13 @@ export function processFrame(
         }),
       );
     }
+    // Store per-component health map. An explicit empty map is a valid
+    // "clear" update — collapsing it into "no update" would let stale
+    // component_health_map rows persist after a collector clears its state.
+    if (msg.health.component_health_map !== undefined) {
+      newState.component_health_map = msg.health.component_health_map as Record<string, unknown>;
+      shouldPersist = true;
+    }
   }
 
   // Process agent description
@@ -266,6 +282,14 @@ export function processFrame(
       newState.agent_description = descJson;
       shouldPersist = true;
     }
+  }
+
+  // Process available_components (spec field 14, Development). Only populated
+  // by the JSON codec — protobuf-framed agents won't set this until we add the
+  // proto message definition and codec mapping (see opamp.proto field 14 comment).
+  if (msg.available_components !== undefined) {
+    newState.available_components = msg.available_components;
+    shouldPersist = true;
   }
 
   // Process effective config — store the agent's actual running config for fleet visibility
@@ -288,6 +312,7 @@ export function processFrame(
             config_id: state.config_id,
             instance_uid: instanceUid,
             timestamp: now,
+            event_id: context.randomId(),
             effective_config_hash: hashHex,
             dedupe_key: `effective:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${hashHex}`,
           }),
@@ -298,7 +323,7 @@ export function processFrame(
 
   // Handle RequestInstanceUid flag — assign new UID per OpAMP spec
   if ((msg.flags & AgentToServerFlags.RequestInstanceUid) !== 0) {
-    const newUid = crypto.getRandomValues(new Uint8Array(16));
+    const newUid = context.randomUid();
     response.agent_identification = { new_instance_uid: newUid };
   }
 
@@ -318,6 +343,7 @@ export function processFrame(
             config_id: state.config_id,
             instance_uid: instanceUid,
             timestamp: now,
+            event_id: context.randomId(),
             config_hash: hashHex,
             dedupe_key: `applied:${state.tenant_id}:${state.config_id}:${instanceUid}:${msg.sequence_num}:${hashHex}`,
           }),
@@ -332,6 +358,7 @@ export function processFrame(
           config_id: state.config_id,
           instance_uid: instanceUid,
           timestamp: now,
+          event_id: context.randomId(),
           config_hash: hashHex,
           error_message: msg.remote_config_status.error_message,
           dedupe_key: `rejected:${state.tenant_id}:${state.config_id}:${instanceUid}:${hashHex}:${msg.remote_config_status.error_message}`,

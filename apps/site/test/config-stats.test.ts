@@ -79,19 +79,30 @@ test("does not synthesize missing snapshot drift fields from visible rows", () =
   assert.equal(metrics.driftedAgents, 0);
 });
 
-test("accepts the legacy connected-agent stats alias", () => {
-  assert.equal(configurationAgentMetrics({ agents_connected: 4 }, [], null).connectedAgents, 4);
+test("uses canonical connected_agents field", () => {
+  assert.equal(
+    configurationAgentMetrics({ total_agents: 5, connected_agents: 4, healthy_agents: 3 }, [], null)
+      .connectedAgents,
+    4,
+  );
 });
 
-test("accepts overview configuration stats aliases", () => {
-  assert.deepEqual(configurationAgentMetrics({ total: 12, connected: 10, healthy: 9 }, [], null), {
-    totalAgents: 12,
-    visibleAgents: 0,
-    connectedAgents: 10,
-    healthyAgents: 9,
-    degradedAgents: 0,
-    driftedAgents: 0,
-    activeWebSockets: undefined,
-    desiredConfigHash: null,
-  });
+test("uses canonical total/connected/healthy fields from stats", () => {
+  assert.deepEqual(
+    configurationAgentMetrics(
+      { total_agents: 12, connected_agents: 10, healthy_agents: 9 },
+      [],
+      null,
+    ),
+    {
+      totalAgents: 12,
+      visibleAgents: 0,
+      connectedAgents: 10,
+      healthyAgents: 9,
+      degradedAgents: 0,
+      driftedAgents: 0,
+      activeWebSockets: undefined,
+      desiredConfigHash: null,
+    },
+  );
 });

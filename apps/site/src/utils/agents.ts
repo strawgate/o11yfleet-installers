@@ -2,17 +2,31 @@ import { trunc } from "./format";
 import type { Agent } from "../api/hooks/portal";
 
 export function agentUid(agent: Agent): string {
-  const uid = agent.instance_uid ?? agent.id;
-  if (!uid) throw new Error("Agent is missing instance_uid/id");
-  return uid;
+  return agent.instance_uid;
 }
 
 export function agentHost(agent: Agent): string {
-  return agent.hostname ?? agent.agent_description ?? "—";
+  if (agent.hostname) return agent.hostname;
+  // Extract hostname from parsed agent_description (identifying/non-identifying attributes)
+  if (agent.agent_description && typeof agent.agent_description === "object") {
+    const desc = agent.agent_description;
+    // host.name is typically in non_identifying_attributes
+    const allAttrs = [
+      ...(desc.non_identifying_attributes ?? []),
+      ...(desc.identifying_attributes ?? []),
+    ];
+    const hostAttr = allAttrs.find(
+      (a: { key: string; value?: { string_value?: string } }) =>
+        a.key === "host.name" || a.key === "hostname",
+    );
+    if (hostAttr?.value?.string_value) return hostAttr.value.string_value;
+  }
+  if (typeof agent.agent_description === "string") return agent.agent_description;
+  return "—";
 }
 
 export function agentLastSeen(agent: Agent): string | undefined {
-  return normalizeTimestamp(agent.last_seen_at ?? agent.last_seen);
+  return normalizeTimestamp(agent.last_seen_at);
 }
 
 export function agentConnectedAt(agent: Agent): string | undefined {

@@ -8,6 +8,38 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import type { AgentMetricsInput } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import type {
+  DesiredConfig,
+  DoIdentity,
+  AgentPageCursor,
+  ListAgentsPageParams,
+  StaleAgent,
+  SweepResult,
+  SweepStats,
+} from "./agent-state-repo-interface.js";
+
+// Re-export types from the interface file for backward compatibility
+export type {
+  DesiredConfig,
+  DoIdentity,
+  AgentSort,
+  AgentPageCursor,
+  ListAgentsPageParams,
+  AgentPageResult,
+  StaleAgent,
+  SweepResult,
+  SweepStats,
+} from "./agent-state-repo-interface.js";
+
+/** Safely parse a JSON string column, returning undefined on malformed data. */
+function safeJsonParse(value: unknown): unknown {
+  if (!value || typeof value !== "string") return undefined;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return undefined;
+  }
+}
 
 /**
  * Initialize all tables in DO-local SQLite.
@@ -30,7 +62,9 @@ export function initSchema(sql: SqlStorage): void {
       agent_description TEXT,
       capabilities INTEGER NOT NULL DEFAULT 0,
       rate_window_start INTEGER NOT NULL DEFAULT 0,
-      rate_window_count INTEGER NOT NULL DEFAULT 0
+      rate_window_count INTEGER NOT NULL DEFAULT 0,
+      component_health_map TEXT,
+      available_components TEXT
     )
   `);
   // Deduplicated config snapshots — one row per unique effective config hash.
@@ -118,17 +152,6 @@ function migrateSchema(sql: SqlStorage): void {
 
 // ─── Config State ───────────────────────────────────────────────────
 
-export interface DesiredConfig {
-  hash: string | null;
-  content: string | null;
-  /**
-   * UTF-8 encoded bytes of `content`, computed once on `set-desired-config`
-   * and persisted alongside the content so the WS hot path doesn't run
-   * `TextEncoder.encode()` per heartbeat. `null` when no content is set.
-   */
-  bytes: Uint8Array | null;
-}
-
 /**
  * Load desired config from SQLite (sync, ~µs).
  *
@@ -177,11 +200,6 @@ export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string
     content,
     encoded,
   );
-}
-
-export interface DoIdentity {
-  tenant_id: string;
-  config_id: string;
 }
 
 export function loadDoIdentity(sql: SqlStorage): DoIdentity {
@@ -255,13 +273,17 @@ export function loadAgentState(
         : null,
       desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
       effective_config_hash: effectiveHash,
-      // Hot path only needs the hash for change detection. The body is written
-      // to config_snapshots when newly reported, but not loaded on every heartbeat.
       effective_config_body: null,
       last_seen_at: row["last_seen_at"] as number,
       connected_at: row["connected_at"] as number,
       agent_description: row["agent_description"] as string | null,
       capabilities: (row["capabilities"] as number) ?? 0,
+      component_health_map: row["component_health_map"]
+        ? (safeJsonParse(row["component_health_map"]) as Record<string, unknown>)
+        : null,
+      available_components: row["available_components"]
+        ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
+        : null,
     };
   }
 
@@ -283,6 +305,8 @@ export function loadAgentState(
     connected_at: 0,
     agent_description: null,
     capabilities: 0,
+    component_health_map: null,
+    available_components: null,
   };
 }
 
@@ -302,9 +326,20 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     );
   }
 
+  const componentHealthMap = state.component_health_map
+    ? JSON.stringify(state.component_health_map, (_k, v) =>
+        typeof v === "bigint" ? v.toString() : v,
+      )
+    : null;
+  const availableComponents = state.available_components
+    ? JSON.stringify(state.available_components, (_k, v) =>
+        typeof v === "bigint" ? v.toString() : v,
+      )
+    : null;
+
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count, component_health_map, available_components)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
@@ -316,7 +351,9 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        last_seen_at = excluded.last_seen_at,
        connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
-       capabilities = excluded.capabilities`,
+       capabilities = excluded.capabilities,
+       component_health_map = COALESCE(excluded.component_health_map, agents.component_health_map),
+       available_components = COALESCE(excluded.available_components, agents.available_components)`,
     uid,
     state.tenant_id,
     state.config_id,
@@ -331,6 +368,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     state.connected_at,
     state.agent_description,
     state.capabilities,
+    componentHealthMap,
+    availableComponents,
   );
 }
 
@@ -346,6 +385,18 @@ export function getAgentCount(sql: SqlStorage): number {
  */
 export function agentExists(sql: SqlStorage, instanceUid: string): boolean {
   return sql.exec("SELECT 1 FROM agents WHERE instance_uid = ?", instanceUid).toArray().length > 0;
+}
+
+/**
+ * Get the current generation of an agent, or 0 if not found.
+ * Used to increment on reconnect.
+ */
+export function getAgentGeneration(sql: SqlStorage, instanceUid: string): number {
+  const rows = sql
+    .exec("SELECT generation FROM agents WHERE instance_uid = ?", instanceUid)
+    .toArray();
+  if (rows.length === 0) return 0;
+  return (rows[0]!["generation"] as number) ?? 0;
 }
 
 /**
@@ -454,25 +505,11 @@ export function getCohortBreakdown(
 
 /**
  * List agents (most recently seen first).
+ * Returns summary data — excludes large blobs (effective_config_body).
  */
-export type AgentSort = "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
-
-export interface AgentPageCursor {
-  last_seen_at: number;
-  instance_uid: string;
-}
-
-export interface ListAgentsPageParams {
-  limit: number;
-  cursor?: AgentPageCursor | null;
-  q?: string;
-  status?: string;
-  health?: "healthy" | "unhealthy" | "unknown";
-  sort: AgentSort;
-}
 
 export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknown>[] {
-  return sql
+  const rows = sql
     .exec(
       `SELECT
         a.instance_uid,
@@ -485,20 +522,33 @@ export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknow
         a.last_error,
         a.current_config_hash,
         a.effective_config_hash,
-        cs.body AS effective_config_body,
         a.last_seen_at,
         a.connected_at,
         a.agent_description,
         a.capabilities,
-        a.rate_window_start,
-        a.rate_window_count
+        a.component_health_map,
+        a.available_components
        FROM agents a
-       LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash
        ORDER BY a.last_seen_at DESC
        LIMIT ?`,
       limit,
     )
     .toArray();
+
+  // Normalize SQLite integers/JSON for API consumers
+  return rows.map((row) => ({
+    ...row,
+    healthy: row["healthy"] === 1,
+    agent_description: row["agent_description"]
+      ? (safeJsonParse(row["agent_description"]) as Record<string, unknown>)
+      : undefined,
+    component_health_map: row["component_health_map"]
+      ? (safeJsonParse(row["component_health_map"]) as Record<string, unknown>)
+      : undefined,
+    available_components: row["available_components"]
+      ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
+      : undefined,
+  }));
 }
 
 export function listAgentsPage(
@@ -537,15 +587,32 @@ export function listAgentsPage(
     params.sort === "instance_uid_asc"
       ? "a.instance_uid ASC"
       : `a.last_seen_at ${dir}, a.instance_uid ${dir}`;
+  // The list endpoint intentionally does not include `effective_config_body`
+  // (which can be many KB per agent). Detail endpoints join `config_snapshots`
+  // on demand for that field.
   const rows = sql
     .exec(
-      `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,cs.body AS effective_config_body,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.rate_window_start,a.rate_window_count FROM agents a LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
+      `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.rate_window_start,a.rate_window_count,a.component_health_map,a.available_components FROM agents a ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
       ...bind,
       params.limit + 1,
     )
     .toArray();
   const hasMore = rows.length > params.limit;
-  const agents = hasMore ? rows.slice(0, params.limit) : rows;
+  // Normalize the JSON-encoded blob columns so API consumers see parsed
+  // objects (matches `listAgents` and `getAgent` behavior).
+  const agents = (hasMore ? rows.slice(0, params.limit) : rows).map((row) => ({
+    ...row,
+    healthy: row["healthy"] === 1,
+    agent_description: row["agent_description"]
+      ? (safeJsonParse(row["agent_description"]) as Record<string, unknown>)
+      : undefined,
+    component_health_map: row["component_health_map"]
+      ? (safeJsonParse(row["component_health_map"]) as Record<string, unknown>)
+      : undefined,
+    available_components: row["available_components"]
+      ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
+      : undefined,
+  }));
   const tail = agents[agents.length - 1] as Record<string, unknown> | undefined;
   const nextCursor =
     hasMore && tail
@@ -578,17 +645,54 @@ export function loadAgentsForMetrics(sql: SqlStorage): Map<string, AgentMetricsI
   }
   return result;
 }
+
+/**
+ * Get a single agent by instance_uid with full detail (parsed JSON blobs).
+ */
+export function getAgent(sql: SqlStorage, uid: string): Record<string, unknown> | null {
+  const row = sql
+    .exec(
+      `SELECT
+        a.instance_uid,
+        a.tenant_id,
+        a.config_id,
+        a.sequence_num,
+        a.generation,
+        a.healthy,
+        a.status,
+        a.last_error,
+        a.current_config_hash,
+        a.effective_config_hash,
+        cs.body AS effective_config_body,
+        a.last_seen_at,
+        a.connected_at,
+        a.agent_description,
+        a.capabilities,
+        a.component_health_map,
+        a.available_components
+       FROM agents a
+       LEFT JOIN config_snapshots cs ON cs.hash = a.effective_config_hash
+       WHERE a.instance_uid = ?`,
+      uid,
+    )
+    .toArray()[0];
+
+  if (!row) return null;
+
+  return {
+    ...row,
+    healthy: row["healthy"] === 1,
+    agent_description: safeJsonParse(row["agent_description"] as string | null),
+    component_health_map: safeJsonParse(row["component_health_map"] as string | null),
+    available_components: safeJsonParse(row["available_components"] as string | null),
+  };
+}
 // ─── Stale Agent Detection ──────────────────────────────────────────
 
 /**
  * Mark agents as disconnected if their last_seen_at is older than the
  * given threshold (in ms). Returns the UIDs of agents that were marked stale.
  */
-export interface StaleAgent {
-  instance_uid: string;
-  tenant_id: string;
-  config_id: string;
-}
 
 export function sweepStaleAgents(
   sql: SqlStorage,
@@ -625,23 +729,6 @@ export function sweepStaleAgents(
 }
 
 // ─── Alarm Sweep Tracking ───────────────────────────────────────────
-
-export interface SweepResult {
-  staleCount: number;
-  activeSocketCount: number;
-  durationMs: number;
-}
-
-export interface SweepStats {
-  last_sweep_at: number;
-  last_sweep_stale_count: number;
-  last_sweep_active_socket_count: number;
-  last_sweep_duration_ms: number;
-  last_stale_sweep_at: number;
-  total_sweeps: number;
-  total_stale_swept: number;
-  sweeps_with_stale: number;
-}
 
 /**
  * Record that a stale sweep just completed.

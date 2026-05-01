@@ -33,20 +33,31 @@ message AgentToServer {
   // field 8: PackageStatuses (not implemented)
   AgentDisconnect agent_disconnect = 9;
   uint64 flags = 10;
-  // fields 11-15: Development features (not implemented)
+  // field 11: ConnectionSettingsRequest (not implemented)
+  // field 12: CustomCapabilities (not implemented)
+  // field 13: CustomMessage (not implemented)
+  // field 14: AvailableComponents — spec extension (Development status).
+  // Not defined in our proto subset; decoded only via the JSON codec.
+  // Protobuf-framed agents will not populate this field until we add the
+  // proto message definition and codec mapping.
+  // ConnectionSettingsStatus is decoded by the codec but not yet processed by
+  // the worker — the server currently ignores the agent's acknowledgement of
+  // connection settings offers. See apps/worker TODO for tracking.
+  ConnectionSettingsStatus connection_settings_status = 15;
 }
 
 message ServerToAgent {
   bytes instance_uid = 1;
   ServerErrorResponse error_response = 2;
   AgentRemoteConfig remote_config = 3;
-  // field 4: ConnectionSettingsOffers (not implemented)
+  ConnectionSettingsOffers connection_settings = 4;
   // field 5: PackagesAvailable (not implemented)
   uint64 flags = 6;
   uint64 capabilities = 7;
   AgentIdentification agent_identification = 8;
-  // fields 9-11: Beta/Development features (not implemented)
-  // Recommended minimum interval in nanoseconds between AgentToServer messages.
+  ServerToAgentCommand command = 9;
+  // field 10: CustomCapabilities (not implemented)
+  // field 11: CustomMessage (not implemented)
   uint64 heart_beat_interval = 12;
 }
 
@@ -116,3 +127,73 @@ message AgentIdentification {
 }
 
 message AgentDisconnect {}
+
+// ─── Connection Settings ─────────────────────────────────────────────────────
+
+message ConnectionSettingsOffers {
+  bytes hash = 1;
+  OpAMPConnectionSettings opamp = 2;
+  // field 3: own_metrics (TelemetryConnectionSettings, not implemented)
+  // field 4: own_traces (TelemetryConnectionSettings, not implemented)
+  // field 5: own_logs (TelemetryConnectionSettings, not implemented)
+  // field 6: other_connections (not implemented)
+}
+
+message OpAMPConnectionSettings {
+  string destination_endpoint = 1;
+  Headers headers = 2;
+  // field 3: certificate (TLSCertificate, not implemented)
+  uint64 heartbeat_interval_seconds = 4;
+}
+
+message Headers {
+  repeated Header headers = 1;
+}
+
+message Header {
+  string key = 1;
+  string value = 2;
+}
+
+// ─── Commands ────────────────────────────────────────────────────────────────
+
+message ServerToAgentCommand {
+  CommandType type = 1;
+}
+
+enum CommandType {
+  CommandType_Restart = 0;
+}
+
+// ─── Connection Settings Status (agent → server) ─────────────────────────────
+
+message ConnectionSettingsStatus {
+  bytes last_connection_settings_hash = 1;
+  ConnectionSettingsStatuses status = 2;
+  string error_message = 3;
+}
+
+enum ConnectionSettingsStatuses {
+  ConnectionSettingsStatuses_UNSET = 0;
+  ConnectionSettingsStatuses_APPLIED = 1;
+  ConnectionSettingsStatuses_APPLYING = 2;
+  ConnectionSettingsStatuses_FAILED = 3;
+}
+
+// ─── Server Capabilities ─────────────────────────────────────────────────────
+
+enum ServerCapabilities {
+  ServerCapabilities_Unspecified = 0;
+  ServerCapabilities_AcceptsStatus = 0x00000001;
+  ServerCapabilities_OffersRemoteConfig = 0x00000002;
+  ServerCapabilities_AcceptsEffectiveConfig = 0x00000004;
+  // 0x00000008 = OffersPackages (not implemented)
+  // 0x00000010 = AcceptsPackagesStatus (not implemented)
+  ServerCapabilities_OffersConnectionSettings = 0x00000020;
+  // 0x00000040 = AcceptsConnectionSettingsRequest (not implemented)
+}
+
+enum ServerToAgentFlags {
+  ServerToAgentFlags_Unspecified = 0;
+  ServerToAgentFlags_ReportFullState = 0x00000001;
+}

@@ -10,8 +10,36 @@ import {
   type AgentToServer,
   type ServerToAgent,
   AgentCapabilities,
-  RemoteConfigStatuses,
 } from "@o11yfleet/core/codec";
+import {
+  buildHello as buildHelloMsg,
+  buildHeartbeat as buildHeartbeatMsg,
+  buildHealthReport as buildHealthMsg,
+  buildConfigAck as buildConfigAckMsg,
+} from "./opamp-messages.js";
+
+/** Pipeline configuration for realistic component_health_map. */
+export interface PipelineConfig {
+  name: string; // e.g. "traces", "metrics", "logs"
+  receivers: string[]; // e.g. ["otlp"]
+  processors: string[]; // e.g. ["batch"]
+  exporters: string[]; // e.g. ["debug"]
+}
+
+/** Standard pipeline set matching a real otelcol-contrib with otlp/batch/debug. */
+export const REAL_COLLECTOR_PIPELINES: PipelineConfig[] = [
+  { name: "traces", receivers: ["otlp"], processors: ["batch"], exporters: ["debug"] },
+  { name: "metrics", receivers: ["otlp"], processors: ["batch"], exporters: ["debug"] },
+  { name: "logs", receivers: ["otlp"], processors: ["batch"], exporters: ["debug"] },
+];
+
+/** Generate a random 12-char hex hostname like a Docker container ID. */
+function randomHostname(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(6));
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 export interface FakeAgentOptions {
   /** WebSocket endpoint, e.g. "ws://localhost:8787/v1/opamp" */
@@ -28,6 +56,26 @@ export interface FakeAgentOptions {
   autoHeartbeat?: boolean;
   /** Callback invoked on each auto-heartbeat (for monitoring). */
   onAutoHeartbeat?: () => void;
+  /** Realistic agent profile matching real OTel Collector behavior. */
+  profile?: AgentProfile;
+}
+
+/** Realistic agent profile — matches what otelcol-contrib actually reports. */
+export interface AgentProfile {
+  /** Service version, e.g. "0.123.0". */
+  serviceVersion?: string;
+  /** Hostname to report. Auto-generated if omitted. */
+  hostname?: string;
+  /** OS type. Defaults to "linux". */
+  osType?: string;
+  /** Architecture. Defaults to "arm64". */
+  arch?: string;
+  /** Pipeline definitions for component_health_map. */
+  pipelines?: PipelineConfig[];
+  /** Extensions to include. Defaults to ["opamp"]. */
+  extensions?: string[];
+  /** Capabilities bitmask. Defaults to 2053 (real collector value). */
+  capabilities?: number;
 }
 
 export interface EnrollmentResult {
@@ -72,6 +120,9 @@ export class FakeOpampAgent {
   private _lastCloseReason: string | null = null;
   private _disconnectedAt: number | null = null;
 
+  private profile: AgentProfile;
+  private resolvedCapabilities: number;
+
   constructor(opts: FakeAgentOptions) {
     this.endpoint = opts.endpoint;
     this.enrollmentToken = opts.enrollmentToken;
@@ -80,6 +131,12 @@ export class FakeOpampAgent {
     this.instanceUid = opts.instanceUid ?? crypto.getRandomValues(new Uint8Array(16));
     this.autoHeartbeatEnabled = opts.autoHeartbeat ?? false;
     this.onAutoHeartbeat = opts.onAutoHeartbeat;
+    this.profile = opts.profile ?? {};
+    this.resolvedCapabilities =
+      this.profile.capabilities ??
+      AgentCapabilities.ReportsStatus |
+        AgentCapabilities.ReportsEffectiveConfig |
+        AgentCapabilities.ReportsHealth;
   }
 
   /**
@@ -185,65 +242,49 @@ export class FakeOpampAgent {
 
   async sendHello(): Promise<void> {
     this.sequenceNum = 0;
-    const msg: AgentToServer = {
-      instance_uid: this.instanceUid,
-      sequence_num: this.sequenceNum,
-      capabilities:
-        AgentCapabilities.ReportsStatus |
-        AgentCapabilities.AcceptsRemoteConfig |
-        AgentCapabilities.ReportsHealth |
-        AgentCapabilities.ReportsRemoteConfig,
-      flags: 0,
-      health: {
-        healthy: true,
-        start_time_unix_nano: BigInt(Date.now()) * 1000000n,
-        last_error: "",
-        status: "running",
-        status_time_unix_nano: BigInt(Date.now()) * 1000000n,
-        component_health_map: {},
-      },
-      agent_description: {
-        identifying_attributes: [{ key: "service.name", value: { string_value: this.agentName } }],
-        non_identifying_attributes: [{ key: "os.type", value: { string_value: "test" } }],
-      },
-    };
+    const p = this.profile;
+    const hostname = p.hostname ?? randomHostname();
+    const hasEffectiveConfigCap =
+      (this.resolvedCapabilities & AgentCapabilities.ReportsEffectiveConfig) !== 0;
+    const msg = buildHelloMsg({
+      instanceUid: this.instanceUid,
+      sequenceNum: this.sequenceNum,
+      capabilities: this.resolvedCapabilities,
+      name: this.agentName,
+      serviceVersion: p.serviceVersion,
+      hostname,
+      osType: p.osType,
+      arch: p.arch,
+      pipelines: p.pipelines,
+      extensions: p.extensions,
+      includeEffectiveConfig: hasEffectiveConfigCap,
+    });
     this.send(msg);
   }
 
   async sendHeartbeat(): Promise<void> {
     this.sequenceNum++;
-    const msg: AgentToServer = {
-      instance_uid: this.instanceUid,
-      sequence_num: this.sequenceNum,
-      capabilities:
-        AgentCapabilities.ReportsStatus |
-        AgentCapabilities.AcceptsRemoteConfig |
-        AgentCapabilities.ReportsHealth,
-      flags: 0,
-    };
-    this.send(msg);
+    this.send(
+      buildHeartbeatMsg({
+        instanceUid: this.instanceUid,
+        sequenceNum: this.sequenceNum,
+        capabilities: this.resolvedCapabilities,
+      }),
+    );
   }
 
   async sendHealth(healthy: boolean, status: string = ""): Promise<void> {
     this.sequenceNum++;
-    const msg: AgentToServer = {
-      instance_uid: this.instanceUid,
-      sequence_num: this.sequenceNum,
-      capabilities:
-        AgentCapabilities.ReportsStatus |
-        AgentCapabilities.AcceptsRemoteConfig |
-        AgentCapabilities.ReportsHealth,
-      flags: 0,
-      health: {
+    this.send(
+      buildHealthMsg({
+        instanceUid: this.instanceUid,
+        sequenceNum: this.sequenceNum,
+        capabilities: this.resolvedCapabilities,
         healthy,
-        start_time_unix_nano: BigInt(Date.now()) * 1000000n,
-        last_error: healthy ? "" : status,
-        status,
-        status_time_unix_nano: BigInt(Date.now()) * 1000000n,
-        component_health_map: {},
-      },
-    };
-    this.send(msg);
+        status: status || undefined,
+        lastError: healthy ? "" : status,
+      }),
+    );
   }
 
   async waitForMessage(timeoutMs = 5000): Promise<ServerToAgent> {
@@ -295,21 +336,14 @@ export class FakeOpampAgent {
 
   async applyConfig(hash: Uint8Array): Promise<void> {
     this.sequenceNum++;
-    const msg: AgentToServer = {
-      instance_uid: this.instanceUid,
-      sequence_num: this.sequenceNum,
-      capabilities:
-        AgentCapabilities.ReportsStatus |
-        AgentCapabilities.AcceptsRemoteConfig |
-        AgentCapabilities.ReportsRemoteConfig,
-      flags: 0,
-      remote_config_status: {
-        last_remote_config_hash: hash,
-        status: RemoteConfigStatuses.APPLIED,
-        error_message: "",
-      },
-    };
-    this.send(msg);
+    this.send(
+      buildConfigAckMsg({
+        instanceUid: this.instanceUid,
+        sequenceNum: this.sequenceNum,
+        capabilities: this.resolvedCapabilities,
+        configHash: hash,
+      }),
+    );
   }
 
   close(): void {

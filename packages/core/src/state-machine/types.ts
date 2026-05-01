@@ -19,7 +19,9 @@ export interface AgentState {
   last_seen_at: number;
   connected_at: number;
   agent_description: string | null;
-  capabilities: number; // C3 fix: stored agent capabilities
+  capabilities: number;
+  component_health_map: Record<string, unknown> | null;
+  available_components: Record<string, unknown> | null;
 }
 
 export interface ProcessResult {
@@ -27,6 +29,26 @@ export interface ProcessResult {
   response: ServerToAgent | null;
   events: AnyFleetEvent[];
   shouldPersist: boolean;
+}
+
+/** Dependency injection for non-deterministic operations.
+ *  Makes processFrame fully pure and deterministically testable. */
+export interface ProcessContext {
+  /** Current wall-clock time in milliseconds (replaces Date.now()). */
+  now: number;
+  /** Generate a random 16-byte instance UID (replaces crypto.getRandomValues). */
+  randomUid: () => Uint8Array;
+  /** Generate a unique event ID string (replaces crypto.randomUUID). */
+  randomId: () => string;
+}
+
+/** Default production context using platform crypto. */
+export function defaultProcessContext(): ProcessContext {
+  return {
+    now: Date.now(),
+    randomUid: () => crypto.getRandomValues(new Uint8Array(16)),
+    randomId: () => crypto.randomUUID(),
+  };
 }
 
 export type { AgentToServer, ServerToAgent };

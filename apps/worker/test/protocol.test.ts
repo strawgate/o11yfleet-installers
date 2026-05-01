@@ -7,9 +7,10 @@ import {
   decodeFrame,
   AgentCapabilities,
   ServerCapabilities,
+  ServerToAgentFlags,
 } from "@o11yfleet/core/codec";
-import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
-import { apiFetch, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
+import type { ServerToAgent } from "@o11yfleet/core/codec";
+import { apiFetch, O11YFLEET_CLAIM_HMAC_SECRET, buildHello, buildHeartbeat } from "./helpers.js";
 
 beforeAll(async () => {
   await env.FP_DB.exec(
@@ -211,20 +212,9 @@ describe("DO Protocol Enforcement", () => {
     const ws = response.webSocket!;
     ws.accept();
 
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
+    const hello = buildHello({
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-      flags: 0,
-      health: {
-        healthy: true,
-        start_time_unix_nano: 0n,
-        last_error: "",
-        status: "running",
-        status_time_unix_nano: 0n,
-        component_health_map: {},
-      },
-    };
+    });
     ws.send(encodeFrame(hello));
 
     const msg = await waitForMsg(ws);
@@ -233,11 +223,11 @@ describe("DO Protocol Enforcement", () => {
     const serverMsg = decodeFrame<ServerToAgent>(buf);
     expect(serverMsg.instance_uid).toBeDefined();
     expect(serverMsg.capabilities).toBeDefined();
-    expect(serverMsg.capabilities).toBe(
-      ServerCapabilities.AcceptsStatus |
-        ServerCapabilities.OffersRemoteConfig |
-        ServerCapabilities.AcceptsEffectiveConfig,
-    );
+    // Verify required capabilities are present (bitwise, so new caps don't break this)
+    expect(serverMsg.capabilities! & ServerCapabilities.AcceptsStatus).toBeTruthy();
+    expect(serverMsg.capabilities! & ServerCapabilities.OffersRemoteConfig).toBeTruthy();
+    expect(serverMsg.capabilities! & ServerCapabilities.AcceptsEffectiveConfig).toBeTruthy();
+    expect(serverMsg.capabilities! & ServerCapabilities.OffersConnectionSettings).toBeTruthy();
 
     ws.close();
   });
@@ -253,12 +243,10 @@ describe("DO Protocol Enforcement", () => {
     const ws = response.webSocket!;
     ws.accept();
 
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
+    const hello = buildHeartbeat({
+      sequenceNum: 0,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-      flags: 0,
-    };
+    });
     ws.send(encodeFrame(hello));
     await waitForMsg(ws); // hello response
 
@@ -280,11 +268,11 @@ describe("DO Protocol Enforcement", () => {
         : (pushMsg.data as ArrayBuffer);
     const push = decodeFrame<ServerToAgent>(pushBuf);
 
-    expect(push.capabilities).toBe(
-      ServerCapabilities.AcceptsStatus |
-        ServerCapabilities.OffersRemoteConfig |
-        ServerCapabilities.AcceptsEffectiveConfig,
-    );
+    // Verify required capabilities are present on config push (bitwise)
+    expect(push.capabilities! & ServerCapabilities.AcceptsStatus).toBeTruthy();
+    expect(push.capabilities! & ServerCapabilities.OffersRemoteConfig).toBeTruthy();
+    expect(push.capabilities! & ServerCapabilities.AcceptsEffectiveConfig).toBeTruthy();
+    expect(push.capabilities! & ServerCapabilities.OffersConnectionSettings).toBeTruthy();
     expect(push.remote_config).toBeDefined();
 
     ws.close();
@@ -392,30 +380,15 @@ describe("Framing Edge Cases", () => {
     ws.accept();
 
     // Send hello (seq 0)
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-      health: {
-        healthy: true,
-        start_time_unix_nano: 0n,
-        last_error: "",
-        status: "running",
-        status_time_unix_nano: 0n,
-        component_health_map: {},
-      },
-    };
+    const hello = buildHello({ capabilities: AgentCapabilities.ReportsStatus });
     ws.send(encodeFrame(hello));
     await waitForMsg(ws);
 
     // Send with sequence gap (skip to 5 instead of 1)
-    const gapMsg: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 5,
+    const gapMsg = buildHeartbeat({
+      sequenceNum: 5,
       capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    };
+    });
     ws.send(encodeFrame(gapMsg));
     const gapResponse = await waitForMsg(ws);
     const buf2 =
@@ -425,7 +398,9 @@ describe("Framing Edge Cases", () => {
     const serverMsg = decodeFrame<ServerToAgent>(buf2);
 
     // Server should request full state report
-    expect(serverMsg.flags & 0x00000001).toBe(1); // ReportFullState flag
+    expect(serverMsg.flags & ServerToAgentFlags.ReportFullState).toBe(
+      ServerToAgentFlags.ReportFullState,
+    );
 
     ws.close();
   });

@@ -153,7 +153,10 @@ function AgentSection({
                 hostname: agentHost(agent),
                 status: agent.status ?? null,
                 health: agentIsHealthy(agent),
-                drift: agentHasDrift(agent, desiredHash),
+                drift:
+                  Number(agent.capabilities ?? 0) & 0x02
+                    ? (agent.is_drifted ?? agentHasDrift(agent, desiredHash))
+                    : false,
                 current_hash: agentCurrentHash(agent),
                 last_seen: agentLastSeen(agent) ?? null,
               })),
@@ -309,7 +312,10 @@ function AgentSection({
                     visible.map((a) => {
                       const uid = agentUid(a);
                       const healthy = agentIsHealthy(a);
-                      const drift = agentHasDrift(a, desiredHash);
+                      const hasConfigCap = Boolean(Number(a.capabilities ?? 0) & 0x02);
+                      const drift = hasConfigCap
+                        ? (a.is_drifted ?? agentHasDrift(a, desiredHash))
+                        : false;
                       return (
                         <tr key={uid} className="clickable">
                           <td className="mono-cell">

@@ -5,7 +5,7 @@ import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { timingSafeEqual } from "./utils/crypto.js";
-import { verifyClaim, hashEnrollmentToken } from "@o11yfleet/core/auth";
+import { hashEnrollmentToken, verifyClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
 
 export interface Env {
   FP_DB: D1Database;
@@ -536,53 +536,64 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     }
   }
 
-  // Cold path: enrollment token
-  const tokenHash = await hashEnrollmentToken(token);
-  const enrollment = await env.FP_DB.prepare(
-    `SELECT et.*, c.tenant_id, c.name as config_name
-     FROM enrollment_tokens et
-     JOIN configurations c ON et.config_id = c.id
-     WHERE et.token_hash = ? AND et.revoked_at IS NULL`,
-  )
-    .bind(tokenHash)
-    .first<{
-      config_id: string;
-      tenant_id: string;
-      expires_at: string | null;
-    }>();
+  // Cold path: enrollment token — verify signature, then check the persisted
+  // row for revoked_at. The signature alone is not enough: a token revoked
+  // through DELETE /api/v1/configurations/:id/enrollment-tokens/:tokenId
+  // would still pass signature verification until its expiry, so we have to
+  // check the denylist before routing to the DO.
 
-  if (!enrollment) {
-    return Response.json({ error: "Invalid enrollment token" }, { status: 401 });
+  // Step 1: Verify token signature — auth failure → 401
+  let claim: Awaited<ReturnType<typeof verifyEnrollmentToken>>;
+  try {
+    claim = await verifyEnrollmentToken(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Invalid enrollment token";
+    return Response.json({ error: msg }, { status: 401 });
   }
 
-  // Check expiry
-  if (enrollment.expires_at && new Date(enrollment.expires_at) < new Date()) {
-    return Response.json({ error: "Enrollment token expired" }, { status: 401 });
+  // Step 2: Infrastructure operations — D1/stub failures → 500
+  try {
+    const tokenHash = await hashEnrollmentToken(token);
+    const tokenRow = await env.FP_DB.prepare(
+      `SELECT revoked_at FROM enrollment_tokens WHERE token_hash = ? LIMIT 1`,
+    )
+      .bind(tokenHash)
+      .first<{ revoked_at: string | null }>();
+    if (!tokenRow) {
+      return Response.json({ error: "Enrollment token not found" }, { status: 401 });
+    }
+    if (tokenRow.revoked_at) {
+      return Response.json({ error: "Enrollment token revoked" }, { status: 401 });
+    }
+
+    // Route to DO
+    const doName = `${claim.tenant_id}:${claim.config_id}`;
+    const doId = env.CONFIG_DO.idFromName(doName);
+    const stub = env.CONFIG_DO.get(doId);
+
+    // Generate a temporary instance UID for the enrolling agent
+    const instanceUid = crypto.randomUUID().replace(/-/g, "");
+
+    cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
+    cleanHeaders.set("x-fp-config-id", claim.config_id);
+    cleanHeaders.set("x-fp-instance-uid", instanceUid);
+    cleanHeaders.set("x-fp-enrollment", "true");
+    const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
+    if (tenantLimit !== null) {
+      cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
+    }
+
+    return stub.fetch(
+      new Request(request.url, {
+        method: request.method,
+        headers: cleanHeaders,
+      }),
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Internal error";
+    console.error("Enrollment cold path infrastructure error:", msg);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
   }
-
-  // Route to DO
-  const doName = `${enrollment.tenant_id}:${enrollment.config_id}`;
-  const doId = env.CONFIG_DO.idFromName(doName);
-  const stub = env.CONFIG_DO.get(doId);
-
-  // Generate a temporary instance UID for the enrolling agent
-  const instanceUid = crypto.randomUUID().replace(/-/g, "");
-
-  cleanHeaders.set("x-fp-tenant-id", enrollment.tenant_id);
-  cleanHeaders.set("x-fp-config-id", enrollment.config_id);
-  cleanHeaders.set("x-fp-instance-uid", instanceUid);
-  cleanHeaders.set("x-fp-enrollment", "true");
-  const tenantLimit = await resolveTenantAgentLimit(env, enrollment.tenant_id);
-  if (tenantLimit !== null) {
-    cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
-  }
-
-  return stub.fetch(
-    new Request(request.url, {
-      method: request.method,
-      headers: cleanHeaders,
-    }),
-  );
 }
 
 /**

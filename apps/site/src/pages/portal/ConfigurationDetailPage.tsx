@@ -100,7 +100,6 @@ export default function ConfigurationDetailPage() {
   // Drift and connection counts are derived from server-side aggregates when
   // available so they remain accurate beyond the first paginated agents page.
   const driftedAgents = agentMetrics.driftedAgents;
-  const connectedCount = connectedAgents;
   const guidanceReady =
     Boolean(c) &&
     (activeTab !== "agents" || agents.isFetched) &&
@@ -121,7 +120,7 @@ export default function ConfigurationDetailPage() {
           ],
           metrics: [
             pageMetric("total_agents", "Total collectors", totalAgents),
-            pageMetric("connected_agents", "Connected collectors", connectedCount),
+            pageMetric("connected_agents", "Connected collectors", connectedAgents),
             pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
             pageMetric("drifted_agents", "Drifted collectors", driftedAgents),
             pageMetric("versions", "Versions", versionList.length),
@@ -253,8 +252,7 @@ export default function ConfigurationDetailPage() {
             status: c.status ?? null,
             active_tab: activeTab,
             total_agents: totalAgents,
-            connected_agents: connectedCount,
-            agents_connected: connectedAgents,
+            connected_agents: connectedAgents,
             healthy_agents: healthyAgents,
             drifted_agents: driftedAgents,
             active_websockets: activeWebSockets ?? null,
@@ -515,11 +513,18 @@ export default function ConfigurationDetailPage() {
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
-          <div className="val">{connectedAgents}</div>
+          <div className="val">
+            {connectedAgents > 0 ? <span className="live-dot" /> : null}
+            {connectedAgents}
+            <span className="denom">/{totalAgents}</span>
+          </div>
           <div className="label">Connected</div>
         </div>
         <div className="stat">
-          <div className="val">{healthyAgents}</div>
+          <div className="val">
+            {healthyAgents}
+            <span className="denom">/{totalAgents}</span>
+          </div>
           <div className="label">Healthy</div>
         </div>
         <div className="stat">
@@ -527,7 +532,12 @@ export default function ConfigurationDetailPage() {
           <div className="label">Drifted</div>
         </div>
         <div className="stat">
-          <div className="val">{activeWebSockets ?? "—"}</div>
+          <div className="val">
+            {typeof activeWebSockets === "number" && activeWebSockets > 0 ? (
+              <span className="live-dot" />
+            ) : null}
+            {activeWebSockets ?? "—"}
+          </div>
           <div className="label">Active WebSockets</div>
         </div>
         <div className="stat">

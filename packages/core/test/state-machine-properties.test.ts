@@ -5,7 +5,7 @@
 import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
 import { processFrame } from "../src/state-machine/processor.js";
-import type { AgentState } from "../src/state-machine/types.js";
+import type { AgentState, ProcessContext } from "../src/state-machine/types.js";
 import type { AgentToServer } from "../src/codec/types.js";
 import { AgentCapabilities, RemoteConfigStatuses } from "../src/codec/types.js";
 import { FleetEventType } from "../src/events.js";
@@ -82,7 +82,19 @@ function makeInitialState(overrides: Partial<AgentState> = {}): AgentState {
     connected_at: 0,
     agent_description: null,
     capabilities: 0,
+    component_health_map: null,
+    available_components: null,
     ...overrides,
+  };
+}
+
+// ─── Deterministic context for reproducible tests ───────────────────
+let deterministicIdCounter = 0;
+function makeDeterministicCtx(): ProcessContext {
+  return {
+    now: 1700000000000,
+    randomUid: () => new Uint8Array(16).fill(0x42),
+    randomId: () => `test-event-id-${deterministicIdCounter++}`,
   };
 }
 
@@ -99,8 +111,7 @@ describe("state-machine property tests", () => {
             desired_config_hash: desiredHash ?? null,
             capabilities: AgentCapabilities.AcceptsRemoteConfig,
           });
-          // Must not throw
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
           expect(result).toBeDefined();
           expect(result.newState).toBeDefined();
           expect(result.events).toBeInstanceOf(Array);
@@ -124,7 +135,7 @@ describe("state-machine property tests", () => {
             capabilities: AgentCapabilities.ReportsStatus,
             flags: 0,
           };
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
           expect(result.newState.last_seen_at).toBeGreaterThanOrEqual(prevLastSeen);
           prevLastSeen = result.newState.last_seen_at;
           state = result.newState;
@@ -147,7 +158,7 @@ describe("state-machine property tests", () => {
             capabilities: AgentCapabilities.ReportsStatus,
             flags: 0,
           };
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
           if (i === 0) {
             // First message (hello) must set connected_at
@@ -172,7 +183,7 @@ describe("state-machine property tests", () => {
         (currentSeq, gap) => {
           const state = makeInitialState({
             sequence_num: currentSeq,
-            connected_at: Date.now(),
+            connected_at: 1700000000000,
           });
           const msg: AgentToServer = {
             instance_uid: new Uint8Array(16),
@@ -180,7 +191,7 @@ describe("state-machine property tests", () => {
             capabilities: AgentCapabilities.ReportsStatus,
             flags: 0,
           };
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
           // ReportFullState flag (0x1) must be set
           expect(result.response!.flags & 0x1).toBeTruthy();
           expect(result.shouldPersist).toBe(true);
@@ -195,7 +206,7 @@ describe("state-machine property tests", () => {
       fc.property(fc.integer({ min: 0, max: 100 }), (currentSeq) => {
         const state = makeInitialState({
           sequence_num: currentSeq,
-          connected_at: Date.now(),
+          connected_at: 1700000000000,
         });
         const msg: AgentToServer = {
           instance_uid: new Uint8Array(16),
@@ -204,7 +215,7 @@ describe("state-machine property tests", () => {
           flags: 0,
           agent_disconnect: {},
         };
-        const result = processFrame(state, msg);
+        const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
         expect(result.response).toBeNull();
         expect(result.events).toHaveLength(1);
         expect(result.events[0]!.type).toBe(FleetEventType.AGENT_DISCONNECTED);
@@ -223,7 +234,7 @@ describe("state-machine property tests", () => {
         (desiredHash, currentHash, capabilities) => {
           const state = makeInitialState({
             sequence_num: 1,
-            connected_at: Date.now(),
+            connected_at: 1700000000000,
             desired_config_hash: desiredHash,
             current_config_hash: currentHash,
             capabilities,
@@ -234,7 +245,7 @@ describe("state-machine property tests", () => {
             capabilities,
             flags: 0,
           };
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
           const hashesMatch =
             currentHash !== null &&
@@ -271,7 +282,7 @@ describe("state-machine property tests", () => {
             flags: 0,
             health,
           };
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
           expect(result.shouldPersist).toBe(true);
           const connectedEvents = result.events.filter(
@@ -296,7 +307,7 @@ describe("state-machine property tests", () => {
             desired_config_hash: new Uint8Array(32).fill(0xff),
             capabilities: AgentCapabilities.AcceptsRemoteConfig,
           });
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
           for (const event of result.events) {
             expect(event.tenant_id).toBe("t-check");
@@ -314,12 +325,12 @@ describe("state-machine property tests", () => {
     );
   });
 
-  it("pure heartbeat (no changes) never persists", () => {
+  it("pure heartbeat (no changes) always persists (seq + last_seen_at)", () => {
     fc.assert(
       fc.property(fc.integer({ min: 5, max: 50 }), (currentSeq) => {
         const state = makeInitialState({
           sequence_num: currentSeq,
-          connected_at: Date.now() - 60000,
+          connected_at: 1700000000000 - 60000,
           healthy: true,
           status: "running",
           capabilities: AgentCapabilities.ReportsStatus,
@@ -331,7 +342,7 @@ describe("state-machine property tests", () => {
           flags: 0,
           // No health, no config status, no description, no disconnect
         };
-        const result = processFrame(state, msg);
+        const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
         // Always persists: sequence_num + last_seen_at saved on every message
         expect(result.shouldPersist).toBe(true);
         expect(result.events).toHaveLength(0);
@@ -345,7 +356,7 @@ describe("state-machine property tests", () => {
       fc.property(arbConfigStatus, arbUint8Array(32), (status, hash) => {
         const state = makeInitialState({
           sequence_num: 5,
-          connected_at: Date.now(),
+          connected_at: 1700000000000,
         });
         const msg: AgentToServer = {
           instance_uid: new Uint8Array(16),
@@ -358,7 +369,7 @@ describe("state-machine property tests", () => {
             error_message: "",
           },
         };
-        const result = processFrame(state, msg);
+        const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
         const appliedEvents = result.events.filter((e) => e.type === FleetEventType.CONFIG_APPLIED);
         const rejectedEvents = result.events.filter(
@@ -390,7 +401,7 @@ describe("state-machine property tests", () => {
           if (msg.agent_disconnect) return;
 
           const state = makeInitialState();
-          const result = processFrame(state, msg);
+          const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
           if (result.response) {
             // Server should always declare AcceptsStatus | OffersRemoteConfig | AcceptsEffectiveConfig
@@ -444,7 +455,7 @@ describe("state-machine stress tests", () => {
             : undefined,
       };
 
-      const result = processFrame(state, msg);
+      const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
 
       // Invariant: last_seen_at never decreases
       expect(result.newState.last_seen_at).toBeGreaterThanOrEqual(state.last_seen_at);
@@ -471,14 +482,14 @@ describe("state-machine stress tests", () => {
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
       flags: 0,
     };
-    const finalResult = processFrame(state, finalMsg);
+    const finalResult = processFrame(state, finalMsg, undefined, undefined, makeDeterministicCtx());
     expect(finalResult.response!.remote_config).toBeUndefined();
   });
 
   it("rapid health toggling is idempotent for same state", () => {
     let state = makeInitialState({
       sequence_num: 0,
-      connected_at: Date.now(),
+      connected_at: 1700000000000,
       healthy: true,
       status: "running",
       capabilities: AgentCapabilities.ReportsHealth,
@@ -500,7 +511,7 @@ describe("state-machine stress tests", () => {
           component_health_map: {},
         },
       };
-      const result = processFrame(state, msg);
+      const result = processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
       healthChangeCount += result.events.filter(
         (e) => e.type === FleetEventType.AGENT_HEALTH_CHANGED,
       ).length;

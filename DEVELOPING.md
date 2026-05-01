@@ -29,6 +29,8 @@ UI, per-user API keys, progressive rollout state, and billing-provider wiring.
 | `packages/db/`         | D1 schema and migrations                                  |
 | `packages/test-utils/` | Fake agents and shared test utilities                     |
 | `tests/e2e/`           | API/OpAMP end-to-end tests                                |
+| `tests/opamp/`         | OpAMP spec compliance tests (54/55 passing)               |
+| `tests/e2e-collector/` | Real OTel Collector e2e + version matrix (Docker)         |
 | `tests/ui/`            | Playwright browser tests                                  |
 | `tests/load*/`         | Load and smoke-test harnesses                             |
 | `infra/terraform/`     | Cloudflare infrastructure                                 |
@@ -65,6 +67,17 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 - Browser coverage lives under `tests/ui`.
 - Run `just docs-api-check` after changing API docs, public docs, route files, or
   route-heavy historical docs.
+
+### Running Test Suites
+
+| Suite                             | Command                   | Notes                                         |
+| --------------------------------- | ------------------------- | --------------------------------------------- |
+| Core (codec, auth, state machine) | `just test-core`          | Fast, no CF runtime needed                    |
+| Worker (runtime + node)           | `just test-worker`        | Runs in workerd pool                          |
+| OpAMP compliance                  | `just test-opamp`         | Requires a **live** worker (`just dev` first) |
+| E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors      |
+| UI (Playwright)                   | `just test-ui`            | Browser tests against live stack              |
+| All fast tests                    | `just test`               | Core + worker (no live server needed)         |
 
 ### AI Guidance Live Check
 

@@ -1,5 +1,5 @@
 // Tenant-scoped API routes — user portal operations
-// All operations are scoped to a single tenant via X-Tenant-Id header (stub auth)
+// All operations are scoped to a single tenant via authenticated session or API key
 
 import type { Env } from "../../index.js";
 import {
@@ -7,6 +7,14 @@ import {
   createEnrollmentTokenRequestSchema,
   updateConfigurationRequestSchema,
   updateTenantRequestSchema,
+  createConfigurationResponseSchema,
+  createEnrollmentTokenResponseSchema,
+  tenantSchema,
+  configurationSchema,
+  type Tenant,
+  type Configuration,
+  type ConfigurationWithStats,
+  type ConfigStats,
 } from "@o11yfleet/core/api";
 import {
   deleteConfigContentIfUnreferenced,
@@ -20,6 +28,7 @@ import {
   handleTenantGuidanceRequest,
 } from "../../ai/guidance.js";
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
+import { typedJsonResponse } from "../../shared/responses.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import {
   countConfigsForTenant,
@@ -188,6 +197,19 @@ async function routeV1Request(
     return handleRollout(request, env, tenantId, rolloutMatch[1]!);
   }
 
+  // ─── Admin Commands ────────────────────────────────────────
+  // TODO: These destructive commands currently only check tenant ownership.
+  // Add admin-role authorization when RBAC is implemented.
+  const disconnectMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/disconnect$/);
+  if (disconnectMatch && method === "POST") {
+    return handleDisconnect(env, tenantId, disconnectMatch[1]!);
+  }
+
+  const restartMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/restart$/);
+  if (restartMatch && method === "POST") {
+    return handleRestart(env, tenantId, restartMatch[1]!);
+  }
+
   return jsonError("Not found", 404);
 }
 
@@ -217,7 +239,7 @@ function getDoName(tenantId: string, configId: string): string {
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-  return Response.json(tenant);
+  return typedJsonResponse(tenantSchema, tenant as Tenant);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
@@ -288,7 +310,11 @@ async function handleCreateConfiguration(
     return jsonError(`Configuration limit reached (${tenant.max_configs})`, 429);
   }
 
-  return Response.json({ id, tenant_id: tenantId, name: body.name }, { status: 201 });
+  return typedJsonResponse(
+    createConfigurationResponseSchema,
+    { id, tenant_id: tenantId, name: body.name },
+    { status: 201 },
+  );
 }
 
 async function handleGetConfiguration(
@@ -298,7 +324,7 @@ async function handleGetConfiguration(
 ): Promise<Response> {
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
-  return Response.json(config);
+  return typedJsonResponse(configurationSchema, config as Configuration);
 }
 
 async function handleUpdateConfiguration(
@@ -335,7 +361,7 @@ async function handleUpdateConfiguration(
     .run();
 
   const updated = await getOwnedConfig(env, tenantId, configId);
-  return Response.json(updated);
+  return typedJsonResponse(configurationSchema, updated as Configuration);
 }
 
 async function handleDeleteConfiguration(
@@ -519,22 +545,37 @@ async function handleCreateEnrollmentToken(
 
   const body = await validateJsonBody(request, createEnrollmentTokenRequestSchema);
 
-  const rawToken = generateEnrollmentToken();
-  const tokenHash = await hashEnrollmentToken(rawToken);
-  const id = crypto.randomUUID();
-
-  let expiresAt: string | null = null;
-  if (body.expires_in_hours) {
-    expiresAt = new Date(Date.now() + body.expires_in_hours * 3600 * 1000).toISOString();
+  let expiresInSeconds: number | undefined;
+  if (body.expires_in_hours !== null && body.expires_in_hours !== undefined) {
+    if (typeof body.expires_in_hours !== "number" || body.expires_in_hours <= 0) {
+      return jsonError("expires_in_hours must be a positive number", 400);
+    }
+    if (body.expires_in_hours > 8760) {
+      return jsonError("expires_in_hours must be 8760 (1 year) or less", 400);
+    }
+    expiresInSeconds = body.expires_in_hours * 3600;
   }
 
+  const id = crypto.randomUUID();
+  const { token: rawToken, expires_at: expiresAt } = await generateEnrollmentToken({
+    tenant_id: tenantId,
+    config_id: configId,
+    secret: env.O11YFLEET_CLAIM_HMAC_SECRET,
+    expires_in_seconds: expiresInSeconds,
+    jti: id,
+  });
+
+  const tokenHash = await hashEnrollmentToken(rawToken);
+
+  // Store in D1 as admin registry (for listing/revocation UI — NOT used on connect path)
   await env.FP_DB.prepare(
     `INSERT INTO enrollment_tokens (id, config_id, tenant_id, token_hash, label, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
   )
     .bind(id, configId, tenantId, tokenHash, body.label ?? null, expiresAt)
     .run();
 
-  return Response.json(
+  return typedJsonResponse(
+    createEnrollmentTokenResponseSchema,
     { id, token: rawToken, config_id: configId, label: body.label ?? null, expires_at: expiresAt },
     { status: 201 },
   );
@@ -611,6 +652,24 @@ async function handleGetStats(env: Env, tenantId: string, configId: string): Pro
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/stats"));
+}
+
+async function handleDisconnect(env: Env, tenantId: string, configId: string): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  return stub.fetch(new Request("http://internal/command/disconnect", { method: "POST" }));
+}
+
+async function handleRestart(env: Env, tenantId: string, configId: string): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  return stub.fetch(new Request("http://internal/command/restart", { method: "POST" }));
 }
 
 async function handleRolloutCohortSummary(
@@ -836,7 +895,7 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
   if (!tenant) return jsonError("Tenant not found", 404);
 
   const configs = await env.FP_DB.prepare(
-    "SELECT id, name, current_config_hash, created_at, updated_at FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC",
+    "SELECT id, tenant_id, name, current_config_hash, created_at, updated_at FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC",
   )
     .bind(tenantId)
     .all<{
@@ -866,27 +925,25 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     }
   }
 
-  const configStats = configs.results.map((config) => {
+  const configStats: ConfigurationWithStats[] = configs.results.map((config) => {
     const snapshot = byConfig.get(config.id);
-    const stats = snapshot
+    const stats: ConfigStats = snapshot
       ? {
           total_agents: snapshot.agent_count,
           connected_agents: snapshot.connected_count,
           healthy_agents: snapshot.healthy_count,
-          websockets: snapshot.websocket_count,
-          snapshot_at: snapshot.timestamp,
+          active_websockets: snapshot.websocket_count,
         }
       : {
           total_agents: 0,
           connected_agents: 0,
           healthy_agents: 0,
-          websockets: 0,
-          snapshot_at: null,
+          active_websockets: 0,
         };
     totals.totalAgents += stats.total_agents;
     totals.connectedAgents += stats.connected_agents;
     totals.healthyAgents += stats.healthy_agents;
-    return { ...config, stats };
+    return { ...config, stats } as ConfigurationWithStats;
   });
 
   return Response.json({
@@ -921,7 +978,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
   // current row.
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-  return Response.json(tenant);
+  return typedJsonResponse(tenantSchema, tenant as Tenant);
 }
 
 // ─── Agent Detail ───────────────────────────────────────────────────

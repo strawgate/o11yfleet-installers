@@ -10,15 +10,20 @@ export interface AgentToServer {
   remote_config_status?: RemoteConfigStatus;
   agent_disconnect?: AgentDisconnect;
   flags: number;
+  connection_settings_status?: ConnectionSettingsStatus;
+  /** Agent-reported available components (spec field 14, Development). */
+  available_components?: Record<string, unknown>;
 }
 
 export interface ServerToAgent {
   instance_uid: Uint8Array;
   error_response?: ServerErrorResponse;
   remote_config?: AgentRemoteConfig;
+  connection_settings?: ConnectionSettingsOffers;
   flags: number;
   capabilities: number;
   agent_identification?: AgentIdentification;
+  command?: ServerToAgentCommand;
   /** Recommended heartbeat interval in nanoseconds (OpAMP spec field 12). */
   heart_beat_interval?: number;
 }
@@ -91,6 +96,49 @@ export interface AgentIdentification {
 // oxlint-disable-next-line typescript/no-empty-object-type
 export interface AgentDisconnect {}
 
+// ─── Connection Settings ─────────────────────────────────────────────────────
+
+export interface ConnectionSettingsOffers {
+  hash: Uint8Array;
+  opamp?: OpAMPConnectionSettings;
+}
+
+export interface OpAMPConnectionSettings {
+  destination_endpoint?: string;
+  headers?: Header[];
+  heartbeat_interval_seconds?: number;
+}
+
+export interface Header {
+  key: string;
+  value: string;
+}
+
+export interface ConnectionSettingsStatus {
+  last_connection_settings_hash: Uint8Array;
+  status: ConnectionSettingsStatuses;
+  error_message?: string;
+}
+
+export enum ConnectionSettingsStatuses {
+  UNSET = 0,
+  APPLIED = 1,
+  APPLYING = 2,
+  FAILED = 3,
+}
+
+// ─── Commands ────────────────────────────────────────────────────────────────
+
+export interface ServerToAgentCommand {
+  type: CommandType;
+}
+
+export enum CommandType {
+  Restart = 0,
+}
+
+// ─── Key/Value ───────────────────────────────────────────────────────────────
+
 export interface KeyValue {
   key: string;
   value: AnyValue;
@@ -106,12 +154,15 @@ export interface AnyValue {
   kvlist_value?: KeyValue[];
 }
 
-// Capability bit flags
+// ─── Capability bit flags ────────────────────────────────────────────────────
+
 export enum AgentCapabilities {
   Unspecified = 0,
   ReportsStatus = 0x00000001,
   AcceptsRemoteConfig = 0x00000002,
   ReportsEffectiveConfig = 0x00000004,
+  AcceptsRestartCommand = 0x00000010,
+  AcceptsOpAMPConnectionSettings = 0x00000100,
   ReportsHealth = 0x00000800,
   ReportsRemoteConfig = 0x00001000,
   ReportsHeartbeat = 0x00002000,
@@ -122,11 +173,14 @@ export enum ServerCapabilities {
   AcceptsStatus = 0x00000001,
   OffersRemoteConfig = 0x00000002,
   AcceptsEffectiveConfig = 0x00000004,
+  OffersConnectionSettings = 0x00000020,
 }
 
 export enum AgentToServerFlags {
   Unspecified = 0,
   RequestInstanceUid = 0x00000001,
+  /** Indicates this message is a full state report (hello / reconnect). */
+  FullState = 0x00000002,
 }
 
 export enum ServerToAgentFlags {

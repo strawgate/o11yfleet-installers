@@ -22,7 +22,8 @@
  *   FP_API_KEY         — API bearer token
  */
 
-import { FakeOpampAgent } from "@o11yfleet/test-utils";
+import { FakeOpampAgent, REAL_COLLECTOR_PIPELINES } from "@o11yfleet/test-utils";
+import type { AgentProfile } from "@o11yfleet/test-utils";
 import {
   createTracker,
   createCounters,
@@ -201,6 +202,21 @@ interface ManagedAgent {
   lastHeartbeat: number;
 }
 
+// Realistic collector versions for varied fleet simulation
+const COLLECTOR_VERSIONS = ["0.120.0", "0.121.0", "0.122.0", "0.123.0"];
+const OS_TYPES = ["linux", "linux", "linux", "linux", "darwin"]; // 80% linux
+const ARCHITECTURES = ["amd64", "amd64", "amd64", "arm64"]; // 75% amd64
+
+function realisticProfile(idx: number): AgentProfile {
+  return {
+    serviceVersion: COLLECTOR_VERSIONS[idx % COLLECTOR_VERSIONS.length],
+    osType: OS_TYPES[idx % OS_TYPES.length],
+    arch: ARCHITECTURES[idx % ARCHITECTURES.length],
+    pipelines: REAL_COLLECTOR_PIPELINES,
+    extensions: ["opamp"],
+  };
+}
+
 async function enrollAgent(
   wsUrl: string,
   enrollmentToken: string,
@@ -212,11 +228,12 @@ async function enrollAgent(
   const agent = new FakeOpampAgent({
     endpoint: wsUrl,
     enrollmentToken,
-    name: `load-agent-${idx}`,
+    name: `otelcol-contrib`,
     autoHeartbeat: true,
     onAutoHeartbeat: () => {
       counters.messagesSent++;
     },
+    profile: realisticProfile(idx),
   });
 
   counters.connectAttempted++;

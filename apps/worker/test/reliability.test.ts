@@ -17,8 +17,10 @@ import {
   decodeFrame,
   AgentCapabilities,
   getConfigStats,
+  buildHello,
+  buildHeartbeat,
 } from "./helpers.js";
-import type { AgentToServer, ServerToAgent } from "./helpers.js";
+import type { ServerToAgent } from "./helpers.js";
 
 // ========================
 // Alarm Sweep Tests
@@ -101,18 +103,7 @@ describe("WebSocket Error Handling", () => {
     ws.accept();
 
     // Send a valid binary hello — should succeed
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-      health: {
-        healthy: true,
-        start_time_unix_nano: 0n,
-        last_error: "",
-        status: "running",
-      },
-    };
+    const hello = buildHello({ capabilities: AgentCapabilities.ReportsStatus });
     ws.send(encodeFrame(hello));
 
     // Should get enrollment + response
@@ -136,13 +127,11 @@ describe("WebSocket Error Handling", () => {
 
     // Blast 61 messages to exceed the 60/min rate limit
     for (let i = 1; i <= 61; i++) {
-      const hb: AgentToServer = {
-        instance_uid: new Uint8Array(16),
-        sequence_num: i,
-        capabilities: AgentCapabilities.ReportsStatus,
-        flags: 0,
-      };
-      ws.send(encodeFrame(hb));
+      ws.send(
+        encodeFrame(
+          buildHeartbeat({ sequenceNum: i, capabilities: AgentCapabilities.ReportsStatus }),
+        ),
+      );
     }
 
     // Wait for close — should be 4029
@@ -180,18 +169,10 @@ describe("Concurrent Enrollment", () => {
       // Each agent sends a hello with unique UID
       const uid = new Uint8Array(16);
       crypto.getRandomValues(uid);
-      const hello: AgentToServer = {
-        instance_uid: uid,
-        sequence_num: 0,
+      const hello = buildHello({
+        instanceUid: uid,
         capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-        flags: 0,
-        health: {
-          healthy: true,
-          start_time_unix_nano: 0n,
-          last_error: "",
-          status: "running",
-        },
-      };
+      });
       ws.send(encodeFrame(hello));
 
       const enrollEvent = await waitForMsg(ws);

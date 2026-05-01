@@ -1,0 +1,19 @@
+# Multi-stage: copy otelcol-contrib into the supervisor image
+# so the supervisor can manage a real collector process.
+ARG COLLECTOR_VERSION=0.146.1
+FROM ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:${COLLECTOR_VERSION} AS collector
+FROM ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-opampsupervisor:0.123.0
+
+# Copy the collector binary from the contrib image
+COPY --from=collector /otelcol-contrib /otelcol-contrib
+
+# The upstream supervisor image runs as root by default; explicitly drop
+# privileges. The supervisor binary listens on user ports only and the
+# collector child process runs whatever cap_add the compose file grants.
+USER 10001:10001
+
+HEALTHCHECK --interval=10s --timeout=3s --start-period=30s --retries=3 \
+  CMD kill -0 1 || exit 1
+
+# The supervisor config should reference executable: /otelcol-contrib
+ENTRYPOINT ["/usr/local/bin/opampsupervisor"]

@@ -10,6 +10,8 @@ export {
   ServerToAgentFlags,
   RemoteConfigStatuses,
   ServerErrorResponseType,
+  CommandType,
+  ConnectionSettingsStatuses,
 } from "./types.js";
 export type {
   AgentDescription,
@@ -22,6 +24,11 @@ export type {
   ServerErrorResponse,
   AgentIdentification,
   AgentDisconnect,
+  ConnectionSettingsOffers,
+  OpAMPConnectionSettings,
+  Header,
+  ConnectionSettingsStatus,
+  ServerToAgentCommand,
   KeyValue,
   AnyValue,
 } from "./types.js";

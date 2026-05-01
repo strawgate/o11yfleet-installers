@@ -1,4 +1,5 @@
 import { expect, test, type ConsoleMessage, type Page, type Route } from "@playwright/test";
+import type { OverviewResponse, ConfigurationWithStats, Tenant } from "@o11yfleet/core/api";
 
 const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
 const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
@@ -45,21 +46,22 @@ async function mockPortalSession(page: Page) {
 async function mockPortalOverview(page: Page) {
   const configuration = {
     id: "config-1",
+    tenant_id: "tenant-1",
     name: "prod-collectors",
     status: "active",
     current_config_hash: "abcdef1234567890",
     description: "Production collector group",
     updated_at: "2026-04-28T20:00:00.000Z",
     stats: {
-      connected: 2,
-      total: 4,
-      healthy: 2,
+      connected_agents: 2,
+      total_agents: 4,
+      healthy_agents: 2,
       snapshot_at: "2026-04-28T20:00:00.000Z",
     },
-  };
+  } satisfies ConfigurationWithStats;
 
   await mockJson(page, "/api/v1/overview", {
-    tenant: { id: "tenant-1", name: "Demo Org" },
+    tenant: { id: "tenant-1", name: "Demo Org", plan: "pro" } satisfies Tenant,
     configs_count: 1,
     total_agents: 4,
     connected_agents: 2,
@@ -68,7 +70,8 @@ async function mockPortalOverview(page: Page) {
     metrics_source: "analytics_engine",
     metrics_error: null,
     configurations: [configuration],
-  });
+  } satisfies OverviewResponse);
+  await mockJson(page, "/api/v1/configurations", { configurations: [configuration] });
   await mockEmptyGuidance(page);
   return configuration;
 }
@@ -141,7 +144,10 @@ test.describe("portal smoke coverage", () => {
     await expect(page.locator(".stat", { hasText: "Total collectors" }).locator(".val")).toHaveText(
       "4",
     );
-    await expect(page.locator(".stat", { hasText: "Connected" }).locator(".val")).toHaveText("2");
+    // The Connected stat now renders `{connected}/{total}` inline (with a
+    // `.denom` span around `/total`). Match the rendered text instead of the
+    // numerator alone.
+    await expect(page.locator(".stat", { hasText: "Connected" }).locator(".val")).toHaveText("2/4");
     await expect(page.getByText("2 / 4 connected")).toBeVisible();
     await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
     runtime.dispose();

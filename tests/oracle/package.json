@@ -1,0 +1,17 @@
+{
+  "name": "@o11yfleet/oracle-tests",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "generate": "go run .",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "@bufbuild/protobuf": "^2.12.0",
+    "@o11yfleet/core": "workspace:*",
+    "@o11yfleet/test-utils": "workspace:*",
+    "typescript": "^5.8.0",
+    "vitest": "^4.1.0"
+  }
+}

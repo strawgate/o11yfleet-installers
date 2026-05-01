@@ -30,7 +30,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file opamp.proto.
  */
 export const file_opamp: GenFile = /*@__PURE__*/
-  fileDesc("CgtvcGFtcC5wcm90bxILb3BhbXAucHJvdG8i9wIKDUFnZW50VG9TZXJ2ZXISFAoMaW5zdGFuY2VfdWlkGAEgASgMEhQKDHNlcXVlbmNlX251bRgCIAEoBBI4ChFhZ2VudF9kZXNjcmlwdGlvbhgDIAEoCzIdLm9wYW1wLnByb3RvLkFnZW50RGVzY3JpcHRpb24SFAoMY2FwYWJpbGl0aWVzGAQgASgEEiwKBmhlYWx0aBgFIAEoCzIcLm9wYW1wLnByb3RvLkNvbXBvbmVudEhlYWx0aBI2ChBlZmZlY3RpdmVfY29uZmlnGAYgASgLMhwub3BhbXAucHJvdG8uRWZmZWN0aXZlQ29uZmlnEj0KFHJlbW90ZV9jb25maWdfc3RhdHVzGAcgASgLMh8ub3BhbXAucHJvdG8uUmVtb3RlQ29uZmlnU3RhdHVzEjYKEGFnZW50X2Rpc2Nvbm5lY3QYCSABKAsyHC5vcGFtcC5wcm90by5BZ2VudERpc2Nvbm5lY3QSDQoFZmxhZ3MYCiABKAQimAIKDVNlcnZlclRvQWdlbnQSFAoMaW5zdGFuY2VfdWlkGAEgASgMEjgKDmVycm9yX3Jlc3BvbnNlGAIgASgLMiAub3BhbXAucHJvdG8uU2VydmVyRXJyb3JSZXNwb25zZRI1Cg1yZW1vdGVfY29uZmlnGAMgASgLMh4ub3BhbXAucHJvdG8uQWdlbnRSZW1vdGVDb25maWcSDQoFZmxhZ3MYBiABKAQSFAoMY2FwYWJpbGl0aWVzGAcgASgEEj4KFGFnZW50X2lkZW50aWZpY2F0aW9uGAggASgLMiAub3BhbXAucHJvdG8uQWdlbnRJZGVudGlmaWNhdGlvbhIbChNoZWFydF9iZWF0X2ludGVydmFsGAwgASgEIoQBChBBZ2VudERlc2NyaXB0aW9uEjUKFmlkZW50aWZ5aW5nX2F0dHJpYnV0ZXMYASADKAsyFS5vcGFtcC5wcm90by5LZXlWYWx1ZRI5Chpub25faWRlbnRpZnlpbmdfYXR0cmlidXRlcxgCIAMoCzIVLm9wYW1wLnByb3RvLktleVZhbHVlIrACCg9Db21wb25lbnRIZWFsdGgSDwoHaGVhbHRoeRgBIAEoCBIcChRzdGFydF90aW1lX3VuaXhfbmFubxgCIAEoBhISCgpsYXN0X2Vycm9yGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIdChVzdGF0dXNfdGltZV91bml4X25hbm8YBSABKAYSUgoUY29tcG9uZW50X2hlYWx0aF9tYXAYBiADKAsyNC5vcGFtcC5wcm90by5Db21wb25lbnRIZWFsdGguQ29tcG9uZW50SGVhbHRoTWFwRW50cnkaVwoXQ29tcG9uZW50SGVhbHRoTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQ29tcG9uZW50SGVhbHRoOgI4ASJCCg9FZmZlY3RpdmVDb25maWcSLwoKY29uZmlnX21hcBgBIAEoCzIbLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnTWFwIqABCg5BZ2VudENvbmZpZ01hcBI+Cgpjb25maWdfbWFwGAEgAygLMioub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXAuQ29uZmlnTWFwRW50cnkaTgoOQ29uZmlnTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQWdlbnRDb25maWdGaWxlOgI4ASI1Cg9BZ2VudENvbmZpZ0ZpbGUSDAoEYm9keRgBIAEoDBIUCgxjb250ZW50X3R5cGUYAiABKAkifwoSUmVtb3RlQ29uZmlnU3RhdHVzEh8KF2xhc3RfcmVtb3RlX2NvbmZpZ19oYXNoGAEgASgMEjEKBnN0YXR1cxgCIAEoDjIhLm9wYW1wLnByb3RvLlJlbW90ZUNvbmZpZ1N0YXR1c2VzEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiVQoRQWdlbnRSZW1vdGVDb25maWcSKwoGY29uZmlnGAEgASgLMhsub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXASEwoLY29uZmlnX2hhc2gYAiABKAwijAEKE1NlcnZlckVycm9yUmVzcG9uc2USMgoEdHlwZRgBIAEoDjIkLm9wYW1wLnByb3RvLlNlcnZlckVycm9yUmVzcG9uc2VUeXBlEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSKgoKcmV0cnlfaW5mbxgDIAEoCzIWLm9wYW1wLnByb3RvLlJldHJ5SW5mbyIsCglSZXRyeUluZm8SHwoXcmV0cnlfYWZ0ZXJfbmFub3NlY29uZHMYASABKAQiLwoTQWdlbnRJZGVudGlmaWNhdGlvbhIYChBuZXdfaW5zdGFuY2VfdWlkGAEgASgMIhEKD0FnZW50RGlzY29ubmVjdCqcAQoUUmVtb3RlQ29uZmlnU3RhdHVzZXMSHgoaUmVtb3RlQ29uZmlnU3RhdHVzZXNfVU5TRVQQABIgChxSZW1vdGVDb25maWdTdGF0dXNlc19BUFBMSUVEEAESIQodUmVtb3RlQ29uZmlnU3RhdHVzZXNfQVBQTFlJTkcQAhIfChtSZW1vdGVDb25maWdTdGF0dXNlc19GQUlMRUQQAyqPAQoXU2VydmVyRXJyb3JSZXNwb25zZVR5cGUSIwofU2VydmVyRXJyb3JSZXNwb25zZVR5cGVfVW5rbm93bhAAEiYKIlNlcnZlckVycm9yUmVzcG9uc2VUeXBlX0JhZFJlcXVlc3QQARInCiNTZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZV9VbmF2YWlsYWJsZRACYgZwcm90bzM", [file_anyvalue]);
+  fileDesc("CgtvcGFtcC5wcm90bxILb3BhbXAucHJvdG8iwgMKDUFnZW50VG9TZXJ2ZXISFAoMaW5zdGFuY2VfdWlkGAEgASgMEhQKDHNlcXVlbmNlX251bRgCIAEoBBI4ChFhZ2VudF9kZXNjcmlwdGlvbhgDIAEoCzIdLm9wYW1wLnByb3RvLkFnZW50RGVzY3JpcHRpb24SFAoMY2FwYWJpbGl0aWVzGAQgASgEEiwKBmhlYWx0aBgFIAEoCzIcLm9wYW1wLnByb3RvLkNvbXBvbmVudEhlYWx0aBI2ChBlZmZlY3RpdmVfY29uZmlnGAYgASgLMhwub3BhbXAucHJvdG8uRWZmZWN0aXZlQ29uZmlnEj0KFHJlbW90ZV9jb25maWdfc3RhdHVzGAcgASgLMh8ub3BhbXAucHJvdG8uUmVtb3RlQ29uZmlnU3RhdHVzEjYKEGFnZW50X2Rpc2Nvbm5lY3QYCSABKAsyHC5vcGFtcC5wcm90by5BZ2VudERpc2Nvbm5lY3QSDQoFZmxhZ3MYCiABKAQSSQoaY29ubmVjdGlvbl9zZXR0aW5nc19zdGF0dXMYDyABKAsyJS5vcGFtcC5wcm90by5Db25uZWN0aW9uU2V0dGluZ3NTdGF0dXMikAMKDVNlcnZlclRvQWdlbnQSFAoMaW5zdGFuY2VfdWlkGAEgASgMEjgKDmVycm9yX3Jlc3BvbnNlGAIgASgLMiAub3BhbXAucHJvdG8uU2VydmVyRXJyb3JSZXNwb25zZRI1Cg1yZW1vdGVfY29uZmlnGAMgASgLMh4ub3BhbXAucHJvdG8uQWdlbnRSZW1vdGVDb25maWcSQgoTY29ubmVjdGlvbl9zZXR0aW5ncxgEIAEoCzIlLm9wYW1wLnByb3RvLkNvbm5lY3Rpb25TZXR0aW5nc09mZmVycxINCgVmbGFncxgGIAEoBBIUCgxjYXBhYmlsaXRpZXMYByABKAQSPgoUYWdlbnRfaWRlbnRpZmljYXRpb24YCCABKAsyIC5vcGFtcC5wcm90by5BZ2VudElkZW50aWZpY2F0aW9uEjIKB2NvbW1hbmQYCSABKAsyIS5vcGFtcC5wcm90by5TZXJ2ZXJUb0FnZW50Q29tbWFuZBIbChNoZWFydF9iZWF0X2ludGVydmFsGAwgASgEIoQBChBBZ2VudERlc2NyaXB0aW9uEjUKFmlkZW50aWZ5aW5nX2F0dHJpYnV0ZXMYASADKAsyFS5vcGFtcC5wcm90by5LZXlWYWx1ZRI5Chpub25faWRlbnRpZnlpbmdfYXR0cmlidXRlcxgCIAMoCzIVLm9wYW1wLnByb3RvLktleVZhbHVlIrACCg9Db21wb25lbnRIZWFsdGgSDwoHaGVhbHRoeRgBIAEoCBIcChRzdGFydF90aW1lX3VuaXhfbmFubxgCIAEoBhISCgpsYXN0X2Vycm9yGAMgASgJEg4KBnN0YXR1cxgEIAEoCRIdChVzdGF0dXNfdGltZV91bml4X25hbm8YBSABKAYSUgoUY29tcG9uZW50X2hlYWx0aF9tYXAYBiADKAsyNC5vcGFtcC5wcm90by5Db21wb25lbnRIZWFsdGguQ29tcG9uZW50SGVhbHRoTWFwRW50cnkaVwoXQ29tcG9uZW50SGVhbHRoTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQ29tcG9uZW50SGVhbHRoOgI4ASJCCg9FZmZlY3RpdmVDb25maWcSLwoKY29uZmlnX21hcBgBIAEoCzIbLm9wYW1wLnByb3RvLkFnZW50Q29uZmlnTWFwIqABCg5BZ2VudENvbmZpZ01hcBI+Cgpjb25maWdfbWFwGAEgAygLMioub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXAuQ29uZmlnTWFwRW50cnkaTgoOQ29uZmlnTWFwRW50cnkSCwoDa2V5GAEgASgJEisKBXZhbHVlGAIgASgLMhwub3BhbXAucHJvdG8uQWdlbnRDb25maWdGaWxlOgI4ASI1Cg9BZ2VudENvbmZpZ0ZpbGUSDAoEYm9keRgBIAEoDBIUCgxjb250ZW50X3R5cGUYAiABKAkifwoSUmVtb3RlQ29uZmlnU3RhdHVzEh8KF2xhc3RfcmVtb3RlX2NvbmZpZ19oYXNoGAEgASgMEjEKBnN0YXR1cxgCIAEoDjIhLm9wYW1wLnByb3RvLlJlbW90ZUNvbmZpZ1N0YXR1c2VzEhUKDWVycm9yX21lc3NhZ2UYAyABKAkiVQoRQWdlbnRSZW1vdGVDb25maWcSKwoGY29uZmlnGAEgASgLMhsub3BhbXAucHJvdG8uQWdlbnRDb25maWdNYXASEwoLY29uZmlnX2hhc2gYAiABKAwijAEKE1NlcnZlckVycm9yUmVzcG9uc2USMgoEdHlwZRgBIAEoDjIkLm9wYW1wLnByb3RvLlNlcnZlckVycm9yUmVzcG9uc2VUeXBlEhUKDWVycm9yX21lc3NhZ2UYAiABKAkSKgoKcmV0cnlfaW5mbxgDIAEoCzIWLm9wYW1wLnByb3RvLlJldHJ5SW5mbyIsCglSZXRyeUluZm8SHwoXcmV0cnlfYWZ0ZXJfbmFub3NlY29uZHMYASABKAQiLwoTQWdlbnRJZGVudGlmaWNhdGlvbhIYChBuZXdfaW5zdGFuY2VfdWlkGAEgASgMIhEKD0FnZW50RGlzY29ubmVjdCJdChhDb25uZWN0aW9uU2V0dGluZ3NPZmZlcnMSDAoEaGFzaBgBIAEoDBIzCgVvcGFtcBgCIAEoCzIkLm9wYW1wLnByb3RvLk9wQU1QQ29ubmVjdGlvblNldHRpbmdzIoIBChdPcEFNUENvbm5lY3Rpb25TZXR0aW5ncxIcChRkZXN0aW5hdGlvbl9lbmRwb2ludBgBIAEoCRIlCgdoZWFkZXJzGAIgASgLMhQub3BhbXAucHJvdG8uSGVhZGVycxIiChpoZWFydGJlYXRfaW50ZXJ2YWxfc2Vjb25kcxgEIAEoBCIvCgdIZWFkZXJzEiQKB2hlYWRlcnMYASADKAsyEy5vcGFtcC5wcm90by5IZWFkZXIiJAoGSGVhZGVyEgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCSI+ChRTZXJ2ZXJUb0FnZW50Q29tbWFuZBImCgR0eXBlGAEgASgOMhgub3BhbXAucHJvdG8uQ29tbWFuZFR5cGUikQEKGENvbm5lY3Rpb25TZXR0aW5nc1N0YXR1cxIlCh1sYXN0X2Nvbm5lY3Rpb25fc2V0dGluZ3NfaGFzaBgBIAEoDBI3CgZzdGF0dXMYAiABKA4yJy5vcGFtcC5wcm90by5Db25uZWN0aW9uU2V0dGluZ3NTdGF0dXNlcxIVCg1lcnJvcl9tZXNzYWdlGAMgASgJKpwBChRSZW1vdGVDb25maWdTdGF0dXNlcxIeChpSZW1vdGVDb25maWdTdGF0dXNlc19VTlNFVBAAEiAKHFJlbW90ZUNvbmZpZ1N0YXR1c2VzX0FQUExJRUQQARIhCh1SZW1vdGVDb25maWdTdGF0dXNlc19BUFBMWUlORxACEh8KG1JlbW90ZUNvbmZpZ1N0YXR1c2VzX0ZBSUxFRBADKo8BChdTZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZRIjCh9TZXJ2ZXJFcnJvclJlc3BvbnNlVHlwZV9Vbmtub3duEAASJgoiU2VydmVyRXJyb3JSZXNwb25zZVR5cGVfQmFkUmVxdWVzdBABEicKI1NlcnZlckVycm9yUmVzcG9uc2VUeXBlX1VuYXZhaWxhYmxlEAIqJgoLQ29tbWFuZFR5cGUSFwoTQ29tbWFuZFR5cGVfUmVzdGFydBAAKroBChpDb25uZWN0aW9uU2V0dGluZ3NTdGF0dXNlcxIkCiBDb25uZWN0aW9uU2V0dGluZ3NTdGF0dXNlc19VTlNFVBAAEiYKIkNvbm5lY3Rpb25TZXR0aW5nc1N0YXR1c2VzX0FQUExJRUQQARInCiNDb25uZWN0aW9uU2V0dGluZ3NTdGF0dXNlc19BUFBMWUlORxACEiUKIUNvbm5lY3Rpb25TZXR0aW5nc1N0YXR1c2VzX0ZBSUxFRBADKukBChJTZXJ2ZXJDYXBhYmlsaXRpZXMSIgoeU2VydmVyQ2FwYWJpbGl0aWVzX1Vuc3BlY2lmaWVkEAASJAogU2VydmVyQ2FwYWJpbGl0aWVzX0FjY2VwdHNTdGF0dXMQARIpCiVTZXJ2ZXJDYXBhYmlsaXRpZXNfT2ZmZXJzUmVtb3RlQ29uZmlnEAISLQopU2VydmVyQ2FwYWJpbGl0aWVzX0FjY2VwdHNFZmZlY3RpdmVDb25maWcQBBIvCitTZXJ2ZXJDYXBhYmlsaXRpZXNfT2ZmZXJzQ29ubmVjdGlvblNldHRpbmdzECAqYAoSU2VydmVyVG9BZ2VudEZsYWdzEiIKHlNlcnZlclRvQWdlbnRGbGFnc19VbnNwZWNpZmllZBAAEiYKIlNlcnZlclRvQWdlbnRGbGFnc19SZXBvcnRGdWxsU3RhdGUQAWIGcHJvdG8z", [file_anyvalue]);
 
 /**
  * @generated from message opamp.proto.AgentToServer
@@ -79,11 +79,19 @@ export type AgentToServer = Message<"opamp.proto.AgentToServer"> & {
   agentDisconnect?: AgentDisconnect | undefined;
 
   /**
-   * fields 11-15: Development features (not implemented)
-   *
    * @generated from field: uint64 flags = 10;
    */
   flags: bigint;
+
+  /**
+   * field 11: ConnectionSettingsRequest (not implemented)
+   * field 12: CustomCapabilities (not implemented)
+   * field 13: CustomMessage (not implemented)
+   * field 14: AvailableComponents (not implemented)
+   *
+   * @generated from field: opamp.proto.ConnectionSettingsStatus connection_settings_status = 15;
+   */
+  connectionSettingsStatus?: ConnectionSettingsStatus | undefined;
 };
 
 /**
@@ -113,7 +121,11 @@ export type ServerToAgent = Message<"opamp.proto.ServerToAgent"> & {
   remoteConfig?: AgentRemoteConfig | undefined;
 
   /**
-   * field 4: ConnectionSettingsOffers (not implemented)
+   * @generated from field: opamp.proto.ConnectionSettingsOffers connection_settings = 4;
+   */
+  connectionSettings?: ConnectionSettingsOffers | undefined;
+
+  /**
    * field 5: PackagesAvailable (not implemented)
    *
    * @generated from field: uint64 flags = 6;
@@ -131,8 +143,13 @@ export type ServerToAgent = Message<"opamp.proto.ServerToAgent"> & {
   agentIdentification?: AgentIdentification | undefined;
 
   /**
-   * fields 9-11: Beta/Development features (not implemented)
-   * Recommended minimum interval in nanoseconds between AgentToServer messages.
+   * @generated from field: opamp.proto.ServerToAgentCommand command = 9;
+   */
+  command?: ServerToAgentCommand | undefined;
+
+  /**
+   * field 10: CustomCapabilities (not implemented)
+   * field 11: CustomMessage (not implemented)
    *
    * @generated from field: uint64 heart_beat_interval = 12;
    */
@@ -390,6 +407,145 @@ export const AgentDisconnectSchema: GenMessage<AgentDisconnect> = /*@__PURE__*/
   messageDesc(file_opamp, 12);
 
 /**
+ * @generated from message opamp.proto.ConnectionSettingsOffers
+ */
+export type ConnectionSettingsOffers = Message<"opamp.proto.ConnectionSettingsOffers"> & {
+  /**
+   * @generated from field: bytes hash = 1;
+   */
+  hash: Uint8Array;
+
+  /**
+   * field 3: own_metrics (TelemetryConnectionSettings, not implemented)
+   * field 4: own_traces (TelemetryConnectionSettings, not implemented)
+   * field 5: own_logs (TelemetryConnectionSettings, not implemented)
+   * field 6: other_connections (not implemented)
+   *
+   * @generated from field: opamp.proto.OpAMPConnectionSettings opamp = 2;
+   */
+  opamp?: OpAMPConnectionSettings | undefined;
+};
+
+/**
+ * Describes the message opamp.proto.ConnectionSettingsOffers.
+ * Use `create(ConnectionSettingsOffersSchema)` to create a new message.
+ */
+export const ConnectionSettingsOffersSchema: GenMessage<ConnectionSettingsOffers> = /*@__PURE__*/
+  messageDesc(file_opamp, 13);
+
+/**
+ * @generated from message opamp.proto.OpAMPConnectionSettings
+ */
+export type OpAMPConnectionSettings = Message<"opamp.proto.OpAMPConnectionSettings"> & {
+  /**
+   * @generated from field: string destination_endpoint = 1;
+   */
+  destinationEndpoint: string;
+
+  /**
+   * @generated from field: opamp.proto.Headers headers = 2;
+   */
+  headers?: Headers | undefined;
+
+  /**
+   * field 3: certificate (TLSCertificate, not implemented)
+   *
+   * @generated from field: uint64 heartbeat_interval_seconds = 4;
+   */
+  heartbeatIntervalSeconds: bigint;
+};
+
+/**
+ * Describes the message opamp.proto.OpAMPConnectionSettings.
+ * Use `create(OpAMPConnectionSettingsSchema)` to create a new message.
+ */
+export const OpAMPConnectionSettingsSchema: GenMessage<OpAMPConnectionSettings> = /*@__PURE__*/
+  messageDesc(file_opamp, 14);
+
+/**
+ * @generated from message opamp.proto.Headers
+ */
+export type Headers = Message<"opamp.proto.Headers"> & {
+  /**
+   * @generated from field: repeated opamp.proto.Header headers = 1;
+   */
+  headers: Header[];
+};
+
+/**
+ * Describes the message opamp.proto.Headers.
+ * Use `create(HeadersSchema)` to create a new message.
+ */
+export const HeadersSchema: GenMessage<Headers> = /*@__PURE__*/
+  messageDesc(file_opamp, 15);
+
+/**
+ * @generated from message opamp.proto.Header
+ */
+export type Header = Message<"opamp.proto.Header"> & {
+  /**
+   * @generated from field: string key = 1;
+   */
+  key: string;
+
+  /**
+   * @generated from field: string value = 2;
+   */
+  value: string;
+};
+
+/**
+ * Describes the message opamp.proto.Header.
+ * Use `create(HeaderSchema)` to create a new message.
+ */
+export const HeaderSchema: GenMessage<Header> = /*@__PURE__*/
+  messageDesc(file_opamp, 16);
+
+/**
+ * @generated from message opamp.proto.ServerToAgentCommand
+ */
+export type ServerToAgentCommand = Message<"opamp.proto.ServerToAgentCommand"> & {
+  /**
+   * @generated from field: opamp.proto.CommandType type = 1;
+   */
+  type: CommandType;
+};
+
+/**
+ * Describes the message opamp.proto.ServerToAgentCommand.
+ * Use `create(ServerToAgentCommandSchema)` to create a new message.
+ */
+export const ServerToAgentCommandSchema: GenMessage<ServerToAgentCommand> = /*@__PURE__*/
+  messageDesc(file_opamp, 17);
+
+/**
+ * @generated from message opamp.proto.ConnectionSettingsStatus
+ */
+export type ConnectionSettingsStatus = Message<"opamp.proto.ConnectionSettingsStatus"> & {
+  /**
+   * @generated from field: bytes last_connection_settings_hash = 1;
+   */
+  lastConnectionSettingsHash: Uint8Array;
+
+  /**
+   * @generated from field: opamp.proto.ConnectionSettingsStatuses status = 2;
+   */
+  status: ConnectionSettingsStatuses;
+
+  /**
+   * @generated from field: string error_message = 3;
+   */
+  errorMessage: string;
+};
+
+/**
+ * Describes the message opamp.proto.ConnectionSettingsStatus.
+ * Use `create(ConnectionSettingsStatusSchema)` to create a new message.
+ */
+export const ConnectionSettingsStatusSchema: GenMessage<ConnectionSettingsStatus> = /*@__PURE__*/
+  messageDesc(file_opamp, 18);
+
+/**
  * @generated from enum opamp.proto.RemoteConfigStatuses
  */
 export enum RemoteConfigStatuses {
@@ -445,4 +601,113 @@ export enum ServerErrorResponseType {
  */
 export const ServerErrorResponseTypeSchema: GenEnum<ServerErrorResponseType> = /*@__PURE__*/
   enumDesc(file_opamp, 1);
+
+/**
+ * @generated from enum opamp.proto.CommandType
+ */
+export enum CommandType {
+  /**
+   * @generated from enum value: CommandType_Restart = 0;
+   */
+  CommandType_Restart = 0,
+}
+
+/**
+ * Describes the enum opamp.proto.CommandType.
+ */
+export const CommandTypeSchema: GenEnum<CommandType> = /*@__PURE__*/
+  enumDesc(file_opamp, 2);
+
+/**
+ * @generated from enum opamp.proto.ConnectionSettingsStatuses
+ */
+export enum ConnectionSettingsStatuses {
+  /**
+   * @generated from enum value: ConnectionSettingsStatuses_UNSET = 0;
+   */
+  ConnectionSettingsStatuses_UNSET = 0,
+
+  /**
+   * @generated from enum value: ConnectionSettingsStatuses_APPLIED = 1;
+   */
+  ConnectionSettingsStatuses_APPLIED = 1,
+
+  /**
+   * @generated from enum value: ConnectionSettingsStatuses_APPLYING = 2;
+   */
+  ConnectionSettingsStatuses_APPLYING = 2,
+
+  /**
+   * @generated from enum value: ConnectionSettingsStatuses_FAILED = 3;
+   */
+  ConnectionSettingsStatuses_FAILED = 3,
+}
+
+/**
+ * Describes the enum opamp.proto.ConnectionSettingsStatuses.
+ */
+export const ConnectionSettingsStatusesSchema: GenEnum<ConnectionSettingsStatuses> = /*@__PURE__*/
+  enumDesc(file_opamp, 3);
+
+/**
+ * @generated from enum opamp.proto.ServerCapabilities
+ */
+export enum ServerCapabilities {
+  /**
+   * @generated from enum value: ServerCapabilities_Unspecified = 0;
+   */
+  ServerCapabilities_Unspecified = 0,
+
+  /**
+   * @generated from enum value: ServerCapabilities_AcceptsStatus = 1;
+   */
+  ServerCapabilities_AcceptsStatus = 1,
+
+  /**
+   * @generated from enum value: ServerCapabilities_OffersRemoteConfig = 2;
+   */
+  ServerCapabilities_OffersRemoteConfig = 2,
+
+  /**
+   * @generated from enum value: ServerCapabilities_AcceptsEffectiveConfig = 4;
+   */
+  ServerCapabilities_AcceptsEffectiveConfig = 4,
+
+  /**
+   * 0x00000008 = OffersPackages (not implemented)
+   * 0x00000010 = AcceptsPackagesStatus (not implemented)
+   *
+   * 0x00000040 = AcceptsConnectionSettingsRequest (not implemented)
+   *
+   * @generated from enum value: ServerCapabilities_OffersConnectionSettings = 32;
+   */
+  ServerCapabilities_OffersConnectionSettings = 32,
+}
+
+/**
+ * Describes the enum opamp.proto.ServerCapabilities.
+ */
+export const ServerCapabilitiesSchema: GenEnum<ServerCapabilities> = /*@__PURE__*/
+  enumDesc(file_opamp, 4);
+
+/**
+ * @generated from enum opamp.proto.ServerToAgentFlags
+ */
+export enum ServerToAgentFlags {
+  /**
+   * @generated from enum value: ServerToAgentFlags_Unspecified = 0;
+   */
+  ServerToAgentFlags_Unspecified = 0,
+
+  /**
+   * @generated from enum value: ServerToAgentFlags_ReportFullState = 1;
+   */
+  ServerToAgentFlags_ReportFullState = 1,
+}
+
+/**
+ * Describes the enum opamp.proto.ServerToAgentFlags.
+ */
+export const ServerToAgentFlagsSchema: GenEnum<ServerToAgentFlags> = /*@__PURE__*/
+  enumDesc(file_opamp, 5);
 

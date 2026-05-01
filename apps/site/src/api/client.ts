@@ -56,15 +56,20 @@ export function detectApiBase(): string {
   const host = window.location.hostname;
   const buildApiUrl = import.meta.env.VITE_O11YFLEET_API_URL?.trim();
 
+  // In local development, use relative URLs by default so requests go through
+  // vite's proxy (same-origin = cookies work). Allow ?api= override for direct access.
   if (host === "localhost" || host === "127.0.0.1") {
     const params = new URLSearchParams(window.location.search);
-    const apiParam = params.get("api");
+    const apiParam = params.get("api") || localStorage.getItem("fp-api-base");
     if (apiParam) {
       const url = stripUrlParam(window.location.href, "api");
       window.history.replaceState({}, "", url);
       if (isLocalOverride(apiParam)) return apiParam;
     }
-    return buildApiUrl || `http://${host}:8787`;
+    // Use relative URLs (empty string) to leverage vite proxy; fall back to
+    // explicit env var if set.
+    if (!buildApiUrl) return "";
+    return buildApiUrl;
   }
 
   if (buildApiUrl) return buildApiUrl;

@@ -3,13 +3,13 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import {
-  AgentCapabilities,
   decodeFrame,
   encodeFrame,
   ServerToAgentFlags,
+  AgentCapabilities,
+  type ServerToAgent,
 } from "@o11yfleet/core/codec";
-import { apiFetch } from "./helpers.js";
-import type { ServerToAgent, AgentToServer } from "@o11yfleet/core/codec";
+import { apiFetch, buildHello, buildHeartbeat } from "./helpers.js";
 
 const O11YFLEET_CLAIM_HMAC_SECRET = env.O11YFLEET_CLAIM_HMAC_SECRET;
 
@@ -105,13 +105,13 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
     ws.accept();
 
     // 5b. Per OpAMP spec: client sends first. Send hello to trigger enrollment.
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-      flags: 0,
-    };
-    ws.send(encodeFrame(hello));
+    ws.send(
+      encodeFrame(
+        buildHello({
+          capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
+        }),
+      ),
+    );
 
     // 6. Receive enrollment_complete text message (triggered by our hello)
     const enrollEvent = await waitForMsg(ws);
@@ -167,13 +167,11 @@ describe("E2E Scenario #1: New enrollment", () => {
     ws.accept();
 
     // Per OpAMP spec: client sends first
-    const hello: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    };
-    ws.send(encodeFrame(hello));
+    ws.send(
+      encodeFrame(
+        buildHeartbeat({ sequenceNum: 0, capabilities: AgentCapabilities.ReportsStatus }),
+      ),
+    );
 
     const enrollEvent = await waitForMsg(ws);
     const enrollMsg = JSON.parse(enrollEvent.data as string);
@@ -272,19 +270,15 @@ describe("E2E Scenario #4: Sequence gap detection", () => {
       connected_at: Date.now(),
     };
 
-    const r1 = processFrame(state, {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    });
+    const r1 = processFrame(
+      state,
+      buildHeartbeat({ sequenceNum: 0, capabilities: AgentCapabilities.ReportsStatus }),
+    );
 
-    const r2 = processFrame(r1.newState, {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 5,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    });
+    const r2 = processFrame(
+      r1.newState,
+      buildHeartbeat({ sequenceNum: 5, capabilities: AgentCapabilities.ReportsStatus }),
+    );
 
     expect(r2.response!.flags & ServerToAgentFlags.ReportFullState).toBeTruthy();
   });
@@ -348,6 +342,29 @@ describe("E2E Scenario #6: Hibernation attachment", () => {
     expect(pushBody.pushed).toBe(1);
 
     ws.close();
+  });
+});
+
+describe("E2E Scenario #7: Queue consumer idempotency", () => {
+  it("duplicate D1 upserts are safe", async () => {
+    const uid = "s7-uid-" + Date.now();
+
+    for (let i = 0; i < 2; i++) {
+      await env.FP_DB.prepare(
+        `INSERT INTO agent_summaries (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, created_at, updated_at)
+         VALUES (?, 's7-t', 's7-c', 'running', 1, datetime('now'), datetime('now'), datetime('now'), datetime('now'))
+         ON CONFLICT(instance_uid) DO UPDATE SET status = 'running', last_seen_at = datetime('now')`,
+      )
+        .bind(uid)
+        .run();
+    }
+
+    const result = await env.FP_DB.prepare(
+      `SELECT COUNT(*) as count FROM agent_summaries WHERE instance_uid = ?`,
+    )
+      .bind(uid)
+      .first<{ count: number }>();
+    expect(result!.count).toBe(1);
   });
 });
 

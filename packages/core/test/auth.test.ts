@@ -1,4 +1,4 @@
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { signClaim, verifyClaim } from "../src/auth/claims.js";
 import type { AssignmentClaim } from "../src/auth/claims.js";
 import {
@@ -85,42 +85,167 @@ describe("auth/claims", () => {
 });
 
 describe("auth/enrollment", () => {
-  it("generates token with correct prefix", () => {
-    const token = generateEnrollmentToken();
+  const secret = "test-enrollment-secret-32-chars!!";
+
+  async function makeToken(overrides: { expires_in_seconds?: number } = {}) {
+    return generateEnrollmentToken({
+      tenant_id: "tenant-1",
+      config_id: "config-1",
+      secret,
+      ...overrides,
+    });
+  }
+
+  it("generates token with correct prefix", async () => {
+    const { token } = await makeToken();
     expect(token).toMatch(/^fp_enroll_/);
     expect(token.length).toBeGreaterThan(20);
+    expect(token).toContain(".");
   });
 
-  it("generates unique tokens", () => {
-    const t1 = generateEnrollmentToken();
-    const t2 = generateEnrollmentToken();
+  it("generates unique tokens", async () => {
+    const { token: t1 } = await makeToken();
+    const { token: t2 } = await makeToken();
     expect(t1).not.toBe(t2);
   });
 
-  it("hash and verify round-trip", async () => {
-    const token = generateEnrollmentToken();
-    const hash = await hashEnrollmentToken(token);
-
-    expect(typeof hash).toBe("string");
-    expect(hash.length).toBeGreaterThan(0);
-
-    const valid = await verifyEnrollmentToken(token, hash);
-    expect(valid).toBe(true);
+  it("verify round-trip extracts claim", async () => {
+    const { token } = await makeToken();
+    const claim = await verifyEnrollmentToken(token, secret);
+    expect(claim.tenant_id).toBe("tenant-1");
+    expect(claim.config_id).toBe("config-1");
+    expect(claim.v).toBe(1);
+    expect(claim.jti).toBeDefined();
   });
 
-  it("rejects wrong token", async () => {
-    const token = generateEnrollmentToken();
-    const hash = await hashEnrollmentToken(token);
+  it("rejects wrong secret", async () => {
+    const { token } = await makeToken();
+    await expect(verifyEnrollmentToken(token, "wrong-secret-32chars!!!!!!!!!!!!")).rejects.toThrow(
+      "Invalid enrollment token signature",
+    );
+  });
 
-    const wrongToken = generateEnrollmentToken();
-    const valid = await verifyEnrollmentToken(wrongToken, hash);
-    expect(valid).toBe(false);
+  it("rejects expired token", async () => {
+    // Generate token "in the past" so it's already expired
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() - 7200_000); // 2 hours ago
+    const { token } = await generateEnrollmentToken({
+      tenant_id: "tenant-1",
+      config_id: "config-1",
+      secret,
+      expires_in_seconds: 3600, // 1 hour TTL, but issued 2 hours ago → expired
+    });
+    vi.useRealTimers();
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("Enrollment token expired");
+  });
+
+  it("rejects negative expires_in_seconds", async () => {
+    await expect(
+      generateEnrollmentToken({
+        tenant_id: "tenant-1",
+        config_id: "config-1",
+        secret,
+        expires_in_seconds: -3600,
+      }),
+    ).rejects.toThrow("Invalid expires_in_seconds");
+  });
+
+  it("rejects NaN expires_in_seconds", async () => {
+    await expect(
+      generateEnrollmentToken({
+        tenant_id: "tenant-1",
+        config_id: "config-1",
+        secret,
+        expires_in_seconds: NaN,
+      }),
+    ).rejects.toThrow("Invalid expires_in_seconds");
+  });
+
+  it("accepts token with no expiry (exp=0)", async () => {
+    const { token } = await makeToken(); // no expires_in_seconds → exp=0
+    const claim = await verifyEnrollmentToken(token, secret);
+    expect(claim.exp).toBe(0);
   });
 
   it("hash is deterministic", async () => {
-    const token = "fp_enroll_fixed-test-value";
+    const { token } = await makeToken();
     const h1 = await hashEnrollmentToken(token);
     const h2 = await hashEnrollmentToken(token);
     expect(h1).toBe(h2);
+  });
+
+  it("rejects non-enrollment token", async () => {
+    await expect(verifyEnrollmentToken("not_an_enrollment_token", secret)).rejects.toThrow(
+      "Not an enrollment token",
+    );
+  });
+
+  it("rejects token with no dot separator (invalid format)", async () => {
+    // fp_enroll_ prefix but no dot → should throw "Invalid enrollment token format"
+    await expect(verifyEnrollmentToken("fp_enroll_nodothere", secret)).rejects.toThrow(
+      "Invalid enrollment token format",
+    );
+  });
+
+  it("rejects token with unsupported version", async () => {
+    // Craft a valid-signature token but with v=2
+    const jti = crypto.randomUUID();
+    const payload = { v: 2, tenant_id: "t", config_id: "c", iat: 0, exp: 0, jti };
+    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    const enc = new TextEncoder();
+    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
+    const sigB64 = base64urlEncode(new Uint8Array(sig));
+    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow(
+      "Unsupported enrollment token version",
+    );
+  });
+
+  it("rejects token with missing tenant_id or config_id", async () => {
+    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    const enc = new TextEncoder();
+    const payload = { v: 1, tenant_id: "", config_id: "c", iat: 0, exp: 0, jti: "id-1" };
+    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
+    const sigB64 = base64urlEncode(new Uint8Array(sig));
+    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing required fields");
+  });
+
+  it("rejects token with missing jti", async () => {
+    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    const enc = new TextEncoder();
+    // Craft payload without jti field
+    const payload = { v: 1, tenant_id: "t", config_id: "c", iat: 0, exp: 0 };
+    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
+    const key = await crypto.subtle.importKey(
+      "raw",
+      enc.encode(secret),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["sign"],
+    );
+    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
+    const sigB64 = base64urlEncode(new Uint8Array(sig));
+    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing token ID (jti)");
   });
 });

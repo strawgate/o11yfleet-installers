@@ -1,0 +1,18 @@
+{
+  "name": "@o11yfleet/opamp-tests",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "echo '[SKIP] OpAMP compliance tests require a live server. Run: just test-opamp'",
+    "test:opamp": "vitest run"
+  },
+  "dependencies": {
+    "@o11yfleet/core": "workspace:*",
+    "@o11yfleet/test-utils": "workspace:*"
+  },
+  "devDependencies": {
+    "vitest": "^4.1.0",
+    "typescript": "^5.8.0"
+  }
+}

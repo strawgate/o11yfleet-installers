@@ -4,7 +4,6 @@
 
 import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:workers";
-import { RemoteConfigStatuses } from "@o11yfleet/core/codec";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
   setupD1,
@@ -24,6 +23,8 @@ import {
   encodeFrame,
   decodeFrame,
   AgentCapabilities,
+  buildConfigAck,
+  buildHealthReport,
   type AgentToServer,
   type ServerToAgent,
   type AssignmentClaim,
@@ -131,20 +132,12 @@ describe("Full Agent Lifecycle", () => {
 
     // ACK the config as applied
     const configHash = pushResp.remote_config!.config_hash;
-    const ack: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 1,
-      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig,
-      flags: 0,
-      remote_config_status: {
-        last_remote_config_hash:
-          configHash instanceof Uint8Array
-            ? configHash
-            : new Uint8Array(configHash as ArrayLike<number>),
-        status: RemoteConfigStatuses.APPLIED,
-        error_message: "",
-      },
-    };
+    const ack = buildConfigAck({
+      configHash:
+        configHash instanceof Uint8Array
+          ? configHash
+          : new Uint8Array(configHash as ArrayLike<number>),
+    });
     ws.send(encodeFrame(ack));
 
     // Should get a response (heartbeat-style — no new config since we just ACK'd)
@@ -181,18 +174,11 @@ describe("Agent Health State Changes", () => {
     await sendHello(ws);
 
     // Send health change: unhealthy
-    const healthMsg: AgentToServer = {
-      instance_uid: new Uint8Array(16),
-      sequence_num: 1,
-      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
-      flags: 0,
-      health: {
-        healthy: false,
-        start_time_unix_nano: 0n,
-        last_error: "OOM killed",
-        status: "degraded",
-      },
-    };
+    const healthMsg = buildHealthReport({
+      healthy: false,
+      lastError: "OOM killed",
+      status: "degraded",
+    });
     ws.send(encodeFrame(healthMsg));
 
     const resp = await waitForMsg(ws);
@@ -216,20 +202,21 @@ describe("Agent Description Persistence", () => {
 
     const { ws } = await connectWithEnrollment(token.token);
 
-    // Hello with agent_description
+    // Hello with agent_description — uses inline construction because
+    // this test asserts attribute ordering (service.name at [0])
     const hello: AgentToServer = {
       instance_uid: new Uint8Array(16),
-      sequence_num: 0,
+      sequence_num: 1,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
       agent_description: {
         identifying_attributes: [
-          { key: "service.name", value: "my-collector" },
-          { key: "service.version", value: "0.98.0" },
+          { key: "service.name", value: { string_value: "my-collector" } },
+          { key: "service.version", value: { string_value: "0.98.0" } },
         ],
         non_identifying_attributes: [
-          { key: "os.type", value: "linux" },
-          { key: "host.arch", value: "amd64" },
+          { key: "os.type", value: { string_value: "linux" } },
+          { key: "host.arch", value: { string_value: "amd64" } },
         ],
       },
     };
@@ -241,14 +228,143 @@ describe("Agent Description Persistence", () => {
     const stub = env.CONFIG_DO.get(doId);
     const doAgentsRes = await stub.fetch("http://internal/agents");
     const doAgents = await doAgentsRes.json<{
-      agents: { agent_description: string }[];
+      agents: { agent_description: { identifying_attributes: { key: string }[] } }[];
     }>();
 
     expect(doAgents.agents.length).toBeGreaterThanOrEqual(1);
     const agent = doAgents.agents[0];
-    const desc = JSON.parse(agent.agent_description);
+    const desc = agent.agent_description;
     expect(desc.identifying_attributes).toBeDefined();
     expect(desc.identifying_attributes[0].key).toBe("service.name");
+
+    ws.close();
+  });
+});
+
+describe("Agent Detail Endpoint (enriched)", () => {
+  it("returns is_connected, desired_config_hash, and uptime for connected agent", async () => {
+    const tenant = await createTenant("Detail Corp");
+    const config = await createConfig(tenant.id, "detail-config");
+    await uploadConfigVersion(config.id, "receivers:\n  otlp:\n");
+    await rolloutConfig(config.id);
+    const token = await createEnrollmentToken(config.id);
+
+    const { ws, enrollment } = await connectWithEnrollment(token.token);
+    const uid = enrollment.instance_uid;
+
+    // Fetch agent detail
+    const doId = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(doId);
+    const res = await stub.fetch(`http://internal/agents/${uid}`);
+    expect(res.status).toBe(200);
+
+    const detail = (await res.json()) as Record<string, unknown>;
+    expect(detail.is_connected).toBe(true);
+    expect(detail.desired_config_hash).toBeDefined();
+    expect(typeof detail.desired_config_hash).toBe("string");
+    expect(detail.uptime_ms).toBeGreaterThan(0);
+    expect(detail.agent_description).toBeDefined();
+    expect(detail.generation).toBe(2);
+    expect(detail.capabilities).toBeGreaterThan(0);
+
+    ws.close();
+  });
+
+  it("returns is_connected=false and null uptime for disconnected agent", async () => {
+    const tenant = await createTenant("Detail Disc Corp");
+    const config = await createConfig(tenant.id, "detail-disc-config");
+    const token = await createEnrollmentToken(config.id);
+
+    const { ws, enrollment } = await connectWithEnrollment(token.token);
+    const uid = enrollment.instance_uid;
+    ws.close();
+
+    // Poll until close propagates through DO
+    const doId = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(doId);
+    let detail: Record<string, unknown> = {};
+    for (let i = 0; i < 20; i++) {
+      const res = await stub.fetch(`http://internal/agents/${uid}`);
+      expect(res.status).toBe(200);
+      detail = (await res.json()) as Record<string, unknown>;
+      if (detail.is_connected === false) break;
+      await new Promise((r) => {
+        setTimeout(r, 25);
+      });
+    }
+
+    expect(detail.is_connected).toBe(false);
+    expect(detail.uptime_ms).toBeNull();
+  });
+
+  it("returns is_drifted=true when effective config differs from desired", async () => {
+    const tenant = await createTenant("Detail Drift Corp");
+    const config = await createConfig(tenant.id, "detail-drift-config");
+    const token = await createEnrollmentToken(config.id);
+
+    const { ws, enrollment } = await connectWithEnrollment(token.token);
+    const uid = enrollment.instance_uid;
+
+    // Push a desired config (agent hasn't applied it yet)
+    const doId = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(doId);
+    await stub.fetch("http://internal/command/set-desired-config", {
+      method: "POST",
+      body: JSON.stringify({ config_hash: "new-hash-abc", config_content: "pipelines: {}" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await stub.fetch(`http://internal/agents/${uid}`);
+    const detail = (await res.json()) as Record<string, unknown>;
+    expect(detail.desired_config_hash).toBe("new-hash-abc");
+    // Agent hasn't applied the new config yet, so it's drifted
+    expect(detail.is_drifted).toBe(true);
+
+    ws.close();
+  });
+
+  it("includes effective_config_body in detail (not in list)", async () => {
+    const tenant = await createTenant("Detail Body Corp");
+    const config = await createConfig(tenant.id, "detail-body-config");
+    await uploadConfigVersion(config.id, "exporters:\n  debug:\n");
+    await rolloutConfig(config.id);
+    const token = await createEnrollmentToken(config.id);
+
+    const { ws, enrollment } = await connectWithEnrollment(token.token);
+
+    // Send a hello reporting the effective config
+    const hello: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 1,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsEffectiveConfig,
+      flags: 0,
+      effective_config: {
+        config_map: {
+          config_map: {
+            "": {
+              body: new TextEncoder().encode("exporters:\n  debug:\n"),
+              content_type: "text/yaml",
+            },
+          },
+        },
+      },
+    };
+    ws.send(encodeFrame(hello));
+    await waitForMsg(ws);
+
+    const doId = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(doId);
+
+    // Detail endpoint includes body
+    const detailRes = await stub.fetch(`http://internal/agents/${enrollment.instance_uid}`);
+    const detail = (await detailRes.json()) as Record<string, unknown>;
+    expect(detail.effective_config_body).toBe("exporters:\n  debug:\n");
+
+    // List endpoint does NOT include body (performance)
+    const listRes = await stub.fetch("http://internal/agents");
+    const list = (await listRes.json()) as { agents: Record<string, unknown>[] };
+    const listAgent = list.agents.find((a) => a.instance_uid === enrollment.instance_uid);
+    expect(listAgent?.effective_config_body).toBeUndefined();
 
     ws.close();
   });

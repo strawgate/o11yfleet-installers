@@ -11,8 +11,15 @@ import {
   AgentIdentificationSchema,
   ServerErrorResponseSchema,
   RetryInfoSchema,
+  ConnectionSettingsOffersSchema,
+  OpAMPConnectionSettingsSchema,
+  HeadersSchema,
+  HeaderSchema,
+  ServerToAgentCommandSchema,
   RemoteConfigStatuses as PbRemoteConfigStatuses,
   ServerErrorResponseType as PbServerErrorResponseType,
+  CommandType as PbCommandType,
+  ConnectionSettingsStatuses as PbConnectionSettingsStatuses,
 } from "./gen/opamp_pb.js";
 import type {
   AgentToServer as PbAgentToServer,
@@ -31,16 +38,22 @@ import type {
   KeyValue,
   AnyValue,
 } from "./types.js";
-import { RemoteConfigStatuses, ServerErrorResponseType } from "./types.js";
+import {
+  RemoteConfigStatuses,
+  ServerErrorResponseType,
+  CommandType,
+  ConnectionSettingsStatuses,
+} from "./types.js";
 
 // ─── Decode: protobuf binary → internal types ─────────────────────
 
 export function decodeAgentToServerProto(buf: ArrayBuffer): AgentToServer {
-  // Strip opamp-go varint header (0x00) if present.
-  // The opamp-go library prepends a single 0x00 byte before the protobuf payload.
+  // The opamp-go library prepends a single-byte header before the protobuf payload.
+  // The header byte is the data type: 0 = protobuf AgentToServer message.
   // See: https://github.com/open-telemetry/opamp-go/blob/main/internal/wsmessage.go
   let data = new Uint8Array(buf);
-  if (data.length > 0 && data[0] === 0x00) {
+  if (data.length > 1 && data[0] === 0x00) {
+    // Strip the 0x00 data-type header
     data = data.subarray(1);
   }
   const pb = fromBinary(AgentToServerSchema, data);
@@ -73,6 +86,23 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
   }
   if (pb.agentDisconnect) {
     result.agent_disconnect = {};
+  }
+  if (pb.connectionSettingsStatus) {
+    const statusMap: Record<number, ConnectionSettingsStatuses> = {
+      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET]:
+        ConnectionSettingsStatuses.UNSET,
+      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED]:
+        ConnectionSettingsStatuses.APPLIED,
+      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING]:
+        ConnectionSettingsStatuses.APPLYING,
+      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED]:
+        ConnectionSettingsStatuses.FAILED,
+    };
+    result.connection_settings_status = {
+      last_connection_settings_hash: pb.connectionSettingsStatus.lastConnectionSettingsHash,
+      status: statusMap[pb.connectionSettingsStatus.status] ?? ConnectionSettingsStatuses.UNSET,
+      error_message: pb.connectionSettingsStatus.errorMessage || undefined,
+    };
   }
 
   return result;
@@ -158,10 +188,10 @@ function pbAnyValueToInternal(pb: PbAnyValue | undefined): AnyValue {
 export function encodeServerToAgentProto(msg: ServerToAgent): ArrayBuffer {
   const pb = internalToServerToAgentPb(msg);
   const payload = toBinary(ServerToAgentSchema, pb);
-  // Prepend opamp-go varint header (0x00) for wire compatibility.
+  // Prepend opamp-go data-type header byte (0x00 = protobuf).
   // See: https://github.com/open-telemetry/opamp-go/blob/main/internal/wsmessage.go
   const result = new Uint8Array(1 + payload.length);
-  result[0] = 0x00; // varint-encoded header value 0
+  result[0] = 0x00;
   result.set(payload, 1);
   return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
 }
@@ -224,6 +254,48 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
         retryAfterNanoseconds: msg.error_response.retry_info.retry_after_nanoseconds,
       });
     }
+  }
+
+  if (msg.connection_settings) {
+    const cs = create(ConnectionSettingsOffersSchema, {
+      hash: msg.connection_settings.hash,
+    });
+    if (msg.connection_settings.opamp) {
+      const opamp = create(OpAMPConnectionSettingsSchema, {});
+      if (msg.connection_settings.opamp.destination_endpoint) {
+        opamp.destinationEndpoint = msg.connection_settings.opamp.destination_endpoint;
+      }
+      if (msg.connection_settings.opamp.heartbeat_interval_seconds) {
+        opamp.heartbeatIntervalSeconds = BigInt(
+          msg.connection_settings.opamp.heartbeat_interval_seconds,
+        );
+      }
+      if (msg.connection_settings.opamp.headers?.length) {
+        opamp.headers = create(HeadersSchema, {
+          headers: msg.connection_settings.opamp.headers.map((h) =>
+            create(HeaderSchema, { key: h.key, value: h.value }),
+          ),
+        });
+      }
+      cs.opamp = opamp;
+    }
+    pb.connectionSettings = cs;
+  }
+
+  if (msg.command) {
+    const typeMap: Record<number, PbCommandType> = {
+      [CommandType.Restart]: PbCommandType.CommandType_Restart,
+    };
+    const pbType = typeMap[msg.command.type];
+    if (pbType === undefined) {
+      // Fail fast on unknown command types so a new CommandType added to the
+      // local enum but not mapped here surfaces as an explicit error rather
+      // than silently sending a Restart command.
+      throw new Error(`Unknown CommandType: ${msg.command.type}`);
+    }
+    pb.command = create(ServerToAgentCommandSchema, {
+      type: pbType,
+    });
   }
 
   return pb;

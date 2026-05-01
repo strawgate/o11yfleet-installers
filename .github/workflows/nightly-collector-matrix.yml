@@ -1,0 +1,129 @@
+name: Nightly - Collector Version Matrix
+
+on:
+  schedule:
+    # Run at 3:00 AM UTC every day
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Single version to test (e.g., 0.151.0). Leave empty for full matrix."
+        required: false
+        type: string
+
+concurrency:
+  group: nightly-collector-matrix
+  cancel-in-progress: true
+
+jobs:
+  matrix-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      # Sample at opamp-go library version boundaries rather than every
+      # collector minor — see `tests/e2e-collector/src/versions.ts` for the
+      # rationale. Each entry here represents the start of a wire-format /
+      # capability cohort. Add a new tag whenever opamp-go bumps in a
+      # collector release and the cohort table in `versions.ts` grows.
+      matrix:
+        collector_version: ${{ github.event.inputs.version && fromJSON(format('["{0}"]', github.event.inputs.version)) || fromJSON('["0.100.0","0.110.0","0.120.0","0.130.0","0.140.0","0.151.0"]') }}
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Start worker (wrangler dev)
+        run: |
+          cd apps/worker
+          npx wrangler dev --port 8787 &
+          echo $! > /tmp/worker.pid
+          # Wait for worker to be ready
+          WORKER_READY=false
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8787/healthz > /dev/null 2>&1; then
+              echo "Worker ready after ${i}s"
+              WORKER_READY=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$WORKER_READY" != "true" ]; then
+            echo "Worker failed to start within 30s"
+            kill "$(cat /tmp/worker.pid)" 2>/dev/null || true
+            exit 1
+          fi
+
+      - name: Pull collector image
+        run: docker pull ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:${{ matrix.collector_version }}
+
+      - name: Run version matrix test
+        env:
+          COLLECTOR_VERSION: ${{ matrix.collector_version }}
+          FP_URL: http://localhost:8787
+        run: |
+          cd tests/e2e-collector
+          pnpm vitest run src/version-matrix.test.ts --reporter=verbose
+
+      - name: Stop worker
+        if: always()
+        run: |
+          if [ -f /tmp/worker.pid ]; then
+            kill "$(cat /tmp/worker.pid)" 2>/dev/null || true
+          fi
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: matrix-results-${{ matrix.collector_version }}
+          path: tests/e2e-collector/docker/matrix/results.json
+          if-no-files-found: ignore
+
+  # Aggregate results into a single summary
+  summarize:
+    runs-on: ubuntu-latest
+    needs: matrix-test
+    if: always()
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: results
+          pattern: matrix-results-*
+
+      - name: Generate compatibility report
+        run: |
+          {
+            echo "# 🧪 Collector Version Compatibility Report"
+            echo ""
+            echo "_Boundary-sampled across opamp-go library cohorts. See \`tests/e2e-collector/src/versions.ts\` for the rationale; this report does not exercise every minor release between the sampled tags._"
+            echo ""
+            echo "| Version | opamp-go | Enrolled | Healthy | Eff. Config | Errors |"
+            echo "|---------|----------|----------|---------|-------------|--------|"
+
+            for dir in results/matrix-results-*/; do
+              file="${dir}results.json"
+              if [ -f "$file" ]; then
+                if ! jq -e '.' "$file" > /dev/null 2>&1; then
+                  echo "⚠️ Failed to parse $file" >> "$GITHUB_STEP_SUMMARY"
+                  continue
+                fi
+                jq -r '.[] | "| \(.version) | \(.opampGo) | \(if .enrolled then "✅" else "❌" end) | \(if .healthy == true then "✅" elif .healthy == null then "⏳" else "❌" end) | \(if .hasEffectiveConfig then "✅" else "❌" end) | \(.errors | length) |"' "$file"
+              fi
+            done
+
+            echo ""
+            echo "_Generated: $(date -u +'%Y-%m-%d %H:%M UTC')_"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -33,26 +33,31 @@ async function main() {
 
   requireApiKey();
 
-  log.info("Seeding local login accounts...");
-  const { status: seedStatus, data: seedData } = await api<{ seeded: string[]; tenantId: string }>(
-    "/auth/seed",
-    {
-      method: "POST",
-    },
-  );
-  if (seedStatus !== 200) {
-    log.error(`Failed to seed login accounts: status ${seedStatus}`);
-    process.exit(1);
-  }
-  if (!seedData.tenantId) {
-    log.error(`Seed response did not include tenantId: ${JSON.stringify(seedData)}`);
-    process.exit(1);
-  }
-  log.ok("Login accounts ready");
-
   // Check for existing state
   const existing = loadState();
   if (existing && !reset) {
+    // Ensure login accounts are bound to the right tenant (idempotent).
+    // This is required repair work on rerun, so a non-200 here means the
+    // saved local state is unusable and the operator needs to know.
+    const { status: reuseSeedStatus, data: seedRepairData } = await api<{ tenantId: string }>(
+      "/auth/seed",
+      {
+        method: "POST",
+        body: JSON.stringify({ tenant_id: existing.tenant_id, tenant_name: existing.tenant_name }),
+      },
+    );
+    if (reuseSeedStatus !== 200) {
+      log.error(`Failed to refresh login accounts for existing tenant: status ${reuseSeedStatus}`);
+      log.error("Local state is stale; re-run with --reset to start fresh.");
+      process.exit(1);
+    }
+    if (seedRepairData?.tenantId && seedRepairData.tenantId !== existing.tenant_id) {
+      log.error(
+        `Seed repair returned different tenant: ${seedRepairData.tenantId} vs ${existing.tenant_id}`,
+      );
+      log.error("Local state is stale; re-run with --reset.");
+      process.exit(1);
+    }
     log.warn(`Local state already exists at ${stateFilePath()}`);
     log.info(`  Tenant:     ${existing.tenant_name} (${existing.tenant_id})`);
     log.info(`  Config:     ${existing.config_name} (${existing.config_id})`);
@@ -64,19 +69,21 @@ async function main() {
     return;
   }
 
-  // 1. Use the seeded tenant so the seeded workspace login sees local configs and agents.
-  log.info("Loading seeded tenant...");
-  const tenantId = seedData.tenantId;
-  const { status: ts, data: tenant } = await api<{ id: string; name: string; plan: string }>(
-    "/api/v1/tenant",
-    { method: "GET" },
-    tenantId,
+  // 1. Seed tenant + login accounts in one call
+  log.info("Seeding tenant and login accounts...");
+  const { status: seedStatus, data: seedData } = await api<{ seeded: string[]; tenantId: string }>(
+    "/auth/seed",
+    {
+      method: "POST",
+      body: JSON.stringify({ tenant_name: "Local Dev" }),
+    },
   );
-  if (ts !== 200) {
-    log.error(`Failed to load seeded tenant: ${JSON.stringify(tenant)}`);
+  if (seedStatus !== 200) {
+    log.error(`Failed to seed: status ${seedStatus}`);
     process.exit(1);
   }
-  log.ok(`Tenant: ${tenant.name} (${tenant.id}) - plan: ${tenant.plan}`);
+  const tenantId = seedData.tenantId;
+  log.ok(`Tenant: Local Dev (${tenantId}) — login accounts ready`);
 
   // 2. Create configuration
   log.info("Creating configuration...");
@@ -89,7 +96,7 @@ async function main() {
         description: "Local development OTel collector config",
       }),
     },
-    tenant.id,
+    tenantId,
   );
   if (cs !== 201) {
     log.error(`Failed to create configuration: ${JSON.stringify(config)}`);
@@ -112,7 +119,7 @@ async function main() {
       body: yaml,
       headers: { "Content-Type": "text/yaml" },
     },
-    tenant.id,
+    tenantId,
   );
   if (us !== 201) {
     log.error(`Failed to upload config: ${JSON.stringify(upload)}`);
@@ -132,7 +139,7 @@ async function main() {
       method: "POST",
       body: JSON.stringify({ label: "local-dev" }),
     },
-    tenant.id,
+    tenantId,
   );
   if (ets !== 201) {
     log.error(`Failed to create enrollment token: ${JSON.stringify(enrollData)}`);
@@ -145,7 +152,7 @@ async function main() {
   const { status: rs, data: rollout } = await api<{ pushed: number }>(
     `/api/v1/configurations/${config.id}/rollout`,
     { method: "POST" },
-    tenant.id,
+    tenantId,
   );
   if (rs === 200) {
     log.ok(`Rollout complete — pushed to ${(rollout as { pushed: number }).pushed} agents`);
@@ -153,8 +160,8 @@ async function main() {
 
   // Save state
   const state = {
-    tenant_id: tenant.id,
-    tenant_name: tenant.name,
+    tenant_id: tenantId,
+    tenant_name: "Local Dev",
     config_id: config.id,
     config_name: config.name,
     enrollment_token: enrollData.token,

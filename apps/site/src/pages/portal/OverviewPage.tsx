@@ -24,12 +24,7 @@ export default function OverviewPage() {
       : Array.isArray(ov?.configurations)
         ? ov.configurations.length
         : cfgList.length;
-  const totalAgents =
-    typeof ov?.total_agents === "number"
-      ? ov.total_agents
-      : typeof ov?.agents === "number"
-        ? ov.agents
-        : 0;
+  const totalAgents = typeof ov?.total_agents === "number" ? ov.total_agents : 0;
   const connectedAgents = typeof ov?.connected_agents === "number" ? ov.connected_agents : 0;
   const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
   const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
@@ -144,11 +139,18 @@ export default function OverviewPage() {
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </div>
         <div className="stat">
-          <div className="val">{connectedAgents}</div>
+          <div className="val">
+            {connectedAgents > 0 ? <span className="live-dot" /> : null}
+            {connectedAgents}
+            <span className="denom">/{totalAgents}</span>
+          </div>
           <div className="label">Connected</div>
         </div>
         <div className="stat">
-          <div className="val">{healthyAgents}</div>
+          <div className="val">
+            {healthyAgents}
+            <span className="denom">/{totalAgents}</span>
+          </div>
           <div className="label">Healthy</div>
         </div>
         <div className="stat">

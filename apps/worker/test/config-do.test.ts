@@ -5,7 +5,7 @@ import { runInDurableObject } from "cloudflare:test";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-1");
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-stats");
     const stub = env.CONFIG_DO.get(id);
     const response = await stub.fetch("http://internal/stats");
     expect(response.status).toBe(200);
@@ -14,7 +14,7 @@ describe("Config Durable Object", () => {
   });
 
   it("GET /agents returns empty list initially", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-1");
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-agents");
     const stub = env.CONFIG_DO.get(id);
     const response = await stub.fetch("http://internal/agents");
     expect(response.status).toBe(200);
@@ -43,6 +43,12 @@ describe("Config Durable Object", () => {
     await runInDurableObject(
       stub,
       async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        // agent_description is stored as a JSON-encoded OpAMP-style descriptor
+        // and the read path JSON.parses it; insert the same shape so the round
+        // trip works under the current contract.
+        const description = JSON.stringify({
+          identifying_attributes: [{ key: "host.name", value: { string_value: "host-detail-1" } }],
+        });
         state.storage.sql.exec(
           `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, agent_description, current_config_hash)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -52,7 +58,7 @@ describe("Config Durable Object", () => {
           "connected",
           Date.now(),
           Date.now(),
-          "host-detail-1",
+          description,
           "hash-current-1",
         );
       },
@@ -63,12 +69,16 @@ describe("Config Durable Object", () => {
     const agent = await found.json<{
       instance_uid: string;
       status: string;
-      agent_description: string;
+      agent_description: {
+        identifying_attributes?: Array<{ key: string; value?: { string_value?: string } }>;
+      };
       current_config_hash: string;
     }>();
     expect(agent.instance_uid).toBe("detail-agent-1");
     expect(agent.status).toBe("connected");
-    expect(agent.agent_description).toBe("host-detail-1");
+    expect(agent.agent_description?.identifying_attributes?.[0]?.value?.string_value).toBe(
+      "host-detail-1",
+    );
     expect(agent.current_config_hash).toBe("hash-current-1");
 
     const missing = await stub.fetch("http://internal/agents/does-not-exist");
@@ -137,7 +147,7 @@ describe("Config Durable Object", () => {
   });
 
   it("POST /command/set-desired-config stores hash", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-1");
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-desired");
     const stub = env.CONFIG_DO.get(id);
 
     const response = await stub.fetch("http://internal/command/set-desired-config", {
@@ -290,7 +300,7 @@ describe("Config Durable Object", () => {
     );
   });
 
-  it("rehydrates effective config bodies on the agents read path", async () => {
+  it("rehydrates effective config bodies on the agent detail path", async () => {
     const id = env.CONFIG_DO.idFromName("tenant-1:config-agent-snapshots");
     const stub = env.CONFIG_DO.get(id);
     await stub.fetch("http://internal/stats");
@@ -317,9 +327,222 @@ describe("Config Durable Object", () => {
       },
     );
 
-    const response = await stub.fetch("http://internal/agents");
+    // Single-agent detail includes the config body
+    const response = await stub.fetch("http://internal/agents/snapshot-agent-1");
     expect(response.status).toBe(200);
-    const body = await response.json<{ agents: Array<{ effective_config_body: string | null }> }>();
-    expect(body.agents[0]?.effective_config_body).toBe("receivers:\n  otlp:\n");
+    const agent = await response.json<{ effective_config_body: string | null }>();
+    expect(agent.effective_config_body).toBe("receivers:\n  otlp:\n");
+  });
+
+  it("paginates agents with cursor round-trip", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-pagination");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        for (let i = 0; i < 5; i++) {
+          state.storage.sql.exec(
+            `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            `page-agent-${i}`,
+            "tenant-1",
+            "config-pagination",
+            "connected",
+            now - i * 1000,
+            now,
+          );
+        }
+      },
+    );
+
+    // First page: limit=2 (default sort = last_seen_desc)
+    const page1Res = await stub.fetch("http://internal/agents?limit=2");
+    expect(page1Res.status).toBe(200);
+    const page1 = await page1Res.json<{
+      agents: Array<{ instance_uid: string }>;
+      pagination: { has_more: boolean; next_cursor: string | null; limit: number };
+    }>();
+    expect(page1.agents).toHaveLength(2);
+    expect(page1.pagination.has_more).toBe(true);
+    expect(page1.pagination.next_cursor).not.toBeNull();
+
+    // Second page using cursor
+    const page2Res = await stub.fetch(
+      `http://internal/agents?limit=2&cursor=${page1.pagination.next_cursor}`,
+    );
+    const page2 = await page2Res.json<{
+      agents: Array<{ instance_uid: string }>;
+      pagination: { has_more: boolean; next_cursor: string | null };
+    }>();
+    expect(page2.agents).toHaveLength(2);
+    expect(page2.pagination.has_more).toBe(true);
+
+    // No overlap between pages
+    const page1Uids = new Set(page1.agents.map((a) => a.instance_uid));
+    for (const agent of page2.agents) {
+      expect(page1Uids.has(agent.instance_uid)).toBe(false);
+    }
+
+    // Third page: only 1 left
+    const page3Res = await stub.fetch(
+      `http://internal/agents?limit=2&cursor=${page2.pagination.next_cursor}`,
+    );
+    const page3 = await page3Res.json<{
+      agents: Array<{ instance_uid: string }>;
+      pagination: { has_more: boolean; next_cursor: string | null };
+    }>();
+    expect(page3.agents).toHaveLength(1);
+    expect(page3.pagination.has_more).toBe(false);
+    expect(page3.pagination.next_cursor).toBeNull();
+  });
+
+  it("filters agents by status", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-filter-status");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        const agents = [
+          ["filter-a1", "connected"],
+          ["filter-a2", "connected"],
+          ["filter-a3", "disconnected"],
+        ] as const;
+        for (const [uid, status] of agents) {
+          state.storage.sql.exec(
+            `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            uid,
+            "tenant-1",
+            "config-filter-status",
+            status,
+            now,
+            now,
+          );
+        }
+      },
+    );
+
+    const res = await stub.fetch("http://internal/agents?status=connected");
+    const body = await res.json<{ agents: Array<{ instance_uid: string; status: string }> }>();
+    expect(body.agents).toHaveLength(2);
+    for (const a of body.agents) {
+      expect(a.status).toBe("connected");
+    }
+  });
+
+  it("filters agents by health", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-filter-health");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "healthy-1",
+          "tenant-1",
+          "config-filter-health",
+          "connected",
+          1,
+          now,
+          now,
+        );
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "unhealthy-1",
+          "tenant-1",
+          "config-filter-health",
+          "connected",
+          0,
+          now,
+          now,
+        );
+      },
+    );
+
+    const healthyRes = await stub.fetch("http://internal/agents?health=healthy");
+    const healthy = await healthyRes.json<{
+      agents: Array<{ instance_uid: string; healthy: boolean }>;
+    }>();
+    expect(healthy.agents).toHaveLength(1);
+    expect(healthy.agents[0]!.instance_uid).toBe("healthy-1");
+
+    const unhealthyRes = await stub.fetch("http://internal/agents?health=unhealthy");
+    const unhealthy = await unhealthyRes.json<{
+      agents: Array<{ instance_uid: string; healthy: boolean }>;
+    }>();
+    expect(unhealthy.agents).toHaveLength(1);
+    expect(unhealthy.agents[0]!.instance_uid).toBe("unhealthy-1");
+  });
+
+  it("searches agents by instance_uid substring", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-search");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        for (const uid of ["prod-collector-1", "prod-collector-2", "staging-monitor-1"]) {
+          state.storage.sql.exec(
+            `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            uid,
+            "tenant-1",
+            "config-search",
+            "connected",
+            now,
+            now,
+          );
+        }
+      },
+    );
+
+    const res = await stub.fetch("http://internal/agents?q=collector");
+    const body = await res.json<{ agents: Array<{ instance_uid: string }> }>();
+    expect(body.agents).toHaveLength(2);
+    for (const a of body.agents) {
+      expect(a.instance_uid).toContain("collector");
+    }
+  });
+
+  it("sorts agents by instance_uid_asc", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-sort-uid");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        for (const uid of ["charlie", "alice", "bob"]) {
+          state.storage.sql.exec(
+            `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            uid,
+            "tenant-1",
+            "config-sort-uid",
+            "connected",
+            now,
+            now,
+          );
+        }
+      },
+    );
+
+    const res = await stub.fetch("http://internal/agents?sort=instance_uid_asc");
+    const body = await res.json<{ agents: Array<{ instance_uid: string }> }>();
+    expect(body.agents.map((a) => a.instance_uid)).toEqual(["alice", "bob", "charlie"]);
   });
 });

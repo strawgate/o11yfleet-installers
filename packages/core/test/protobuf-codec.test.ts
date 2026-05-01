@@ -27,6 +27,7 @@ import {
   AgentCapabilities,
   ServerCapabilities,
   ServerToAgentFlags,
+  CommandType,
 } from "../src/codec/types.js";
 
 // ─── Helpers ────────────────────────────────────────────────────────
@@ -320,11 +321,12 @@ describe("decodeAgentToServerProto", () => {
 describe("encodeServerToAgentProto", () => {
   /** Strip the opamp-go 0x00 varint header from encoded output */
   function stripHeader(buf: ArrayBuffer): Uint8Array {
+    // Strip 0x00 data-type header byte (opamp-go wire format)
     const arr = new Uint8Array(buf);
     return arr[0] === 0x00 ? arr.subarray(1) : arr;
   }
 
-  it("encodes a minimal response with opamp-go header", () => {
+  it("encodes a minimal response with opamp-go data-type header", () => {
     const encoded = encodeServerToAgentProto({
       instance_uid: AGENT_UID,
       flags: ServerToAgentFlags.Unspecified,
@@ -334,7 +336,7 @@ describe("encodeServerToAgentProto", () => {
         ServerCapabilities.AcceptsEffectiveConfig,
     });
 
-    // First byte should be the opamp-go 0x00 header
+    // First byte should be 0x00 (opamp-go data-type header)
     expect(new Uint8Array(encoded)[0]).toBe(0x00);
 
     // Verify it's valid protobuf after stripping header
@@ -393,6 +395,73 @@ describe("encodeServerToAgentProto", () => {
     });
 
     expect(encoded.byteLength).toBeGreaterThan(0);
+  });
+
+  it("encodes connection_settings with opamp endpoint and headers", () => {
+    const encoded = encodeServerToAgentProto({
+      instance_uid: AGENT_UID,
+      flags: 0,
+      capabilities: ServerCapabilities.OffersConnectionSettings,
+      connection_settings: {
+        hash: new Uint8Array([0xaa, 0xbb, 0xcc]),
+        opamp: {
+          destination_endpoint: "wss://fleet.example.com/v1/opamp",
+          headers: [{ key: "Authorization", value: "Bearer tok_abc" }],
+          heartbeat_interval_seconds: 30,
+        },
+      },
+    });
+
+    const decoded = fromBinary(ServerToAgentSchema, stripHeader(encoded));
+    expect(decoded.connectionSettings).toBeDefined();
+    expect(decoded.connectionSettings!.hash).toEqual(new Uint8Array([0xaa, 0xbb, 0xcc]));
+    expect(decoded.connectionSettings!.opamp!.destinationEndpoint).toBe(
+      "wss://fleet.example.com/v1/opamp",
+    );
+    expect(decoded.connectionSettings!.opamp!.headers!.headers[0]!.key).toBe("Authorization");
+    expect(decoded.connectionSettings!.opamp!.headers!.headers[0]!.value).toBe("Bearer tok_abc");
+    expect(decoded.connectionSettings!.opamp!.heartbeatIntervalSeconds).toBe(30n);
+  });
+
+  it("encodes connection_settings without opamp (hash only)", () => {
+    const encoded = encodeServerToAgentProto({
+      instance_uid: AGENT_UID,
+      flags: 0,
+      capabilities: ServerCapabilities.OffersConnectionSettings,
+      connection_settings: {
+        hash: new Uint8Array([0x01]),
+      },
+    });
+
+    const decoded = fromBinary(ServerToAgentSchema, stripHeader(encoded));
+    expect(decoded.connectionSettings).toBeDefined();
+    expect(decoded.connectionSettings!.hash).toEqual(new Uint8Array([0x01]));
+    expect(decoded.connectionSettings!.opamp).toBeUndefined();
+  });
+
+  it("encodes command with Restart type", () => {
+    const encoded = encodeServerToAgentProto({
+      instance_uid: AGENT_UID,
+      flags: 0,
+      capabilities: ServerCapabilities.AcceptsStatus,
+      command: { type: CommandType.Restart },
+    });
+
+    const decoded = fromBinary(ServerToAgentSchema, stripHeader(encoded));
+    expect(decoded.command).toBeDefined();
+    // PB CommandType_Restart = 0
+    expect(decoded.command!.type).toBe(0);
+  });
+
+  it("throws on unknown command type", () => {
+    expect(() =>
+      encodeServerToAgentProto({
+        instance_uid: AGENT_UID,
+        flags: 0,
+        capabilities: ServerCapabilities.AcceptsStatus,
+        command: { type: 999 as CommandType },
+      }),
+    ).toThrow("Unknown CommandType: 999");
   });
 });
 

@@ -156,6 +156,7 @@ export const configurationSchema = z
     name: z.string().min(1),
     description: z.string().nullable().optional(),
     current_config_hash: z.string().nullable().optional(),
+    status: z.string().optional(),
     created_at: z.string().optional(),
     updated_at: z.string().optional(),
   })
@@ -184,7 +185,7 @@ export const createConfigurationResponseSchema = z
     tenant_id: idSchema,
     name: z.string().min(1),
   })
-  .passthrough();
+  .strict();
 export type CreateConfigurationResponse = z.infer<typeof createConfigurationResponseSchema>;
 
 export const createEnrollmentTokenRequestSchema = z
@@ -203,7 +204,7 @@ export const createEnrollmentTokenResponseSchema = z
     label: z.string().nullable(),
     expires_at: z.string().nullable(),
   })
-  .passthrough();
+  .strict();
 export type CreateEnrollmentTokenResponse = z.infer<typeof createEnrollmentTokenResponseSchema>;
 
 export const updateTenantRequestSchema = z
@@ -224,3 +225,132 @@ export const setDesiredConfigRequestSchema = z
   })
   .strict();
 export type SetDesiredConfigRequest = z.output<typeof setDesiredConfigRequestSchema>;
+
+// ─── Response Schemas ───────────────────────────────────────────────
+// Canonical shapes for every API response. The worker validates outbound
+// data against these; the site infers types from them; test mocks use
+// `satisfies` to stay in sync.
+
+/** Sweep stats embedded in config stats. */
+export const sweepStatsSchema = z.object({
+  last_sweep_at: z.number(),
+  last_sweep_stale_count: z.number(),
+  last_sweep_active_socket_count: z.number(),
+  last_sweep_duration_ms: z.number(),
+  last_stale_sweep_at: z.number(),
+  total_sweeps: z.number(),
+  total_stale_swept: z.number(),
+  sweeps_with_stale: z.number(),
+});
+export type SweepStats = z.infer<typeof sweepStatsSchema>;
+
+/** Per-config stats returned by DO /stats and embedded in overview. */
+export const configStatsSchema = z.object({
+  total_agents: z.number(),
+  connected_agents: z.number(),
+  healthy_agents: z.number(),
+  drifted_agents: z.number().optional(),
+  status_counts: z.record(z.string(), z.number()).optional(),
+  current_hash_counts: z.array(z.object({ value: z.string(), count: z.number() })).optional(),
+  desired_config_hash: z.string().nullable().optional(),
+  active_websockets: z.number().optional(),
+  snapshot_at: z.union([z.string(), z.number()]).nullable().optional(),
+  stale_sweep: sweepStatsSchema.optional(),
+});
+export type ConfigStats = z.infer<typeof configStatsSchema>;
+
+/** Configuration with optional embedded stats (as returned in overview). */
+export const configurationWithStatsSchema = configurationSchema.extend({
+  stats: configStatsSchema.optional(),
+});
+export type ConfigurationWithStats = z.infer<typeof configurationWithStatsSchema>;
+
+/** Portal overview response. */
+export const overviewResponseSchema = z.object({
+  tenant: tenantSchema,
+  configs_count: z.number(),
+  total_agents: z.number(),
+  connected_agents: z.number(),
+  healthy_agents: z.number(),
+  active_rollouts: z.number().nullable().optional(),
+  configurations: z.array(configurationWithStatsSchema),
+  metrics_source: z.enum(["analytics_engine", "unavailable"]).optional(),
+  metrics_error: z.string().nullable().optional(),
+});
+export type OverviewResponse = z.infer<typeof overviewResponseSchema>;
+
+/** Key-value attribute pair (used in agent_description). */
+const kvAttributeSchema = z.object({
+  key: z.string(),
+  value: z
+    .object({
+      string_value: z.string().optional(),
+      int_value: z.number().optional(),
+      bool_value: z.boolean().optional(),
+    })
+    .passthrough()
+    .optional(),
+});
+
+/** Agent description (parsed from JSON blob). */
+export const agentDescriptionResponseSchema = z.object({
+  identifying_attributes: z.array(kvAttributeSchema).optional(),
+  non_identifying_attributes: z.array(kvAttributeSchema).optional(),
+});
+export type AgentDescriptionResponse = z.infer<typeof agentDescriptionResponseSchema>;
+
+/** Agent row in list responses. */
+export const agentSchema = z.object({
+  instance_uid: z.string(),
+  tenant_id: z.string().optional(),
+  config_id: z.string().optional(),
+  sequence_num: z.number().optional(),
+  generation: z.number().optional(),
+  healthy: z.union([z.boolean(), z.number()]).nullable().optional(),
+  status: z.string().optional(),
+  last_error: z.string().nullable().optional(),
+  current_config_hash: z.string().nullable().optional(),
+  effective_config_hash: z.string().nullable().optional(),
+  last_seen_at: z.number().nullable().optional(),
+  connected_at: z.number().nullable().optional(),
+  agent_description: z.union([z.string(), agentDescriptionResponseSchema]).nullable().optional(),
+  capabilities: z.number().nullable().optional(),
+  component_health_map: z.record(z.string(), z.unknown()).nullable().optional(),
+  available_components: z.record(z.string(), z.unknown()).nullable().optional(),
+  hostname: z.string().nullable().optional(),
+  is_connected: z.boolean().optional(),
+  is_drifted: z.boolean().optional(),
+  desired_config_hash: z.string().nullable().optional(),
+  effective_config_body: z.string().nullable().optional(),
+  uptime_ms: z.number().nullable().optional(),
+});
+export type Agent = z.infer<typeof agentSchema>;
+
+/** Single-agent detail response (agent row + live enrichment). */
+export const agentDetailSchema = agentSchema.extend({
+  is_connected: z.boolean(),
+  desired_config_hash: z.string().nullable().optional(),
+  is_drifted: z.boolean(),
+  uptime_ms: z.number().nullable(),
+  effective_config_body: z.string().nullable().optional(),
+  component_health_map: z.record(z.unknown()).nullable(),
+  available_components: z.record(z.unknown()).nullable(),
+});
+export type AgentDetail = z.infer<typeof agentDetailSchema>;
+
+/** Paginated agent list response. */
+export const agentPageSchema = z.object({
+  agents: z.array(agentSchema),
+  pagination: z.object({
+    limit: z.number(),
+    next_cursor: z.string().nullable(),
+    has_more: z.boolean(),
+    sort: z.enum(["last_seen_desc", "last_seen_asc", "instance_uid_asc"]),
+  }),
+  filters: z.object({
+    q: z.string().optional(),
+    status: z.string().optional(),
+    health: z.enum(["healthy", "unhealthy", "unknown"]).optional(),
+  }),
+});
+export type AgentPage = z.infer<typeof agentPageSchema>;

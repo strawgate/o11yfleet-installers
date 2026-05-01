@@ -22,13 +22,10 @@ export function configurationAgentMetrics(
   const hasSnapshot = stats !== undefined;
 
   return {
-    totalAgents: numberOr(stats?.total_agents ?? stats?.total, visible.totalAgents),
+    totalAgents: numberOr(stats?.total_agents, visible.totalAgents),
     visibleAgents: visible.visibleAgents,
-    connectedAgents: numberOr(
-      stats?.connected_agents ?? stats?.agents_connected ?? stats?.connected,
-      visible.connectedAgents,
-    ),
-    healthyAgents: numberOr(stats?.healthy_agents ?? stats?.healthy, visible.healthyAgents),
+    connectedAgents: numberOr(stats?.connected_agents, visible.connectedAgents),
+    healthyAgents: numberOr(stats?.healthy_agents, visible.healthyAgents),
     degradedAgents: hasSnapshot
       ? numberOr(stats?.status_counts?.["degraded"], 0)
       : visible.degradedAgents,

@@ -1,0 +1,45 @@
+# E2E tests with real OTel Collectors
+#
+# Tests two official deployment modes against local wrangler dev:
+#   1. opamp extension (built into otelcol-contrib)
+#   2. opamp supervisor (separate binary managing otelcol)
+#
+# Prerequisites:
+#   just dev          # wrangler dev on :8787
+#   just db-migrate   # D1 schema up
+#   docker            # running Docker daemon
+#
+# Run:
+#   just test-e2e-collector
+#
+# Or manually:
+#   cd tests/e2e-collector && pnpm vitest run
+
+services:
+  # ─── Mode 1: opamp extension (built-in) ─────────────────────────────
+  collector-ext:
+    image: ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:${COLLECTOR_VERSION:-0.146.1}
+    command: ["--config", "/etc/otelcol/config.yaml"]
+    volumes:
+      - ./generated/ext-config.yaml:/etc/otelcol/config.yaml:ro
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+  # ─── Mode 2: opamp supervisor + collector ───────────────────────────
+  # The supervisor image doesn't bundle otelcol-contrib, so we copy it from
+  # the contrib image in a multi-stage build defined in Dockerfile.supervisor.
+  supervisor:
+    build:
+      context: .
+      dockerfile: Dockerfile.supervisor
+      args:
+        COLLECTOR_VERSION: ${COLLECTOR_VERSION:-0.146.1}
+    command: ["--config", "/etc/supervisor/config.yaml"]
+    volumes:
+      - ./generated/supervisor-config.yaml:/etc/supervisor/config.yaml:ro
+      - supervisor-storage:/var/lib/opamp-supervisor
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  supervisor-storage:

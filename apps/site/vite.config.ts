@@ -1,24 +1,32 @@
-import { defineConfig } from "vite";
+import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import path from "path";
 
-export default defineConfig({
-  plugins: [react(), tailwindcss()],
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "src"),
+// Use Vite's `loadEnv` so future `.env*` files are picked up automatically.
+// Reading directly from `process.env` would silently ignore any `.env.local`
+// override added later for the dev proxy target.
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+  const apiTarget = env.VITE_API_TARGET || "http://localhost:8787";
+
+  return {
+    plugins: [react(), tailwindcss()],
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "src"),
+      },
     },
-  },
-  server: {
-    port: 4000,
-    proxy: {
-      "/auth": "http://127.0.0.1:8787",
-      "/api": "http://127.0.0.1:8787",
+    server: {
+      port: 4000,
+      proxy: {
+        "/auth": apiTarget,
+        "/api": apiTarget,
+      },
     },
-  },
-  build: {
-    outDir: "dist",
-    sourcemap: true,
-  },
+    build: {
+      outDir: "dist",
+      sourcemap: true,
+    },
+  };
 });

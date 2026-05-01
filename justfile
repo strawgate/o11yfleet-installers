@@ -264,6 +264,10 @@ setup: db-migrate seed fleet
 bench:
     pnpm tsx experiments/src/benchmark.ts
 
+# Run core codec/state-machine microbenchmarks (vitest bench)
+bench-core:
+    cd packages/core && pnpm bench
+
 # Run pipeline-management model experiments
 pipeline-experiment:
     pnpm tsx experiments/src/pipeline-management.ts
@@ -353,6 +357,10 @@ smoke-test:
 # Alias for local end-to-end smoke test
 smoke-local: smoke-test
 
+# OpAMP protocol compliance tests (requires `just dev` running)
+test-opamp:
+    cd tests/opamp && pnpm vitest run
+
 # Load test (default: 50 agents, requires `just dev` running)
 load-test agents="50" ramp="10" steady="30":
     pnpm --filter @o11yfleet/load-test load -- --agents={{agents}} --ramp={{ramp}} --steady={{steady}}
@@ -400,6 +408,24 @@ collectors-docker-logs:
 # Full-stack E2E tests (requires `just dev` running)
 test-e2e:
     cd tests/e2e && pnpm run test:e2e
+
+# E2E tests with real OTel Collectors (requires `just dev` + Docker)
+test-e2e-collector:
+    cd tests/e2e-collector && pnpm vitest run
+
+# Run multi-version collector compatibility matrix (requires Docker + worker running).
+# Pass an empty `version` to run the full matrix; otherwise pin to a single tag.
+# We intentionally do NOT export `COLLECTOR_VERSION=""` when no version is given,
+# because that would mask any value already in the caller's environment.
+test-collector-matrix version="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd tests/e2e-collector
+    if [ -n "{{version}}" ]; then
+        COLLECTOR_VERSION="{{version}}" pnpm vitest run src/version-matrix.test.ts --reporter=verbose
+    else
+        pnpm vitest run src/version-matrix.test.ts --reporter=verbose
+    fi
 
 # UI tests with Playwright (starts the site dev server automatically)
 test-ui:
