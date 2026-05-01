@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "wrangler dev",
+    "dev": "wrangler dev --var ENVIRONMENT:dev",
     "bundle": "wrangler deploy --env=\"\" --dry-run --outdir dist",
     "deploy": "cd ../.. && just tf-apply-worker prod",
     "deploy:wrangler": "wrangler deploy --env=\"\"",

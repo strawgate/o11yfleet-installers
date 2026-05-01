@@ -155,6 +155,7 @@ ensure_dev_vars() {
       printf '%s=%s\n' "$key" "$value" >>"$vars_file"
   }
 
+  ensure_dev_var ENVIRONMENT dev
   ensure_dev_var O11YFLEET_API_BEARER_SECRET dev-local-api-secret-1234567890x
   ensure_dev_var O11YFLEET_CLAIM_HMAC_SECRET dev-local-claim-secret-12345678x
   ensure_dev_var O11YFLEET_SEED_TENANT_USER_EMAIL demo@o11yfleet.com
@@ -225,6 +226,8 @@ trap cleanup_on_exit EXIT
 stop_stack
 
 WORKER_VAR_ARGS=()
+# Always set ENVIRONMENT=dev to enable local dev CORS (localhost origins allowed)
+WORKER_VAR_ARGS+=(--var "ENVIRONMENT:dev")
 if [ -n "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
   write_worker_env_file
   WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_PROVIDER:${AI_GUIDANCE_PROVIDER:-minimax}")

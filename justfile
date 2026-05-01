@@ -183,8 +183,9 @@ docs-api-check:
     pnpm tsx scripts/check-api-docs.ts
 
 # Dev mode — start worker locally
+# Note: --var ENVIRONMENT:dev enables local dev CORS (allows localhost origins)
 dev:
-    cd apps/worker && pnpm wrangler dev
+    cd apps/worker && pnpm wrangler dev --var ENVIRONMENT:dev
 
 # Dev mode — start management UI
 ui:
