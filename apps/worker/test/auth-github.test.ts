@@ -1,4 +1,4 @@
-import { exports } from "cloudflare:workers";
+import { env, exports } from "cloudflare:workers";
 import { base64urlDecode } from "@o11yfleet/core/auth";
 import { describe, expect, it } from "vitest";
 
@@ -19,9 +19,72 @@ describe("GitHub social auth", () => {
   });
 
   it("accepts Terraform-managed static site Worker origins", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    env.ENVIRONMENT = "staging";
     const siteOrigin = "https://o11yfleet-site-worker-staging.o11yfleet.workers.dev";
+    try {
+      const response = await exports.default.fetch(
+        `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent(siteOrigin)}`,
+        { redirect: "manual" },
+      );
+
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("Location") ?? "");
+      const state = location.searchParams.get("state") ?? "";
+      const [payload] = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+        returnTo: string;
+      };
+      expect(decoded.returnTo).toBe(`${siteOrigin}/portal/overview`);
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
+    }
+  });
+
+  it("accepts app and admin custom site origins for the active environment", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    const cases = [
+      {
+        environment: "production",
+        origins: ["https://app.o11yfleet.com", "https://admin.o11yfleet.com"],
+      },
+      {
+        environment: "staging",
+        origins: ["https://staging-app.o11yfleet.com", "https://staging-admin.o11yfleet.com"],
+      },
+      {
+        environment: "dev",
+        origins: ["https://dev-app.o11yfleet.com", "https://dev-admin.o11yfleet.com"],
+      },
+    ] as const;
+
+    try {
+      for (const testCase of cases) {
+        env.ENVIRONMENT = testCase.environment;
+        for (const siteOrigin of testCase.origins) {
+          const response = await exports.default.fetch(
+            `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent(siteOrigin)}`,
+            { redirect: "manual" },
+          );
+
+          expect(response.status).toBe(302);
+          const location = new URL(response.headers.get("Location") ?? "");
+          const state = location.searchParams.get("state") ?? "";
+          const [payload] = state.split(".");
+          const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+            returnTo: string;
+          };
+          expect(decoded.returnTo).toBe(`${siteOrigin}/portal/overview`);
+        }
+      }
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
+    }
+  });
+
+  it("normalizes explicit site_origin values to their origin", async () => {
     const response = await exports.default.fetch(
-      `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent(siteOrigin)}`,
+      `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent("https://dev-app.o11yfleet.com/portal/agents?tab=all")}`,
       { redirect: "manual" },
     );
 
@@ -32,7 +95,51 @@ describe("GitHub social auth", () => {
     const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
       returnTo: string;
     };
-    expect(decoded.returnTo).toBe(`${siteOrigin}/portal/overview`);
+    expect(decoded.returnTo).toBe("https://dev-app.o11yfleet.com/portal/overview");
+  });
+
+  it("rejects cross-environment custom site origins", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    env.ENVIRONMENT = "dev";
+    try {
+      const response = await exports.default.fetch(
+        `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent("https://staging-app.o11yfleet.com")}`,
+        { redirect: "manual" },
+      );
+
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("Location") ?? "");
+      const state = location.searchParams.get("state") ?? "";
+      const [payload] = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+        returnTo: string;
+      };
+      expect(decoded.returnTo).toBe("http://localhost:4000/portal/overview");
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
+    }
+  });
+
+  it("falls back to production site origins for unknown environments", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    env.ENVIRONMENT = "preview" as typeof env.ENVIRONMENT;
+    try {
+      const response = await exports.default.fetch(
+        `http://localhost/auth/github/start?mode=login&site_origin=${encodeURIComponent("https://dev-app.o11yfleet.com")}`,
+        { redirect: "manual" },
+      );
+
+      expect(response.status).toBe(302);
+      const location = new URL(response.headers.get("Location") ?? "");
+      const state = location.searchParams.get("state") ?? "";
+      const [payload] = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+        returnTo: string;
+      };
+      expect(decoded.returnTo).toBe("https://o11yfleet.com/portal/overview");
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
+    }
   });
 
   it("renders the GitHub App manifest creation form", async () => {

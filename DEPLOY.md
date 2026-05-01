@@ -367,9 +367,16 @@ curl -fsS https://staging-api.o11yfleet.com/healthz
 curl -fsS https://api.o11yfleet.com/healthz
 ```
 
-For the site, verify the custom domains relevant to the environment. For public
-marketing changes, verify the live bundle on the custom domain, not just the
-deploy job result.
+For the site, verify the custom domains relevant to the environment:
+
+```bash
+just smoke-aliases dev
+just smoke-aliases staging
+just smoke-aliases prod
+```
+
+For public marketing changes, verify the live bundle on the custom domain, not
+just the deploy job result.
 
 Then sign in to the admin portal for the environment and check:
 
@@ -453,6 +460,8 @@ This file is ignored by git and should be `0600`.
 | `just env-api-url <env>`                  | Prints the env API URL.                                                                                                                                             |
 | `just env-api-smoke-url <env>`            | Prints the API URL used by CI smoke tests. Non-prod smoke uses workers.dev URLs to avoid zone-level security challenges from CI runner IPs.                         |
 | `just env-site-smoke-targets <env>`       | Prints static site smoke-test targets. Non-prod smoke uses workers.dev URLs to avoid zone-level security challenges from CI runner IPs.                             |
+| `just env-site-alias-smoke-targets <env>` | Prints custom-domain site smoke targets for public environment aliases.                                                                                             |
+| `just smoke-aliases <env>`                | Checks the custom API alias `/healthz` plus the custom site/app/admin aliases for one deployed environment.                                                         |
 
 Reusable GitHub composite actions keep deploy jobs aligned:
 
@@ -465,6 +474,9 @@ Reusable GitHub composite actions keep deploy jobs aligned:
   configuration creation, enrollment-token creation, and stats smoke tests.
   Production uses the custom API domain; dev and staging use workers.dev for the
   same CI-runner challenge reason.
+- Deploy and release workflows also run `just smoke-aliases <env>` after the
+  deploy-grade smoke tests. This catches missing DNS, Worker routes, or static
+  site routes for the public custom-domain aliases.
 
 ## Rollback And Recovery
 

@@ -7,6 +7,7 @@ import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
 import { hashEnrollmentToken, verifyClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
+import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
 
 export interface Env {
   FP_DB: D1Database;
@@ -40,74 +41,9 @@ export interface Env {
   O11YFLEET_OIDC_AUDIENCE?: string;
 }
 
-// Production CORS origins (always allowed)
-const PRODUCTION_ORIGINS = [
-  "https://app.o11yfleet.com",
-  "https://admin.o11yfleet.com",
-  "https://o11yfleet.com",
-  "https://www.o11yfleet.com",
-];
-
-const STAGING_ORIGINS = [
-  "https://staging-app.o11yfleet.com",
-  "https://staging-admin.o11yfleet.com",
-  "https://staging.o11yfleet.com",
-];
-
-const DEV_ORIGINS = [
-  "https://dev-app.o11yfleet.com",
-  "https://dev-admin.o11yfleet.com",
-  "https://dev.o11yfleet.com",
-];
-
-function isLocalDevOrigin(origin: string): boolean {
-  try {
-    const url = new URL(origin);
-    return (
-      (url.protocol === "http:" || url.protocol === "https:") &&
-      ["localhost", "127.0.0.1", "::1", "[::1]"].includes(url.hostname)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function staticSiteWorkerOriginsForEnv(environment: Env["ENVIRONMENT"]): string[] {
-  switch (environment) {
-    case "dev":
-      return ["https://o11yfleet-site-worker-dev.o11yfleet.workers.dev"];
-    case "staging":
-      return ["https://o11yfleet-site-worker-staging.o11yfleet.workers.dev"];
-    default:
-      return ["https://o11yfleet-site-worker.o11yfleet.workers.dev"];
-  }
-}
-
-/** Check if origin is the Terraform-managed static site Worker for this environment. */
-function isStaticSiteWorkerOrigin(origin: string, environment: Env["ENVIRONMENT"]): boolean {
-  try {
-    const url = new URL(origin);
-    return (
-      url.protocol === "https:" && staticSiteWorkerOriginsForEnv(environment).includes(url.origin)
-    );
-  } catch {
-    return false;
-  }
-}
-
-function isAllowedOrigin(origin: string, env: Env): boolean {
-  const environment = env.ENVIRONMENT ?? "production";
-  if (PRODUCTION_ORIGINS.includes(origin)) return true;
-  if (isStaticSiteWorkerOrigin(origin, environment)) return true;
-  if (environment === "staging" && STAGING_ORIGINS.includes(origin)) return true;
-  if (environment === "dev" && DEV_ORIGINS.includes(origin)) return true;
-  if (environment !== "production" && isLocalDevOrigin(origin)) return true;
-  return false;
-}
-
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {
   const origin = request.headers.get("Origin") || "";
-  const allowed = isAllowedOrigin(origin, env);
+  const allowed = isAllowedCorsOrigin(origin, env.ENVIRONMENT);
   return {
     "Access-Control-Allow-Origin": allowed ? origin : PRODUCTION_ORIGINS[0]!,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
@@ -230,14 +166,14 @@ const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
 function isTrustedOrigin(request: Request, env: Env): boolean {
   const origin = request.headers.get("Origin");
   if (origin) {
-    return isAllowedOrigin(origin, env);
+    return isAllowedCorsOrigin(origin, env.ENVIRONMENT);
   }
   // Fallback: same-origin requests may omit Origin; check Referer
   const referer = request.headers.get("Referer");
   if (referer) {
     try {
       const refOrigin = new URL(referer).origin;
-      return isAllowedOrigin(refOrigin, env);
+      return isAllowedCorsOrigin(refOrigin, env.ENVIRONMENT);
     } catch {
       return false;
     }

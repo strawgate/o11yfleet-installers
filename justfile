@@ -685,6 +685,62 @@ env-site-smoke-targets env="prod":
         ;;
     esac
 
+# Print custom-domain smoke-test targets for public environment aliases.
+env-site-alias-smoke-targets env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production)
+        printf '%s\n' \
+          "site|https://o11yfleet.com/" \
+          "app|https://app.o11yfleet.com/portal/overview" \
+          "admin|https://admin.o11yfleet.com/admin/overview"
+        ;;
+      staging)
+        printf '%s\n' \
+          "site|https://staging.o11yfleet.com/" \
+          "app|https://staging-app.o11yfleet.com/portal/overview" \
+          "admin|https://staging-admin.o11yfleet.com/admin/overview"
+        ;;
+      dev)
+        printf '%s\n' \
+          "site|https://dev.o11yfleet.com/" \
+          "app|https://dev-app.o11yfleet.com/portal/overview" \
+          "admin|https://dev-admin.o11yfleet.com/admin/overview"
+        ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Smoke-test public custom-domain aliases for one deployed environment.
+smoke-aliases env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    api_url="$(just --quiet env-api-url "{{env}}")"
+    curl -fsS --connect-timeout 5 --max-time 20 "$api_url/healthz" >/dev/null
+    echo "api alias ok: $api_url/healthz"
+    targets="$(just --quiet env-site-alias-smoke-targets "{{env}}")"
+    printf '%s\n' "$targets" | while IFS='|' read -r surface url; do
+        [ -n "$surface" ] || continue
+        tmp="$(mktemp)"
+        status="$(curl -sS --connect-timeout 5 --max-time 20 -o "$tmp" -w '%{http_code}' "$url" || true)"
+        if [ "$status" != "200" ]; then
+            echo "$surface alias failed: $status $url" >&2
+            cat "$tmp" >&2
+            rm -f "$tmp"
+            exit 1
+        fi
+        if ! grep -q '<div id="root"></div>' "$tmp"; then
+            echo "$surface alias did not include React root marker: $url" >&2
+            rm -f "$tmp"
+            exit 1
+        fi
+        rm -f "$tmp"
+        echo "$surface alias ok: $url"
+    done
+
 # Build the site bundle for a deployment environment.
 site-build env="prod":
     #!/usr/bin/env bash

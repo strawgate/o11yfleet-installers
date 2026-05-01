@@ -147,9 +147,9 @@ those data-bearing resources can be imported instead of recreated.
 deploy path. It runs `just deploy-env <env>`, which applies Terraform control
 plane resources, uploads the Terraform-managed static site Worker/assets, runs
 D1 migrations, uploads a Terraform-managed API Worker version, and smoke-tests
-the site plus the deploy-grade API flow. The workflow permits branch deploys for
-`dev` and `staging` so a PR can be live-validated before merge; `prod` deploys
-are still restricted to `main`.
+the site plus the deploy-grade API flow. The workflow is restricted to `main`
+for the shared `dev`, `staging`, and `prod` environments; per-PR deploys should
+use a separate preview environment rather than mutating shared long-lived state.
 
 `.github/workflows/release.yml` is the production application release path. It
 is intentionally a thin wrapper around `just deploy-env prod`, so release,

@@ -391,3 +391,6 @@ jobs:
           O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
           O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
           O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
+
+      - name: Smoke test staging public aliases
+        run: just smoke-aliases staging

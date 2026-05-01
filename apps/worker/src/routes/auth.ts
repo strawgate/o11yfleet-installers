@@ -8,6 +8,7 @@ import { getPlanLimits, normalizePlan, type PlanId } from "../shared/plans.js";
 import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
 import { clearSessionCookie, sessionCookie } from "../shared/cookies.js";
 import { validateJsonBody } from "../shared/validation.js";
+import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/origins.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -172,43 +173,26 @@ function requestOrigin(request: Request): string {
 function siteOriginForRequest(request: Request, env: Env): string {
   const url = new URL(request.url);
   const explicit = url.searchParams.get("site_origin")?.trim();
-  if (explicit && isAllowedSiteOrigin(explicit, env)) return explicit;
+  if (explicit) {
+    try {
+      const explicitOrigin = new URL(explicit).origin;
+      if (isAllowedSiteOrigin(explicitOrigin, env.ENVIRONMENT)) return explicitOrigin;
+    } catch {
+      /* ignore malformed explicit site_origin */
+    }
+  }
 
   const referer = request.headers.get("Referer");
   if (referer) {
     try {
       const origin = new URL(referer).origin;
-      if (isAllowedSiteOrigin(origin, env)) return origin;
+      if (isAllowedSiteOrigin(origin, env.ENVIRONMENT)) return origin;
     } catch {
       /* ignore malformed referer */
     }
   }
 
-  if (env.ENVIRONMENT === "production") return "https://o11yfleet.com";
-  if (env.ENVIRONMENT === "staging") return "https://staging.o11yfleet.com";
-  return "http://localhost:4000";
-}
-
-function isAllowedSiteOrigin(origin: string, env: Env): boolean {
-  try {
-    const url = new URL(origin);
-    if (env.ENVIRONMENT !== "production" && ["localhost", "127.0.0.1"].includes(url.hostname)) {
-      return url.protocol === "http:" || url.protocol === "https:";
-    }
-    return (
-      url.protocol === "https:" &&
-      (url.hostname === "o11yfleet.com" ||
-        url.hostname === "www.o11yfleet.com" ||
-        url.hostname === "app.o11yfleet.com" ||
-        url.hostname === "staging.o11yfleet.com" ||
-        url.hostname === "dev.o11yfleet.com" ||
-        url.hostname === "o11yfleet-site-worker.o11yfleet.workers.dev" ||
-        url.hostname === "o11yfleet-site-worker-staging.o11yfleet.workers.dev" ||
-        url.hostname === "o11yfleet-site-worker-dev.o11yfleet.workers.dev")
-    );
-  } catch {
-    return false;
-  }
+  return primarySiteOriginForEnvironment(env.ENVIRONMENT);
 }
 
 function safeReturnTo(raw: string | null, siteOrigin: string, fallbackPath: string): string {
