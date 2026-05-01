@@ -128,48 +128,52 @@ export default function UsagePage() {
     [data?.services],
   );
   const insightSurface = insightSurfaces.adminUsage;
-  const pageContext = data
-    ? buildBrowserPageContext({
-        title: "Usage and spend",
-        visible_text: [
-          "Usage and spend estimates come from usage metrics and explicit pricing assumptions, not lagging Cloudflare billing totals.",
-        ],
-        metrics: [
-          pageMetric(
-            "month_to_date_estimated_spend_usd",
-            "Month-to-date estimate",
-            data.month_to_date_estimated_spend_usd,
-            { unit: "USD" },
-          ),
-          pageMetric(
-            "projected_month_estimated_spend_usd",
-            "Projected month",
-            data.projected_month_estimated_spend_usd,
-            { unit: "USD" },
-          ),
-          pageMetric("ready_usage_sources", "Ready usage sources", readyServices),
-          pageMetric("total_usage_sources", "Total usage sources", data.services.length),
-          pageMetric("required_env_count", "Required env vars", data.required_env.length),
-        ],
-        tables: [
-          pageTable(
-            "usage_services",
-            "Usage services",
-            data.services.map((service) => ({
-              id: service.id,
-              name: service.name,
-              status: service.status,
-              source: service.source,
-              month_to_date_estimated_spend_usd: service.month_to_date_estimated_spend_usd,
-              projected_month_estimated_spend_usd: service.projected_month_estimated_spend_usd,
-              line_items: service.line_items.length,
-              notes: service.notes.length,
-            })),
-            { totalRows: data.services.length },
-          ),
-        ],
-      })
-    : null;
+  const pageContext = useMemo(
+    () =>
+      data
+        ? buildBrowserPageContext({
+            title: "Usage and spend",
+            visible_text: [
+              "Usage and spend estimates come from usage metrics and explicit pricing assumptions, not lagging Cloudflare billing totals.",
+            ],
+            metrics: [
+              pageMetric(
+                "month_to_date_estimated_spend_usd",
+                "Month-to-date estimate",
+                data.month_to_date_estimated_spend_usd,
+                { unit: "USD" },
+              ),
+              pageMetric(
+                "projected_month_estimated_spend_usd",
+                "Projected month",
+                data.projected_month_estimated_spend_usd,
+                { unit: "USD" },
+              ),
+              pageMetric("ready_usage_sources", "Ready usage sources", readyServices),
+              pageMetric("total_usage_sources", "Total usage sources", data.services.length),
+              pageMetric("required_env_count", "Required env vars", data.required_env.length),
+            ],
+            tables: [
+              pageTable(
+                "usage_services",
+                "Usage services",
+                data.services.map((service) => ({
+                  id: service.id,
+                  name: service.name,
+                  status: service.status,
+                  source: service.source,
+                  month_to_date_estimated_spend_usd: service.month_to_date_estimated_spend_usd,
+                  projected_month_estimated_spend_usd: service.projected_month_estimated_spend_usd,
+                  line_items: service.line_items.length,
+                  notes: service.notes.length,
+                })),
+                { totalRows: data.services.length },
+              ),
+            ],
+          })
+        : null,
+    [data, readyServices],
+  );
   const guidanceRequest: AiGuidanceRequest | null =
     data && pageContext
       ? buildInsightRequest(

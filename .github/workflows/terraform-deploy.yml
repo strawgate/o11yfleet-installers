@@ -117,6 +117,27 @@ jobs:
           fi
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
+      - name: Remove orphaned state resources
+        if: ${{ steps.remote-state.outputs.configured == 'true' && steps.target.outputs.env == 'prod' }}
+        run: |
+          just tf-init-remote ${{ steps.target.outputs.env }}
+          cd infra/terraform
+          # Remove known orphaned resource types from v4 provider state
+          orphaned_patterns=(
+            "^cloudflare_pages_"
+            "^cloudflare_record\\."
+            "^cloudflare_workers_route\\."
+          )
+          for resource in $(terraform state list 2>/dev/null); do
+            for pattern in "${orphaned_patterns[@]}"; do
+              if echo "$resource" | grep -qE "$pattern"; then
+                echo "Removing orphaned resource: $resource"
+                terraform state rm "$resource" 2>/dev/null || true
+                break
+              fi
+            done
+          done
+
       - name: Terraform plan
         if: ${{ steps.remote-state.outputs.configured == 'true' }}
         run: |

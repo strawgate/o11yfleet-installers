@@ -20,7 +20,7 @@ export default function OverviewPage() {
   const tenants = useAdminTenantsPage({ page: 1, limit: 25, sort: "newest" });
   const health = useAdminHealth();
   const ov = overview.data;
-  const tenantList = tenants.data?.tenants ?? [];
+  const tenantList = useMemo(() => tenants.data?.tenants ?? [], [tenants.data]);
   const tenantPagination = tenants.data?.pagination;
   const totalTenants = ov?.total_tenants ?? ov?.tenants ?? tenantList.length;
   const totalConfigs =
@@ -45,40 +45,54 @@ export default function OverviewPage() {
   const adminAiContext = buildAdminAiOverviewContext(tenantList, totalTenants, totalConfigs);
 
   const insightSurface = insightSurfaces.adminOverview;
-  const pageContext =
-    overview.data && tenants.data && health.data
-      ? buildBrowserPageContext({
-          title: "Admin overview",
-          visible_text: [
-            "Admin overview summarizes platform tenants, configurations, collectors, and dependency health.",
-          ],
-          metrics: [
-            pageMetric("total_tenants", "Total tenants", totalTenants),
-            pageMetric("total_configurations", "Total configurations", totalConfigs),
-            pageMetric("total_agents", "Total agents", totalAgents),
-            pageMetric(
-              "tenants_without_configs",
-              "Tenants without configurations",
-              tenantList.filter((tenant) => ((tenant["config_count"] as number) ?? 0) === 0).length,
-            ),
-          ],
-          details: [{ key: "health_status", label: "System health", value: healthStatus }],
-          tables: [
-            pageTable(
-              "recent_tenants",
-              "Recent tenants",
-              recentTenants.map((tenant) => ({
-                id: tenant.id,
-                plan: normalizePlanId(tenant.plan),
-                config_count: tenant["config_count"] ?? null,
-                user_count: tenant["user_count"] ?? null,
-                created_at: tenant.created_at ?? null,
-              })),
-              { totalRows: tenantList.length },
-            ),
-          ],
-        })
-      : null;
+  const pageContext = useMemo(
+    () =>
+      overview.data && tenants.data && health.data
+        ? buildBrowserPageContext({
+            title: "Admin overview",
+            visible_text: [
+              "Admin overview summarizes platform tenants, configurations, collectors, and dependency health.",
+            ],
+            metrics: [
+              pageMetric("total_tenants", "Total tenants", totalTenants),
+              pageMetric("total_configurations", "Total configurations", totalConfigs),
+              pageMetric("total_agents", "Total agents", totalAgents),
+              pageMetric(
+                "tenants_without_configs",
+                "Tenants without configurations",
+                tenantList.filter((tenant) => ((tenant["config_count"] as number) ?? 0) === 0)
+                  .length,
+              ),
+            ],
+            details: [{ key: "health_status", label: "System health", value: healthStatus }],
+            tables: [
+              pageTable(
+                "recent_tenants",
+                "Recent tenants",
+                recentTenants.map((tenant) => ({
+                  id: tenant.id,
+                  plan: normalizePlanId(tenant.plan),
+                  config_count: tenant["config_count"] ?? null,
+                  user_count: tenant["user_count"] ?? null,
+                  created_at: tenant.created_at ?? null,
+                })),
+                { totalRows: tenantList.length },
+              ),
+            ],
+          })
+        : null,
+    [
+      overview.data,
+      tenants.data,
+      health.data,
+      totalTenants,
+      totalConfigs,
+      totalAgents,
+      healthStatus,
+      recentTenants,
+      tenantList,
+    ],
+  );
   const guidanceRequest: AiGuidanceRequest | null =
     overview.data && tenants.data && health.data && pageContext
       ? buildInsightRequest(

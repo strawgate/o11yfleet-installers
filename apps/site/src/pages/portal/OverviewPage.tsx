@@ -38,35 +38,48 @@ export default function OverviewPage() {
   const insightSurface = insightSurfaces.portalOverview;
   const recentConfigurations = cfgList.slice(0, 5);
 
-  const pageContext = view
-    ? buildBrowserPageContext({
-        title: "Fleet overview",
-        visible_text: [
-          "Collector status, health, and drift are separate signals.",
-          "A collector can be connected and still report unhealthy runtime state.",
-        ],
-        metrics: [
-          pageMetric("configs_count", "Configurations", totalConfigs),
-          pageMetric("total_agents", "Total collectors", totalAgents),
-          pageMetric("connected_agents", "Connected collectors", connectedAgents),
-          pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
-          pageMetric("active_rollouts", "Active rollouts", activeRollouts),
-        ],
-        tables: [
-          pageTable(
-            "recent_configurations",
-            "Recent configurations",
-            recentConfigurations.map((config) => ({
-              id: config.id,
-              name: config.name,
-              status: config.status ?? null,
-              updated_at: config.updated_at ?? null,
-            })),
-            { totalRows: cfgList.length },
-          ),
-        ],
-      })
-    : null;
+  const pageContext = useMemo(
+    () =>
+      view
+        ? buildBrowserPageContext({
+            title: "Fleet overview",
+            visible_text: [
+              "Collector status, health, and drift are separate signals.",
+              "A collector can be connected and still report unhealthy runtime state.",
+            ],
+            metrics: [
+              pageMetric("configs_count", "Configurations", totalConfigs),
+              pageMetric("total_agents", "Total collectors", totalAgents),
+              pageMetric("connected_agents", "Connected collectors", connectedAgents),
+              pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
+              pageMetric("active_rollouts", "Active rollouts", activeRollouts),
+            ],
+            tables: [
+              pageTable(
+                "recent_configurations",
+                "Recent configurations",
+                recentConfigurations.map((config) => ({
+                  id: config.id,
+                  name: config.name,
+                  status: config.status ?? null,
+                  updated_at: config.updated_at ?? null,
+                })),
+                { totalRows: cfgList.length },
+              ),
+            ],
+          })
+        : null,
+    [
+      view,
+      totalConfigs,
+      totalAgents,
+      connectedAgents,
+      healthyAgents,
+      activeRollouts,
+      recentConfigurations,
+      cfgList.length,
+    ],
+  );
   const guidanceRequest: AiGuidanceRequest | null =
     view && pageContext
       ? buildInsightRequest(
