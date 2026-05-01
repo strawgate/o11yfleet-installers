@@ -195,6 +195,7 @@ async function fetchJWKS(): Promise<JWK[]> {
 
   const res = await fetch(GITHUB_JWKS_URL);
   if (!res.ok) {
+    console.warn(`JWKS fetch failed: HTTP ${res.status}`);
     return jwksCache?.keys ?? [];
   }
 

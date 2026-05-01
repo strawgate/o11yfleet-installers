@@ -340,6 +340,8 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     const auth = request.headers.get("Authorization");
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
 
+    let oidcError: string | null = null;
+
     if (token) {
       if (
         env.O11YFLEET_API_BEARER_SECRET &&
@@ -353,6 +355,9 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         const result = await verifyGitHubOIDC(token, { audience, allowedRepos });
         if (result.ok) {
           oidcClaims = result.claims;
+        } else {
+          oidcError = result.error;
+          console.warn(`OIDC verification failed: ${result.error}`);
         }
       }
     }
@@ -375,7 +380,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           ? { error: "Admin session required", code: "admin_session_required" }
           : oidcClaims
             ? { error: "OIDC scope insufficient", code: "oidc_scope_insufficient" }
-            : { error: "Admin access required" };
+            : { error: "Admin access required", oidc_error: oidcError };
         return addSecurityHeaders(
           addCorsHeaders(Response.json(body, { status: 403 }), request, env),
         );

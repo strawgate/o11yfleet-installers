@@ -126,6 +126,8 @@
           "O11YFLEET_SEED_ADMIN_PASSWORD",
           "O11YFLEET_SEED_TENANT_USER_EMAIL",
           "O11YFLEET_SEED_TENANT_USER_PASSWORD",
+          "O11YFLEET_OIDC_ALLOWED_REPOS",
+          "O11YFLEET_OIDC_AUDIENCE",
         ],
       },
       "observability": {
