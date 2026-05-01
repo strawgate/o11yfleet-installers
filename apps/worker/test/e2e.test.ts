@@ -113,16 +113,10 @@ describe("Phase 3-SYNC: Full Lifecycle E2E", () => {
       ),
     );
 
-    // 6. Receive enrollment_complete text message (triggered by our hello)
-    const enrollEvent = await waitForMsg(ws);
-    const enrollMsg = JSON.parse(enrollEvent.data as string);
-    expect(enrollMsg.type).toBe("enrollment_complete");
-    expect(enrollMsg.assignment_claim).toBeDefined();
-    expect(enrollMsg.instance_uid).toBeDefined();
-
-    // 7. Receive initial OpAMP binary response
+    // 6. Receive initial OpAMP binary response (no enrollment_complete text message after protobuf-only refactor)
     const opampEvent = await waitForMsg(ws);
     // Binary data arrives as Blob in workerd test environment
+    // Inline instead of msgToBuffer to avoid extra async overhead on hot path
     const buf =
       opampEvent.data instanceof Blob
         ? await (opampEvent.data as Blob).arrayBuffer()
@@ -173,9 +167,13 @@ describe("E2E Scenario #1: New enrollment", () => {
       ),
     );
 
+    // Server responds with protobuf message (no text enrollment_complete after protobuf-only refactor)
     const enrollEvent = await waitForMsg(ws);
-    const enrollMsg = JSON.parse(enrollEvent.data as string);
-    expect(enrollMsg.assignment_claim).toBeDefined();
+    const buf =
+      enrollEvent.data instanceof Blob
+        ? await (enrollEvent.data as Blob).arrayBuffer()
+        : (enrollEvent.data as ArrayBuffer);
+    const enrollMsg = decodeFrame<ServerToAgent>(buf);
     expect(enrollMsg.instance_uid).toBeDefined();
 
     ws.close();

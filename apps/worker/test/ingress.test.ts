@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { AgentCapabilities, encodeFrame } from "@o11yfleet/core/codec";
-import type { AgentToServer } from "@o11yfleet/core/codec";
+import { AgentCapabilities, decodeFrame, encodeFrame } from "@o11yfleet/core/codec";
+import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 import { apiFetch, setupD1, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
 
 beforeAll(setupD1);
@@ -165,18 +165,21 @@ describe("Ingress Router", () => {
     };
     ws.send(encodeFrame(hello));
 
-    // Read enrollment message
-    const enrollmentMsg = await new Promise<string>((resolve, reject) => {
+    // Read enrollment message (binary protobuf after protobuf-only refactor)
+    // Inline Blob→ArrayBuffer to avoid extra async overhead on hot path
+    const enrollmentMsg = await new Promise<ArrayBuffer>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error("Timeout")), 5000);
       ws.addEventListener("message", (event) => {
         clearTimeout(timer);
-        resolve(event.data as string);
+        resolve(
+          event.data instanceof Blob
+            ? (event.data as Blob).arrayBuffer()
+            : (event.data as ArrayBuffer),
+        );
       });
     });
 
-    const parsed = JSON.parse(enrollmentMsg);
-    expect(parsed.type).toBe("enrollment_complete");
-    expect(parsed.assignment_claim).toBeDefined();
+    const parsed = decodeFrame<ServerToAgent>(enrollmentMsg);
     expect(parsed.instance_uid).toBeDefined();
 
     ws.close();

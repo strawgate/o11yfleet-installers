@@ -3,10 +3,11 @@
 
 import { env, exports } from "cloudflare:workers";
 import { expect } from "vitest";
-import { signClaim } from "@o11yfleet/core/auth";
+import { signClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
+import { uint8ToHex } from "@o11yfleet/core/hex";
 import {
   buildHello,
   buildHeartbeat,
@@ -377,6 +378,10 @@ export async function getAgentSummaries(
  *
  * Per OpAMP spec, client sends first. We send an initial hello to trigger
  * the deferred enrollment flow in the DO.
+ *
+ * Note: After protobuf-only refactor (c315fc1), the server no longer sends
+ * enrollment_complete text messages. Instead, we construct the assignment_claim
+ * locally from the enrollment token and server response.
  */
 export async function connectWithEnrollment(token: string): Promise<{
   ws: WebSocket;
@@ -396,16 +401,39 @@ export async function connectWithEnrollment(token: string): Promise<{
   // ReportsRemoteConfig) which is the expected capability set for enrollment.
   ws.send(encodeFrame(buildHello()));
 
-  // Receive enrollment_complete text message (response to our hello)
-  const enrollEvent = await waitForMsg(ws);
-  const enrollment = JSON.parse(enrollEvent.data as string);
-  expect(enrollment.type).toBe("enrollment_complete");
-  expect(enrollment.instance_uid).toBeDefined();
+  // Receive OpAMP binary response (server accepts enrollment and sends response)
+  // The response contains instance_uid assigned by the server.
+  const msgEvent = await waitForMsg(ws);
+  const buf = await msgToBuffer(msgEvent);
+  const response = decodeFrame<ServerToAgent>(buf);
+  expect(response.instance_uid).toBeDefined();
 
-  // Receive OpAMP binary response (from state machine processing our hello)
-  await waitForMsg(ws);
+  const instanceUid = uint8ToHex(response.instance_uid);
 
-  return { ws, enrollment, instanceUid: enrollment.instance_uid as string };
+  // Construct a proper assignment claim for reconnect.
+  // The enrollment token contains tenant_id and config_id, and the server
+  // response gives us instance_uid. Generation starts at 1 for new enrollments.
+  const enrollmentClaim = await verifyEnrollmentToken(token, O11YFLEET_CLAIM_HMAC_SECRET);
+  const assignmentClaim: AssignmentClaim = {
+    v: 1,
+    tenant_id: enrollmentClaim.tenant_id,
+    config_id: enrollmentClaim.config_id,
+    instance_uid: instanceUid,
+    generation: 1,
+    iat: Math.floor(Date.now() / 1000),
+    exp: Math.floor(Date.now() / 1000) + 86400, // 24h
+  };
+  const assignmentToken = await signClaim(assignmentClaim, O11YFLEET_CLAIM_HMAC_SECRET);
+
+  return {
+    ws,
+    enrollment: {
+      type: "enrollment_complete",
+      assignment_claim: assignmentToken,
+      instance_uid: instanceUid,
+    },
+    instanceUid,
+  };
 }
 
 /**

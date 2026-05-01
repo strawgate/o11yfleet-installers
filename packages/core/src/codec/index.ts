@@ -6,6 +6,11 @@ export {
   encodeServerToAgentProto,
   isProtobufFrame,
 } from "./protobuf.js";
+// Aliases for backward compatibility with tests (JSON framing removed in c315fc1)
+export {
+  encodeAgentToServerProto as encodeFrame,
+  decodeServerToAgentProto as decodeFrame,
+} from "./protobuf.js";
 export type { AgentToServer, ServerToAgent } from "./types.js";
 export {
   AgentCapabilities,
