@@ -139,9 +139,6 @@ variable "worker_inherited_binding_names" {
     "O11YFLEET_SEED_TENANT_USER_EMAIL",
     "O11YFLEET_SEED_TENANT_USER_PASSWORD",
     "CLOUDFLARE_USAGE_API_TOKEN",
-    "RESEND_API_KEY",
-    "EMAIL_FROM_ADDRESS",
-    "O11YFLEET_AUTO_APPROVE_SIGNUPS",
   ]
 
   validation {
