@@ -410,6 +410,11 @@ for target_env in $TARGET_ENVS; do
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_ACCESS_KEY_ID "$r2_access_key_id"
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_SECRET_ACCESS_KEY "$r2_secret_access_key"
 
+  # Also set repo-level secrets for workflows that don't specify an environment
+  set_github_secret "" CLOUDFLARE_DEPLOY_API_TOKEN "$deploy_token"
+  set_github_secret "" TERRAFORM_STATE_R2_ACCESS_KEY_ID "$r2_access_key_id"
+  set_github_secret "" TERRAFORM_STATE_R2_SECRET_ACCESS_KEY "$r2_secret_access_key"
+
   if [ "$ANALYTICS_SQL_TOKENS" = true ]; then
     account_resource="com.cloudflare.api.account.${env_account_id}"
     analytics_sql_groups="$(permission_group_objects "$ACCOUNT_ANALYTICS_READ_ID" "$D1_ANALYTICS_READ_ID")"
