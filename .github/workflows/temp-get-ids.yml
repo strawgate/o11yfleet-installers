@@ -1,0 +1,36 @@
+name: Get Resource IDs (Temp)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  get-ids:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Resource IDs
+        run: |
+          echo "=== DNS Records ==="
+          curl -s "https://api.cloudflare.com/client/v4/zones/2650adcd696a6e400201a68323e90c5e/dns_records" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq '.result[] | {id, name, type}'
+          
+          echo ""
+          echo "=== Workers Routes ==="
+          curl -s "https://api.cloudflare.com/client/v4/zones/2650adcd696a6e400201a68323e90c5e/workers/routes" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq '.result[] | {id, pattern, script}'
+          
+          echo ""
+          echo "=== Workers Cron Triggers ==="
+          curl -s "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6dc56/workers/scripts/o11yfleet-worker/schedules" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq '.result'
+          
+          echo ""
+          echo "=== Queue Consumers ==="
+          curl -s "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6dc56/workers/queues/471d349a1e5a41a4a6f0c7e6e9076912" \
+            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
+            -H "Content-Type: application/json" | jq '.result'
