@@ -302,10 +302,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    // Handle first message (enrollment or reconnection)
-    const result = await handleFirstMessage(this.sessionCtx(), ws, attachment, message);
-    if (result.earlyReturn) return;
-    attachment = result.attachment;
+    // Handle first message only (enrollment or reconnection claim signing).
+    // Subsequent messages skip the expensive decode+signClaim crypto path.
+    if (attachment.is_first_message || attachment.is_enrollment) {
+      const result = await handleFirstMessage(this.sessionCtx(), ws, attachment, message);
+      if (result.earlyReturn) return;
+      attachment = result.attachment;
+    }
 
     const isPendingDo = attachment.config_id === PENDING_DO_CONFIG_ID;
 
