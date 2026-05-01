@@ -75,6 +75,14 @@ describe("admin API routes", () => {
     expect(invalidBody.pagination.page).toBe(1);
     expect(invalidBody.pagination.limit).toBe(500);
   });
+  it("does not crash on inherited prototype keys in sort param", async () => {
+    for (const protoKey of ["constructor", "toString", "hasOwnProperty", "__proto__"]) {
+      const res = await apiFetch(`http://localhost/api/admin/tenants?sort=${protoKey}`);
+      expect(res.status).toBe(200);
+      const body = await res.json<{ filters: { sort: string } }>();
+      expect(body.filters.sort).toBe("newest");
+    }
+  });
   it("treats LIKE wildcards in q as literal characters", async () => {
     for (const entry of [
       { name: "Underscore_Tenant", plan: "starter" },

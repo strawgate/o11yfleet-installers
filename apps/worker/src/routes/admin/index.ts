@@ -169,7 +169,7 @@ type TenantSort = keyof typeof TENANT_SORTS;
 
 function normalizeTenantSort(value: string | null): TenantSort {
   if (!value) return "newest";
-  if (value in TENANT_SORTS) return value as TenantSort;
+  if (Object.prototype.hasOwnProperty.call(TENANT_SORTS, value)) return value as TenantSort;
   return "newest";
 }
 
