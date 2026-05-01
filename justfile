@@ -606,11 +606,11 @@ tf-check-staging-readiness env="staging": (tf-init-remote env)
     fi
 
 # Terraform apply for an environment tfvars file against remote state.
+# Note: D1 database excluded due to provider API issues
 tf-apply env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     targets=(
-        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_queue.events
         -target=cloudflare_dns_record.api
