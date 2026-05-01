@@ -59,7 +59,7 @@ export async function handleV1Request(
     if (err instanceof AiApiError) {
       return jsonError(err.message, err.status);
     }
-    console.error("V1 API error:", err);
+    console.error("V1 API error:", url.pathname, err);
     return jsonError("Internal server error", 500);
   }
 }

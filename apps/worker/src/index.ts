@@ -203,7 +203,7 @@ export default {
     try {
       return await handleRequest(request, env);
     } catch (err) {
-      console.error("Unhandled error:", err);
+      console.error("Unhandled error:", new URL(request.url).pathname, err);
       const corsHeaders = getCorsHeaders(request, env);
       return addSecurityHeaders(
         new Response(JSON.stringify({ error: "Internal server error" }), {
