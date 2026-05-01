@@ -19,6 +19,7 @@ export default function SettingsPage() {
   const navigate = useNavigate();
 
   const [name, setName] = useState("");
+  const [geoEnabled, setGeoEnabled] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const seededTenantId = useRef<string | null>(null);
@@ -27,6 +28,7 @@ export default function SettingsPage() {
     if (tenant.data && tenant.data.id !== seededTenantId.current) {
       seededTenantId.current = tenant.data.id;
       setName(tenant.data.name);
+      setGeoEnabled(Boolean(tenant.data["geo_enabled"]));
     }
   }, [tenant.data]);
 
@@ -37,7 +39,10 @@ export default function SettingsPage() {
 
   async function handleSave() {
     try {
-      await updateTenant.mutateAsync({ name: name.trim() });
+      await updateTenant.mutateAsync({
+        name: name.trim(),
+        geo_enabled: geoEnabled,
+      });
       toast("Settings saved");
     } catch (err) {
       toast("Failed to save", err instanceof Error ? err.message : "Unknown error", "err");
@@ -90,10 +95,33 @@ export default function SettingsPage() {
           </span>
         </div>
 
+        <div className="mt-6 grid gap-2">
+          <div className="flex items-center justify-between">
+            <div>
+              <label className="text-sm font-medium text-foreground" htmlFor="geo-enabled">
+                Geo-IP collection
+              </label>
+              <p className="text-xs text-muted-foreground">
+                Collect IP address and approximate geographic location of collectors.
+              </p>
+            </div>
+            <input
+              type="checkbox"
+              id="geo-enabled"
+              checked={geoEnabled}
+              onChange={(e) => setGeoEnabled(e.target.checked)}
+              className="h-4 w-4 rounded border-input"
+            />
+          </div>
+        </div>
+
         <Button
           className="mt-6"
           onClick={() => void handleSave()}
-          disabled={updateTenant.isPending || name.trim() === (t?.name ?? "")}
+          disabled={
+            updateTenant.isPending ||
+            (name.trim() === (t?.name ?? "") && geoEnabled === Boolean(t?.["geo_enabled"]))
+          }
         >
           {updateTenant.isPending ? "Saving..." : "Save changes"}
         </Button>

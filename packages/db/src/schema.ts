@@ -6,6 +6,7 @@ export interface Tenant {
   plan: "hobby" | "pro" | "starter" | "growth" | "enterprise";
   max_configs: number;
   max_agents_per_config: number;
+  geo_enabled: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -85,4 +86,15 @@ export interface AuthIdentity {
   provider_email: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface PendingToken {
+  id: string;
+  tenant_id: string;
+  token_hash: string;
+  label: string | null;
+  target_config_id: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
 }

@@ -41,6 +41,9 @@ import {
   STALE_AGENT_THRESHOLD_MS,
 } from "./constants.js";
 
+export const PENDING_MESSAGES_PER_MINUTE = 6;
+const PENDING_DO_CONFIG_ID = "__pending__";
+
 export interface ConfigDOEnv {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
@@ -59,6 +62,17 @@ function parseTenantAgentLimit(header: string | null): number | null {
     return null;
   }
   return parsed;
+}
+
+function extractDisplayName(identifyingAttributes: {
+  attributes?: Array<{ key: string; value: { string_value?: string } }>;
+}): string | null {
+  const attrs = identifyingAttributes.attributes;
+  if (!attrs) return null;
+  const hostAttr = attrs.find((a) => a.key === "host");
+  const nameValue = hostAttr?.value?.string_value;
+  if (!nameValue) return null;
+  return nameValue.slice(0, 128).replace(/[^a-zA-Z0-9 _.-]/g, "");
 }
 
 // Config Durable Object — per tenant:config stateful actor for OpAMP agent management
@@ -144,6 +158,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.ensureInit();
     const url = new URL(request.url);
 
+    // Determine if this is a pending DO from the stored identity
+    const identity = this.repo.loadDoIdentity();
+    const isPendingDo = identity.config_id === PENDING_DO_CONFIG_ID;
+
     if (request.headers.get("Upgrade") === "websocket") {
       return this.handleWebSocket(request);
     }
@@ -187,6 +205,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (url.pathname === "/debug/query" && request.method === "POST")
       return handleDebugQuery(this.ctx.storage.sql, request);
 
+    // Pending device routes (only for __pending__ DOs)
+    if (isPendingDo) {
+      if (url.pathname === "/pending-devices" && request.method === "GET")
+        return handleListPendingDevices(this.ctx.storage.sql, request);
+      const pendingAssignMatch = url.pathname.match(/^\/pending-devices\/([^/]+)\/assign$/);
+      if (pendingAssignMatch && request.method === "POST")
+        return handleAssignPendingDevice(this.ctx.storage.sql, request, pendingAssignMatch[1]!);
+    }
+
     return new Response("Not found", { status: 404 });
   }
 
@@ -197,21 +224,49 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const configId = request.headers.get("x-fp-config-id") ?? "unknown";
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
+    const isPendingDo = configId === PENDING_DO_CONFIG_ID;
+    const sourceIp =
+      request.headers.get("cf-connecting-ip") ??
+      request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
+      null;
 
     console.warn(
-      `[ws.connect] tenant=${tenantId} config=${configId} uid=${instanceUid} enrollment=${isEnrollment}`,
+      `[ws.connect] tenant=${tenantId} config=${configId} uid=${instanceUid} enrollment=${isEnrollment} pending=${isPendingDo}`,
     );
 
-    // Enforce per-tenant plan limit if the worker resolved one.
-    const tenantLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
-    const limit =
-      tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
-    const count = this.repo.getAgentCount();
-    if (count >= limit && !this.repo.agentExists(instanceUid)) {
-      return Response.json(
-        { error: "Agent limit reached for this configuration" },
-        { status: 429 },
-      );
+    if (isPendingDo) {
+      const { upsertPendingDevice, checkPendingDeviceRateLimit } =
+        await import("./agent-state-repo.js");
+      if (
+        checkPendingDeviceRateLimit(this.ctx.storage.sql, instanceUid, PENDING_MESSAGES_PER_MINUTE)
+      ) {
+        return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
+      }
+      upsertPendingDevice(this.ctx.storage.sql, {
+        instance_uid: instanceUid,
+        tenant_id: tenantId,
+        source_ip: sourceIp,
+        geo_country: request.headers.get("x-fp-geo-country") ?? null,
+        geo_city: request.headers.get("x-fp-geo-city") ?? null,
+        geo_lat: request.headers.get("x-fp-geo-lat")
+          ? Number(request.headers.get("x-fp-geo-lat"))
+          : null,
+        geo_lon: request.headers.get("x-fp-geo-lon")
+          ? Number(request.headers.get("x-fp-geo-lon"))
+          : null,
+        connected_at: Date.now(),
+      });
+    } else {
+      const tenantLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
+      const limit =
+        tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
+      const count = this.repo.getAgentCount();
+      if (count >= limit && !this.repo.agentExists(instanceUid)) {
+        return Response.json(
+          { error: "Agent limit reached for this configuration" },
+          { status: 429 },
+        );
+      }
     }
     this.repo.saveDoIdentity(tenantId, configId);
 
@@ -252,8 +307,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (result.earlyReturn) return;
     attachment = result.attachment;
 
+    const isPendingDo = attachment.config_id === PENDING_DO_CONFIG_ID;
+
     // Rate limit — atomic check-and-increment in SQLite
-    if (this.repo.checkRateLimit(attachment.instance_uid, MAX_MESSAGES_PER_MINUTE)) {
+    // Use lower rate limit (6 msg/min) for pending DOs
+    const rateLimit = isPendingDo ? PENDING_MESSAGES_PER_MINUTE : MAX_MESSAGES_PER_MINUTE;
+    if (this.repo.checkRateLimit(attachment.instance_uid, rateLimit)) {
       try {
         const retryDelayNs = BigInt(30_000_000_000); // 30 seconds
         const errorResponse: ServerToAgent = {
@@ -339,7 +398,48 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         state.connected_at = attachment.connected_at;
         state.status = "connected";
         attachment.is_first_message = false;
+
+        // For pending DOs, check for pending assignment on reconnection
+        if (isPendingDo) {
+          const { getPendingAssignment, deletePendingDevice } =
+            await import("./agent-state-repo.js");
+          const assignment = getPendingAssignment(this.ctx.storage.sql, attachment.instance_uid);
+          if (assignment) {
+            // Issue real claim for the assigned config
+            const claim: AssignmentClaim = {
+              v: 1,
+              tenant_id: attachment.tenant_id,
+              config_id: assignment.target_config_id,
+              instance_uid: attachment.instance_uid,
+              generation: 1,
+              iat: Math.floor(Date.now() / 1000),
+              exp: Math.floor(Date.now() / 1000) + ASSIGNMENT_CLAIM_TTL_SECONDS,
+            };
+            const token = await signClaim(claim, this.env.O11YFLEET_CLAIM_HMAC_SECRET);
+            attachment.pending_connection_settings = token;
+            attachment.config_id = assignment.target_config_id;
+            // Clean up pending state
+            deletePendingDevice(this.ctx.storage.sql, attachment.instance_uid);
+          }
+        }
+
         ws.serializeAttachment(attachment);
+      }
+
+      // For pending DOs, update device info with display_name from agent_description
+      if (isPendingDo && agentMsg.agent_description?.identifying_attributes) {
+        const displayName = extractDisplayName({
+          attributes: agentMsg.agent_description.identifying_attributes,
+        });
+        if (displayName) {
+          const { upsertPendingDevice } = await import("./agent-state-repo.js");
+          upsertPendingDevice(this.ctx.storage.sql, {
+            instance_uid: attachment.instance_uid,
+            tenant_id: attachment.tenant_id,
+            display_name: displayName,
+            agent_description: JSON.stringify(agentMsg.agent_description?.identifying_attributes),
+          });
+        }
       }
 
       const result = await processFrame(
@@ -503,4 +603,50 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       doubles: configMetricsToDoubles(metrics),
     });
   }
+}
+
+// ─── Pending Device HTTP Handlers ─────────────────────────────────────
+
+async function handleListPendingDevices(sql: SqlStorage, request: Request): Promise<Response> {
+  const { listPendingDevices } = await import("./agent-state-repo.js");
+  // Use the x-fp-tenant-id header passed by the worker (authoritative).
+  // For a fresh pending DO with no prior connections, loadDoIdentity() returns
+  // empty strings — the header is the reliable source of tenant context.
+  const tenantId = request.headers.get("x-fp-tenant-id") ?? "";
+  const rows = listPendingDevices(sql, tenantId, 1000);
+  return Response.json({ devices: rows });
+}
+
+async function handleAssignPendingDevice(
+  sql: SqlStorage,
+  request: Request,
+  deviceUid: string,
+): Promise<Response> {
+  const body = await request.json<{ config_id: string; assigned_by?: string }>();
+  if (!body.config_id) {
+    return Response.json({ error: "config_id is required" }, { status: 400 });
+  }
+
+  const { upsertPendingAssignment, getPendingDevice, deletePendingDevice } =
+    await import("./agent-state-repo.js");
+
+  const device = getPendingDevice(sql, deviceUid);
+  if (!device) {
+    return Response.json({ error: "Pending device not found" }, { status: 404 });
+  }
+
+  upsertPendingAssignment(sql, {
+    instance_uid: deviceUid,
+    tenant_id: device.tenant_id,
+    target_config_id: body.config_id,
+    assigned_by: body.assigned_by ?? null,
+  });
+
+  deletePendingDevice(sql, deviceUid);
+
+  return Response.json({
+    instance_uid: deviceUid,
+    target_config_id: body.config_id,
+    assigned: true,
+  });
 }

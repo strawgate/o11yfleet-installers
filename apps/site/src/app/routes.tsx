@@ -70,6 +70,10 @@ const GettingStartedPage = lazyPage(
 );
 const OnboardingPage = lazyPage(() => import("@/pages/portal/OnboardingPage"), "Onboarding");
 const TokensPage = lazyPage(() => import("@/pages/portal/TokensPage"), "Tokens");
+const PendingDevicesPage = lazyPage(
+  () => import("@/pages/portal/PendingDevicesPage"),
+  "Pending Devices",
+);
 const TeamPage = lazyPage(() => import("@/pages/portal/TeamPage"), "Team");
 const BillingPage = lazyPage(() => import("@/pages/portal/BillingPage"), "Billing");
 const SettingsPage = lazyPage(() => import("@/pages/portal/SettingsPage"), "Settings");
@@ -131,6 +135,7 @@ export function AppRoutes() {
           <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="tokens" element={<TokensPage />} />
+          <Route path="pending-devices" element={<PendingDevicesPage />} />
           <Route path="team" element={<TeamPage />} />
           <Route path="billing" element={<BillingPage />} />
           <Route path="settings" element={<SettingsPage />} />

@@ -273,6 +273,10 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     updates.push("max_agents_per_config = ?");
     values.push(limits.max_agents_per_config);
   }
+  if (body.geo_enabled !== undefined) {
+    updates.push("geo_enabled = ?");
+    values.push(body.geo_enabled ? 1 : 0);
+  }
 
   if (updates.length === 0) {
     return jsonError("No fields to update", 400);

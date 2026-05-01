@@ -358,3 +358,89 @@ export function useDeleteTenant() {
     },
   });
 }
+
+/* ------------------------------------------------------------------ */
+/*  Pending Devices & Tokens                                           */
+/* ------------------------------------------------------------------ */
+
+export interface PendingDevice {
+  instance_uid: string;
+  tenant_id: string;
+  display_name: string | null;
+  source_ip: string | null;
+  geo_country: string | null;
+  geo_city: string | null;
+  geo_lat: number | null;
+  geo_lon: number | null;
+  agent_description: string | null;
+  connected_at: number;
+  last_seen_at: number;
+}
+
+export interface PendingToken {
+  id: string;
+  token?: string;
+  label: string | null;
+  target_config_id: string | null;
+  expires_at: string | null;
+  revoked_at: string | null;
+  created_at: string;
+}
+
+export function usePendingDevices() {
+  return useQuery({
+    queryKey: ["pending-devices"],
+    queryFn: async () => {
+      const data = await apiGet<{ devices: PendingDevice[] }>("/api/v1/pending-devices");
+      return data.devices ?? [];
+    },
+  });
+}
+
+export function usePendingTokens() {
+  return useQuery({
+    queryKey: ["pending-tokens"],
+    queryFn: async () => {
+      const data = await apiGet<{ tokens: PendingToken[] }>("/api/v1/pending-tokens");
+      return data.tokens ?? [];
+    },
+  });
+}
+
+export function useCreatePendingToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { label?: string; target_config_id?: string }) =>
+      apiPost<{ id: string; token: string; label: string | null; target_config_id: string | null }>(
+        "/api/v1/pending-tokens",
+        body,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pending-tokens"] });
+    },
+  });
+}
+
+export function useRevokePendingToken() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tokenId: string) => apiDel(`/api/v1/pending-tokens/${tokenId}`),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pending-tokens"] });
+    },
+  });
+}
+
+export function useAssignPendingDevice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ deviceUid, configId }: { deviceUid: string; configId: string }) =>
+      apiPost<{ instance_uid: string; target_config_id: string; assigned: boolean }>(
+        `/api/v1/pending-devices/${encodeURIComponent(deviceUid)}/assign`,
+        { config_id: configId },
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pending-devices"] });
+    },
+  });
+}

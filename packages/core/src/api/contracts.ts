@@ -126,6 +126,7 @@ export type AdminCreateTenantRequest = z.output<typeof adminCreateTenantRequestS
 export const adminUpdateTenantRequestSchema = z
   .object({
     name: shortNameSchema.optional(),
+    geo_enabled: z.boolean().optional(),
     plan: adminPlanIdRequestSchema.optional(),
   })
   .strict();
@@ -207,9 +208,18 @@ export const createEnrollmentTokenResponseSchema = z
   .strict();
 export type CreateEnrollmentTokenResponse = z.infer<typeof createEnrollmentTokenResponseSchema>;
 
+export const createPendingTokenRequestSchema = z
+  .object({
+    label: z.string().trim().max(255).optional(),
+    target_config_id: idSchema.optional(),
+  })
+  .strict();
+export type CreatePendingTokenRequest = z.output<typeof createPendingTokenRequestSchema>;
+
 export const updateTenantRequestSchema = z
   .object({
     name: shortNameSchema.optional(),
+    geo_enabled: z.boolean().optional(),
   })
   .strict();
 export type UpdateTenantRequest = z.output<typeof updateTenantRequestSchema>;

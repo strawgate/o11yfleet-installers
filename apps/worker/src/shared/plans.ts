@@ -21,6 +21,7 @@ export interface PlanDefinition {
   supports_gitops: boolean;
   supports_sso: boolean;
   stateful_operations: boolean;
+  supports_direct_enrollment: boolean;
   features: string[];
 }
 
@@ -45,6 +46,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_gitops: false,
     supports_sso: false,
     stateful_operations: false,
+    supports_direct_enrollment: false,
     features: ["Live collector inventory", "1 policy", "Manual config deployment"],
   },
   pro: {
@@ -65,6 +67,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_gitops: false,
     supports_sso: false,
     stateful_operations: true,
+    supports_direct_enrollment: false,
     features: ["3 policies", "7-day history", "Version history, diff, and rollback"],
   },
   starter: {
@@ -85,6 +88,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_gitops: false,
     supports_sso: false,
     stateful_operations: false,
+    supports_direct_enrollment: true,
     features: ["1,000 collectors", "1 policy", "Shared team inventory"],
   },
   growth: {
@@ -105,6 +109,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_gitops: true,
     supports_sso: false,
     stateful_operations: true,
+    supports_direct_enrollment: true,
     features: [
       "10 policies",
       "30-day history",
@@ -132,6 +137,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_gitops: true,
     supports_sso: true,
     stateful_operations: true,
+    supports_direct_enrollment: true,
     features: [
       "Custom managed config and repo limits",
       "SSO / SAML / OIDC",

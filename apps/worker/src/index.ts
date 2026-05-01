@@ -458,7 +458,7 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   }
 
   // Try hot path: signed assignment claim
-  if (!token.startsWith("fp_enroll_")) {
+  if (!token.startsWith("fp_enroll_") && !token.startsWith("fp_pending_")) {
     try {
       const claim = await verifyClaim(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
       // Route to DO based on claim
@@ -490,6 +490,11 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     }
   }
 
+  // Pending path: fp_pending_ token — route to tenant:__pending__ DO
+  if (token.startsWith("fp_pending_")) {
+    return handlePendingTokenRequest(request, env, token, cleanHeaders);
+  }
+
   // Cold path: enrollment token — verify signature, then check the persisted
   // row for revoked_at. The signature alone is not enough: a token revoked
   // through DELETE /api/v1/configurations/:id/enrollment-tokens/:tokenId
@@ -505,7 +510,16 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     return Response.json({ error: msg }, { status: 401 });
   }
 
-  // Step 2: Infrastructure operations — D1/stub failures → 500
+  // Step 2: Check plan supports_direct_enrollment — hobby/pro must use pending flow
+  const tenantPlan = await resolveTenantPlan(env, claim.tenant_id);
+  if (tenantPlan === "hobby" || tenantPlan === "pro") {
+    return Response.json(
+      { error: "This plan does not support direct enrollment. Use a pending enrollment token." },
+      { status: 403 },
+    );
+  }
+
+  // Step 3: Infrastructure operations — D1/stub failures → 500
   try {
     const tokenHash = await hashEnrollmentToken(token);
     const tokenRow = await env.FP_DB.prepare(
@@ -568,4 +582,125 @@ async function resolveTenantAgentLimit(env: Env, tenantId: string): Promise<numb
     return null;
   }
   return Math.floor(value);
+}
+
+async function resolveTenantPlan(env: Env, tenantId: string): Promise<string | null> {
+  const row = await env.FP_DB.prepare(`SELECT plan FROM tenants WHERE id = ? LIMIT 1`)
+    .bind(tenantId)
+    .first<{ plan: string | null }>();
+  return row?.plan ?? null;
+}
+
+async function handlePendingTokenRequest(
+  request: Request,
+  env: Env,
+  token: string,
+  cleanHeaders: Headers,
+): Promise<Response> {
+  const PENDING_DO_CONFIG_ID = "__pending__";
+
+  const body = token.slice("fp_pending_".length);
+  const dotIdx = body.indexOf(".");
+  if (dotIdx === -1) {
+    return Response.json({ error: "Invalid pending token format" }, { status: 401 });
+  }
+
+  const payload = body.slice(0, dotIdx);
+  const signature = body.slice(dotIdx + 1);
+
+  try {
+    const key = await crypto.subtle.importKey(
+      "raw",
+      new TextEncoder().encode(env.O11YFLEET_CLAIM_HMAC_SECRET),
+      { name: "HMAC", hash: "SHA-256" },
+      false,
+      ["verify"],
+    );
+    const sigBytes = Uint8Array.from(atob(signature.replace(/-/g, "+").replace(/_/g, "/")), (c) =>
+      c.charCodeAt(0),
+    );
+    const valid = await crypto.subtle.verify(
+      "HMAC",
+      key,
+      sigBytes,
+      new TextEncoder().encode(payload),
+    );
+    if (!valid) {
+      return Response.json({ error: "Invalid pending token signature" }, { status: 401 });
+    }
+  } catch {
+    return Response.json({ error: "Invalid pending token" }, { status: 401 });
+  }
+
+  let claim: { tenant_id: string; jti: string; exp: number };
+  try {
+    claim = JSON.parse(atob(payload.replace(/-/g, "+").replace(/_/g, "/"))) as {
+      tenant_id: string;
+      jti: string;
+      exp: number;
+    };
+  } catch {
+    return Response.json({ error: "Malformed pending token payload" }, { status: 401 });
+  }
+
+  if (claim.exp > 0 && claim.exp < Date.now() / 1000) {
+    return Response.json({ error: "Pending token expired" }, { status: 401 });
+  }
+
+  try {
+    const tokenHash = await hashEnrollmentToken(token);
+    const tokenRow = await env.FP_DB.prepare(
+      `SELECT revoked_at FROM pending_tokens WHERE token_hash = ? LIMIT 1`,
+    )
+      .bind(tokenHash)
+      .first<{ revoked_at: string | null }>();
+    if (!tokenRow) {
+      return Response.json({ error: "Pending token not found" }, { status: 401 });
+    }
+    if (tokenRow.revoked_at) {
+      return Response.json({ error: "Pending token revoked" }, { status: 401 });
+    }
+
+    // Check geo_enabled for this tenant
+    const tenantRow = await env.FP_DB.prepare(
+      `SELECT geo_enabled FROM tenants WHERE id = ? LIMIT 1`,
+    )
+      .bind(claim.tenant_id)
+      .first<{ geo_enabled: number | null }>();
+    const geoEnabled = tenantRow?.geo_enabled === 1;
+
+    const doName = `${claim.tenant_id}:${PENDING_DO_CONFIG_ID}`;
+    const doId = env.CONFIG_DO.idFromName(doName);
+    const stub = env.CONFIG_DO.get(doId);
+
+    const instanceUid = crypto.randomUUID().replace(/-/g, "");
+
+    cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
+    cleanHeaders.set("x-fp-config-id", PENDING_DO_CONFIG_ID);
+    cleanHeaders.set("x-fp-instance-uid", instanceUid);
+    cleanHeaders.set("x-fp-enrollment", "true");
+
+    // Pass geo headers to DO only if tenant has geo_enabled
+    if (geoEnabled) {
+      const cfCountry = request.headers.get("cf-ipcountry");
+      const cfCity = request.headers.get("cf-ipcity");
+      const cfLat = request.headers.get("cf-ip-latitude");
+      const cfLon = request.headers.get("cf-ip-longitude");
+      if (cfCountry) cleanHeaders.set("x-fp-geo-country", cfCountry);
+      if (cfCity) cleanHeaders.set("x-fp-geo-city", cfCity);
+      if (cfLat) cleanHeaders.set("x-fp-geo-lat", cfLat);
+      if (cfLon) cleanHeaders.set("x-fp-geo-lon", cfLon);
+    }
+
+    return stub.fetch(
+      new Request(request.url, {
+        method: request.method,
+        headers: cleanHeaders,
+      }),
+    );
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Internal error";
+    console.error("Pending token infrastructure error:", msg);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
 }

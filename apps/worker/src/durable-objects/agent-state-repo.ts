@@ -103,6 +103,41 @@ export function initSchema(sql: SqlStorage): void {
   sql.exec(
     `CREATE INDEX IF NOT EXISTS idx_agents_config_hash ON agents(current_config_hash) WHERE current_config_hash IS NOT NULL`,
   );
+  // Pending devices table — for __pending__ DOs only
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS pending_devices (
+      instance_uid TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      display_name TEXT,
+      source_ip TEXT,
+      geo_country TEXT,
+      geo_city TEXT,
+      geo_lat REAL,
+      geo_lon REAL,
+      agent_description TEXT,
+      connected_at INTEGER NOT NULL DEFAULT 0,
+      last_seen_at INTEGER NOT NULL DEFAULT 0,
+      rate_window_start INTEGER NOT NULL DEFAULT 0,
+      rate_window_count INTEGER NOT NULL DEFAULT 0
+    )
+  `);
+  sql.exec(`CREATE INDEX IF NOT EXISTS idx_pending_devices_tenant ON pending_devices(tenant_id)`);
+  sql.exec(
+    `CREATE INDEX IF NOT EXISTS idx_pending_devices_last_seen ON pending_devices(last_seen_at)`,
+  );
+  // Pending assignments — maps device to target config
+  sql.exec(`
+    CREATE TABLE IF NOT EXISTS pending_assignments (
+      instance_uid TEXT PRIMARY KEY,
+      tenant_id TEXT NOT NULL,
+      target_config_id TEXT NOT NULL,
+      assigned_at INTEGER NOT NULL DEFAULT 0,
+      assigned_by TEXT
+    )
+  `);
+  sql.exec(
+    `CREATE INDEX IF NOT EXISTS idx_pending_assignments_config ON pending_assignments(target_config_id)`,
+  );
   // Migrate existing DO-local schemas forward.
   migrateSchema(sql);
 }
@@ -851,4 +886,197 @@ export function getSweepStats(sql: SqlStorage): SweepStats {
     total_stale_swept: row["total_stale_swept"] as number,
     sweeps_with_stale: row["sweeps_with_stale"] as number,
   };
+}
+
+// ─── Pending Devices (DO-local SQLite for __pending__ DOs) ─────────────
+
+export interface PendingDeviceInfo {
+  instance_uid: string;
+  tenant_id: string;
+  display_name: string | null;
+  source_ip: string | null;
+  geo_country: string | null;
+  geo_city: string | null;
+  geo_lat: number | null;
+  geo_lon: number | null;
+  agent_description: string | null;
+  connected_at: number;
+  last_seen_at: number;
+}
+
+export interface PendingAssignment {
+  instance_uid: string;
+  tenant_id: string;
+  target_config_id: string;
+  assigned_at: number;
+  assigned_by: string | null;
+}
+
+export function upsertPendingDevice(
+  sql: SqlStorage,
+  info: {
+    instance_uid: string;
+    tenant_id: string;
+    display_name?: string | null;
+    source_ip?: string | null;
+    geo_country?: string | null;
+    geo_city?: string | null;
+    geo_lat?: number | null;
+    geo_lon?: number | null;
+    agent_description?: string | null;
+    connected_at?: number;
+  },
+): void {
+  const now = Date.now();
+  sql.exec(
+    `INSERT INTO pending_devices (instance_uid, tenant_id, display_name, source_ip, geo_country, geo_city, geo_lat, geo_lon, agent_description, connected_at, last_seen_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(instance_uid) DO UPDATE SET
+       display_name = COALESCE(excluded.display_name, pending_devices.display_name),
+       source_ip = COALESCE(excluded.source_ip, pending_devices.source_ip),
+       geo_country = COALESCE(excluded.geo_country, pending_devices.geo_country),
+       geo_city = COALESCE(excluded.geo_city, pending_devices.geo_city),
+       geo_lat = COALESCE(excluded.geo_lat, pending_devices.geo_lat),
+       geo_lon = COALESCE(excluded.geo_lon, pending_devices.geo_lon),
+       agent_description = COALESCE(excluded.agent_description, pending_devices.agent_description),
+       connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE pending_devices.connected_at END,
+       last_seen_at = ?
+     WHERE instance_uid = ?`,
+    info.instance_uid,
+    info.tenant_id,
+    info.display_name ?? null,
+    info.source_ip ?? null,
+    info.geo_country ?? null,
+    info.geo_city ?? null,
+    info.geo_lat ?? null,
+    info.geo_lon ?? null,
+    info.agent_description ?? null,
+    info.connected_at ?? 0,
+    now,
+    info.instance_uid,
+  );
+}
+
+export function getPendingDevice(sql: SqlStorage, instanceUid: string): PendingDeviceInfo | null {
+  const row = sql
+    .exec(`SELECT * FROM pending_devices WHERE instance_uid = ?`, instanceUid)
+    .toArray()[0];
+  if (!row) return null;
+  return {
+    instance_uid: row["instance_uid"] as string,
+    tenant_id: row["tenant_id"] as string,
+    display_name: row["display_name"] as string | null,
+    source_ip: row["source_ip"] as string | null,
+    geo_country: row["geo_country"] as string | null,
+    geo_city: row["geo_city"] as string | null,
+    geo_lat: row["geo_lat"] as number | null,
+    geo_lon: row["geo_lon"] as number | null,
+    agent_description: row["agent_description"] as string | null,
+    connected_at: row["connected_at"] as number,
+    last_seen_at: row["last_seen_at"] as number,
+  };
+}
+
+export function listPendingDevices(
+  sql: SqlStorage,
+  tenantId: string,
+  limit = 100,
+): PendingDeviceInfo[] {
+  const rows = sql
+    .exec(
+      `SELECT * FROM pending_devices WHERE tenant_id = ? ORDER BY last_seen_at DESC LIMIT ?`,
+      tenantId,
+      limit,
+    )
+    .toArray();
+  return rows.map((row) => ({
+    instance_uid: row["instance_uid"] as string,
+    tenant_id: row["tenant_id"] as string,
+    display_name: row["display_name"] as string | null,
+    source_ip: row["source_ip"] as string | null,
+    geo_country: row["geo_country"] as string | null,
+    geo_city: row["geo_city"] as string | null,
+    geo_lat: row["geo_lat"] as number | null,
+    geo_lon: row["geo_lon"] as number | null,
+    agent_description: row["agent_description"] as string | null,
+    connected_at: row["connected_at"] as number,
+    last_seen_at: row["last_seen_at"] as number,
+  }));
+}
+
+export function deletePendingDevice(sql: SqlStorage, instanceUid: string): void {
+  sql.exec(`DELETE FROM pending_devices WHERE instance_uid = ?`, instanceUid);
+  sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
+}
+
+export function upsertPendingAssignment(
+  sql: SqlStorage,
+  assignment: {
+    instance_uid: string;
+    tenant_id: string;
+    target_config_id: string;
+    assigned_by?: string | null;
+  },
+): void {
+  const now = Date.now();
+  sql.exec(
+    `INSERT INTO pending_assignments (instance_uid, tenant_id, target_config_id, assigned_at, assigned_by)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(instance_uid) DO UPDATE SET
+       target_config_id = excluded.target_config_id,
+       assigned_at = excluded.assigned_at,
+       assigned_by = COALESCE(excluded.assigned_by, pending_assignments.assigned_by)`,
+    assignment.instance_uid,
+    assignment.tenant_id,
+    assignment.target_config_id,
+    now,
+    assignment.assigned_by ?? null,
+  );
+}
+
+export function getPendingAssignment(
+  sql: SqlStorage,
+  instanceUid: string,
+): PendingAssignment | null {
+  const row = sql
+    .exec(`SELECT * FROM pending_assignments WHERE instance_uid = ?`, instanceUid)
+    .toArray()[0];
+  if (!row) return null;
+  return {
+    instance_uid: row["instance_uid"] as string,
+    tenant_id: row["tenant_id"] as string,
+    target_config_id: row["target_config_id"] as string,
+    assigned_at: row["assigned_at"] as number,
+    assigned_by: row["assigned_by"] as string | null,
+  };
+}
+
+export function deletePendingAssignment(sql: SqlStorage, instanceUid: string): void {
+  sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
+}
+
+export function checkPendingDeviceRateLimit(
+  sql: SqlStorage,
+  uid: string,
+  maxPerMinute: number,
+): boolean {
+  const now = Date.now();
+  const windowStart = now - 60_000;
+
+  const row = sql
+    .exec(
+      `UPDATE pending_devices SET
+       rate_window_start = CASE WHEN rate_window_start < ? THEN ? ELSE rate_window_start END,
+       rate_window_count = CASE WHEN rate_window_start < ? THEN 1 ELSE rate_window_count + 1 END
+     WHERE instance_uid = ?
+     RETURNING rate_window_count`,
+      windowStart,
+      now,
+      windowStart,
+      uid,
+    )
+    .toArray()[0];
+
+  if (!row) return false;
+  return (row["rate_window_count"] as number) > maxPerMinute;
 }

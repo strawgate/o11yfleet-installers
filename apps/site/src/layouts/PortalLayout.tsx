@@ -31,6 +31,9 @@ const ICONS: Record<string, string> = {
   card: '<rect x="2" y="4" width="12" height="9" rx="1.4"/><path d="M2 7h12"/>',
   settings:
     '<circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/>',
+  clock: '<circle cx="8" cy="8" r="6"/><path d="M8 5v3l2 2"/>',
+  hourglass:
+    '<path d="M4 2h8M4 2v3c0 1.5 1.5 3 4 3s4-1.5 4-3V2"/><path d="M4 14h8M4 14v-3c0-1.5 1.5-3 4-3s4 1.5 4 3v3"/><path d="M6 8h4"/>',
 };
 
 /* ------------------------------------------------------------------ */
@@ -59,6 +62,12 @@ const USER_NAV: (NavSection | NavItem)[] = [
     icon: "play",
   },
   { id: "tokens", label: "Enrollment tokens", href: "/portal/tokens", icon: "key" },
+  {
+    id: "pending-devices",
+    label: "Pending collectors",
+    href: "/portal/pending-devices",
+    icon: "hourglass",
+  },
   { sec: "Settings" },
   { id: "team", label: "Team", href: "/portal/team", icon: "users" },
   { id: "billing", label: "Plan & billing", href: "/portal/billing", icon: "card" },

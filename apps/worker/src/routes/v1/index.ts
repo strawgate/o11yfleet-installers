@@ -15,6 +15,7 @@ import {
   type Configuration,
   type ConfigurationWithStats,
   type ConfigStats,
+  createPendingTokenRequestSchema,
 } from "@o11yfleet/core/api";
 import {
   deleteConfigContentIfUnreferenced,
@@ -30,6 +31,7 @@ import {
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
 import { validateJsonBody } from "../../shared/validation.js";
+import { z } from "zod";
 import {
   countConfigsForTenant,
   findOwnedConfig,
@@ -208,6 +210,31 @@ async function routeV1Request(
   const restartMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/restart$/);
   if (restartMatch && method === "POST") {
     return handleRestart(env, tenantId, restartMatch[1]!);
+  }
+
+  // ─── Pending Tokens ───────────────────────────────────────
+
+  if (path === "/api/v1/pending-tokens" && method === "GET") {
+    return handleListPendingTokens(env, tenantId);
+  }
+  if (path === "/api/v1/pending-tokens" && method === "POST") {
+    return handleCreatePendingToken(request, env, tenantId);
+  }
+
+  const pendingTokenDeleteMatch = path.match(/^\/api\/v1\/pending-tokens\/([^/]+)$/);
+  if (pendingTokenDeleteMatch && method === "DELETE") {
+    return handleRevokePendingToken(env, tenantId, pendingTokenDeleteMatch[1]!);
+  }
+
+  // ─── Pending Devices ──────────────────────────────────────
+
+  if (path === "/api/v1/pending-devices" && method === "GET") {
+    return handleListPendingDevices(env, tenantId);
+  }
+
+  const pendingAssignMatch = path.match(/^\/api\/v1\/pending-devices\/([^/]+)\/assign$/);
+  if (pendingAssignMatch && method === "POST") {
+    return handleAssignPendingDevice(request, env, tenantId, pendingAssignMatch[1]!);
   }
 
   return jsonError("Not found", 404);
@@ -962,23 +989,34 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
   const body = await validateJsonBody(request, updateTenantRequestSchema);
-  if (body.name) {
-    // Single round-trip: UPDATE ... RETURNING * combines the existence
-    // check, the mutation, and the post-update read. A missing tenant
-    // returns no rows and we surface 404 from that.
-    const updated = await env.FP_DB.prepare(
-      "UPDATE tenants SET name = ?, updated_at = datetime('now') WHERE id = ? RETURNING *",
-    )
-      .bind(body.name, tenantId)
-      .first();
-    if (!updated) return jsonError("Tenant not found", 404);
-    return Response.json(updated);
+  const updates: string[] = [];
+  const values: unknown[] = [];
+
+  if (body.name !== undefined) {
+    updates.push("name = ?");
+    values.push(body.name);
   }
-  // No-op path: the body had no fields to change. Just return the
-  // current row.
-  const tenant = await findTenantById(env, tenantId);
-  if (!tenant) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, tenant as Tenant);
+  if (body.geo_enabled !== undefined) {
+    updates.push("geo_enabled = ?");
+    values.push(body.geo_enabled ? 1 : 0);
+  }
+
+  if (updates.length === 0) {
+    const tenant = await findTenantById(env, tenantId);
+    if (!tenant) return jsonError("Tenant not found", 404);
+    return typedJsonResponse(tenantSchema, tenant as Tenant);
+  }
+
+  updates.push("updated_at = datetime('now')");
+  values.push(tenantId);
+
+  const updated = await env.FP_DB.prepare(
+    `UPDATE tenants SET ${updates.join(", ")} WHERE id = ? RETURNING *`,
+  )
+    .bind(...values)
+    .first();
+  if (!updated) return jsonError("Tenant not found", 404);
+  return Response.json(updated);
 }
 
 // ─── Agent Detail ───────────────────────────────────────────────────
@@ -999,4 +1037,139 @@ async function handleGetAgent(
   );
   if (agentResp.status === 404) return jsonError("Agent not found", 404);
   return agentResp;
+}
+
+// ─── Pending Token Handlers ────────────────────────────────────────
+
+async function handleListPendingTokens(env: Env, tenantId: string): Promise<Response> {
+  const result = await env.FP_DB.prepare(
+    `SELECT id, tenant_id, label, target_config_id, expires_at, revoked_at, created_at
+     FROM pending_tokens WHERE tenant_id = ? ORDER BY created_at DESC`,
+  )
+    .bind(tenantId)
+    .all();
+  return Response.json({ tokens: result.results });
+}
+
+async function handleCreatePendingToken(
+  request: Request,
+  env: Env,
+  tenantId: string,
+): Promise<Response> {
+  const body = await validateJsonBody(request, createPendingTokenRequestSchema);
+  const label = body.label ?? null;
+  const targetConfigId = body.target_config_id ?? null;
+
+  if (targetConfigId) {
+    const config = await getOwnedConfig(env, tenantId, targetConfigId);
+    if (!config) return jsonError("Target configuration not found", 404);
+  }
+
+  const id = crypto.randomUUID();
+  const jti = id;
+  const now = Math.floor(Date.now() / 1000);
+  const claim = {
+    v: 1,
+    tenant_id: tenantId,
+    jti,
+    iat: now,
+    exp: 0,
+  };
+
+  const payload = btoa(JSON.stringify(claim))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+  const key = await crypto.subtle.importKey(
+    "raw",
+    new TextEncoder().encode(env.O11YFLEET_CLAIM_HMAC_SECRET),
+    { name: "HMAC", hash: "SHA-256" },
+    false,
+    ["sign"],
+  );
+  const sig = await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(payload));
+  const sigB64 = btoa(String.fromCharCode(...new Uint8Array(sig)))
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=/g, "");
+
+  const token = `fp_pending_${payload}.${sigB64}`;
+  const tokenHash = await hashEnrollmentToken(token);
+
+  await env.FP_DB.prepare(
+    `INSERT INTO pending_tokens (id, tenant_id, token_hash, label, target_config_id) VALUES (?, ?, ?, ?, ?)`,
+  )
+    .bind(id, tenantId, tokenHash, label, targetConfigId)
+    .run();
+
+  return Response.json({ id, token, label, target_config_id: targetConfigId }, { status: 201 });
+}
+
+async function handleRevokePendingToken(
+  env: Env,
+  tenantId: string,
+  tokenId: string,
+): Promise<Response> {
+  const token = await env.FP_DB.prepare(
+    `SELECT * FROM pending_tokens WHERE id = ? AND tenant_id = ?`,
+  )
+    .bind(tokenId, tenantId)
+    .first();
+  if (!token) return jsonError("Pending token not found", 404);
+  if (token["revoked_at"]) return jsonError("Token is already revoked", 409);
+
+  await env.FP_DB.prepare(`UPDATE pending_tokens SET revoked_at = datetime('now') WHERE id = ?`)
+    .bind(tokenId)
+    .run();
+
+  return Response.json({ id: tokenId, revoked: true });
+}
+
+// ─── Pending Device Handlers ────────────────────────────────────────
+
+async function handleListPendingDevices(env: Env, tenantId: string): Promise<Response> {
+  const doName = `${tenantId}:__pending__`;
+  const doId = env.CONFIG_DO.idFromName(doName);
+  const stub = env.CONFIG_DO.get(doId);
+  const resp = await stub.fetch(
+    new Request("http://internal/pending-devices", {
+      headers: { "x-fp-tenant-id": tenantId },
+    }),
+  );
+  if (!resp.ok) {
+    return jsonError("Failed to fetch pending devices", 502);
+  }
+  return resp;
+}
+
+async function handleAssignPendingDevice(
+  request: Request,
+  env: Env,
+  tenantId: string,
+  deviceUid: string,
+): Promise<Response> {
+  const body = await validateJsonBody(
+    request,
+    z.object({
+      config_id: z.string().min(1),
+    }),
+  );
+
+  const config = await getOwnedConfig(env, tenantId, body.config_id);
+  if (!config) return jsonError("Configuration not found", 404);
+
+  const doName = `${tenantId}:__pending__`;
+  const doId = env.CONFIG_DO.idFromName(doName);
+  const stub = env.CONFIG_DO.get(doId);
+  const resp = await stub.fetch(
+    new Request(`http://internal/pending-devices/${encodeURIComponent(deviceUid)}/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config_id: body.config_id, assigned_by: "api" }),
+    }),
+  );
+  if (resp.status === 404) return jsonError("Pending device not found", 404);
+  if (!resp.ok) return jsonError("Failed to assign device", 502);
+
+  return resp;
 }
