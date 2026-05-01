@@ -6,4 +6,5 @@ export {
   verifyEnrollmentToken,
 } from "./enrollment.js";
 export { base64urlEncode, base64urlDecode } from "./base64url.js";
+export { timingSafeEqual } from "./timing-safe-compare.js";
 export type { AssignmentClaim } from "./claims.js";

@@ -3,6 +3,7 @@
 // Only SHA-256 hash is stored
 
 import { base64urlEncode } from "./base64url.js";
+import { timingSafeEqual } from "./timing-safe-compare.js";
 
 const encoder = new TextEncoder();
 
@@ -23,12 +24,5 @@ export async function verifyEnrollmentToken(
   storedHash: string,
 ): Promise<boolean> {
   const computedHash = await hashEnrollmentToken(rawToken);
-  if (computedHash.length !== storedHash.length) return false;
-  const a = encoder.encode(computedHash);
-  const b = encoder.encode(storedHash);
-  let result = 0;
-  for (let i = 0; i < a.length; i++) {
-    result |= a[i]! ^ b[i]!;
-  }
-  return result === 0;
+  return timingSafeEqual(computedHash, storedHash);
 }

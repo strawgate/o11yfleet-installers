@@ -15,14 +15,20 @@ export interface AssignmentClaim {
 
 const encoder = new TextEncoder();
 
+const keyPromiseCache = new Map<string, Promise<CryptoKey>>();
+
 async function getSigningKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
+  let promise = keyPromiseCache.get(secret);
+  if (promise) return promise;
+  promise = crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
+  keyPromiseCache.set(secret, promise);
+  return promise;
 }
 
 export async function signClaim(claim: AssignmentClaim, secret: string): Promise<string> {

@@ -110,14 +110,20 @@ function getCookie(request: Request, name: string): string | null {
   return match ? decodeURIComponent(match[1]!) : null;
 }
 
+const hmacKeyPromiseCache = new Map<string, Promise<CryptoKey>>();
+
 async function hmacKey(secret: string): Promise<CryptoKey> {
-  return crypto.subtle.importKey(
+  let promise = hmacKeyPromiseCache.get(secret);
+  if (promise) return promise;
+  promise = crypto.subtle.importKey(
     "raw",
     encoder.encode(secret),
     { name: "HMAC", hash: "SHA-256" },
     false,
     ["sign", "verify"],
   );
+  hmacKeyPromiseCache.set(secret, promise);
+  return promise;
 }
 
 async function signState(state: OAuthState, secret: string): Promise<string> {
@@ -376,7 +382,13 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
       tenant_id: string | null;
     }>();
 
-  if (!user) return jsonError("Invalid email or password", 401);
+  if (!user) {
+    await verifyPassword(
+      password,
+      "pbkdf2:100000:00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000",
+    );
+    return jsonError("Invalid email or password", 401);
+  }
 
   const valid = await verifyPassword(password, user.password_hash);
   if (!valid) return jsonError("Invalid email or password", 401);
@@ -479,7 +491,8 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
   } catch {
     return jsonError("Invalid GitHub login state", 400);
   }
-  if (getCookie(request, OAUTH_STATE_COOKIE) !== state.nonce) {
+  const cookieNonce = getCookie(request, OAUTH_STATE_COOKIE);
+  if (!cookieNonce || !timingSafeEqual(cookieNonce, state.nonce)) {
     return jsonError("Invalid GitHub login cookie", 400);
   }
 
@@ -732,7 +745,8 @@ async function handleGitHubManifestCallback(request: Request, env: Env): Promise
   } catch {
     return jsonError("Invalid GitHub manifest state", 400);
   }
-  if (getCookie(request, OAUTH_STATE_COOKIE) !== state.nonce) {
+  const manifestCookieNonce = getCookie(request, OAUTH_STATE_COOKIE);
+  if (!manifestCookieNonce || !timingSafeEqual(manifestCookieNonce, state.nonce)) {
     return jsonError("Invalid GitHub manifest cookie", 400);
   }
 

@@ -44,11 +44,23 @@ export function detectApiBase(): string {
   const host = window.location.hostname;
   const buildApiUrl = import.meta.env.VITE_O11YFLEET_API_URL?.trim();
 
-  // Allow ?api= override only in local development
-  if (host === "localhost" || host === "127.0.0.1") {
+  if (host === "localhost" || host === "127.0.0.1" || host === "[::1]") {
     const params = new URLSearchParams(window.location.search);
-    const explicit = params.get("api") || localStorage.getItem("fp-api-base");
-    if (explicit) return explicit;
+    const apiParam = params.get("api");
+    if (apiParam) {
+      try {
+        const url = new URL(apiParam, "http://localhost");
+        if (
+          url.hostname === "localhost" ||
+          url.hostname === "127.0.0.1" ||
+          url.hostname === "[::1]"
+        ) {
+          return apiParam;
+        }
+      } catch {
+        // ignore
+      }
+    }
     return buildApiUrl || `http://${host}:8787`;
   }
 
@@ -84,7 +96,6 @@ export function detectApiBase(): string {
 }
 
 export const apiBase: string = detectApiBase();
-if (apiBase) localStorage.setItem("fp-api-base", apiBase);
 
 export function apiUrl(path: string): string {
   return apiBase + path;

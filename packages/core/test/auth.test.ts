@@ -65,6 +65,23 @@ describe("auth/claims", () => {
   it("rejects invalid format", async () => {
     await expect(verifyClaim("not-a-valid-token", secret)).rejects.toThrow("Invalid claim format");
   });
+
+  it("handles many rapid verifications efficiently (cache regression)", async () => {
+    const claim = makeClaim();
+    const token = await signClaim(claim, secret);
+    await Promise.all(Array.from({ length: 50 }, () => verifyClaim(token, secret)));
+  });
+
+  it("concurrent sign + verify with same secret does not race", async () => {
+    const claim = makeClaim();
+    const token = await signClaim(claim, secret);
+    await Promise.all([
+      signClaim(claim, secret),
+      signClaim(claim, secret),
+      verifyClaim(token, secret),
+      verifyClaim(token, secret),
+    ]);
+  });
 });
 
 describe("auth/enrollment", () => {
