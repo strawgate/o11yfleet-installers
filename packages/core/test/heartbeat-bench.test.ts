@@ -73,16 +73,16 @@ function makeAgentState(seq: number): AgentState {
   };
 }
 
-function bench(
+async function bench(
   name: string,
-  fn: () => void,
+  fn: () => unknown,
   iterations = 10_000,
-): { opsPerSec: number; avgNs: number } {
+): Promise<{ opsPerSec: number; avgNs: number }> {
   // Warm up
-  for (let i = 0; i < 100; i++) fn();
+  for (let i = 0; i < 100; i++) await fn();
 
   const start = performance.now();
-  for (let i = 0; i < iterations; i++) fn();
+  for (let i = 0; i < iterations; i++) await fn();
   const elapsed = performance.now() - start;
 
   const avgMs = elapsed / iterations;
@@ -93,54 +93,64 @@ function bench(
 }
 
 describe("Heartbeat hot-path benchmark", () => {
-  it("measures each step of the heartbeat pipeline", () => {
+  it("measures each step of the heartbeat pipeline", async () => {
     const msg = makeHeartbeatMsg(42);
     const state = makeAgentState(41); // seq - 1 so it matches
 
     // Step 1: JSON encode (what FakeOpampAgent does)
     const jsonEncoded = encodeFrame(msg);
-    const r1 = bench("JSON encode (AgentToServer)", () => encodeFrame(msg));
+    const r1 = await bench("JSON encode (AgentToServer)", () => encodeFrame(msg));
 
     // Step 2: Protobuf encode (what real OTel Collectors do)
     // We don't have a direct AgentToServer proto encoder, so test the response encode
     const protoResponse = makeHeartbeatResponse();
     const protoEncoded = encodeServerToAgentProto(protoResponse);
-    const r2encode = bench("Proto encode (ServerToAgent)", () =>
+    const r2encode = await bench("Proto encode (ServerToAgent)", () =>
       encodeServerToAgentProto(protoResponse),
     );
 
     // Step 3: Format detection
-    const r3json = bench("detectCodecFormat (JSON frame)", () => detectCodecFormat(jsonEncoded));
-    const r3proto = bench("detectCodecFormat (Proto frame)", () => isProtobufFrame(protoEncoded));
+    const r3json = await bench("detectCodecFormat (JSON frame)", () =>
+      detectCodecFormat(jsonEncoded),
+    );
+    const r3proto = await bench("isProtobufFrame (Proto frame)", () =>
+      isProtobufFrame(protoEncoded),
+    );
 
     // Step 4: JSON decode
-    const r4 = bench("JSON decode (AgentToServer)", () => decodeFrame<AgentToServer>(jsonEncoded));
+    const r4 = await bench("JSON decode (AgentToServer)", () =>
+      decodeFrame<AgentToServer>(jsonEncoded),
+    );
 
     // Step 5: Full decode with format detection (JSON path)
-    const r5json = bench("decodeAgentToServer (JSON)", () => decodeAgentToServer(jsonEncoded));
+    const r5json = await bench("decodeAgentToServer (JSON)", () =>
+      decodeAgentToServer(jsonEncoded),
+    );
 
     // Step 6: processFrame (pure function — the state machine)
-    const r6 = bench("processFrame (heartbeat)", () => processFrame(state, msg, null));
+    const r6 = await bench("processFrame (heartbeat)", () => processFrame(state, msg, null));
 
     // Step 7: JSON encode response
     const response = makeHeartbeatResponse();
-    const r7json = bench("JSON encode (ServerToAgent)", () => encodeFrame(response));
-    const r7proto = bench("Proto encode (ServerToAgent)", () => encodeServerToAgentProto(response));
+    const r7json = await bench("JSON encode (ServerToAgent)", () => encodeFrame(response));
+    const r7proto = await bench("Proto encode (ServerToAgent)", () =>
+      encodeServerToAgentProto(response),
+    );
 
     // Step 8: Full pipeline (decode + processFrame + encode response) — JSON path
-    const r8json = bench("Full pipeline (JSON)", () => {
+    const r8json = await bench("Full pipeline (JSON)", async () => {
       const decoded = decodeFrame<AgentToServer>(jsonEncoded);
-      const result = processFrame(state, decoded, null);
+      const result = await processFrame(state, decoded, null);
       if (result.response) encodeFrame(result.response);
     });
 
     // Step 9: Full pipeline — Protobuf decode path
     // Create a protobuf-encoded heartbeat using the AgentToServer proto encoder
     // We need to build one manually since we only have the JSON framing encoder for AgentToServer
-    const r9 = bench("encodeServerToAgent (full, proto)", () =>
+    const r9 = await bench("encodeServerToAgent (full, proto)", () =>
       encodeServerToAgent(response, "protobuf"),
     );
-    const r9json_full = bench("encodeServerToAgent (full, json)", () =>
+    const r9json_full = await bench("encodeServerToAgent (full, json)", () =>
       encodeServerToAgent(response, "json"),
     );
 
@@ -207,11 +217,11 @@ describe("Heartbeat hot-path benchmark", () => {
     expect(r1.opsPerSec).toBeGreaterThan(0);
   });
 
-  it("verifies pure heartbeat produces no events and minimal state change", () => {
+  it("verifies pure heartbeat produces no events and minimal state change", async () => {
     const msg = makeHeartbeatMsg(42);
     const state = makeAgentState(41);
 
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
 
     // Should persist (sequence_num + last_seen_at update)
     expect(result.shouldPersist).toBe(true);

@@ -36,8 +36,8 @@ describe("Cost Guardrails", () => {
     agent_description: null,
   };
 
-  it("heartbeat always persists sequence_num + last_seen_at (DO SQLite is ~µs)", () => {
-    const result = processFrame(baseState, {
+  it("heartbeat always persists sequence_num + last_seen_at (DO SQLite is ~µs)", async () => {
+    const result = await processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,
@@ -46,8 +46,8 @@ describe("Cost Guardrails", () => {
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("no-op heartbeat: zero transition events emitted", () => {
-    const result = processFrame(baseState, {
+  it("no-op heartbeat: zero transition events emitted", async () => {
+    const result = await processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,
@@ -56,8 +56,8 @@ describe("Cost Guardrails", () => {
     expect(result.events).toHaveLength(0);
   });
 
-  it("health change: shouldPersist is true", () => {
-    const result = processFrame(baseState, {
+  it("health change: shouldPersist is true", async () => {
+    const result = await processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,
@@ -74,8 +74,8 @@ describe("Cost Guardrails", () => {
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("health change: emits transition event", () => {
-    const result = processFrame(baseState, {
+  it("health change: emits transition event", async () => {
+    const result = await processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,

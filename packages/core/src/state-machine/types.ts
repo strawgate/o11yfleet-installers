@@ -40,14 +40,24 @@ export interface ProcessContext {
   randomUid: () => Uint8Array;
   /** Generate a unique event ID string (replaces crypto.randomUUID). */
   randomId: () => string;
+  /** SHA-256 hash input data, returning lowercase hex. Uses crypto.subtle in production. */
+  sha256: (input: BufferSource | string) => Promise<string>;
 }
 
-/** Default production context using platform crypto. */
+/** Default production context using platform crypto.subtle for hardware-accelerated SHA-256. */
 export function defaultProcessContext(): ProcessContext {
   return {
     now: Date.now(),
     randomUid: () => crypto.getRandomValues(new Uint8Array(16)),
     randomId: () => crypto.randomUUID(),
+    sha256: async (input: BufferSource | string): Promise<string> => {
+      const data = typeof input === "string" ? new TextEncoder().encode(input) : input;
+      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+      const hashArray = new Uint8Array(hashBuffer);
+      return Array.from(hashArray)
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+    },
   };
 }
 

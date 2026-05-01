@@ -6,7 +6,7 @@
 // in DO-local storage (~µs per query), so this is effectively free.
 
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput } from "@o11yfleet/core/metrics";
+import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import type {
   DesiredConfig,
@@ -99,6 +99,9 @@ export function initSchema(sql: SqlStorage): void {
   sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`);
   sql.exec(
     `CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`,
+  );
+  sql.exec(
+    `CREATE INDEX IF NOT EXISTS idx_agents_config_hash ON agents(current_config_hash) WHERE current_config_hash IS NOT NULL`,
   );
   // Migrate existing DO-local schemas forward.
   migrateSchema(sql);
@@ -644,6 +647,72 @@ export function loadAgentsForMetrics(sql: SqlStorage): Map<string, AgentMetricsI
     });
   }
   return result;
+}
+
+/**
+ * Compute fleet metrics via a single SQL aggregate query — O(1) memory.
+ * Replaces the pattern of loadAgentsForMetrics() + computeConfigMetrics()
+ * which materializes all rows into JS memory.
+ */
+export function computeMetricsSql(
+  sql: SqlStorage,
+  desiredConfigHash: string | null,
+  staleThresholdMs: number,
+): ConfigMetrics {
+  const now = Date.now();
+  const staleTimestamp = now - staleThresholdMs;
+
+  const row = sql
+    .exec(
+      `SELECT
+        COUNT(*) AS agent_count,
+        SUM(CASE WHEN status != 'disconnected' AND connected_at > 0 THEN 1 ELSE 0 END) AS connected_count,
+        SUM(CASE WHEN status = 'disconnected' THEN 1 ELSE 0 END) AS disconnected_count,
+        SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END) AS healthy_count,
+        SUM(CASE WHEN healthy = 0 OR healthy IS NULL THEN 1 ELSE 0 END) AS unhealthy_count,
+        SUM(CASE WHEN healthy = 1 AND status != 'disconnected' AND connected_at > 0 THEN 1 ELSE 0 END) AS connected_healthy_count,
+        SUM(CASE WHEN (? IS NULL) OR current_config_hash = ? THEN 1 ELSE 0 END) AS config_up_to_date,
+        SUM(CASE WHEN ? IS NOT NULL AND (current_config_hash IS NULL OR current_config_hash != ?) THEN 1 ELSE 0 END) AS config_pending,
+        SUM(CASE WHEN last_error != '' AND last_error IS NOT NULL THEN 1 ELSE 0 END) AS agents_with_errors,
+        SUM(CASE WHEN status != 'disconnected' AND last_seen_at > 0 AND last_seen_at < ? THEN 1 ELSE 0 END) AS agents_stale
+      FROM agents`,
+      desiredConfigHash,
+      desiredConfigHash,
+      desiredConfigHash,
+      desiredConfigHash,
+      staleTimestamp,
+    )
+    .toArray()[0];
+
+  if (!row) {
+    return {
+      agent_count: 0,
+      connected_count: 0,
+      disconnected_count: 0,
+      healthy_count: 0,
+      unhealthy_count: 0,
+      connected_healthy_count: 0,
+      config_up_to_date: 0,
+      config_pending: 0,
+      agents_with_errors: 0,
+      agents_stale: 0,
+      websocket_count: 0,
+    };
+  }
+
+  return {
+    agent_count: Number(row["agent_count"] ?? 0),
+    connected_count: Number(row["connected_count"] ?? 0),
+    disconnected_count: Number(row["disconnected_count"] ?? 0),
+    healthy_count: Number(row["healthy_count"] ?? 0),
+    unhealthy_count: Number(row["unhealthy_count"] ?? 0),
+    connected_healthy_count: Number(row["connected_healthy_count"] ?? 0),
+    config_up_to_date: Number(row["config_up_to_date"] ?? 0),
+    config_pending: Number(row["config_pending"] ?? 0),
+    agents_with_errors: Number(row["agents_with_errors"] ?? 0),
+    agents_stale: Number(row["agents_stale"] ?? 0),
+    websocket_count: 0, // set by caller
+  };
 }
 
 /**

@@ -8,11 +8,7 @@ import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame, defaultProcessContext } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { signClaim, type AssignmentClaim } from "@o11yfleet/core/auth";
-import {
-  computeConfigMetrics,
-  configMetricsToDoubles,
-  FLEET_CONFIG_SNAPSHOT_INTERVAL,
-} from "@o11yfleet/core/metrics";
+import { configMetricsToDoubles, FLEET_CONFIG_SNAPSHOT_INTERVAL } from "@o11yfleet/core/metrics";
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
@@ -42,6 +38,7 @@ import {
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
   SERVER_CAPABILITIES,
   ASSIGNMENT_CLAIM_TTL_SECONDS,
+  STALE_AGENT_THRESHOLD_MS,
 } from "./constants.js";
 
 export interface ConfigDOEnv {
@@ -348,7 +345,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         ws.serializeAttachment(attachment);
       }
 
-      const result = processFrame(state, agentMsg, configBytes, undefined, defaultProcessContext());
+      const result = await processFrame(
+        state,
+        agentMsg,
+        configBytes,
+        undefined,
+        defaultProcessContext(),
+      );
 
       // Persist agent's advertised capabilities in attachment for command gating.
       if (agentMsg.capabilities && attachment.capabilities !== agentMsg.capabilities) {
@@ -493,9 +496,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const identity = this.repo.loadDoIdentity();
     if (!identity.tenant_id || !identity.config_id) return;
 
-    const agents = this.repo.loadAgentsForMetrics();
     const config = this.getDesiredConfig();
-    const metrics = computeConfigMetrics(agents, config.hash);
+    const metrics = this.repo.computeMetrics(config.hash, STALE_AGENT_THRESHOLD_MS);
     metrics.websocket_count = this.ctx.getWebSockets().length;
 
     this.env.FP_ANALYTICS.writeDataPoint({

@@ -1,4 +1,9 @@
-import { encodeServerToAgent, CommandType, AgentCapabilities } from "@o11yfleet/core/codec";
+import {
+  encodeServerToAgent,
+  prepareBroadcastMessage,
+  CommandType,
+  AgentCapabilities,
+} from "@o11yfleet/core/codec";
 import type { CodecFormat, ServerToAgent } from "@o11yfleet/core/codec";
 import { hexToUint8Array } from "@o11yfleet/core/hex";
 import { setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
@@ -59,28 +64,38 @@ export async function handleSetDesiredConfig(
   // Build config_map with YAML content if available
   const configMap = buildConfigMap(body.config_content ?? null);
 
+  // Pre-build the broadcast template (everything except instance_uid)
+  const broadcastTemplate: Omit<ServerToAgent, "instance_uid"> = {
+    flags: 0,
+    capabilities: SERVER_CAPABILITIES,
+    remote_config: {
+      config: { config_map: configMap },
+      config_hash: desiredHashBytes,
+    },
+  };
+
+  // Pre-encode once per codec format for O(1) per-socket send cost
+  const protoBroadcast = prepareBroadcastMessage(broadcastTemplate, "protobuf");
+  const jsonBroadcast = prepareBroadcastMessage(broadcastTemplate, "json");
+
   for (const ws of sockets) {
     const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) continue;
 
+    // Skip agents that don't accept remote config
+    if (
+      attachment.capabilities !== undefined &&
+      !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
+    ) {
+      continue;
+    }
+
     try {
-      // Skip enrollment sockets that haven't negotiated a codec yet
       const socketCodec = resolveSocketCodec(attachment);
       if (!socketCodec) continue;
-      ws.send(
-        encodeServerToAgent(
-          {
-            instance_uid: hexToUint8Array(attachment.instance_uid),
-            flags: 0,
-            capabilities: SERVER_CAPABILITIES,
-            remote_config: {
-              config: { config_map: configMap },
-              config_hash: desiredHashBytes,
-            },
-          },
-          socketCodec,
-        ),
-      );
+      const uid = hexToUint8Array(attachment.instance_uid);
+      const encoded = socketCodec === "protobuf" ? protoBroadcast(uid) : jsonBroadcast(uid);
+      ws.send(encoded);
       pushed++;
     } catch {
       // Socket may have closed

@@ -32,6 +32,8 @@ export default defineConfig({
           CLOUDFLARE_USAGE_R2_BUCKET_NAME: "",
           GITHUB_APP_CLIENT_ID: "test-github-client-id",
           GITHUB_APP_CLIENT_SECRET: "test-github-client-secret",
+          O11YFLEET_OIDC_ALLOWED_REPOS: "strawgate/o11yfleet-load",
+          O11YFLEET_OIDC_AUDIENCE: "o11yfleet",
         },
       },
     }),

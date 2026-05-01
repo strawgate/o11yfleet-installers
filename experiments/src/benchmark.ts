@@ -31,15 +31,15 @@ function percentile(sorted: number[], p: number): number {
   return sorted[Math.max(0, idx)];
 }
 
-function bench(name: string, iterations: number, fn: () => void): BenchResult {
+async function bench(name: string, iterations: number, fn: () => unknown): Promise<BenchResult> {
   // Warmup
-  for (let i = 0; i < Math.min(100, iterations); i++) fn();
+  for (let i = 0; i < Math.min(100, iterations); i++) await fn();
 
   const latencies: number[] = [];
   const start = performance.now();
   for (let i = 0; i < iterations; i++) {
     const t0 = performance.now();
-    fn();
+    await fn();
     latencies.push((performance.now() - t0) * 1000); // microseconds
   }
   const totalMs = performance.now() - start;
@@ -98,14 +98,14 @@ const results: BenchResult[] = [];
 
 // Benchmark 1: Encode
 results.push(
-  bench("encodeFrame", 10_000, () => {
+  await bench("encodeFrame", 10_000, () => {
     encodeFrame(sampleMsg);
   }),
 );
 
 // Benchmark 2: Decode
 results.push(
-  bench("decodeFrame", 10_000, () => {
+  await bench("decodeFrame", 10_000, () => {
     decodeFrame(encoded);
   }),
 );
@@ -113,9 +113,9 @@ results.push(
 // Benchmark 3: State machine transitions
 let seq = 0;
 results.push(
-  bench("processFrame", 10_000, () => {
+  await bench("processFrame", 10_000, () => {
     seq++;
-    processFrame(
+    return processFrame(
       { ...baseState, sequence_num: seq - 1 },
       {
         instance_uid: new Uint8Array(16),
@@ -141,7 +141,7 @@ results.push(
       sequence_num: 0,
     };
     for (let m = 0; m < msgsPerAgent; m++) {
-      const result = processFrame(state, {
+      const result = await processFrame(state, {
         instance_uid: state.instance_uid,
         sequence_num: m + 1,
         capabilities: AgentCapabilities.ReportsStatus,

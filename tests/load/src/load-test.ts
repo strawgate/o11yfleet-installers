@@ -135,15 +135,30 @@ async function apiJson<T>(baseUrl: string, path: string, opts?: RequestInit): Pr
 async function setupTestInfra(baseUrl: string) {
   console.log("📦 Setting up test infrastructure...");
 
-  const tenant = await apiJson<{ id: string }>(baseUrl, "/api/admin/tenants", {
-    method: "POST",
-    body: JSON.stringify({ name: `load-test-${Date.now()}` }),
-  });
-  console.log(`   Tenant: ${tenant.id}`);
+  // Use an existing tenant if FP_TENANT_ID is set (admin routes require browser session auth
+  // on deployed Workers, so we can't create tenants via the API bearer token alone).
+  const existingTenantId = process.env["FP_TENANT_ID"];
+  let tenant: { id: string };
+  if (existingTenantId) {
+    tenant = { id: existingTenantId };
+    console.log(`   Tenant: ${tenant.id} (from FP_TENANT_ID)`);
+  } else {
+    try {
+      tenant = await apiJson<{ id: string }>(baseUrl, "/api/admin/tenants", {
+        method: "POST",
+        body: JSON.stringify({ name: `load-test-${Date.now()}` }),
+      });
+    } catch (e) {
+      throw new Error(
+        `Failed to create tenant. On deployed Workers, set FP_TENANT_ID or use OIDC auth. ${e instanceof Error ? e.message : e}`,
+      );
+    }
+    console.log(`   Tenant: ${tenant.id}`);
+  }
 
   const config = await apiJson<{ id: string }>(baseUrl, "/api/v1/configurations", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenant.id, name: "load-test-config" }),
+    body: JSON.stringify({ name: `load-test-config-${Date.now()}` }),
     headers: { "X-Tenant-Id": tenant.id },
   });
   console.log(`   Config: ${config.id}`);

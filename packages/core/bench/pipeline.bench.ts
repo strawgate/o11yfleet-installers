@@ -56,38 +56,38 @@ function makeState(overrides: Partial<AgentState> = {}): AgentState {
 // instead of the intended scenario.
 
 describe("Full Pipeline: decode → processFrame → encode (JSON→JSON)", () => {
-  bench("heartbeat (hot path)", () => {
+  bench("heartbeat (hot path)", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.heartbeat, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 
-  bench("health report (no components)", () => {
+  bench("health report (no components)", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.healthyReport, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 
-  bench("health report (3 components)", () => {
+  bench("health report (3 components)", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.unhealthyWithComponents, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 
-  bench("effective config (10KB)", () => {
+  bench("effective config (10KB)", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.effectiveConfigLarge, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 
-  bench("agent disconnect", () => {
+  bench("agent disconnect", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.agentDisconnect, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 });
@@ -97,17 +97,17 @@ describe("Full Pipeline: decode → processFrame → encode (protobuf→protobuf
   // We don't have an AgentToServer protobuf ENCODER (only decoder),
   // so we benchmark the decode+process+encode with JSON input but protobuf output.
   // This still exercises the protobuf encoder which is the server's hot path.
-  bench("heartbeat → protobuf response", () => {
+  bench("heartbeat → protobuf response", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.heartbeat, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgentProto(result.response);
   });
 
-  bench("health + components → protobuf response", () => {
+  bench("health + components → protobuf response", async () => {
     const state = makeState();
     const msg = decodeAgentToServer(jsonFrames.unhealthyWithComponents, "json");
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     if (result.response) encodeServerToAgentProto(result.response);
   });
 });
@@ -120,17 +120,17 @@ describe("Full Pipeline: config push scenario", () => {
       desired_config_hash: new Uint8Array(32).fill(0xbb),
     });
 
-  bench("heartbeat + config push (2KB) → JSON", () => {
+  bench("heartbeat + config push (2KB) → JSON", async () => {
     const state = pushState();
     const msg = decodeAgentToServer(jsonFrames.heartbeat, "json");
-    const result = processFrame(state, msg, configBytes);
+    const result = await processFrame(state, msg, configBytes);
     if (result.response) encodeServerToAgent(result.response, "json");
   });
 
-  bench("heartbeat + config push (2KB) → protobuf", () => {
+  bench("heartbeat + config push (2KB) → protobuf", async () => {
     const state = pushState();
     const msg = decodeAgentToServer(jsonFrames.heartbeat, "json");
-    const result = processFrame(state, msg, configBytes);
+    const result = await processFrame(state, msg, configBytes);
     if (result.response) encodeServerToAgentProto(result.response);
   });
 });
@@ -140,13 +140,13 @@ describe("Throughput: N messages/second estimate", () => {
   const state = makeState();
   let seq = 41;
 
-  bench("100 sequential heartbeats (burst)", () => {
+  bench("100 sequential heartbeats (burst)", async () => {
     for (let i = 0; i < 100; i++) {
       seq++;
       const msg = decodeAgentToServer(jsonFrames.heartbeat, "json");
       // Override sequence_num to avoid gap detection
       msg.sequence_num = seq;
-      const result = processFrame({ ...state, sequence_num: seq - 1 }, msg, null);
+      const result = await processFrame({ ...state, sequence_num: seq - 1 }, msg, null);
       if (result.response) encodeServerToAgent(result.response, "json");
     }
   });

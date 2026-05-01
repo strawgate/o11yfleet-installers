@@ -1,5 +1,5 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput } from "@o11yfleet/core/metrics";
+import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
 
 export interface DesiredConfig {
   hash: string | null;
@@ -95,7 +95,10 @@ export interface AgentStateRepository {
     current_hash_counts: Array<{ value: string; count: number }>;
   };
   listAgentsPage(params: ListAgentsPageParams): AgentPageResult;
+  /** @deprecated Use computeMetrics() for O(1) SQL aggregation instead. */
   loadAgentsForMetrics(): Map<string, AgentMetricsInput>;
+  /** Compute fleet metrics via SQL aggregation — O(1) memory, no JS materialization. */
+  computeMetrics(desiredConfigHash: string | null, staleThresholdMs: number): ConfigMetrics;
 
   // Sweep
   sweepStaleAgents(thresholdMs: number, activeUids: Set<string>): StaleAgent[];

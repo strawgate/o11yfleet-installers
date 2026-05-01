@@ -270,12 +270,12 @@ describe("E2E Scenario #4: Sequence gap detection", () => {
       connected_at: Date.now(),
     };
 
-    const r1 = processFrame(
+    const r1 = await processFrame(
       state,
       buildHeartbeat({ sequenceNum: 0, capabilities: AgentCapabilities.ReportsStatus }),
     );
 
-    const r2 = processFrame(
+    const r2 = await processFrame(
       r1.newState,
       buildHeartbeat({ sequenceNum: 5, capabilities: AgentCapabilities.ReportsStatus }),
     );

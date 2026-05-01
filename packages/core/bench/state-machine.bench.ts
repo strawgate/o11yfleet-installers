@@ -188,57 +188,57 @@ const configBytes = new Uint8Array(2048).fill(0x61);
 // ─── Benchmarks ─────────────────────────────────────────────────────────────
 
 describe("processFrame — steady state (no config push)", () => {
-  bench("heartbeat (minimal)", () => {
-    processFrame(makeState(), heartbeat, null);
+  bench("heartbeat (minimal)", async () => {
+    await processFrame(makeState(), heartbeat, null);
   });
 
-  bench("health report (no components)", () => {
-    processFrame(makeState(), healthReport, null);
+  bench("health report (no components)", async () => {
+    await processFrame(makeState(), healthReport, null);
   });
 
-  bench("health report (3 components)", () => {
-    processFrame(makeState(), healthWithComponents, null);
+  bench("health report (3 components)", async () => {
+    await processFrame(makeState(), healthWithComponents, null);
   });
 
-  bench("effective config (4KB)", () => {
-    processFrame(makeState(), effectiveConfig, null);
+  bench("effective config (4KB)", async () => {
+    await processFrame(makeState(), effectiveConfig, null);
   });
 
-  bench("remote_config_status", () => {
-    processFrame(makeState(), remoteConfigStatus, null);
+  bench("remote_config_status", async () => {
+    await processFrame(makeState(), remoteConfigStatus, null);
   });
 
-  bench("available_components (5 entries)", () => {
-    processFrame(makeState(), availableComponents, null);
+  bench("available_components (5 entries)", async () => {
+    await processFrame(makeState(), availableComponents, null);
   });
 });
 
 describe("processFrame — first connect (triggers config push)", () => {
-  bench("hello → config push (2KB)", () => {
+  bench("hello → config push (2KB)", async () => {
     const freshState = makeState({
       sequence_num: 0,
       current_config_hash: null,
       desired_config_hash: new Uint8Array(32).fill(0xdd),
     });
-    processFrame(freshState, helloFirstConnect, configBytes);
+    await processFrame(freshState, helloFirstConnect, configBytes);
   });
 });
 
 describe("processFrame — sequence gap (ReportFullState)", () => {
   const gapMsg: AgentToServer = { ...heartbeat, sequence_num: 105 };
 
-  bench("sequence gap detection", () => {
-    processFrame(makeState({ sequence_num: 100 }), gapMsg, null);
+  bench("sequence gap detection", async () => {
+    await processFrame(makeState({ sequence_num: 100 }), gapMsg, null);
   });
 });
 
 describe("processFrame — config mismatch (triggers push)", () => {
-  bench("config mismatch → push 2KB", () => {
+  bench("config mismatch → push 2KB", async () => {
     const mismatchState = makeState({
       current_config_hash: new Uint8Array(32).fill(0xaa),
       desired_config_hash: new Uint8Array(32).fill(0xbb),
     });
-    processFrame(mismatchState, heartbeat, configBytes);
+    await processFrame(mismatchState, heartbeat, configBytes);
   });
 });
 
@@ -246,10 +246,10 @@ describe("processFrame — throughput simulation", () => {
   // Simulates rapid heartbeats from same agent (hot path)
   const state = makeState();
 
-  bench("sequential heartbeats (hot path)", () => {
+  bench("sequential heartbeats (hot path)", async () => {
     const seq = 101; // fresh each iteration
     const msg: AgentToServer = { ...heartbeat, sequence_num: seq };
-    const result = processFrame({ ...state, sequence_num: seq - 1 }, msg, null);
+    const result = await processFrame({ ...state, sequence_num: seq - 1 }, msg, null);
     // Consume result to prevent dead-code elimination
     if (!result.response) throw new Error("unreachable");
   });

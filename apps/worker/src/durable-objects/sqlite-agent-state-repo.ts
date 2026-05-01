@@ -1,5 +1,5 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput } from "@o11yfleet/core/metrics";
+import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
 import type {
   AgentStateRepository,
   DesiredConfig,
@@ -28,6 +28,7 @@ import {
   getCohortBreakdown,
   listAgentsPage,
   loadAgentsForMetrics,
+  computeMetricsSql,
   sweepStaleAgents,
   recordSweep,
   getSweepStats,
@@ -111,6 +112,10 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   loadAgentsForMetrics(): Map<string, AgentMetricsInput> {
     return loadAgentsForMetrics(this.sql);
+  }
+
+  computeMetrics(desiredConfigHash: string | null, staleThresholdMs: number): ConfigMetrics {
+    return computeMetricsSql(this.sql, desiredConfigHash, staleThresholdMs);
   }
 
   sweepStaleAgents(thresholdMs: number, activeUids: Set<string>): StaleAgent[] {

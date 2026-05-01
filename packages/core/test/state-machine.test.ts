@@ -49,10 +49,10 @@ function makeHelloMsg(uid?: Uint8Array): AgentToServer {
 }
 
 describe("state-machine/processFrame", () => {
-  it("handles hello message — emits connected event", () => {
+  it("handles hello message — emits connected event", async () => {
     const state = makeDefaultState();
     const msg = makeHelloMsg();
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
 
     expect(result.shouldPersist).toBe(true);
     expect(result.events).toHaveLength(1); // connected
@@ -60,7 +60,7 @@ describe("state-machine/processFrame", () => {
     expect(result.newState.connected_at).toBeGreaterThan(0);
   });
 
-  it("handles heartbeat with no changes — always persists (seq + last_seen_at)", () => {
+  it("handles heartbeat with no changes — always persists (seq + last_seen_at)", async () => {
     const state = makeDefaultState({
       sequence_num: 5,
       connected_at: Date.now() - 10000,
@@ -75,7 +75,7 @@ describe("state-machine/processFrame", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     // Always persists: sequence_num + last_seen_at must be saved to prevent
     // false sequence gaps on the next heartbeat.
     expect(result.shouldPersist).toBe(true);
@@ -83,7 +83,7 @@ describe("state-machine/processFrame", () => {
     expect(result.response).not.toBeNull();
   });
 
-  it("detects sequence gap — requests full state", () => {
+  it("detects sequence gap — requests full state", async () => {
     const state = makeDefaultState({ sequence_num: 5, connected_at: Date.now() });
     const msg: AgentToServer = {
       instance_uid: new Uint8Array(16),
@@ -92,12 +92,12 @@ describe("state-machine/processFrame", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response!.flags & ServerToAgentFlags.ReportFullState).toBeTruthy();
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("handles health change — emits event and persists", () => {
+  it("handles health change — emits event and persists", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -119,7 +119,7 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     expect(result.newState.healthy).toBe(false);
     expect(result.newState.status).toBe("degraded");
@@ -127,7 +127,7 @@ describe("state-machine/processFrame", () => {
     expect(healthEvent).toBeDefined();
   });
 
-  it("offers remote config when desired != current", () => {
+  it("offers remote config when desired != current", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -141,12 +141,12 @@ describe("state-machine/processFrame", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response!.remote_config).toBeDefined();
     expect(result.response!.remote_config!.config_hash).toEqual(new Uint8Array([0xaa, 0xbb]));
   });
 
-  it("does NOT offer config when current matches desired", () => {
+  it("does NOT offer config when current matches desired", async () => {
     const hash = new Uint8Array([0xaa, 0xbb]);
     const state = makeDefaultState({
       sequence_num: 1,
@@ -161,11 +161,11 @@ describe("state-machine/processFrame", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response!.remote_config).toBeUndefined();
   });
 
-  it("handles config applied — emits event", () => {
+  it("handles config applied — emits event", async () => {
     const hash = new Uint8Array([0xaa, 0xbb]);
     const state = makeDefaultState({
       sequence_num: 2,
@@ -184,14 +184,14 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     expect(result.newState.current_config_hash).toEqual(hash);
     const configEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED);
     expect(configEvent).toBeDefined();
   });
 
-  it("handles disconnect — emits event, no response", () => {
+  it("handles disconnect — emits event, no response", async () => {
     const state = makeDefaultState({
       sequence_num: 5,
       connected_at: Date.now(),
@@ -204,7 +204,7 @@ describe("state-machine/processFrame", () => {
       agent_disconnect: {},
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response).toBeNull();
     expect(result.shouldPersist).toBe(true);
     expect(result.events[0].type).toBe(FleetEventType.AGENT_DISCONNECTED);
@@ -212,7 +212,7 @@ describe("state-machine/processFrame", () => {
     expect(result.newState.connected_at).toBe(0);
   });
 
-  it("handles config rejected — emits event", () => {
+  it("handles config rejected — emits event", async () => {
     const hash = new Uint8Array([0xcc, 0xdd]);
     const state = makeDefaultState({
       sequence_num: 3,
@@ -230,13 +230,13 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     const rejectEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED);
     expect(rejectEvent).toBeDefined();
   });
 
-  it("handles config rejected without hash — does not throw", () => {
+  it("handles config rejected without hash — does not throw", async () => {
     const state = makeDefaultState({
       sequence_num: 3,
       connected_at: Date.now(),
@@ -253,13 +253,13 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    expect(() => processFrame(state, msg)).not.toThrow();
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
+    expect(result).toBeDefined();
     const rejectEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED);
     expect(rejectEvent).toBeDefined();
   });
 
-  it("does not emit config applied when applied hash is unchanged", () => {
+  it("does not emit config applied when applied hash is unchanged", async () => {
     const hash = new Uint8Array([0xaa, 0xbb]);
     const state = makeDefaultState({
       sequence_num: 2,
@@ -280,12 +280,12 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED)).toBeUndefined();
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("updates agent description — persists", () => {
+  it("updates agent description — persists", async () => {
     const state = makeDefaultState({ sequence_num: 1, connected_at: Date.now() });
     const msg: AgentToServer = {
       instance_uid: new Uint8Array(16),
@@ -300,7 +300,7 @@ describe("state-machine/processFrame", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     expect(result.newState.agent_description).toContain("otel-collector");
   });
@@ -310,7 +310,7 @@ describe("state-machine/processFrame", () => {
 // Config Content Delivery (C4 fix)
 // ========================
 describe("Config Content Delivery", () => {
-  it("includes config content in response when configContent is provided", () => {
+  it("includes config content in response when configContent is provided", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -325,7 +325,7 @@ describe("Config Content Delivery", () => {
     };
 
     const yamlContent = "receivers:\n  otlp:\n    protocols:\n      grpc:";
-    const result = processFrame(state, msg, new TextEncoder().encode(yamlContent));
+    const result = await processFrame(state, msg, new TextEncoder().encode(yamlContent));
 
     expect(result.response?.remote_config).toBeDefined();
     expect(result.response!.remote_config!.config.config_map).toBeDefined();
@@ -338,7 +338,7 @@ describe("Config Content Delivery", () => {
     expect(new TextDecoder().decode(configMap[""].body)).toBe(yamlContent);
   });
 
-  it("sends empty config_map when configContent is null", () => {
+  it("sends empty config_map when configContent is null", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -352,13 +352,13 @@ describe("Config Content Delivery", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg, null);
+    const result = await processFrame(state, msg, null);
     expect(result.response?.remote_config).toBeDefined();
     const configMap = result.response!.remote_config!.config.config_map as Record<string, unknown>;
     expect(Object.keys(configMap)).toHaveLength(0);
   });
 
-  it("does not offer config when current matches desired", () => {
+  it("does not offer config when current matches desired", async () => {
     const hash = new Uint8Array([1, 2, 3]);
     const state = makeDefaultState({
       sequence_num: 1,
@@ -374,11 +374,11 @@ describe("Config Content Delivery", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg, new TextEncoder().encode("should not appear"));
+    const result = await processFrame(state, msg, new TextEncoder().encode("should not appear"));
     expect(result.response?.remote_config).toBeUndefined();
   });
 
-  it("does not offer config when agent lacks AcceptsRemoteConfig capability", () => {
+  it("does not offer config when agent lacks AcceptsRemoteConfig capability", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -392,7 +392,7 @@ describe("Config Content Delivery", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg, new TextEncoder().encode("should not appear"));
+    const result = await processFrame(state, msg, new TextEncoder().encode("should not appear"));
     expect(result.response?.remote_config).toBeUndefined();
   });
 });
@@ -401,7 +401,7 @@ describe("Config Content Delivery", () => {
 // Effective Config Processing
 // ========================
 describe("Effective Config Processing", () => {
-  it("stores effective config when reported", () => {
+  it("stores effective config when reported", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
       connected_at: Date.now(),
@@ -424,7 +424,7 @@ describe("Effective Config Processing", () => {
       },
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     expect(result.newState.effective_config_hash).toBe(
       "a9d8ad161fac5160417a2aec6a96fa89f571ba8de8b5d250c0d72ba30abf6384",
@@ -434,7 +434,7 @@ describe("Effective Config Processing", () => {
     expect(effEvent).toBeDefined();
   });
 
-  it("does not persist when effective config unchanged", () => {
+  it("does not persist when effective config unchanged", async () => {
     const yamlBody = "receivers:\n  otlp:";
     // Pre-compute the hash by running once
     const firstState = makeDefaultState({
@@ -458,7 +458,7 @@ describe("Effective Config Processing", () => {
         },
       },
     };
-    const firstResult = processFrame(firstState, firstMsg);
+    const firstResult = await processFrame(firstState, firstMsg);
     const hash = firstResult.newState.effective_config_hash;
 
     // Second call with same effective config — should not persist
@@ -485,7 +485,7 @@ describe("Effective Config Processing", () => {
         },
       },
     };
-    const secondResult = processFrame(secondState, secondMsg);
+    const secondResult = await processFrame(secondState, secondMsg);
     expect(secondResult.shouldPersist).toBe(true);
     expect(secondResult.events).toHaveLength(0);
   });
@@ -495,7 +495,7 @@ describe("Effective Config Processing", () => {
 // RequestInstanceUid Flag
 // ========================
 describe("RequestInstanceUid", () => {
-  it("assigns new instance UID when RequestInstanceUid flag is set", () => {
+  it("assigns new instance UID when RequestInstanceUid flag is set", async () => {
     const state = makeDefaultState({
       sequence_num: 0,
       connected_at: 0,
@@ -507,7 +507,7 @@ describe("RequestInstanceUid", () => {
       flags: 1, // RequestInstanceUid
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response).toBeDefined();
     expect(result.response!.agent_identification).toBeDefined();
     expect(result.response!.agent_identification!.new_instance_uid).toHaveLength(16);
@@ -516,7 +516,7 @@ describe("RequestInstanceUid", () => {
     expect(allZero).toBe(false);
   });
 
-  it("does not assign UID when flag is not set", () => {
+  it("does not assign UID when flag is not set", async () => {
     const state = makeDefaultState({
       sequence_num: 0,
       connected_at: 0,
@@ -528,7 +528,7 @@ describe("RequestInstanceUid", () => {
       flags: 0,
     };
 
-    const result = processFrame(state, msg);
+    const result = await processFrame(state, msg);
     expect(result.response!.agent_identification).toBeUndefined();
   });
 });

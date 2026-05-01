@@ -5,6 +5,7 @@ import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { timingSafeEqual } from "./utils/crypto.js";
+import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
 import { hashEnrollmentToken, verifyClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
 
 export interface Env {
@@ -33,6 +34,10 @@ export interface Env {
   GITHUB_APP_ID?: string;
   GITHUB_APP_WEBHOOK_SECRET?: string;
   GITHUB_APP_PRIVATE_KEY?: string;
+  /** Comma-separated repos allowed to use OIDC provisioning (e.g. "strawgate/o11yfleet-load"). */
+  O11YFLEET_OIDC_ALLOWED_REPOS?: string;
+  /** OIDC audience claim (defaults to "o11yfleet"). */
+  O11YFLEET_OIDC_AUDIENCE?: string;
 }
 
 // Production CORS origins (always allowed)
@@ -394,11 +399,25 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     // Check Bearer token first (programmatic API access). O11YFLEET_API_BEARER_SECRET is intentionally
     // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
     let hasApiSecretBearer = false;
-    if (env.O11YFLEET_API_BEARER_SECRET) {
-      const auth = request.headers.get("Authorization");
-      const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-      if (token && timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)) {
+    let oidcClaims: GitHubOIDCClaims | null = null;
+
+    const auth = request.headers.get("Authorization");
+    const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
+
+    if (token) {
+      if (
+        env.O11YFLEET_API_BEARER_SECRET &&
+        timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)
+      ) {
         hasApiSecretBearer = true;
+      } else if (looksLikeJWT(token) && env.O11YFLEET_OIDC_ALLOWED_REPOS) {
+        // Attempt GitHub Actions OIDC verification — scoped to "provision" operations only.
+        const allowedRepos = env.O11YFLEET_OIDC_ALLOWED_REPOS.split(",").map((r) => r.trim());
+        const audience = env.O11YFLEET_OIDC_AUDIENCE ?? "o11yfleet";
+        const result = await verifyGitHubOIDC(token, { audience, allowedRepos });
+        if (result.ok) {
+          oidcClaims = result.claims;
+        }
       }
     }
 
@@ -409,21 +428,26 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     // Admin routes — /api/admin/*
     if (url.pathname.startsWith("/api/admin/")) {
-      // Require an authenticated admin browser session. O11YFLEET_API_BEARER_SECRET must not act as
-      // a broad employee/admin credential for human-facing support operations.
-      if (!sessionAuth || sessionAuth.role !== "admin") {
+      // OIDC "provision" scope: only allows POST /api/admin/tenants (tenant creation).
+      // This enables CI workflows to provision test infrastructure without full admin access.
+      if (oidcClaims && request.method === "POST" && url.pathname === "/api/admin/tenants") {
+        resp = await handleAdminRequest(request, env, url);
+      } else if (sessionAuth?.role === "admin") {
+        resp = await handleAdminRequest(request, env, url);
+      } else {
         const body = hasApiSecretBearer
           ? { error: "Admin session required", code: "admin_session_required" }
-          : { error: "Admin access required" };
+          : oidcClaims
+            ? { error: "OIDC scope insufficient", code: "oidc_scope_insufficient" }
+            : { error: "Admin access required" };
         return addSecurityHeaders(
           addCorsHeaders(Response.json(body, { status: 403 }), request, env),
         );
       }
-      resp = await handleAdminRequest(request, env, url);
     }
     // Tenant-scoped routes — /api/v1/*
     else if (url.pathname.startsWith("/api/v1/")) {
-      // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth)
+      // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth only)
       let tenantId: string | null = null;
       if (sessionAuth?.tenantId) {
         tenantId = sessionAuth.tenantId;
