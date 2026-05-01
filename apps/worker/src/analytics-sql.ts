@@ -14,8 +14,8 @@
  * HTTP transport.
  */
 export interface AnalyticsSqlEnv {
-  CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
-  CLOUDFLARE_USAGE_API_TOKEN?: string;
+  CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID?: string;
+  CLOUDFLARE_ANALYTICS_SQL_API_TOKEN?: string;
 }
 
 export interface AnalyticsSqlRow {
@@ -42,14 +42,14 @@ export class AnalyticsSqlError extends Error {
 export class AnalyticsSqlNotConfiguredError extends Error {
   constructor() {
     super(
-      "Analytics Engine SQL API is not configured (set CLOUDFLARE_USAGE_ACCOUNT_ID and CLOUDFLARE_USAGE_API_TOKEN)",
+      "Analytics Engine SQL API is not configured (set CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID and CLOUDFLARE_ANALYTICS_SQL_API_TOKEN)",
     );
     this.name = "AnalyticsSqlNotConfiguredError";
   }
 }
 
 export function isAnalyticsSqlConfigured(env: AnalyticsSqlEnv): boolean {
-  return !!(env.CLOUDFLARE_USAGE_ACCOUNT_ID && env.CLOUDFLARE_USAGE_API_TOKEN);
+  return !!(env.CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID && env.CLOUDFLARE_ANALYTICS_SQL_API_TOKEN);
 }
 
 /**
@@ -64,14 +64,14 @@ export async function runAnalyticsSql<T extends AnalyticsSqlRow = AnalyticsSqlRo
   env: AnalyticsSqlEnv,
   sql: string,
 ): Promise<T[]> {
-  if (!env.CLOUDFLARE_USAGE_ACCOUNT_ID || !env.CLOUDFLARE_USAGE_API_TOKEN) {
+  if (!env.CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID || !env.CLOUDFLARE_ANALYTICS_SQL_API_TOKEN) {
     throw new AnalyticsSqlNotConfiguredError();
   }
-  const url = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_USAGE_ACCOUNT_ID}/analytics_engine/sql`;
+  const url = `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID}/analytics_engine/sql`;
   const response = await fetch(url, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${env.CLOUDFLARE_USAGE_API_TOKEN}`,
+      Authorization: `Bearer ${env.CLOUDFLARE_ANALYTICS_SQL_API_TOKEN}`,
       "Content-Type": "text/plain",
     },
     body: sql,
