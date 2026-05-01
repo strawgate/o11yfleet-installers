@@ -24,9 +24,11 @@ export interface AdminTenant {
   id: string;
   name: string;
   plan?: string;
+  status?: string;
   max_configs?: number;
   max_agents_per_config?: number;
   created_at?: string;
+  approved_at?: string | null;
   config_count?: number;
   agent_count?: number;
   connected_agents?: number;
@@ -114,6 +116,7 @@ export interface AdminTenantsPagination {
 export interface AdminTenantsFilters {
   q: string;
   plan: string;
+  status: string | null;
   sort: string;
 }
 
@@ -121,6 +124,7 @@ export interface AdminTenantsPage {
   tenants: AdminTenant[];
   pagination: AdminTenantsPagination;
   filters: AdminTenantsFilters;
+  status_counts: Record<string, number>;
 }
 
 export interface AdminDoQueryResponse {
@@ -149,6 +153,7 @@ export function useAdminOverview() {
 export function useAdminTenantsPage(params?: {
   q?: string;
   plan?: string;
+  status?: string | null;
   sort?: string;
   page?: number;
   limit?: number;
@@ -156,6 +161,7 @@ export function useAdminTenantsPage(params?: {
   const query = new URLSearchParams();
   if (params?.q) query.set("q", params.q);
   if (params?.plan) query.set("plan", params.plan);
+  if (params?.status) query.set("status", params.status);
   if (params?.sort) query.set("sort", params.sort);
   if (params?.page) query.set("page", String(params.page));
   if (params?.limit) query.set("limit", String(params.limit));
@@ -300,6 +306,43 @@ export function useImpersonateTenant(id: string) {
       const response = await apiPost<{ user: AuthUser }>(`/api/admin/tenants/${id}/impersonate`);
       return { user: normalizeUser(response.user) };
     },
+  });
+}
+
+export function useApproveTenant(id: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { action: "approve" | "reject"; reason?: string }) =>
+      apiPost<{ success: boolean; status: string; tenantId: string }>(
+        `/api/admin/tenants/${id}/approve`,
+        body,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "tenant", id] });
+    },
+  });
+}
+
+export function useBulkApproveTenants() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (body: { tenant_ids: string[] }) =>
+      apiPost<{ approved: string[]; failed: { id: string; error: string }[] }>(
+        "/api/admin/bulk-approve",
+        body,
+      ),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
+    },
+  });
+}
+
+export function useAdminSettings() {
+  return useQuery({
+    queryKey: ["admin", "settings"],
+    queryFn: () => apiGet<{ auto_approve_signups: boolean }>("/api/admin/settings"),
   });
 }
 

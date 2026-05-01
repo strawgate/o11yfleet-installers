@@ -9,6 +9,7 @@ import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
 import { clearSessionCookie, sessionCookie } from "../shared/cookies.js";
 import { validateJsonBody } from "../shared/validation.js";
 import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/origins.js";
+import { isAutoApproveEnabled } from "../shared/email.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -216,7 +217,14 @@ function normalizeSelfServicePlan(rawPlan: string | null): PlanId {
 async function createSessionResponse(
   request: Request,
   env: Env,
-  user: { id: string; email: string; display_name: string; role: string; tenant_id: string | null },
+  user: {
+    id: string;
+    email: string;
+    display_name: string;
+    role: string;
+    tenant_id: string | null;
+    tenant_status?: string;
+  },
   redirectTo?: string,
 ): Promise<Response> {
   const sessionId = generateSessionId();
@@ -248,6 +256,7 @@ async function createSessionResponse(
         displayName: user.display_name,
         role: user.role,
         tenantId: user.tenant_id,
+        tenantStatus: user.tenant_status ?? "pending",
       },
     },
     { headers },
@@ -264,11 +273,14 @@ function githubClientSecret(env: Env): string | null {
 
 // ─── Auth context (used by middleware) ──────────────────────────────
 
+export type TenantApprovalStatus = "pending" | "active" | "suspended";
+
 export interface AuthContext {
   userId: string;
   email: string;
   displayName: string;
   tenantId: string | null;
+  tenantStatus: TenantApprovalStatus;
   role: "member" | "admin";
   isImpersonation: boolean;
 }
@@ -278,8 +290,11 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
   if (!sessionId) return null;
 
   const row = await env.FP_DB.prepare(
-    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role, s.is_impersonation
-     FROM sessions s JOIN users u ON s.user_id = u.id
+    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role, s.is_impersonation,
+            t.status as tenant_status
+     FROM sessions s
+     JOIN users u ON s.user_id = u.id
+     LEFT JOIN tenants t ON t.id = u.tenant_id
      WHERE s.id = ? AND s.expires_at > datetime('now')`,
   )
     .bind(sessionId)
@@ -290,6 +305,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
       tenant_id: string | null;
       role: string;
       is_impersonation: number;
+      tenant_status: string | null;
     }>();
 
   if (!row) return null;
@@ -298,6 +314,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
     email: row.email,
     displayName: row.display_name,
     tenantId: row.tenant_id,
+    tenantStatus: (row.tenant_status as TenantApprovalStatus) ?? "pending",
     role: row.role as "member" | "admin",
     isImpersonation: row.is_impersonation === 1,
   };
@@ -356,7 +373,11 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
   const password = body.password;
 
   const user = await env.FP_DB.prepare(
-    "SELECT id, email, password_hash, display_name, role, tenant_id FROM users WHERE email = ?",
+    `SELECT u.id, u.email, u.password_hash, u.display_name, u.role, u.tenant_id,
+            t.status as tenant_status
+     FROM users u
+     LEFT JOIN tenants t ON t.id = u.tenant_id
+     WHERE u.email = ?`,
   )
     .bind(email)
     .first<{
@@ -366,6 +387,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
       display_name: string;
       role: string;
       tenant_id: string | null;
+      tenant_status: string | null;
     }>();
 
   if (!user) {
@@ -385,6 +407,7 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
     display_name: user.display_name,
     role: user.role,
     tenant_id: user.tenant_id,
+    tenant_status: (user.tenant_status as TenantApprovalStatus) ?? "pending",
   });
 }
 
@@ -492,7 +515,21 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
   const email = await fetchGitHubPrimaryEmail(token);
   const user = await findOrCreateGitHubUser(env, profile, email, state.plan ?? "starter");
 
-  return createSessionResponse(request, env, user, state.returnTo);
+  // Fetch tenant status for the response
+  let tenantStatus = "pending";
+  if (user.tenant_id) {
+    const tenant = await env.FP_DB.prepare("SELECT status FROM tenants WHERE id = ?")
+      .bind(user.tenant_id)
+      .first<{ status: string }>();
+    tenantStatus = tenant?.status ?? "pending";
+  }
+
+  return createSessionResponse(
+    request,
+    env,
+    { ...user, tenant_status: tenantStatus },
+    tenantStatus === "pending" ? undefined : state.returnTo,
+  );
 }
 
 async function exchangeGitHubCode(
@@ -565,12 +602,14 @@ async function findOrCreateGitHubUser(
   display_name: string;
   role: string;
   tenant_id: string | null;
+  tenant_status?: string;
 }> {
   const providerUserId = String(profile.id);
   const identity = await env.FP_DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.role, u.tenant_id
+    `SELECT u.id, u.email, u.display_name, u.role, u.tenant_id, t.status as tenant_status
      FROM auth_identities ai
      JOIN users u ON u.id = ai.user_id
+     LEFT JOIN tenants t ON t.id = u.tenant_id
      WHERE ai.provider = 'github' AND ai.provider_user_id = ?`,
   )
     .bind(providerUserId)
@@ -580,6 +619,7 @@ async function findOrCreateGitHubUser(
       display_name: string;
       role: string;
       tenant_id: string | null;
+      tenant_status: string | null;
     }>();
   if (identity) {
     await env.FP_DB.prepare(
@@ -588,7 +628,10 @@ async function findOrCreateGitHubUser(
     )
       .bind(profile.login, email, providerUserId)
       .run();
-    return identity;
+    return {
+      ...identity,
+      tenant_status: identity.tenant_status ?? undefined,
+    };
   }
 
   let user = await env.FP_DB.prepare(
@@ -612,10 +655,13 @@ async function findOrCreateGitHubUser(
     const userId = crypto.randomUUID();
     const displayName = profile.name?.trim() || profile.login;
     const { max_configs, max_agents_per_config } = getPlanLimits(plan);
+    // Determine initial tenant status based on auto-approval setting
+    const tenantStatus = isAutoApproveEnabled(env) ? "active" : "pending";
+
     await env.FP_DB.batch([
       env.FP_DB.prepare(
-        "INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)",
-      ).bind(tenantId, `${profile.login}'s workspace`, plan, max_configs, max_agents_per_config),
+        "INSERT INTO tenants (id, name, plan, status, max_configs, max_agents_per_config, approved_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
+      ).bind(tenantId, `${profile.login}'s workspace`, plan, tenantStatus, max_configs, max_agents_per_config),
       env.FP_DB.prepare(
         "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, 'member', ?)",
       ).bind(userId, email, `external:github:${providerUserId}`, displayName, tenantId),
@@ -639,7 +685,10 @@ async function findOrCreateGitHubUser(
     .bind(user.id, providerUserId, profile.login, email)
     .run();
 
-  return user;
+  return {
+    ...user,
+    tenant_status: undefined, // Will be determined at login time from tenant record
+  };
 }
 
 async function handleGitHubManifestStart(request: Request, env: Env): Promise<Response> {

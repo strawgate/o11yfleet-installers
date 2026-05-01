@@ -41,6 +41,16 @@ export interface Env {
   O11YFLEET_OIDC_ALLOWED_REPOS?: string;
   /** OIDC audience claim (defaults to "o11yfleet"). */
   O11YFLEET_OIDC_AUDIENCE?: string;
+  /** Enable auto-approval of new tenant signups (for post-soft-launch). Set to "true" to enable. */
+  O11YFLEET_AUTO_APPROVE_SIGNUPS?: string;
+  /** SMTP configuration for sending approval emails. */
+  SMTP_HOST?: string;
+  SMTP_PORT?: string;
+  SMTP_USER?: string;
+  SMTP_PASSWORD?: string;
+  SMTP_FROM?: string;
+  /** Enable email sending. Set to "true" when SMTP is configured. */
+  SMTP_ENABLED?: string;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

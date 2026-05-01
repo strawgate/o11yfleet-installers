@@ -102,11 +102,16 @@ export const authLoginResponseSchema = z
   .strict();
 export type AuthLoginResponse = z.infer<typeof authLoginResponseSchema>;
 
+export const tenantStatusSchema = z.enum(["pending", "active", "suspended"]);
+export type TenantStatus = z.infer<typeof tenantStatusSchema>;
+
 export const tenantSchema = z
   .object({
     id: idSchema,
     name: z.string().min(1),
     plan: planIdSchema.or(z.string()),
+    status: tenantStatusSchema.optional(),
+    approved_at: z.string().nullable().optional(),
     max_configs: z.number().int().min(0).optional(),
     max_agents_per_config: z.number().int().min(0).optional(),
     created_at: z.string().optional(),
@@ -128,9 +133,43 @@ export const adminUpdateTenantRequestSchema = z
     name: shortNameSchema.optional(),
     geo_enabled: z.boolean().optional(),
     plan: adminPlanIdRequestSchema.optional(),
+    status: tenantStatusSchema.optional(),
   })
   .strict();
 export type AdminUpdateTenantRequest = z.output<typeof adminUpdateTenantRequestSchema>;
+
+export const adminApproveTenantRequestSchema = z
+  .object({
+    action: z.enum(["approve", "reject"]),
+    reason: z.string().max(500).optional(),
+  })
+  .strict();
+export type AdminApproveTenantRequest = z.infer<typeof adminApproveTenantRequestSchema>;
+
+export const adminBulkApproveRequestSchema = z
+  .object({
+    tenant_ids: z.array(idSchema).min(1).max(100),
+  })
+  .strict();
+export type AdminBulkApproveRequest = z.infer<typeof adminBulkApproveRequestSchema>;
+
+export const adminBulkApproveResponseSchema = z
+  .object({
+    approved: z.array(z.string()),
+    failed: z.array(z.object({
+      id: z.string(),
+      error: z.string(),
+    })),
+  })
+  .strict();
+export type AdminBulkApproveResponse = z.infer<typeof adminBulkApproveResponseSchema>;
+
+export const adminSettingsSchema = z
+  .object({
+    auto_approve_signups: z.boolean(),
+  })
+  .strict();
+export type AdminSettings = z.infer<typeof adminSettingsSchema>;
 
 const debugSqlParamSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const debugReadSqlSchema = z

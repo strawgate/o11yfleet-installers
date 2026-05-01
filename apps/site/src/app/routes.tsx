@@ -77,6 +77,10 @@ const PendingDevicesPage = lazyPage(
 const TeamPage = lazyPage(() => import("@/pages/portal/TeamPage"), "Team");
 const BillingPage = lazyPage(() => import("@/pages/portal/BillingPage"), "Billing");
 const SettingsPage = lazyPage(() => import("@/pages/portal/SettingsPage"), "Settings");
+const PendingApprovalPage = lazyPage(
+  () => import("@/pages/portal/PendingApprovalPage"),
+  "Pending Approval",
+);
 
 const AdminLayout = lazy(() => import("@/layouts/AdminLayout"));
 const AdminOverviewPage = lazyPage(() => import("@/pages/admin/OverviewPage"), "Admin Overview");
@@ -136,6 +140,7 @@ export function AppRoutes() {
           <Route path="onboarding" element={<OnboardingPage />} />
           <Route path="tokens" element={<TokensPage />} />
           <Route path="pending-devices" element={<PendingDevicesPage />} />
+          <Route path="pending-approval" element={<PendingApprovalPage />} />
           <Route path="team" element={<TeamPage />} />
           <Route path="billing" element={<BillingPage />} />
           <Route path="settings" element={<SettingsPage />} />

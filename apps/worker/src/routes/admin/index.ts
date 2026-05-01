@@ -6,6 +6,8 @@ import {
   adminCreateTenantRequestSchema,
   adminDoQueryRequestSchema,
   adminUpdateTenantRequestSchema,
+  adminApproveTenantRequestSchema,
+  adminBulkApproveRequestSchema,
 } from "@o11yfleet/core/api";
 import {
   AiApiError,
@@ -26,6 +28,7 @@ import { sessionCookie } from "../../shared/cookies.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
 import { currentFleetSummary, currentFleetSummaryByTenant } from "@o11yfleet/core/metrics";
+import { sendTenantApprovalEmail, isAutoApproveEnabled } from "../../shared/email.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
@@ -105,6 +108,27 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
     return handleImpersonateTenant(request, env, tenantImpersonateMatch[1]!);
   }
 
+  // POST /api/admin/tenants/:id/approve — approve or reject a tenant
+  const tenantApproveMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/approve$/);
+  if (tenantApproveMatch && method === "POST") {
+    return handleApproveTenant(request, env, tenantApproveMatch[1]!);
+  }
+
+  // POST /api/admin/bulk-approve — bulk approve pending tenants
+  if (path === "/api/admin/bulk-approve" && method === "POST") {
+    return handleBulkApproveTenants(request, env);
+  }
+
+  // GET /api/admin/settings — get admin settings
+  if (path === "/api/admin/settings" && method === "GET") {
+    return handleGetSettings(env);
+  }
+
+  // PUT /api/admin/settings — update admin settings (e.g., auto-approve)
+  if (path === "/api/admin/settings" && method === "PUT") {
+    return handleUpdateSettings(request, env);
+  }
+
   const configDOTablesMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/tables$/);
   if (configDOTablesMatch && method === "GET") {
     return handleDoTables(env, configDOTablesMatch[1]!);
@@ -181,6 +205,10 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   const q = qRaw.slice(0, 200);
   const requestedPlan = url.searchParams.get("plan");
   const plan = requestedPlan ? (normalizePlan(requestedPlan) ?? "all") : "all";
+  const requestedStatus = url.searchParams.get("status");
+  const status = ["pending", "active", "suspended"].includes(requestedStatus ?? "")
+    ? requestedStatus
+    : null;
   const sort = normalizeTenantSort(url.searchParams.get("sort"));
   const limit = boundedPositiveInt(url.searchParams.get("limit"), 100, 500);
   const page = boundedPositiveInt(url.searchParams.get("page"), 1, 10_000);
@@ -204,6 +232,10 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   if (plan !== "all") {
     whereClauses.push("t.plan = ?");
     whereParams.push(plan);
+  }
+  if (status) {
+    whereClauses.push("t.status = ?");
+    whereParams.push(status);
   }
   const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
 
@@ -234,10 +266,22 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
     };
   });
   const total = totalRow?.count ?? 0;
+
+  // Get counts by status for filter badges
+  const statusCounts = await env.FP_DB.prepare(
+    "SELECT status, COUNT(*) as count FROM tenants GROUP BY status",
+  ).all<{ status: string; count: number }>();
+
+  const statusCountsMap: Record<string, number> = {};
+  for (const row of statusCounts.results) {
+    statusCountsMap[row.status] = row.count;
+  }
+
   return Response.json({
     tenants,
     pagination: { page, limit, total, has_more: offset + result.results.length < total },
-    filters: { q, plan, sort },
+    filters: { q, plan, status, sort },
+    status_counts: statusCountsMap,
     metrics_source: tenantMetrics.available ? "analytics_engine" : "unavailable",
     metrics_error: tenantMetrics.error,
   });
@@ -276,6 +320,20 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
   if (body.geo_enabled !== undefined) {
     updates.push("geo_enabled = ?");
     values.push(body.geo_enabled ? 1 : 0);
+  }
+  if (body.status) {
+    if (!["pending", "active", "suspended"].includes(body.status)) {
+      return jsonError("Invalid status. Must be one of: pending, active, suspended", 400);
+    }
+    updates.push("status = ?");
+    values.push(body.status);
+    // If approving (setting to active), set approved_at
+    if (body.status === "active") {
+      updates.push("approved_at = datetime('now')");
+      const adminId = request.headers.get("X-Admin-Id") ?? "system";
+      updates.push("approved_by = ?");
+      values.push(adminId);
+    }
   }
 
   if (updates.length === 0) {
@@ -869,5 +927,163 @@ async function handleImpersonateTenant(
       },
     },
     { headers: { "Set-Cookie": sessionCookie(sessionId, maxAge, env, request) } },
+  );
+}
+
+// ─── Tenant Approval ────────────────────────────────────────────────
+
+interface TenantWithUser {
+  id: string;
+  name: string;
+  email: string;
+  tenant_status: string | null;
+}
+
+async function getTenantWithPrimaryUser(env: Env, tenantId: string): Promise<TenantWithUser | null> {
+  const tenant = await env.FP_DB.prepare(
+    `SELECT t.id, t.name, u.email
+     FROM tenants t
+     LEFT JOIN users u ON u.tenant_id = t.id
+     WHERE t.id = ?
+     LIMIT 1`,
+  )
+    .bind(tenantId)
+    .first<{ id: string; name: string; email: string }>();
+
+  if (!tenant) return null;
+
+  const status = await env.FP_DB.prepare("SELECT status FROM tenants WHERE id = ?")
+    .bind(tenantId)
+    .first<{ status: string }>();
+
+  return {
+    id: tenant.id,
+    name: tenant.name,
+    email: tenant.email ?? "",
+    tenant_status: status?.status ?? null,
+  };
+}
+
+async function handleApproveTenant(
+  request: Request,
+  env: Env,
+  tenantId: string,
+): Promise<Response> {
+  const body = await validateJsonBody(request, adminApproveTenantRequestSchema);
+
+  const tenant = await findTenantById(env, tenantId);
+  if (!tenant) return jsonError("Tenant not found", 404);
+
+  const adminId = request.headers.get("X-Admin-Id") ?? "system";
+
+  if (body.action === "approve") {
+    await env.FP_DB.prepare(
+      `UPDATE tenants
+       SET status = 'active', approved_at = datetime('now'), approved_by = ?
+       WHERE id = ?`,
+    )
+      .bind(adminId, tenantId)
+      .run();
+
+    // Send approval email
+    const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
+    if (tenantWithUser?.email) {
+      await sendTenantApprovalEmail(env, {
+        tenantName: tenantWithUser.name,
+        tenantEmail: tenantWithUser.email,
+        action: "approved",
+      });
+    }
+
+    return Response.json({ success: true, status: "active", tenantId });
+  } else if (body.action === "reject") {
+    // Mark as suspended (or you could delete the tenant)
+    await env.FP_DB.prepare(
+      `UPDATE tenants SET status = 'suspended' WHERE id = ?`,
+    )
+      .bind(tenantId)
+      .run();
+
+    // Send rejection email
+    const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
+    if (tenantWithUser?.email) {
+      await sendTenantApprovalEmail(env, {
+        tenantName: tenantWithUser.name,
+        tenantEmail: tenantWithUser.email,
+        action: "rejected",
+        reason: body.reason,
+      });
+    }
+
+    return Response.json({ success: true, status: "suspended", tenantId });
+  }
+
+  return jsonError("Invalid action", 400);
+}
+
+async function handleBulkApproveTenants(request: Request, env: Env): Promise<Response> {
+  const body = await validateJsonBody(request, adminBulkApproveRequestSchema);
+  const adminId = request.headers.get("X-Admin-Id") ?? "system";
+
+  const approved: string[] = [];
+  const failed: { id: string; error: string }[] = [];
+
+  for (const tenantId of body.tenant_ids) {
+    try {
+      const tenant = await findTenantById(env, tenantId);
+      if (!tenant) {
+        failed.push({ id: tenantId, error: "Tenant not found" });
+        continue;
+      }
+
+      const tenantStatus = (tenant as Record<string, unknown>)["status"] as string | undefined;
+      if (tenantStatus !== "pending") {
+        failed.push({ id: tenantId, error: `Tenant is ${tenantStatus ?? "unknown"}, not pending` });
+        continue;
+      }
+
+      await env.FP_DB.prepare(
+        `UPDATE tenants
+         SET status = 'active', approved_at = datetime('now'), approved_by = ?
+         WHERE id = ? AND status = 'pending'`,
+      )
+        .bind(adminId, tenantId)
+        .run();
+
+      // Send approval email
+      const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
+      if (tenantWithUser?.email) {
+        await sendTenantApprovalEmail(env, {
+          tenantName: tenantWithUser.name,
+          tenantEmail: tenantWithUser.email,
+          action: "approved",
+        });
+      }
+
+      approved.push(tenantId);
+    } catch (err) {
+      const error = err instanceof Error ? err.message : String(err);
+      failed.push({ id: tenantId, error });
+    }
+  }
+
+  return Response.json({ approved, failed });
+}
+
+// ─── Admin Settings ─────────────────────────────────────────────────
+
+async function handleGetSettings(env: Env): Promise<Response> {
+  return Response.json({
+    auto_approve_signups: isAutoApproveEnabled(env),
+  });
+}
+
+async function handleUpdateSettings(_request: Request, _env: Env): Promise<Response> {
+  // Note: Settings are controlled via environment variables in production
+  // This endpoint is primarily for reading current state
+  // In a full implementation, you might persist settings to D1 or KV
+  return jsonError(
+    "Settings must be updated via environment variables (O11YFLEET_AUTO_APPROVE_SIGNUPS)",
+    400,
   );
 }
