@@ -361,7 +361,7 @@ export default function BuilderPage() {
                 {yamlPreview ? <CopyButton value={yamlPreview} label="copy YAML" /> : null}
               </div>
             </div>
-            {yamlPreviewError ? (
+            {yamlPreviewError !== null ? (
               <div className="banner warn mt-4">
                 <div>
                   <div className="b-title">YAML preview unavailable</div>
@@ -383,7 +383,18 @@ export default function BuilderPage() {
         </p>
 
         <div className="pipe-issues mt-4">
-          {validation.errors.length === 0 && validation.warnings.length === 0 ? (
+          {yamlPreviewError !== null ? (
+            <div className="banner err mt-2">
+              <div>
+                <div className="b-title">YAML preview unavailable</div>
+                <div className="b-body">{yamlPreviewError}</div>
+              </div>
+            </div>
+          ) : null}
+
+          {yamlPreviewError === null &&
+          validation.errors.length === 0 &&
+          validation.warnings.length === 0 ? (
             <div className="banner ok">
               <div>
                 <div className="b-title">No graph issues detected</div>

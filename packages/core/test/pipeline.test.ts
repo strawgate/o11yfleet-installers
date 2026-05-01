@@ -246,6 +246,30 @@ describe("pipeline model", () => {
     expect(yaml).toContain("service:\n  pipelines: {}");
   });
 
+  it("throws when a component has conflicting dotted and nested config keys", () => {
+    const graphWithConflict: PipelineGraph = {
+      id: "conflict",
+      label: "Conflict",
+      components: [
+        {
+          id: "exporter/otlp",
+          name: "otlp",
+          role: "exporter",
+          type: "otlp",
+          signals: ["logs", "metrics", "traces"],
+          config: {
+            // Conflicting pair: tls: {...} and tls.insecure: false
+            tls: { insecure: true },
+            "tls.insecure": false,
+          },
+        },
+      ],
+      wires: [],
+    };
+
+    expect(() => renderCollectorYaml(graphWithConflict)).toThrow(/tls/);
+  });
+
   it("imports basic collector YAML into a complete graph", () => {
     const yaml = readFileSync(new URL("../../../configs/basic-otlp.yaml", import.meta.url), "utf8");
 

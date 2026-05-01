@@ -146,6 +146,22 @@ describe("API Authentication", () => {
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
   });
 
+  it("allows staging Pages preview origins in staging environment", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    env.ENVIRONMENT = "staging";
+    try {
+      const stagingPreviewOrigin = "https://abc123.o11yfleet-staging-app.pages.dev";
+      const response = await apiFetch("http://localhost/api/admin/tenants", {
+        method: "OPTIONS",
+        headers: { Origin: stagingPreviewOrigin, "Access-Control-Request-Method": "GET" },
+      });
+      expect(response.status).toBe(204);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(stagingPreviewOrigin);
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
+    }
+  });
+
   it("does not allow staging origins when ENVIRONMENT is dev", async () => {
     const stagingOrigin = "https://staging-app.o11yfleet.com";
     const response = await apiFetch("http://localhost/api/admin/tenants", {
