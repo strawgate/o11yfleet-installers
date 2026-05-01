@@ -38,15 +38,35 @@ Pages projects, so Terraform can attach each custom domain to its target
 project after the existing Pages custom domains are imported or detached from
 the legacy project.
 
-## GitHub Secrets
+## GitHub Actions Secrets
 
 Add these in GitHub repo Settings > Secrets and variables > Actions:
 
-| Secret                         | Value                              | Notes                                                |
-| ------------------------------ | ---------------------------------- | ---------------------------------------------------- |
-| `CLOUDFLARE_DEPLOY_API_TOKEN`  | (create in CF Dashboard)           | See permissions below                                |
-| `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` | Workflows map this to `CLOUDFLARE_ACCOUNT_ID`        |
-| `O11YFLEET_API_BEARER_SECRET`  | (same as staging Worker secret)    | Staging API smoke; prefer staging environment secret |
+Repository-level deployment credentials:
+
+| Secret                         | Value                              | Notes                                         |
+| ------------------------------ | ---------------------------------- | --------------------------------------------- |
+| `CLOUDFLARE_DEPLOY_API_TOKEN`  | (create in CF Dashboard)           | See permissions below                         |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` | Workflows map this to `CLOUDFLARE_ACCOUNT_ID` |
+
+Environment-level Worker and smoke-test secrets, configured separately for the
+`dev`, `staging`, and `production` GitHub Environments:
+
+| Secret                                | Notes                                                             |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| `O11YFLEET_API_BEARER_SECRET`         | Worker admin bearer and deploy smoke auth                         |
+| `O11YFLEET_CLAIM_HMAC_SECRET`         | OpAMP enrollment claim signing                                    |
+| `O11YFLEET_SEED_TENANT_USER_EMAIL`    | `/auth/seed` tenant user email; required in dev/staging/prod      |
+| `O11YFLEET_SEED_TENANT_USER_PASSWORD` | `/auth/seed` tenant user password; required in dev/staging/prod   |
+| `O11YFLEET_SEED_ADMIN_EMAIL`          | `/auth/seed` admin email; required in dev/staging/prod            |
+| `O11YFLEET_SEED_ADMIN_PASSWORD`       | `/auth/seed` admin password; required in dev/staging/prod         |
+| `AI_GUIDANCE_MINIMAX_API_KEY`         | Optional; only required for SDK-backed AI guidance provider modes |
+| `CLOUDFLARE_USAGE_ACCOUNT_ID`         | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_API_TOKEN`          | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Optional admin usage/spend estimates                              |
+| `CLOUDFLARE_USAGE_ANALYTICS_DATASET`  | Optional admin usage/spend estimates                              |
 
 ### CF API Token Permissions
 

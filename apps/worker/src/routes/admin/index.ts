@@ -12,7 +12,7 @@ import {
   handleAdminChatRequest,
   handleAdminGuidanceRequest,
 } from "../../ai/guidance.js";
-import { buildCloudflareUsage } from "../../cloudflare-usage.js";
+import { buildCloudflareUsage, cloudflareUsageRequiredEnv } from "../../cloudflare-usage.js";
 import {
   DEFAULT_PLAN,
   PLAN_DEFINITIONS,
@@ -612,9 +612,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
     degradedBindings.length === 0
       ? "Live Worker binding probes for D1, R2, Durable Objects, and Queues"
       : `Needs attention: ${degradedBindings.map(([key]) => key).join(", ")}`;
-  const cloudflareAccountMetricsConfigured = Boolean(
-    env.CLOUDFLARE_USAGE_ACCOUNT_ID && env.CLOUDFLARE_USAGE_API_TOKEN,
-  );
+  const cloudflareAccountMetricsConfigured = cloudflareUsageRequiredEnv(env).length === 0;
   const sources: Record<string, HealthDataSource> = {
     app_database: {
       status: checks["d1"]?.status === "healthy" ? "connected" : "unavailable",

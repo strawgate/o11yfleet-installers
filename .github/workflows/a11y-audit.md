@@ -2,19 +2,6 @@
 name: "Audit: Site A11y & Usability"
 description: "Reviews apps/site for accessibility & usability defects (static source review plus live axe-core scans via Playwright) and reports findings as a PR comment or single issue"
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-    paths:
-      - ".github/workflows/a11y-audit.md"
-      - ".github/workflows/a11y-audit.lock.yml"
-      - "apps/site/**"
-      - "packages/core/**"
-      - "scripts/**"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
   workflow_dispatch:
     inputs:
       surfaces:
@@ -48,7 +35,7 @@ engine:
   env:
     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
   concurrency:
-    group: "gh-aw-claude-${{ github.workflow }}-a11y-audit-${{ github.event.pull_request.number || github.ref }}"
+    group: "gh-aw-claude-${{ github.workflow }}-a11y-audit-${{ github.ref }}"
 network:
   allowed: [defaults, github, node, playwright]
 tools:
@@ -74,13 +61,13 @@ safe-outputs:
     max: 1
     # gh-aw enables `noop` automatically as soon as any safe-output is
     # declared, with `report-as-issue: true` by default. That would open
-    # a tracker issue every time a PR run, schedule run, or dispatch
+    # a tracker issue every time a schedule run or dispatch
     # finds nothing actionable — strictly noise. Override to `false` so
     # a clean run posts no comment and no issue; the workflow run
     # summary in the GitHub Actions UI is enough signal.
     report-as-issue: false
 concurrency:
-  group: a11y-audit-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: a11y-audit-${{ github.ref }}
   cancel-in-progress: true
 strict: false
 timeout-minutes: 45

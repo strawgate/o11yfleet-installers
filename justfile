@@ -723,8 +723,8 @@ deploy-env env="staging":
         ;;
     esac
     just tf-apply "$TARGET"
-    just tf-apply-worker "$TARGET"
     just d1-migrate "$TARGET"
+    just tf-apply-worker "$TARGET"
     just site-build "$TARGET"
     just pages-deploy "$TARGET"
 

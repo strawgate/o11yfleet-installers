@@ -323,6 +323,24 @@ function apiToken(env: UsageEnv): string | undefined {
   return env.CLOUDFLARE_USAGE_API_TOKEN;
 }
 
+function hasNonEmptyString(value: unknown): value is string {
+  return typeof value === "string" && value.trim() !== "";
+}
+
+export function cloudflareUsageRequiredEnv(env: Partial<UsageEnv>): string[] {
+  const requiredEnv = [
+    "CLOUDFLARE_USAGE_ACCOUNT_ID",
+    "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME",
+    "CLOUDFLARE_USAGE_D1_DATABASE_ID",
+    "CLOUDFLARE_USAGE_R2_BUCKET_NAME",
+    "CLOUDFLARE_USAGE_ANALYTICS_DATASET",
+  ].filter((key) => !hasNonEmptyString(env[key as keyof UsageEnv]));
+  if (!hasNonEmptyString(apiToken(env as UsageEnv))) {
+    requiredEnv.unshift("CLOUDFLARE_USAGE_API_TOKEN");
+  }
+  return requiredEnv;
+}
+
 function analyticsDatasetIdentifier(value: string): string {
   const dataset = value.trim();
   if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dataset)) {
@@ -1014,16 +1032,7 @@ export async function buildCloudflareUsage(
   const projectedMonth = roundMoney(
     services.reduce((sum, service) => sum + service.projected_month_estimated_spend_usd, 0),
   );
-  const requiredEnv = [
-    "CLOUDFLARE_USAGE_ACCOUNT_ID",
-    "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME",
-    "CLOUDFLARE_USAGE_D1_DATABASE_ID",
-    "CLOUDFLARE_USAGE_R2_BUCKET_NAME",
-    "CLOUDFLARE_USAGE_ANALYTICS_DATASET",
-  ].filter((key) => !usageEnv[key as keyof UsageEnv]);
-  if (!apiToken(usageEnv)) {
-    requiredEnv.unshift("CLOUDFLARE_USAGE_API_TOKEN");
-  }
+  const requiredEnv = cloudflareUsageRequiredEnv(usageEnv);
 
   return {
     configured: requiredEnv.length === 0,

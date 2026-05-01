@@ -836,7 +836,13 @@ function setupPageCss(): string {
 }
 
 // ─── POST /auth/seed ────────────────────────────────────────────────
-// Creates hardcoded accounts from env vars. Idempotent.
+// Creates seed accounts from configured env vars. Idempotent.
+const SEED_ENV_KEYS = [
+  "O11YFLEET_SEED_TENANT_USER_EMAIL",
+  "O11YFLEET_SEED_TENANT_USER_PASSWORD",
+  "O11YFLEET_SEED_ADMIN_EMAIL",
+  "O11YFLEET_SEED_ADMIN_PASSWORD",
+] as const;
 
 interface SeedEnv extends Env {
   O11YFLEET_SEED_TENANT_USER_EMAIL?: string;
@@ -848,6 +854,11 @@ interface SeedEnv extends Env {
 async function handleSeed(env: Env): Promise<Response> {
   const e = env as SeedEnv;
   const results: string[] = [];
+  const allowDefaultSeedCredentials = !env.ENVIRONMENT;
+  const missingSeedEnv = SEED_ENV_KEYS.filter((key) => !e[key]?.trim());
+  if (!allowDefaultSeedCredentials && missingSeedEnv.length > 0) {
+    return jsonError(`Missing required seed secrets: ${missingSeedEnv.join(", ")}`, 500);
+  }
 
   // Find the demo tenant (first tenant, or create one)
   let tenant = await env.FP_DB.prepare("SELECT id FROM tenants ORDER BY created_at LIMIT 1").first<{
@@ -867,7 +878,7 @@ async function handleSeed(env: Env): Promise<Response> {
   }
 
   // Seed tenant user
-  const tenantEmail = e.O11YFLEET_SEED_TENANT_USER_EMAIL ?? "demo@o11yfleet.com";
+  const tenantEmail = e.O11YFLEET_SEED_TENANT_USER_EMAIL?.trim() || "demo@o11yfleet.com";
   const tenantPassword = e.O11YFLEET_SEED_TENANT_USER_PASSWORD ?? "demo-password";
   const existingTenantUser = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
     .bind(tenantEmail)
@@ -891,7 +902,7 @@ async function handleSeed(env: Env): Promise<Response> {
   }
 
   // Seed admin user
-  const adminEmail = e.O11YFLEET_SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+  const adminEmail = e.O11YFLEET_SEED_ADMIN_EMAIL?.trim() || "admin@o11yfleet.com";
   const adminPassword = e.O11YFLEET_SEED_ADMIN_PASSWORD ?? "admin-password";
   const existingAdmin = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
     .bind(adminEmail)

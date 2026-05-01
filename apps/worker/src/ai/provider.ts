@@ -129,10 +129,10 @@ export async function streamAiChat(
 }
 
 function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiProviderConfig {
-  const providerMode = env.AI_GUIDANCE_PROVIDER?.trim().toLowerCase() ?? "fixture";
+  const providerMode = env.AI_GUIDANCE_PROVIDER?.trim().toLowerCase() || "fixture";
   const model = env.AI_GUIDANCE_MODEL?.trim() || "MiniMax-M2.7";
 
-  if (providerMode === "fixture" || providerMode === "deterministic" || !env.AI_GUIDANCE_PROVIDER) {
+  if (providerMode === "fixture" || providerMode === "deterministic") {
     return { mode: "fixture", model: "o11yfleet-guidance-fixture" };
   }
 

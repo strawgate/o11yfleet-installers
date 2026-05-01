@@ -2,21 +2,6 @@
 name: "Audit: Performance & Hot-Path Defects"
 description: "Static source review of worker hot path, DO state, codec, API routes, D1 schema, and the React portal for performance defects"
 on:
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
-    branches: [main]
-    paths:
-      - ".github/workflows/perf-audit.md"
-      - ".github/workflows/perf-audit.lock.yml"
-      - "apps/worker/**"
-      - "apps/site/**"
-      - "packages/core/**"
-      - "packages/db/**"
-      - "scripts/**"
-      - "justfile"
-      - "package.json"
-      - "pnpm-lock.yaml"
-      - "pnpm-workspace.yaml"
   workflow_dispatch:
     inputs:
       surfaces:
@@ -50,7 +35,7 @@ engine:
   env:
     ANTHROPIC_BASE_URL: https://api.minimax.io/anthropic
   concurrency:
-    group: "gh-aw-claude-${{ github.workflow }}-perf-audit-${{ github.event.pull_request.number || github.ref }}"
+    group: "gh-aw-claude-${{ github.workflow }}-perf-audit-${{ github.ref }}"
 network:
   allowed: [defaults, github, node]
 tools:
@@ -79,7 +64,7 @@ safe-outputs:
     # the workflow run summary in the GitHub Actions UI is enough signal.
     report-as-issue: false
 concurrency:
-  group: perf-audit-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  group: perf-audit-${{ github.ref }}
   cancel-in-progress: true
 strict: false
 timeout-minutes: 30

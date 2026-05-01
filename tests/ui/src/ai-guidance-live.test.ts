@@ -112,7 +112,7 @@ test.describe("live AI guidance audit", () => {
   test.describe.configure({ retries: 0 });
 
   test.skip(
-    process.env.LIVE_AI_GUIDANCE !== "1",
+    process.env.LIVE_AI_GUIDANCE !== "1" || !process.env.AI_GUIDANCE_MINIMAX_API_KEY,
     "Set LIVE_AI_GUIDANCE=1 and provide AI_GUIDANCE_MINIMAX_API_KEY to run the live provider check.",
   );
 
