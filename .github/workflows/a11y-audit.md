@@ -1,6 +1,6 @@
 ---
 name: "Audit: Site A11y & Usability"
-description: "Reviews apps/site for accessibility & usability defects (static source review plus live axe-core scans via Playwright) and reports findings as a PR comment or single issue"
+description: "Reviews apps/site for accessibility & usability defects (static source review plus live axe-core scans via Playwright) and reports findings as a single issue"
 on:
   workflow_dispatch:
     inputs:
@@ -42,7 +42,7 @@ tools:
   github:
     mode: remote
     toolsets: [default, actions]
-    allowed: [create_issue, create_issue_comment, get_workflow_run, list_workflow_jobs, search_issues]
+    allowed: [create_issue, get_workflow_run, list_workflow_jobs, search_issues]
   bash: true
   playwright: null
 safe-outputs:
@@ -54,9 +54,6 @@ safe-outputs:
     close-older-key: "[a11y-audit]"
     close-older-issues: true
     expires: 7d
-  add-comment:
-    max: 1
-    hide-older-comments: true
   noop:
     max: 1
     # gh-aw enables `noop` automatically as soon as any safe-output is
@@ -118,7 +115,7 @@ action at a time, and inspect the page after each.
 - `severity_floor`: `${{ inputs.severity_floor || 'high' }}`
 
 GitHub Actions only populates the `inputs` context for `workflow_dispatch`
-runs; on `pull_request` and `schedule` triggers `inputs.*` is empty. The
+runs; on `schedule` triggers `inputs.*` is empty. The
 `||` defaults above ensure a non-empty value reaches the prompt at every
 trigger. Always print the effective values you're using at the top of
 your output (e.g. "Severity floor: high; surfaces: marketing,portal,admin,auth,common")
@@ -342,9 +339,6 @@ introduced inside the 7-day window.
 
 ### Phase 5: Output
 
-**On a pull request run**, post **one PR comment** via `add-comment` using
-the schema below.
-
 **On `workflow_dispatch` or `schedule`**, create **one issue** via
 `create-issue` using the same schema. Title prefix `[a11y-audit] ` is
 applied automatically; close-older-key dedupes with prior runs.
@@ -430,7 +424,7 @@ tool returned a hard error, surface that via the `missing_tool` /
 
 ## Output rules
 
-- One report per run. Do not post both an issue and a PR comment.
+- One report per run. Use `create_issue` for findings, or `noop` when clean.
 - Cite line numbers from the **current** source, not the baseline doc.
 - Do not duplicate the baseline doc verbatim — only include findings still
   present in source or in the rendered DOM.

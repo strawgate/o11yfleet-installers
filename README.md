@@ -38,7 +38,7 @@ migrations, seeds local data, and keeps both dev servers attached.
 
 - [Docs index](docs/README.md)
 - [Development guide](DEVELOPING.md)
-- [Deployment checklist](DEPLOY.md)
+- [Deployment runbook](DEPLOY.md)
 - [Architecture](docs/architecture/overview.md)
 - [Product model](docs/product/model.md)
 - [Pricing model](docs/product/pricing.md)

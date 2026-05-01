@@ -42,7 +42,7 @@ tools:
   github:
     mode: remote
     toolsets: [default, actions]
-    allowed: [create_issue, create_issue_comment, get_workflow_run, list_workflow_jobs, search_issues]
+    allowed: [create_issue, get_workflow_run, list_workflow_jobs, search_issues]
   bash: true
 safe-outputs:
   activation-comments: false
@@ -53,9 +53,6 @@ safe-outputs:
     close-older-key: "[perf-audit]"
     close-older-issues: true
     expires: 7d
-  add-comment:
-    max: 1
-    hide-older-comments: true
   noop:
     max: 1
     # gh-aw enables `noop` automatically with `report-as-issue: true` when any
@@ -95,9 +92,9 @@ not run benchmarks, do not write Playwright tests. Use `Read`, `Glob`,
 `Grep`, and `Bash` (read-only) to walk the source. Runtime perf checks live
 in the companion `perf-explore-portal.md` workflow.
 
-You are **not** a deterministic test suite. You produce one issue (or PR
-comment) per run with prioritized findings, or call `noop` with coverage
-notes if the audit is clean.
+You are **not** a deterministic test suite. You produce one issue per run
+with prioritized findings, or call `noop` with coverage notes if the audit
+is clean.
 
 ## Inputs
 
@@ -105,7 +102,7 @@ notes if the audit is clean.
 - `severity_floor`: `${{ inputs.severity_floor || 'high' }}`
 
 GitHub Actions only populates `inputs` for `workflow_dispatch`; on
-`pull_request` and `schedule` triggers `inputs.*` is empty. The `||`
+`schedule` triggers `inputs.*` is empty. The `||`
 defaults above ensure a non-empty value at every trigger. **Print the
 effective values at the top of your output** (e.g. "Severity floor: high;
 surfaces: worker-hotpath,do-sqlite,codec,api-routes,d1-schema,portal") so
@@ -113,8 +110,6 @@ a reviewer can confirm.
 
 ## Trigger context
 
-- On `pull_request`: post one PR comment summarizing findings (or no
-  comment if clean). Limit to defects introduced or worsened on this PR.
 - On `schedule` / `workflow_dispatch`: walk all surfaces and open one
   issue with the prioritized findings (or `noop` if clean).
 
@@ -286,8 +281,7 @@ Look for:
 - **Medium**: small constant-factor wins.
 - **Low**: micro-optimizations or stylistic.
 
-Apply `severity_floor`. On PR runs, weight toward defects introduced or
-worsened by the diff.
+Apply `severity_floor`.
 
 ## What to report
 
@@ -314,16 +308,11 @@ Do **not** include findings that:
 
 ## Output
 
-Emit exactly one final safe output, then stop:
-
-- **PR runs**: `add-comment` with up to 10 findings, ranked
-  Critical → High → Medium. Group by class. Title the comment
-  `## Performance audit findings`. If clean, call `noop` (no comment is
-  posted).
-- **Schedule / dispatch runs**: `create_issue` titled `[perf-audit]
-  weekly hot-path scan` (the title-prefix above adds the bracket;
-  use the rest of the title to summarize the top finding) with the same
-  ranked content. If clean, call `noop`.
+Emit exactly one final safe output, then stop. On schedule or dispatch runs,
+use `create_issue` with title suffix `weekly hot-path scan`; the safe-output
+`title-prefix` adds `[perf-audit]`. Put the top-finding summary in the issue
+body, followed by up to 10 findings ranked Critical → High → Medium and grouped
+by class. If clean, call `noop`.
 
 If browser/runtime tools are unexpectedly invoked, report `missing_tool`
 and stop — this workflow is static-only by design.

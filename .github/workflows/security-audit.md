@@ -4,11 +4,11 @@ description: "Automated security audit that scans key source files for known vul
 on:
   workflow_dispatch:
   schedule:
-    - cron: "0 6 * * 1"  # Every Monday at 06:00 UTC
+    - cron: "0 6 * * 1" # Every Monday at 06:00 UTC
 
 permissions:
   contents: read
-  issues: write
+  issues: read
   pull-requests: read
 
 engine:
@@ -20,7 +20,7 @@ engine:
 tools:
   github:
     mode: remote
-    toolsets: [default, code_search]
+    toolsets: [default, search]
     allowed:
       - get_file_contents
       - search_code
@@ -36,6 +36,11 @@ safe-outputs:
     close-older-key: "[security-audit]"
     close-older-issues: true
     expires: 7d
+  noop:
+    max: 1
+    # gh-aw enables noop reporting by default when safe outputs exist. Clean
+    # scheduled runs should stay visible in Actions without opening tracker issues.
+    report-as-issue: false
 
 timeout-minutes: 45
 ---
@@ -176,4 +181,6 @@ For each ❌:
 
 Call `noop` if:
 - A `[security-audit]` issue was opened within the last 7 days
-- No source files could be read (repository permissions issue)
+
+Call `missing_data` if no source files could be read. That indicates a
+repository permissions or GitHub API problem, not a clean audit.

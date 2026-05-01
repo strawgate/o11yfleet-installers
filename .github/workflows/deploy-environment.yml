@@ -28,22 +28,27 @@ permissions:
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
-  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
-  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-  CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
-  TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
-  TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
-  REQUIRE_TERRAFORM_STATE_READY: ${{ inputs.require_state_ready }}
 
 jobs:
+  guard-main:
+    runs-on: ubicloud-standard-2-arm
+    timeout-minutes: 5
+    steps:
+      - name: Require main branch
+        run: test "${{ github.ref }}" = "refs/heads/main"
+
   deploy:
+    needs: guard-main
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 25
     environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    env:
+      TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+      TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+      TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+      TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
+      TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
+      REQUIRE_TERRAFORM_STATE_READY: ${{ inputs.require_state_ready }}
     steps:
       - uses: actions/checkout@v6
 
@@ -64,6 +69,11 @@ jobs:
       - uses: taiki-e/install-action@just
 
       - name: Check deployment configuration
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
         run: |
           test -n "$TERRAFORM_STATE_R2_BUCKET"
           test -n "$TERRAFORM_STATE_R2_ENDPOINT"
@@ -73,12 +83,16 @@ jobs:
           test -n "$CLOUDFLARE_ACCOUNT_ID"
 
           if [ "${{ inputs.environment }}" = "prod" ]; then
-            test "${{ github.ref }}" = "refs/heads/main"
             test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
             test "$TERRAFORM_PRODUCTION_APPLY_ENABLED" = "true"
           fi
 
       - name: Deploy environment
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
         run: just deploy-env ${{ inputs.environment }}
 
       - name: Resolve Pages smoke targets
