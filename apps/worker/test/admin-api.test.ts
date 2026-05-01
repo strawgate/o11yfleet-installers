@@ -125,6 +125,112 @@ describe("admin API routes", () => {
     expect(cookie).toContain("SameSite=None");
   });
 
+  it("keeps the default seed route idempotent when seed users already exist", async () => {
+    const first = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(first.status).toBe(200);
+    const firstBody = await first.json<{ tenantId: string }>();
+
+    const second = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(second.status).toBe(200);
+    const secondBody = await second.json<{ tenantId: string }>();
+
+    expect(secondBody.tenantId).toBe(firstBody.tenantId);
+  });
+
+  it("reconciles the default seed tenant to the current seed config", async () => {
+    const seeded = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tenant_name: "Seed Tenant" }),
+    });
+    expect(seeded.status).toBe(200);
+    const seededBody = await seeded.json<{ tenantId: string }>();
+
+    await env.FP_DB.prepare(
+      "UPDATE tenants SET name = ?, plan = ?, max_configs = ?, max_agents_per_config = ? WHERE id = ?",
+    )
+      .bind("Stale Tenant", "starter", 1, 1, seededBody.tenantId)
+      .run();
+
+    const reseeded = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ tenant_name: "Seed Tenant" }),
+    });
+    expect(reseeded.status).toBe(200);
+
+    const tenant = await env.FP_DB.prepare(
+      "SELECT name, plan, max_configs, max_agents_per_config FROM tenants WHERE id = ?",
+    )
+      .bind(seededBody.tenantId)
+      .first<{
+        name: string;
+        plan: string;
+        max_configs: number;
+        max_agents_per_config: number;
+      }>();
+    expect(tenant).toEqual({
+      name: "Seed Tenant",
+      plan: "growth",
+      max_configs: 10,
+      max_agents_per_config: 1000,
+    });
+  });
+
+  it("rejects implicit reseed when the seed user has no tenant binding", async () => {
+    const seeded = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+        "Content-Type": "application/json",
+      },
+      body: "{}",
+    });
+    expect(seeded.status).toBe(200);
+    const seededBody = await seeded.json<{ tenantId: string }>();
+
+    await env.FP_DB.prepare("UPDATE users SET tenant_id = NULL WHERE email = ?")
+      .bind("demo@o11yfleet.com")
+      .run();
+    try {
+      const response = await exports.default.fetch("https://api.o11yfleet.com/auth/seed", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${O11YFLEET_API_BEARER_SECRET}`,
+          "Content-Type": "application/json",
+        },
+        body: "{}",
+      });
+
+      expect(response.status).toBe(409);
+      expect(await response.json()).toMatchObject({ code: "TENANT_CONFLICT" });
+    } finally {
+      await env.FP_DB.prepare("UPDATE users SET tenant_id = ? WHERE email = ?")
+        .bind(seededBody.tenantId, "demo@o11yfleet.com")
+        .run();
+    }
+  });
+
   it("rejects login payload schema drift", async () => {
     const response = await exports.default.fetch("https://api.o11yfleet.com/auth/login", {
       method: "POST",

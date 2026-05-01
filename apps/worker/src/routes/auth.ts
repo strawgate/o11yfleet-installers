@@ -867,6 +867,12 @@ interface SeedEnv extends Env {
   O11YFLEET_SEED_ADMIN_PASSWORD?: string;
 }
 
+function defaultSeedTenantId(env: Env): string {
+  const environment = env.ENVIRONMENT?.trim() || "local";
+  const suffix = environment.replace(/[^A-Za-z0-9_-]/g, "-");
+  return `seed-${suffix || "local"}`;
+}
+
 async function handleSeed(request: Request, env: Env): Promise<Response> {
   const e = env as SeedEnv;
   const results: string[] = [];
@@ -893,27 +899,6 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
     // No body / non-JSON content type is fine — use defaults.
   }
 
-  const tenantId = body.tenant_id ?? crypto.randomUUID();
-  const tenantName = body.tenant_name ?? "Local Dev";
-
-  // Upsert: create if not exists, otherwise reuse
-  const existing = await env.FP_DB.prepare("SELECT id FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first();
-  if (!existing) {
-    const seedPlan = "growth";
-    const { max_configs, max_agents_per_config } = getPlanLimits(seedPlan);
-    await env.FP_DB.prepare(
-      "INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)",
-    )
-      .bind(tenantId, tenantName, seedPlan, max_configs, max_agents_per_config)
-      .run();
-    results.push(`Created tenant: ${tenantId} (${tenantName})`);
-  } else {
-    results.push(`Using existing tenant: ${tenantId}`);
-  }
-
-  // Upsert tenant user — always bind to this tenant
   const tenantEmail = e.O11YFLEET_SEED_TENANT_USER_EMAIL?.trim() || "demo@o11yfleet.com";
   const tenantPassword = e.O11YFLEET_SEED_TENANT_USER_PASSWORD ?? "demo-password";
   const existingTenantUser = await env.FP_DB.prepare(
@@ -921,31 +906,74 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
   )
     .bind(tenantEmail)
     .first<{ id: string; tenant_id: string | null }>();
+
+  const requestedTenantId = body.tenant_id ?? existingTenantUser?.tenant_id;
+  if (existingTenantUser && !requestedTenantId) {
+    return Response.json(
+      {
+        error: `User ${tenantEmail} has no tenant binding; refusing implicit reseed`,
+        code: "TENANT_CONFLICT",
+      },
+      { status: 409 },
+    );
+  }
+  const tenantId = requestedTenantId ?? defaultSeedTenantId(env);
+  const tenantName = body.tenant_name ?? "Local Dev";
+
+  if (existingTenantUser && existingTenantUser.tenant_id !== tenantId) {
+    return Response.json(
+      {
+        error: `User ${tenantEmail} already belongs to tenant ${existingTenantUser.tenant_id ?? "none"}; refusing to move to ${tenantId}`,
+        code: "TENANT_CONFLICT",
+      },
+      { status: 409 },
+    );
+  }
+
+  const seedPlan = "growth";
+  const { max_configs, max_agents_per_config } = getPlanLimits(seedPlan);
+  await env.FP_DB.prepare(
+    `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config)
+     VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(id) DO UPDATE SET
+       name = excluded.name,
+       plan = excluded.plan,
+       max_configs = excluded.max_configs,
+       max_agents_per_config = excluded.max_agents_per_config,
+       updated_at = datetime('now')`,
+  )
+    .bind(tenantId, tenantName, seedPlan, max_configs, max_agents_per_config)
+    .run();
+  results.push(`Using seed tenant: ${tenantId}`);
+
+  // Upsert tenant user — always bind to this tenant
+  const tenantPasswordHash = await hashPassword(tenantPassword);
   if (!existingTenantUser) {
-    const hash = await hashPassword(tenantPassword);
     const userId = crypto.randomUUID();
     await env.FP_DB.prepare(
-      "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
+      "INSERT OR IGNORE INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
     )
-      .bind(userId, tenantEmail, hash, "Demo User", "member", tenantId)
+      .bind(userId, tenantEmail, tenantPasswordHash, "Demo User", "member", tenantId)
       .run();
-    results.push(`Created tenant user: ${tenantEmail}`);
-  } else {
-    if (existingTenantUser.tenant_id !== tenantId) {
-      return Response.json(
-        {
-          error: `User ${tenantEmail} already belongs to tenant ${existingTenantUser.tenant_id}; refusing to move to ${tenantId}`,
-          code: "TENANT_CONFLICT",
-        },
-        { status: 409 },
-      );
-    }
-    const hash = await hashPassword(tenantPassword);
-    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?")
-      .bind(hash, tenantEmail)
-      .run();
-    results.push(`Updated tenant user: ${tenantEmail}`);
   }
+  const currentTenantUser = await env.FP_DB.prepare(
+    "SELECT id, tenant_id FROM users WHERE email = ?",
+  )
+    .bind(tenantEmail)
+    .first<{ id: string; tenant_id: string | null }>();
+  if (!currentTenantUser || currentTenantUser.tenant_id !== tenantId) {
+    return Response.json(
+      {
+        error: `User ${tenantEmail} already belongs to tenant ${currentTenantUser?.tenant_id ?? "unknown"}; refusing to move to ${tenantId}`,
+        code: "TENANT_CONFLICT",
+      },
+      { status: 409 },
+    );
+  }
+  await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ? AND tenant_id = ?")
+    .bind(tenantPasswordHash, tenantEmail, tenantId)
+    .run();
+  results.push(`${existingTenantUser ? "Updated" : "Created"} tenant user: ${tenantEmail}`);
 
   // Upsert admin user (no tenant binding)
   const adminEmail = e.O11YFLEET_SEED_ADMIN_EMAIL?.trim() || "admin@o11yfleet.com";
