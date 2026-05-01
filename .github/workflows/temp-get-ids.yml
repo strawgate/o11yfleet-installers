@@ -36,42 +36,72 @@ jobs:
           cd infra/terraform
 
           echo "=== Importing cloudflare_worker.fleet ==="
-          terraform import -var-file=envs/prod.tfvars \
-            cloudflare_worker.fleet \
-            "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+          if terraform state show "cloudflare_worker.fleet" >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              cloudflare_worker.fleet \
+              "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+          fi
 
           echo ""
           echo "=== Importing cloudflare_dns_record.api ==="
-          terraform import -var-file=envs/prod.tfvars \
-            "cloudflare_dns_record.api" \
-            "2650adcd696a6e400201a68323e90c5e/6a4c27a938e75523570a7d8d2fbbb140"
+          if terraform state show "cloudflare_dns_record.api" >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              "cloudflare_dns_record.api" \
+              "2650adcd696a6e400201a68323e90c5e/6a4c27a938e75523570a7d8d2fbbb140"
+          fi
 
           echo ""
           echo "=== Importing cloudflare_workers_route.api ==="
-          terraform import -var-file=envs/prod.tfvars \
-            "cloudflare_workers_route.api" \
-            "2650adcd696a6e400201a68323e90c5e/f04d7e7161514559806187706d345826"
+          if terraform state show "cloudflare_workers_route.api" >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              "cloudflare_workers_route.api" \
+              "2650adcd696a6e400201a68323e90c5e/f04d7e7161514559806187706d345826"
+          fi
 
           echo ""
           echo "=== Importing cloudflare_workers_cron_trigger.fleet ==="
-          terraform import -var-file=envs/prod.tfvars \
-            "cloudflare_workers_cron_trigger.fleet" \
-            "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+          if terraform state show "cloudflare_workers_cron_trigger.fleet" >/dev/null 2>&1; then
+            echo "Already imported"
+          else
+            terraform import -var-file=envs/prod.tfvars \
+              "cloudflare_workers_cron_trigger.fleet" \
+              "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+          fi
 
           echo ""
-          echo "=== Importing cloudflare_queue_consumer.events ==="
-          terraform import -var-file=envs/prod.tfvars \
-            "cloudflare_queue_consumer.events" \
-            "417e8c0fd8f1a64e9f2c4845afa6dc56/471d349a1e5a41a4a6f0c7e6e9076912"
+          echo "=== cloudflare_queue_consumer.events ==="
+          echo "! Does not support import in Cloudflare provider v5"
+          echo "! Will be managed by Terraform apply"
 
       - name: Verify imports
         run: |
           cd infra/terraform
           echo "=== Checking Terraform state ==="
-          just --quiet tf-required-imports | while read resource; do
+          echo ""
+          echo "--- Resources that should be in state ---"
+          for resource in "cloudflare_d1_database.fleet" "cloudflare_r2_bucket.configs" "cloudflare_queue.events"; do
             if terraform state show "$resource" >/dev/null 2>&1; then
               echo "✓ $resource"
             else
               echo "✗ $resource NOT FOUND"
             fi
           done
+          echo ""
+          echo "--- Resources imported this run ---"
+          for resource in "cloudflare_dns_record.api" "cloudflare_worker.fleet" "cloudflare_workers_cron_trigger.fleet" "cloudflare_workers_route.api"; do
+            if terraform state show "$resource" >/dev/null 2>&1; then
+              echo "✓ $resource"
+            else
+              echo "✗ $resource NOT FOUND"
+            fi
+          done
+          echo ""
+          echo "--- Resources created by Terraform apply ---"
+          echo "ℹ cloudflare_queue_consumer.events (does not support import)"
+          echo "ℹ cloudflare_queue_consumer.events will be created during apply"

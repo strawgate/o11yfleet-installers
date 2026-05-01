@@ -555,14 +555,15 @@ tf-required-rollout-state:
 
 # Production imports required before enabling provider v5 apply paths. These
 # include the already-routed production Worker traffic resources.
+# Note: cloudflare_queue_consumer.events does not support import in provider v5
+# and will be created/managed by Terraform apply.
 tf-required-imports:
     #!/usr/bin/env bash
     set -euo pipefail
     just --quiet tf-required-rollout-state
     printf '%s\n' \
         cloudflare_workers_cron_trigger.fleet \
-        cloudflare_workers_route.api \
-        cloudflare_queue_consumer.events
+        cloudflare_workers_route.api
 
 # Verify production imports are in remote state before enabling v5 apply paths.
 tf-check-prod-imports env="prod": (tf-init-remote env)
