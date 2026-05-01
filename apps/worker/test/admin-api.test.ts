@@ -279,7 +279,7 @@ describe("admin API routes", () => {
     const response = await exports.default.fetch("http://localhost/api/admin/health");
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "Admin access required" });
+    expect(await response.json()).toEqual({ error: "Admin access required", oidc_error: null });
   });
 
   it("rejects O11YFLEET_API_BEARER_SECRET bearer access to admin routes", async () => {
@@ -330,7 +330,7 @@ describe("admin API routes", () => {
     });
 
     expect(response.status).toBe(403);
-    expect(await response.json()).toEqual({ error: "Admin access required" });
+    expect(await response.json()).toEqual({ error: "Admin access required", oidc_error: null });
   });
 
   it("rejects admin tenant schema drift with stable validation details", async () => {
