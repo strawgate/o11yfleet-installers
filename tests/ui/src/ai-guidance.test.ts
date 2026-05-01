@@ -967,13 +967,13 @@ test.describe("AI guidance surfaces", () => {
     });
 
     await page.goto(`${UI_URL}/portal/configurations/config-1?api=${encodeURIComponent(API_URL)}`);
-    await page.getByRole("button", { name: "YAML" }).click();
+    await page.getByRole("tab", { name: "YAML" }).click();
     await page.getByRole("button", { name: "Explain YAML" }).click();
 
     await expect.poll(() => explainRequestSeen).toBe(true);
     await expect(page.getByText("Parser-backed YAML explanation.")).toBeVisible();
     await expect(page.getByText("YAML defines one logs pipeline")).toBeVisible();
-    await page.getByRole("button", { name: "Versions" }).click();
+    await page.getByRole("tab", { name: "Versions" }).click();
     await page.getByRole("button", { name: "Summarize latest diff" }).click();
 
     await expect.poll(() => versionDiffRequestSeen).toBe(true);

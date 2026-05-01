@@ -21,20 +21,11 @@ import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
-import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { EnrollmentDialogBody, enrollmentTokenFailureMessage } from "./EnrollmentDialogBody";
 import { relTime, trunc } from "../../utils/format";
-import {
-  agentCurrentHash,
-  agentHasDrift,
-  agentHost,
-  agentIsHealthy,
-  agentLastSeen,
-  agentUid,
-  hashLabel,
-} from "../../utils/agents";
+import { agentHost, agentLastSeen, agentUid, hashLabel } from "../../utils/agents";
 import { configurationAgentMetrics } from "../../utils/config-stats";
 import {
   buildInsightRequest,
@@ -52,6 +43,18 @@ import {
   pageYaml,
   unavailableFetch,
 } from "../../ai/page-context";
+import {
+  DataTable,
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  type ColumnDef,
+} from "@/components/app";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { agentConnectionTone, agentHealthView, agentSyncView } from "./agent-view-model";
 import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
@@ -107,6 +110,7 @@ export default function ConfigurationDetailPage() {
   // Drift and connection counts are derived from server-side aggregates when
   // available so they remain accurate beyond the first paginated agents page.
   const driftedAgents = agentMetrics.driftedAgents;
+  const agentColumns = useMemo(() => configurationAgentColumns(id, desiredHash), [desiredHash, id]);
   const guidanceReady =
     Boolean(c) &&
     (activeTab !== "agents" || agents.isFetched) &&
@@ -115,78 +119,94 @@ export default function ConfigurationDetailPage() {
     stats.isFetched &&
     (!hasConfigContent || yaml.isFetched);
   const insightSurface = insightSurfaces.portalConfiguration;
-  const buildConfigurationPageContext = (
-    options: { includeYaml?: boolean; lightFetches?: AiLightFetch[] } = {},
-  ) =>
-    c
-      ? buildBrowserPageContext({
-          title: `Configuration: ${c.name}`,
-          active_tab: activeTab,
-          visible_text: [
-            "Configuration detail shows rollout state, collector health, version history, enrollment tokens, and YAML.",
-          ],
-          metrics: [
-            pageMetric("total_agents", "Total collectors", totalAgents),
-            pageMetric("connected_agents", "Connected collectors", connectedAgents),
-            pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
-            pageMetric("drifted_agents", "Drifted collectors", driftedAgents),
-            pageMetric("versions", "Versions", versionList.length),
-            pageMetric("total_active_tokens", "Active enrollment tokens", tokenList.length),
-          ],
-          details: [
-            pageDetail("configuration_id", "Configuration ID", c.id),
-            pageDetail("configuration_name", "Configuration name", c.name),
-            pageDetail("status", "Status", c.status ?? null),
-            pageDetail("desired_config_hash", "Desired config hash", desiredHash),
-            pageDetail(
-              "latest_version_created_at",
-              "Latest version",
-              versionList[0]?.created_at ?? null,
-            ),
-          ],
-          tables: [
-            ...(activeTab === "agents"
-              ? [
-                  pageTable(
-                    "agents",
-                    "Collectors",
-                    agentList.slice(0, 20).map((agent) => ({
-                      id: agentUid(agent),
-                      hostname: agentHost(agent),
-                      status: agent.status ?? null,
-                      health: agentIsHealthy(agent),
-                      drift: agentHasDrift(agent, desiredHash),
-                      last_seen: agentLastSeen(agent) ?? null,
-                    })),
-                    { totalRows: agentList.length },
-                  ),
-                ]
-              : []),
-            ...(activeTab === "versions"
-              ? [
-                  pageTable(
-                    "versions",
-                    "Versions",
-                    versionList.slice(0, 10).map((version) => ({
-                      id: version.id,
-                      version: version.version,
-                      hash: (version["config_hash"] as string | undefined) ?? null,
-                      created_at: version.created_at,
-                      size_bytes: (version["size_bytes"] as number | undefined) ?? null,
-                    })),
-                    { totalRows: versionList.length },
-                  ),
-                ]
-              : []),
-          ],
-          yaml:
-            options.includeYaml && yaml.data
-              ? pageYaml("Current configuration YAML", yaml.data)
-              : undefined,
-          light_fetches: options.lightFetches ?? [],
-        })
-      : null;
-  const pageContext = guidanceReady && c ? buildConfigurationPageContext() : null;
+  const buildConfigurationPageContext = useCallback(
+    (options: { includeYaml?: boolean; lightFetches?: AiLightFetch[] } = {}) =>
+      c
+        ? buildBrowserPageContext({
+            title: `Configuration: ${c.name}`,
+            active_tab: activeTab,
+            visible_text: [
+              "Configuration detail shows rollout state, collector health, version history, enrollment tokens, and YAML.",
+            ],
+            metrics: [
+              pageMetric("total_agents", "Total collectors", totalAgents),
+              pageMetric("connected_agents", "Connected collectors", connectedAgents),
+              pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
+              pageMetric("drifted_agents", "Drifted collectors", driftedAgents),
+              pageMetric("versions", "Versions", versionList.length),
+              pageMetric("total_active_tokens", "Active enrollment tokens", tokenList.length),
+            ],
+            details: [
+              pageDetail("configuration_id", "Configuration ID", c.id),
+              pageDetail("configuration_name", "Configuration name", c.name),
+              pageDetail("status", "Status", c.status ?? null),
+              pageDetail("desired_config_hash", "Desired config hash", desiredHash),
+              pageDetail(
+                "latest_version_created_at",
+                "Latest version",
+                versionList[0]?.created_at ?? null,
+              ),
+            ],
+            tables: [
+              ...(activeTab === "agents"
+                ? [
+                    pageTable(
+                      "agents",
+                      "Collectors",
+                      agentList.slice(0, 20).map((agent) => ({
+                        id: agentUid(agent),
+                        hostname: agentHost(agent),
+                        status: agent.status ?? null,
+                        health: agentHealthView(agent).label,
+                        config_sync: agentSyncView(agent, desiredHash).label,
+                        last_seen: agentLastSeen(agent) ?? null,
+                      })),
+                      { totalRows: agentList.length },
+                    ),
+                  ]
+                : []),
+              ...(activeTab === "versions"
+                ? [
+                    pageTable(
+                      "versions",
+                      "Versions",
+                      versionList.slice(0, 10).map((version) => ({
+                        id: version.id,
+                        version: version.version,
+                        hash: (version["config_hash"] as string | undefined) ?? null,
+                        created_at: version.created_at,
+                        size_bytes: (version["size_bytes"] as number | undefined) ?? null,
+                      })),
+                      { totalRows: versionList.length },
+                    ),
+                  ]
+                : []),
+            ],
+            yaml:
+              options.includeYaml && yaml.data
+                ? pageYaml("Current configuration YAML", yaml.data)
+                : undefined,
+            light_fetches: options.lightFetches ?? [],
+          })
+        : null,
+    [
+      activeTab,
+      agentList,
+      c,
+      connectedAgents,
+      desiredHash,
+      driftedAgents,
+      healthyAgents,
+      tokenList.length,
+      totalAgents,
+      versionList,
+      yaml.data,
+    ],
+  );
+  const pageContext = useMemo(
+    () => (guidanceReady && c ? buildConfigurationPageContext() : null),
+    [buildConfigurationPageContext, c, guidanceReady],
+  );
   const buildConfigurationTargets = useCallback(
     (options: { includeCopilotTargets?: boolean } = {}) => {
       const targets = [insightTarget(insightSurface, insightSurface.targets.page)];
@@ -261,78 +281,101 @@ export default function ConfigurationDetailPage() {
       yaml.data,
     ],
   );
-  const guidanceRequest: AiGuidanceRequest | null =
-    guidanceReady && c && pageContext
-      ? buildInsightRequest(
-          insightSurface,
-          buildConfigurationTargets(),
-          {
-            configuration_id: c.id,
-            configuration_name: c.name,
-            status: c.status ?? null,
-            active_tab: activeTab,
-            total_agents: totalAgents,
-            connected_agents: connectedAgents,
-            healthy_agents: healthyAgents,
-            drifted_agents: driftedAgents,
-            active_websockets: activeWebSockets ?? null,
-            desired_config_hash: desiredHash,
-            versions: versionList.length,
-            total_active_tokens: tokenList.length,
-            latest_version_created_at: versionList[0]?.created_at ?? null,
-            yaml_available: Boolean(yaml.data),
-          },
-          {
+  const guidanceContext = useMemo(
+    () => ({
+      configuration_id: c?.id ?? null,
+      configuration_name: c?.name ?? null,
+      status: c?.status ?? null,
+      active_tab: activeTab,
+      total_agents: totalAgents,
+      connected_agents: connectedAgents,
+      healthy_agents: healthyAgents,
+      drifted_agents: driftedAgents,
+      active_websockets: activeWebSockets ?? null,
+      desired_config_hash: desiredHash,
+      versions: versionList.length,
+      total_active_tokens: tokenList.length,
+      latest_version_created_at: versionList[0]?.created_at ?? null,
+      yaml_available: Boolean(yaml.data),
+    }),
+    [
+      activeTab,
+      activeWebSockets,
+      c?.id,
+      c?.name,
+      c?.status,
+      connectedAgents,
+      desiredHash,
+      driftedAgents,
+      healthyAgents,
+      tokenList.length,
+      totalAgents,
+      versionList,
+      yaml.data,
+    ],
+  );
+  const guidanceTargets = useMemo(() => buildConfigurationTargets(), [buildConfigurationTargets]);
+  const browserTargets = useMemo(
+    () =>
+      guidanceReady && c && pageContext
+        ? buildConfigurationTargets({ includeCopilotTargets: true })
+        : [],
+    [buildConfigurationTargets, c, guidanceReady, pageContext],
+  );
+  const guidanceRequest: AiGuidanceRequest | null = useMemo(
+    () =>
+      guidanceReady && c && pageContext
+        ? buildInsightRequest(insightSurface, guidanceTargets, guidanceContext, {
             intent: "triage_state",
             pageContext,
-          },
-        )
-      : null;
+          })
+        : null,
+    [c, guidanceContext, guidanceReady, guidanceTargets, insightSurface, pageContext],
+  );
+  const browserLightFetches = useMemo(
+    () =>
+      guidanceReady && c
+        ? [
+            ...(id && activeTab === "versions" && versionList.length >= 2
+              ? [
+                  {
+                    key: "configuration.version_diff_latest_previous",
+                    label: "Latest versus previous configuration version",
+                    load: () => fetchConfigurationVersionDiff(id),
+                  },
+                ]
+              : []),
+            ...(id && activeTab === "rollout"
+              ? [
+                  {
+                    key: "configuration.rollout_cohort_summary",
+                    label: "Rollout cohort summary",
+                    load: () => fetchRolloutCohortSummary(id),
+                  },
+                ]
+              : []),
+          ]
+        : [],
+    [activeTab, c, guidanceReady, id, versionList.length],
+  );
   const browserContext = useMemo(
     () => ({
       id: "portal.configuration.detail",
       title: c ? `Configuration: ${c.name}` : "Configuration detail",
       surface: insightSurface.surface,
-      context: guidanceRequest?.context ?? {},
-      targets:
-        guidanceReady && c && pageContext
-          ? buildConfigurationTargets({ includeCopilotTargets: true })
-          : [],
+      context: guidanceRequest?.context ?? guidanceContext,
+      targets: browserTargets,
       pageContext: pageContext ?? undefined,
-      lightFetches:
-        guidanceReady && c
-          ? [
-              ...(id && activeTab === "versions" && versionList.length >= 2
-                ? [
-                    {
-                      key: "configuration.version_diff_latest_previous",
-                      label: "Latest versus previous configuration version",
-                      load: () => fetchConfigurationVersionDiff(id),
-                    },
-                  ]
-                : []),
-              ...(id && activeTab === "rollout"
-                ? [
-                    {
-                      key: "configuration.rollout_cohort_summary",
-                      label: "Rollout cohort summary",
-                      load: () => fetchRolloutCohortSummary(id),
-                    },
-                  ]
-                : []),
-            ]
-          : [],
+      lightFetches: browserLightFetches,
     }),
     [
-      activeTab,
-      buildConfigurationTargets,
+      browserLightFetches,
+      browserTargets,
       c,
-      guidanceReady,
+      guidanceContext,
       guidanceRequest?.context,
-      id,
       insightSurface.surface,
       pageContext,
-      versionList.length,
     ],
   );
   useRegisterBrowserContext(browserContext);
@@ -496,84 +539,70 @@ export default function ConfigurationDetailPage() {
   ];
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <div>
-          <h1>{c.name}</h1>
-          {(c["description"] as string | undefined) && (
-            <p className="meta">{c["description"] as string}</p>
-          )}
-          <p className="meta">
-            Configuration group: desired config for collectors enrolled into this assignment
-            boundary.
-          </p>
-        </div>
-        <div className="actions">
-          <button
-            className="btn btn-primary"
-            onClick={() => {
-              setEnrollmentToken(null);
-              setEnrollmentTokenError(null);
-              setEnrollOpen(true);
-            }}
-          >
-            Enroll agent
-          </button>
-          <span className={`tag tag-${c.status === "active" ? "ok" : "warn"}`}>
-            {c.status ?? "unknown"}
-          </span>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title={c.name}
+        description={
+          <>
+            {(c["description"] as string | undefined) ? (
+              <span className="block">{c["description"] as string}</span>
+            ) : null}
+            <span>
+              Configuration group: desired config for collectors enrolled into this assignment
+              boundary.
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <Button
+              onClick={() => {
+                setEnrollmentToken(null);
+                setEnrollmentTokenError(null);
+                setEnrollOpen(true);
+              }}
+            >
+              Enroll agent
+            </Button>
+            <StatusBadge tone={c.status === "active" ? "ok" : "warn"}>
+              {c.status ?? "unknown"}
+            </StatusBadge>
+          </>
+        }
+      />
 
       {/* Stat cards */}
-      <div className="stat-grid">
-        <div className="stat">
-          <div className="val">{totalAgents}</div>
-          <div className="label">Total collectors</div>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+        <MetricCard label="Total collectors" value={totalAgents.toLocaleString()}>
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">
-            {connectedAgents > 0 ? <span className="live-dot" /> : null}
-            {connectedAgents}
-            <span className="denom">/{totalAgents}</span>
-          </div>
-          <div className="label">Connected</div>
-        </div>
-        <div className="stat">
-          <div className="val">
-            {healthyAgents}
-            <span className="denom">/{totalAgents}</span>
-          </div>
-          <div className="label">Healthy</div>
-        </div>
-        <div className="stat">
-          <div className="val">{driftedAgents}</div>
-          <div className="label">Drifted</div>
-        </div>
-        <div className="stat">
-          <div className="val">
-            {typeof activeWebSockets === "number" && activeWebSockets > 0 ? (
-              <span className="live-dot" />
-            ) : null}
-            {activeWebSockets ?? "—"}
-          </div>
-          <div className="label">Active WebSockets</div>
-        </div>
-        <div className="stat">
-          <div className="val mono-cell">{hashLabel(desiredHash)}</div>
-          <div className="label">Desired config</div>
-        </div>
-        <div className="stat">
-          <div className="val">{versionList.length}</div>
-          <div className="label">Versions</div>
+        </MetricCard>
+        <MetricCard
+          label="Connected"
+          value={`${connectedAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`}
+          tone={connectedAgents === totalAgents && totalAgents > 0 ? "ok" : "neutral"}
+        />
+        <MetricCard
+          label="Healthy"
+          value={`${healthyAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`}
+          tone={healthyAgents === totalAgents && totalAgents > 0 ? "ok" : "neutral"}
+        />
+        <MetricCard
+          label="Drifted"
+          value={driftedAgents.toLocaleString()}
+          tone={driftedAgents > 0 ? "warn" : "neutral"}
+        />
+        <MetricCard
+          label="Active WebSockets"
+          value={activeWebSockets ?? "—"}
+          tone={typeof activeWebSockets === "number" && activeWebSockets > 0 ? "ok" : "neutral"}
+        />
+        <MetricCard label="Desired config" value={hashLabel(desiredHash)} />
+        <MetricCard label="Versions" value={versionList.length.toLocaleString()}>
           <GuidanceSlot item={versionInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">{tokenList.length}</div>
-          <div className="label">Tokens</div>
+        </MetricCard>
+        <MetricCard label="Tokens" value={tokenList.length.toLocaleString()}>
           <GuidanceSlot item={tokenInsight} loading={guidance.isLoading} />
-        </div>
+        </MetricCard>
       </div>
 
       <GuidancePanel
@@ -599,11 +628,23 @@ export default function ConfigurationDetailPage() {
       ) : null}
 
       {/* Tabs */}
-      <div className="tabs mt-6">
+      <div
+        className="mt-6 flex flex-wrap gap-2 border-b border-border"
+        role="tablist"
+        aria-label="Configuration sections"
+      >
         {tabs.map((t) => (
           <button
             key={t.key}
-            className={`tab${activeTab === t.key ? " active" : ""}`}
+            type="button"
+            role="tab"
+            aria-selected={activeTab === t.key}
+            aria-controls={`configuration-tab-${t.key}`}
+            className={`border-b-2 px-3 py-2 text-sm font-medium ${
+              activeTab === t.key
+                ? "border-primary text-foreground"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
             onClick={() => setActiveTab(t.key)}
           >
             {t.label}
@@ -613,112 +654,58 @@ export default function ConfigurationDetailPage() {
 
       {/* Tab panels */}
       {activeTab === "agents" && (
-        <div className="dt-card">
+        <div id="configuration-tab-agents" role="tabpanel" className="mt-6">
           {agents.isLoading ? (
             <LoadingSpinner />
           ) : (
-            <table className="dt">
-              <thead>
-                <tr>
-                  <th>Instance UID</th>
-                  <th>Status</th>
-                  <th>Health</th>
-                  <th>Config sync</th>
-                  <th>Current hash</th>
-                  <th>Last seen</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agentList.length === 0 ? (
-                  <tr>
-                    <td colSpan={6}>
-                      <EmptyState
-                        icon="plug"
-                        title="No agents connected"
-                        description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
-                      >
-                        <button
-                          className="btn btn-primary btn-sm"
-                          onClick={() => {
-                            setEnrollmentToken(null);
-                            setEnrollmentTokenError(null);
-                            setEnrollOpen(true);
-                          }}
-                        >
-                          Enroll agent
-                        </button>
-                      </EmptyState>
-                    </td>
-                  </tr>
-                ) : (
-                  agentList.map((a) => {
-                    const uid = agentUid(a);
-                    const healthy = agentIsHealthy(a);
-                    const drift = agentHasDrift(a, desiredHash);
-                    return (
-                      <tr key={uid} className="clickable">
-                        <td className="mono-cell">
-                          <Link to={`/portal/agents/${id}/${uid}`}>{uid}</Link>
-                        </td>
-                        <td>
-                          <span
-                            className={`tag ${
-                              a.status === "connected"
-                                ? "tag-ok"
-                                : a.status === "degraded"
-                                  ? "tag-warn"
-                                  : "tag-err"
-                            }`}
-                          >
-                            {a.status ?? "unknown"}
-                          </span>
-                        </td>
-                        <td>
-                          <span
-                            className={`tag ${healthy === false ? "tag-err" : healthy === true ? "tag-ok" : ""}`}
-                          >
-                            {healthy === false
-                              ? "unhealthy"
-                              : healthy === true
-                                ? "healthy"
-                                : "unknown"}
-                          </span>
-                        </td>
-                        <td>
-                          <span className={`tag ${drift ? "tag-warn" : ""}`}>
-                            {drift ? "drift" : agentCurrentHash(a) ? "in sync" : "not reported"}
-                          </span>
-                        </td>
-                        <td className="mono-cell">{hashLabel(agentCurrentHash(a))}</td>
-                        <td className="meta">{relTime(agentLastSeen(a))}</td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+            <DataTable
+              title="Collectors"
+              columns={agentColumns}
+              data={agentList}
+              getRowId={(agent) => agentUid(agent)}
+              emptyState={
+                <EmptyState
+                  icon="plug"
+                  title="No agents connected"
+                  description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
+                >
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      setEnrollmentToken(null);
+                      setEnrollmentTokenError(null);
+                      setEnrollOpen(true);
+                    }}
+                  >
+                    Enroll agent
+                  </Button>
+                </EmptyState>
+              }
+            />
           )}
-          <div className="meta" style={{ padding: "12px 16px", display: "flex", gap: 12 }}>
-            <button
-              className="btn btn-ghost btn-sm"
+          <div className="flex flex-wrap items-center gap-2 border-x border-b border-border px-4 py-3 text-sm text-muted-foreground">
+            <Button
+              variant="ghost"
+              size="sm"
               disabled={!agentCursor}
               onClick={() => setAgentCursor(undefined)}
             >
               First page
-            </button>
-            <button
-              className="btn btn-secondary btn-sm"
+            </Button>
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={!agents.data?.pagination?.has_more}
               onClick={() => setAgentCursor(agents.data?.pagination?.next_cursor ?? undefined)}
             >
               Next page
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {activeTab === "versions" && (
-        <>
+        <div id="configuration-tab-versions" role="tabpanel" className="mt-6">
           <div className="flex-row justify-between mb-4">
             <div>
               <h3>Versions</h3>
@@ -785,11 +772,11 @@ export default function ConfigurationDetailPage() {
               </table>
             )}
           </div>
-        </>
+        </div>
       )}
 
       {activeTab === "rollout" && (
-        <div className="card card-pad">
+        <div id="configuration-tab-rollout" role="tabpanel" className="card card-pad mt-6">
           <h3>Rollout configuration</h3>
           <p className="meta mt-2">
             Rollout promotes the current version to desired config for this configuration group.
@@ -867,7 +854,7 @@ export default function ConfigurationDetailPage() {
       )}
 
       {activeTab === "yaml" && (
-        <div className="card card-pad">
+        <div id="configuration-tab-yaml" role="tabpanel" className="card card-pad mt-6">
           <div className="flex-row justify-between mb-6">
             <div>
               <h3>Desired YAML</h3>
@@ -915,7 +902,7 @@ export default function ConfigurationDetailPage() {
       )}
 
       {activeTab === "settings" && (
-        <div>
+        <div id="configuration-tab-settings" role="tabpanel" className="mt-6">
           <div className="card card-pad">
             <h3>Details</h3>
             <table className="dt mt-2">
@@ -1027,14 +1014,79 @@ export default function ConfigurationDetailPage() {
         <p>
           Type <strong>{c.name}</strong> to confirm deletion.
         </p>
-        <input
-          className="input mt-2"
+        <Input
+          className="mt-2"
           value={confirmName}
           onChange={(e) => setConfirmName(e.target.value)}
           placeholder={c.name}
           autoFocus
         />
       </Modal>
-    </div>
+    </PageShell>
   );
+}
+
+function configurationAgentColumns(
+  configurationId: string | undefined,
+  desiredHash: string | null,
+): ColumnDef<Agent>[] {
+  return [
+    {
+      id: "instance_uid",
+      header: "Instance UID",
+      cell: ({ row }) => {
+        const uid = agentUid(row.original);
+        return (
+          <Link
+            className="font-mono text-xs text-foreground hover:text-primary"
+            to={`/portal/agents/${configurationId ?? ""}/${uid}`}
+          >
+            {uid}
+          </Link>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => (
+        <StatusBadge tone={agentConnectionTone(row.original.status)}>
+          {row.original.status ?? "unknown"}
+        </StatusBadge>
+      ),
+    },
+    {
+      id: "health",
+      header: "Health",
+      cell: ({ row }) => {
+        const health = agentHealthView(row.original);
+        return <StatusBadge tone={health.tone}>{health.label}</StatusBadge>;
+      },
+    },
+    {
+      id: "config_sync",
+      header: "Config sync",
+      cell: ({ row }) => {
+        const sync = agentSyncView(row.original, desiredHash);
+        return <StatusBadge tone={sync.tone}>{sync.label}</StatusBadge>;
+      },
+    },
+    {
+      id: "current_hash",
+      header: "Current hash",
+      cell: ({ row }) => {
+        const sync = agentSyncView(row.original, desiredHash);
+        return <span className="font-mono text-xs text-muted-foreground">{sync.hashLabel}</span>;
+      },
+    },
+    {
+      id: "last_seen",
+      header: "Last seen",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {relTime(agentLastSeen(row.original))}
+        </span>
+      ),
+    },
+  ];
 }
