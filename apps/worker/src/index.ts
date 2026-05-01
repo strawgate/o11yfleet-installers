@@ -44,6 +44,24 @@ const PRODUCTION_ORIGINS = [
   "https://o11yfleet-site.pages.dev",
 ];
 
+const STAGING_ORIGINS = [
+  "https://staging-app.o11yfleet.com",
+  "https://staging-admin.o11yfleet.com",
+  "https://staging.o11yfleet.com",
+  "https://o11yfleet-staging-app.pages.dev",
+  "https://o11yfleet-staging-admin.pages.dev",
+  "https://o11yfleet-staging.pages.dev",
+];
+
+const DEV_ORIGINS = [
+  "https://dev-app.o11yfleet.com",
+  "https://dev-admin.o11yfleet.com",
+  "https://dev.o11yfleet.com",
+  "https://o11yfleet-dev-app.pages.dev",
+  "https://o11yfleet-dev-admin.pages.dev",
+  "https://o11yfleet-dev.pages.dev",
+];
+
 function isLocalDevOrigin(origin: string): boolean {
   try {
     const url = new URL(origin);
@@ -56,24 +74,40 @@ function isLocalDevOrigin(origin: string): boolean {
   }
 }
 
-/** Check if origin is a Cloudflare Pages preview deploy (e.g. abc123.o11yfleet-site.pages.dev). */
-function isPagesPreview(origin: string): boolean {
+/** Check if origin is a Cloudflare Pages preview deploy for the active environment. */
+function isPagesPreview(origin: string, environment: NonNullable<Env["ENVIRONMENT"]>): boolean {
   try {
     const host = new URL(origin).hostname;
-    const parts = host.split(".");
-    // Must be exactly <hash>.o11yfleet-site.pages.dev (4 segments)
-    return parts.length === 4 && host.endsWith(".o11yfleet-site.pages.dev");
+    if (!host.endsWith(".pages.dev")) return false;
+    const base = host.replace(/^[^.]+\./, "");
+    if (environment === "staging") {
+      return (
+        base === "o11yfleet-staging-app.pages.dev" ||
+        base === "o11yfleet-staging-admin.pages.dev" ||
+        base === "o11yfleet-staging.pages.dev"
+      );
+    }
+    if (environment === "dev") {
+      return (
+        base === "o11yfleet-dev-app.pages.dev" ||
+        base === "o11yfleet-dev-admin.pages.dev" ||
+        base === "o11yfleet-dev.pages.dev"
+      );
+    }
+    return base === "o11yfleet-site.pages.dev";
   } catch {
     return false;
   }
 }
 
 function isAllowedOrigin(origin: string, env: Env): boolean {
-  return (
-    PRODUCTION_ORIGINS.includes(origin) ||
-    isPagesPreview(origin) ||
-    (env.ENVIRONMENT !== "production" && isLocalDevOrigin(origin))
-  );
+  const environment = env.ENVIRONMENT ?? "production";
+  if (PRODUCTION_ORIGINS.includes(origin)) return true;
+  if (isPagesPreview(origin, environment)) return true;
+  if (environment === "staging" && STAGING_ORIGINS.includes(origin)) return true;
+  if (environment === "dev" && DEV_ORIGINS.includes(origin)) return true;
+  if (environment !== "production" && isLocalDevOrigin(origin)) return true;
+  return false;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

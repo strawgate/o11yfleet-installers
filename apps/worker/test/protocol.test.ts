@@ -104,6 +104,57 @@ describe("API Authentication", () => {
     expect(response.status).toBe(201);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
   });
+
+  it("allows dev frontend origins in dev environment", async () => {
+    const devOrigins = [
+      "https://dev-app.o11yfleet.com",
+      "https://dev-admin.o11yfleet.com",
+      "https://dev.o11yfleet.com",
+    ];
+    for (const origin of devOrigins) {
+      const response = await apiFetch("http://localhost/api/admin/tenants", {
+        method: "OPTIONS",
+        headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
+      });
+      expect(response.status).toBe(204, `Expected ${origin} to be allowed in dev`);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    }
+  });
+
+  it("allows dev Pages preview origins in dev environment", async () => {
+    const previewOrigins = [
+      "https://def456.o11yfleet-dev-app.pages.dev",
+      "https://abc123.o11yfleet-dev-admin.pages.dev",
+    ];
+    for (const origin of previewOrigins) {
+      const response = await apiFetch("http://localhost/api/admin/tenants", {
+        method: "OPTIONS",
+        headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
+      });
+      expect(response.status).toBe(204, `Expected ${origin} to be allowed`);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+    }
+  });
+
+  it("does not allow staging Pages preview origins when ENVIRONMENT is dev", async () => {
+    const stagingPreviewOrigin = "https://abc123.o11yfleet-staging-app.pages.dev";
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "OPTIONS",
+      headers: { Origin: stagingPreviewOrigin, "Access-Control-Request-Method": "GET" },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
+  });
+
+  it("does not allow staging origins when ENVIRONMENT is dev", async () => {
+    const stagingOrigin = "https://staging-app.o11yfleet.com";
+    const response = await apiFetch("http://localhost/api/admin/tenants", {
+      method: "OPTIONS",
+      headers: { Origin: stagingOrigin, "Access-Control-Request-Method": "GET" },
+    });
+    expect(response.status).toBe(204);
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
+  });
 });
 
 // ========================

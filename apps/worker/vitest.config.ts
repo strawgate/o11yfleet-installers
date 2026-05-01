@@ -24,6 +24,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           ...requiredWorkerSecretTestBindings,
+          ENVIRONMENT: "dev",
           CLOUDFLARE_USAGE_API_TOKEN: "",
           CLOUDFLARE_USAGE_ACCOUNT_ID: "",
           CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME: "",
