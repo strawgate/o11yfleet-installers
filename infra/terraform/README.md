@@ -4,15 +4,13 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 
 - D1 database for tenants, auth, configuration metadata, and enrollment tokens.
 - R2 bucket for configuration YAML blobs.
-- Queue for fleet events.
-- API Worker identity, Worker route, queue consumer, and Worker version/deployment.
+- API Worker identity, Worker route, and Worker version/deployment.
 - Static site Worker identity, routes, DNS records, assets, and Worker deployment.
-- Optional Cloudflare Access application and policy for the admin hostname.
 
 Wrangler still builds the API Worker bundle and manages D1 migrations/secrets.
 Terraform owns the deployed Worker versions, static site assets, Worker bindings,
-Worker rollout, queue consumer settings, routes, and DNS. Add runtime
-configuration to Terraform unless it is a secret that must stay out of state.
+Worker rollout, routes, and DNS. Add runtime configuration to Terraform unless
+it is a secret that must stay out of state.
 
 ## Best-Practice Baseline
 
@@ -256,7 +254,6 @@ The Worker migration uses provider 5.x resources:
 - `cloudflare_workers_cron_trigger` for the Worker schedules.
 - `cloudflare_worker_version` for code modules, compatibility date/flags, Durable Object migrations, and bindings.
 - `cloudflare_workers_deployment` for the active version rollout.
-- `cloudflare_queue_consumer` for the `fp-events` consumer settings.
 - `cloudflare_worker_version.site` for static site asset uploads.
 
 `manage_worker_deployment` defaults to `false` so normal Terraform validation and
@@ -415,16 +412,3 @@ the release workflow) so Terraform creates the static site Worker version,
 deployment, DNS records, and routes together. A control-plane-only Terraform
 apply can create the Worker identity, DNS, and routes, but it intentionally does
 not upload the built site assets unless `manage_site_deployment=true`.
-
-## Admin Access
-
-Set `enable_admin_access = true` only with at least one identity rule:
-
-```hcl
-enable_admin_access = true
-admin_access_allowed_emails = [
-  "admin@example.com",
-]
-```
-
-Cloudflare Access identity providers are account configuration. This stack only manages the application and policy for `admin.o11yfleet.com`.

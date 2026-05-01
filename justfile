@@ -1145,7 +1145,6 @@ tf-plan-site env="prod": (tf-init-remote env)
         -target=cloudflare_worker_version.site
         -target=cloudflare_workers_deployment.site
         -target=cloudflare_workers_route.site
-        -target=cloudflare_zero_trust_access_application.admin
     )
     terraform plan \
         "${targets[@]}" \
@@ -1213,7 +1212,6 @@ tf-apply-site env="prod": (tf-init-remote env)
         -target=cloudflare_worker_version.site
         -target=cloudflare_workers_deployment.site
         -target=cloudflare_workers_route.site
-        -target=cloudflare_zero_trust_access_application.admin
     )
     terraform apply \
         "${targets[@]}" \
