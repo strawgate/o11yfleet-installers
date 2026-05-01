@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # O11yFleet Collector Installer
-# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token <TOKEN>
+# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 #
 # Installs otelcol-contrib with OpAMP extension configured to connect to O11yFleet.
 # Supports: Linux (amd64/arm64), macOS (amd64/arm64)
@@ -282,7 +282,7 @@ main() {
 O11yFleet Collector Installer
 
 Usage:
-  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token <TOKEN>
+  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
   --token TOKEN       Enrollment token (required, starts with fp_enroll_)
@@ -309,7 +309,7 @@ EOF
   fi
 
   if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required. Usage:\n  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token fp_enroll_..."
+    fail "Enrollment token required. Usage:\n  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
   fi
 
   case "$TOKEN" in
@@ -357,7 +357,7 @@ EOF
     darwin) echo "  tail -f /var/log/o11yfleet-collector.log" ;;
   esac
   info "Uninstall:"
-  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --uninstall"
+  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --uninstall"
   echo ""
 }
 

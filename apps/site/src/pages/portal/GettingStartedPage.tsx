@@ -17,7 +17,7 @@ const INSTALL_SH = (token: string) =>
   `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;
 
 const DOWNLOAD_INSTALL_SH = (token: string) =>
-  `curl --proto '=https' --tlsv1.2 -fsSLO https://o11yfleet-site.pages.dev/install.sh
+  `curl --proto '=https' --tlsv1.2 -fsSLO https://o11yfleet.com/install.sh
 chmod +x install.sh
 ./install.sh --token ${token}`;
 

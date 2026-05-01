@@ -14,4 +14,3 @@ environment           = "staging"
 # For strongest isolation, use a separate Cloudflare account and separate DNS
 # zone per long-lived environment. If sharing an account/zone, keep all
 # stateful resources and hostnames environment-prefixed.
-pages_custom_domains_to_attach = ["site", "app", "admin"]

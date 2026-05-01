@@ -202,7 +202,9 @@ function isAllowedSiteOrigin(origin: string, env: Env): boolean {
         url.hostname === "app.o11yfleet.com" ||
         url.hostname === "staging.o11yfleet.com" ||
         url.hostname === "dev.o11yfleet.com" ||
-        url.hostname.endsWith(".o11yfleet-site.pages.dev"))
+        url.hostname === "o11yfleet-site-worker.o11yfleet.workers.dev" ||
+        url.hostname === "o11yfleet-site-worker-staging.o11yfleet.workers.dev" ||
+        url.hostname === "o11yfleet-site-worker-dev.o11yfleet.workers.dev")
     );
   } catch {
     return false;

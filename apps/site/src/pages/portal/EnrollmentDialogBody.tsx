@@ -3,7 +3,7 @@ import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "../../components/common/EmptyState";
 
 const INSTALL_COMMAND = (token: string) =>
-  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet-site.pages.dev/install.sh | bash -s -- --token ${token}`;
+  `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;
 
 interface EnrollmentDialogBodyProps {
   enrollmentToken: string | null;

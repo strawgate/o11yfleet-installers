@@ -19,35 +19,29 @@ These records currently exist in the [Cloudflare Dashboard](https://dash.cloudfl
 
 This routes `api.o11yfleet.com` → Worker (`o11yfleet-worker`).
 
-### Site (Cloudflare Pages custom domains)
+### Site (Workers Static Assets custom domains)
 
-Current custom domains in Pages > o11yfleet-site > Custom domains:
+The site surfaces are served by Terraform-managed Workers Static Assets:
 
 - `o11yfleet.com` — marketing site
 - `app.o11yfleet.com` — user portal (root redirects to `/portal/overview`)
 - `admin.o11yfleet.com` — admin portal (root redirects to `/admin/overview`)
 
-The Terraform target splits these into separate Pages projects:
-
-- `o11yfleet-site` -> `o11yfleet.com`
-- `o11yfleet-app` -> `app.o11yfleet.com`
-- `o11yfleet-admin` -> `admin.o11yfleet.com`
-
-The deployment workflows publish the same built SPA bundle to all three split
-Pages projects, so Terraform can attach each custom domain to its target
-project after the existing Pages custom domains are imported or detached from
-the legacy project.
+Terraform uploads the same built SPA bundle to one static site Worker per
+environment and routes all three hostnames to it.
 
 ## GitHub Actions Secrets
 
 Add these in GitHub repo Settings > Secrets and variables > Actions:
 
-Repository-level deployment credentials:
+Environment-level deployment credentials:
 
-| Secret                         | Value                              | Notes                                         |
-| ------------------------------ | ---------------------------------- | --------------------------------------------- |
-| `CLOUDFLARE_DEPLOY_API_TOKEN`  | (create in CF Dashboard)           | See permissions below                         |
-| `CLOUDFLARE_DEPLOY_ACCOUNT_ID` | `417e8c0fd8f1a64e9f2c4845afa6dc56` | Workflows map this to `CLOUDFLARE_ACCOUNT_ID` |
+| Secret                                 | Value                              | Notes                                         |
+| -------------------------------------- | ---------------------------------- | --------------------------------------------- |
+| `CLOUDFLARE_DEPLOY_API_TOKEN`          | (create with bootstrap script)     | See permissions below                         |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID`         | `417e8c0fd8f1a64e9f2c4845afa6dc56` | Workflows map this to `CLOUDFLARE_ACCOUNT_ID` |
+| `TERRAFORM_STATE_R2_ACCESS_KEY_ID`     | (create with bootstrap script)     | R2 S3 access key for Terraform state          |
+| `TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` | (create with bootstrap script)     | R2 S3 secret key for Terraform state          |
 
 Environment-level Worker and smoke-test secrets, configured separately for the
 `dev`, `staging`, and `production` GitHub Environments:
@@ -69,18 +63,35 @@ Environment-level Worker and smoke-test secrets, configured separately for the
 
 ### CF API Token Permissions
 
-Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
+Prefer the bootstrap script so the token values are created and sent directly to
+GitHub Environment secrets without printing:
+
+```bash
+just cloudflare-credentials-dry-run "dev staging prod"
+just cloudflare-credentials-apply "dev staging prod"
+```
+
+The bootstrap script creates one deploy API token and one R2 state API token for
+each environment. The deploy token permissions are equivalent to creating a
+custom token with:
 
 - **Zone > DNS > Edit** (for managing DNS records)
+- **Zone > Workers Routes > Edit**
 - **Zone > Zone > Read**
 - **Account > Workers Scripts > Edit**
-- **Account > Workers Tail > Read**
 - **Account > D1 > Edit**
 - **Account > R2 > Edit**
-- **Account > Cloudflare Pages > Edit**
-- **Account > Access: Apps and Policies > Edit** (for admin Access)
+- **Account > Queues > Edit**
+- **Account > Account Settings > Read**
 
-Zone resources: Include all zones in account.
+Zone resources: the `o11yfleet.com` zone. Account resources: the o11yFleet
+account. Add `--include-zero-trust` when `enable_admin_access=true`; that adds
+the Cloudflare Access app/policy write permission for admin Access.
+
+The R2 state token is scoped to object read/write/list on the Terraform state
+bucket. Cloudflare R2 derives S3 credentials from the token response: the access
+key id is the API token id, and the secret access key is the SHA-256 hash of the
+API token value.
 
 ## Worker Runtime Secrets
 
@@ -89,8 +100,10 @@ as plaintext Worker configuration. Provision these as Worker secrets for each
 deployed environment. Terraform-managed Worker versions inherit `O11YFLEET_API_BEARER_SECRET`,
 `O11YFLEET_CLAIM_HMAC_SECRET`, and seed-account secrets from the latest Worker version by
 default. Provision them before Terraform Worker deployments so the uploaded
-version can inherit the secret bindings. AI guidance can also inherit the optional
-`AI_GUIDANCE_MINIMAX_API_KEY`; Terraform provides the non-secret `AI_GUIDANCE_PROVIDER`, `AI_GUIDANCE_MODEL`,
+version can inherit the secret bindings. AI guidance can also inherit the
+optional `AI_GUIDANCE_MINIMAX_API_KEY` when an environment's tfvars set an SDK
+provider mode and include that secret in `worker_inherited_binding_names`;
+Terraform provides the non-secret `AI_GUIDANCE_PROVIDER`, `AI_GUIDANCE_MODEL`,
 and `AI_GUIDANCE_BASE_URL` Worker bindings.
 
 `apps/worker/wrangler.jsonc` also declares these names under
@@ -99,7 +112,7 @@ That makes Wrangler fail deploys/version uploads when a required secret binding
 is missing, while Terraform validates that the production Worker version keeps
 the same required inherited bindings.
 
-Pages deployments do not get Worker runtime secrets. The browser receives only
+Static site deployments do not get API Worker runtime secrets. The browser receives only
 non-secret build-time values such as `VITE_O11YFLEET_API_URL`.
 
 ```bash
@@ -143,34 +156,32 @@ curl "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6
 
 ## Current Resource IDs
 
-| Resource              | ID                                     |
-| --------------------- | -------------------------------------- |
-| D1 Database (fp-db)   | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
-| Worker                | `o11yfleet-worker`                     |
-| Pages Project (site)  | `o11yfleet-site`                       |
-| Pages Project (app)   | `o11yfleet-app`                        |
-| Pages Project (admin) | `o11yfleet-admin`                      |
-| CF Account            | `417e8c0fd8f1a64e9f2c4845afa6dc56`     |
-| Zone (o11yfleet.com)  | `2650adcd696a6e400201a68323e90c5e`     |
+| Resource             | ID                                     |
+| -------------------- | -------------------------------------- |
+| D1 Database (fp-db)  | `192ca9ca-bd47-4bd2-9321-fcdf62d9cf05` |
+| API Worker           | `o11yfleet-worker`                     |
+| Static site Worker   | `o11yfleet-site-worker`                |
+| CF Account           | `417e8c0fd8f1a64e9f2c4845afa6dc56`     |
+| Zone (o11yfleet.com) | `2650adcd696a6e400201a68323e90c5e`     |
 
 ## URLs
 
-| Service              | URL                                            |
-| -------------------- | ---------------------------------------------- |
-| Worker (workers.dev) | https://o11yfleet-worker.o11yfleet.workers.dev |
-| Worker (custom)      | https://api.o11yfleet.com                      |
-| Site (pages.dev)     | https://o11yfleet-site.pages.dev               |
-| Site (custom)        | https://o11yfleet.com                          |
-| Portal (custom)      | https://app.o11yfleet.com                      |
-| Admin (custom)       | https://admin.o11yfleet.com                    |
+| Service              | URL                                                 |
+| -------------------- | --------------------------------------------------- |
+| Worker (workers.dev) | https://o11yfleet-worker.o11yfleet.workers.dev      |
+| Worker (custom)      | https://api.o11yfleet.com                           |
+| Site Worker          | https://o11yfleet-site-worker.o11yfleet.workers.dev |
+| Site (custom)        | https://o11yfleet.com                               |
+| Portal (custom)      | https://app.o11yfleet.com                           |
+| Admin (custom)       | https://admin.o11yfleet.com                         |
 
 Terraform non-production defaults:
 
-| Service        | Staging URL                          | Dev URL                          |
-| -------------- | ------------------------------------ | -------------------------------- |
-| Worker API     | https://staging-api.o11yfleet.com    | https://dev-api.o11yfleet.com    |
-| Marketing/docs | https://staging.o11yfleet.com        | https://dev.o11yfleet.com        |
-| Portal         | https://staging-app.o11yfleet.com    | https://dev-app.o11yfleet.com    |
-| Admin          | https://staging-admin.o11yfleet.com  | https://dev-admin.o11yfleet.com  |
-| Pages projects | `o11yfleet-staging-{site,app,admin}` | `o11yfleet-dev-{site,app,admin}` |
-| Worker script  | `o11yfleet-worker-staging`           | `o11yfleet-worker-dev`           |
+| Service        | Staging URL                         | Dev URL                         |
+| -------------- | ----------------------------------- | ------------------------------- |
+| Worker API     | https://staging-api.o11yfleet.com   | https://dev-api.o11yfleet.com   |
+| Marketing/docs | https://staging.o11yfleet.com       | https://dev.o11yfleet.com       |
+| Portal         | https://staging-app.o11yfleet.com   | https://dev-app.o11yfleet.com   |
+| Admin          | https://staging-admin.o11yfleet.com | https://dev-admin.o11yfleet.com |
+| Site Worker    | `o11yfleet-site-worker-staging`     | `o11yfleet-site-worker-dev`     |
+| API Worker     | `o11yfleet-worker-staging`          | `o11yfleet-worker-dev`          |

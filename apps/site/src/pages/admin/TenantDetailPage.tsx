@@ -9,6 +9,7 @@ import {
   useImpersonateTenant,
 } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
+import { apiBase } from "../../api/client";
 import { GuidancePanel } from "../../components/ai";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
@@ -142,7 +143,14 @@ export default function TenantDetailPage() {
   async function handleImpersonate() {
     try {
       await impersonateTenant.mutateAsync();
-      window.location.assign("/portal/overview");
+      const destination = new URL("/portal/overview", window.location.origin);
+      if (
+        apiBase &&
+        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
+      ) {
+        destination.searchParams.set("api", apiBase);
+      }
+      window.location.assign(destination.pathname + destination.search);
     } catch (err) {
       toast("Failed to view tenant", err instanceof Error ? err.message : "Unknown error", "err");
     }

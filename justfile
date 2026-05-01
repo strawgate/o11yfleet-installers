@@ -518,8 +518,18 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
     if [ "{{refresh}}" = "false" ]; then
         refresh_arg=(-refresh=false)
     fi
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_dns_record.api
+        -target=cloudflare_dns_record.site
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker.site
+        -target=cloudflare_zero_trust_access_application.admin
+    )
     cd infra/terraform
-    terraform plan "${refresh_arg[@]}" -var-file=envs/{{env}}.tfvars
+    terraform plan "${refresh_arg[@]}" "${targets[@]}" -var-file=envs/{{env}}.tfvars
 
 # Terraform plan for PR validation while remote state is still provider-v4 shaped.
 tf-plan-empty-state env="staging":
@@ -533,27 +543,34 @@ tf-plan-empty-state env="staging":
     terraform init -backend=false
     terraform plan -refresh=false -var-file=envs/{{env}}.tfvars
 
-# Shared Terraform state addresses required before Worker rollout checks.
-# Consumed by tf-check-prod-imports and tf-check-staging-readiness so both
-# environments stay in sync.
-tf-required-imports:
+# Terraform state addresses required before non-production Worker rollout checks.
+tf-required-rollout-state:
     #!/usr/bin/env bash
     set -euo pipefail
     printf '%s\n' \
         cloudflare_d1_database.fleet \
         cloudflare_r2_bucket.configs \
         cloudflare_dns_record.api \
-        cloudflare_worker.fleet \
+        cloudflare_worker.fleet
+
+# Production imports required before enabling provider v5 apply paths. These
+# include the already-routed production Worker traffic resources.
+tf-required-imports:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just --quiet tf-required-rollout-state
+    printf '%s\n' \
         cloudflare_workers_cron_trigger.fleet \
-        cloudflare_workers_route.api
+        cloudflare_workers_route.api \
+        cloudflare_queue_consumer.events
 
 # Verify production imports are in remote state before enabling v5 apply paths.
 tf-check-prod-imports env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     cd infra/terraform
-    # These production resources must be adopted before cutover; split Pages
-    # projects/domains may still be created by Terraform during rollout.
+    # These production resources must be adopted before cutover; the static site
+    # Worker and routes may still be created by Terraform during rollout.
     mapfile -t required < <(just --quiet tf-required-imports)
     missing=()
     for resource in "${required[@]}"; do
@@ -573,7 +590,7 @@ tf-check-staging-readiness env="staging": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     cd infra/terraform
-    mapfile -t required < <(just --quiet tf-required-imports)
+    mapfile -t required < <(just --quiet tf-required-rollout-state)
     missing=()
     for resource in "${required[@]}"; do
         if ! terraform state show "$resource" >/dev/null 2>&1; then
@@ -589,7 +606,20 @@ tf-check-staging-readiness env="staging": (tf-init-remote env)
 
 # Terraform apply for an environment tfvars file against remote state.
 tf-apply env="prod": (tf-init-remote env)
-    cd infra/terraform && terraform apply -var-file=envs/{{env}}.tfvars -auto-approve
+    #!/usr/bin/env bash
+    set -euo pipefail
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_dns_record.api
+        -target=cloudflare_dns_record.site
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker.site
+        -target=cloudflare_zero_trust_access_application.admin
+    )
+    cd infra/terraform
+    terraform apply "${targets[@]}" -var-file=envs/{{env}}.tfvars -auto-approve
 
 # Print the API URL for a deployment environment.
 env-api-url env="prod":
@@ -599,6 +629,20 @@ env-api-url env="prod":
       prod|production) printf '%s\n' "https://api.o11yfleet.com" ;;
       staging) printf '%s\n' "https://staging-api.o11yfleet.com" ;;
       dev) printf '%s\n' "https://dev-api.o11yfleet.com" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+# Print the API URL used by CI smoke tests. Non-prod uses workers.dev because
+# GitHub runner IPs can receive managed challenges on zone custom domains.
+env-api-smoke-url env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) printf '%s\n' "https://api.o11yfleet.com" ;;
+      staging|dev) printf '%s\n' "https://o11yfleet-worker-{{env}}.o11yfleet.workers.dev" ;;
       *)
         printf 'unknown deployment env: %s\n' "{{env}}" >&2
         exit 2
@@ -618,41 +662,22 @@ env-d1-name env="prod":
         ;;
     esac
 
-# Print Pages project names for a deployment environment.
-env-pages-projects env="prod":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    case "{{env}}" in
-      prod|production)
-        printf '%s\n' o11yfleet-site o11yfleet-app o11yfleet-admin
-        ;;
-      staging|dev)
-        printf 'o11yfleet-%s-site\n' "{{env}}"
-        printf 'o11yfleet-%s-app\n' "{{env}}"
-        printf 'o11yfleet-%s-admin\n' "{{env}}"
-        ;;
-      *)
-        printf 'unknown deployment env: %s\n' "{{env}}" >&2
-        exit 2
-        ;;
-    esac
-
-# Print smoke-test targets for Pages in a deployment environment.
-env-pages-smoke-targets env="prod":
+# Print smoke-test targets for the static site Worker in a deployment environment.
+env-site-smoke-targets env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{env}}" in
       prod|production)
         printf '%s\n' \
-          "site|https://o11yfleet-site.pages.dev/" \
-          "app|https://o11yfleet-app.pages.dev/portal/overview" \
-          "admin|https://o11yfleet-admin.pages.dev/admin/overview"
+          "site|https://o11yfleet.com/" \
+          "app|https://app.o11yfleet.com/portal/overview" \
+          "admin|https://admin.o11yfleet.com/admin/overview"
         ;;
       staging|dev)
         printf '%s\n' \
-          "site|https://o11yfleet-{{env}}-site.pages.dev/" \
-          "app|https://o11yfleet-{{env}}-app.pages.dev/portal/overview" \
-          "admin|https://o11yfleet-{{env}}-admin.pages.dev/admin/overview"
+          "site|https://o11yfleet-site-worker-{{env}}.o11yfleet.workers.dev/" \
+          "app|https://o11yfleet-site-worker-{{env}}.o11yfleet.workers.dev/portal/overview" \
+          "admin|https://o11yfleet-site-worker-{{env}}.o11yfleet.workers.dev/admin/overview"
         ;;
       *)
         printf 'unknown deployment env: %s\n' "{{env}}" >&2
@@ -666,24 +691,256 @@ site-build env="prod":
     set -euo pipefail
     API_URL="$(just --quiet env-api-url {{env}})"
     VITE_O11YFLEET_API_URL="$API_URL" pnpm --filter @o11yfleet/site run build
-
-# Deploy the already-built site bundle to the Pages projects for a deployment environment.
-pages-deploy env="prod":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    while IFS= read -r project; do
-        [ -n "$project" ] || continue
-        pnpm exec wrangler pages deploy apps/site/dist \
-            --project-name "$project" \
-            --commit-dirty=true
-    done < <(just --quiet env-pages-projects {{env}})
+    printf '%s\n' _worker.js _headers _redirects > apps/site/dist/.assetsignore
 
 # Run D1 migrations for a deployment environment.
-d1-migrate env="prod":
+d1-migrate env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     DB_NAME="$(just --quiet env-d1-name {{env}})"
-    pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply "$DB_NAME" --remote
+    case "{{env}}" in
+      prod|production|staging|dev) ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+    REPO_ROOT="$(pwd)"
+    D1_DATABASE_ID="$(cd infra/terraform && terraform output -raw d1_database_id)"
+    TMP_CONFIG="$(mktemp "$REPO_ROOT/apps/worker/.wrangler-d1-{{env}}.XXXXXX.jsonc")"
+    trap 'rm -f "$TMP_CONFIG"' EXIT
+    node -e 'const fs = require("node:fs"); const [configPath, databaseName, databaseId] = process.argv.slice(1); fs.writeFileSync(configPath, JSON.stringify({ name: "o11yfleet-d1-migrations", main: "src/index.ts", compatibility_date: "2026-04-29", d1_databases: [{ binding: "FP_DB", database_name: databaseName, database_id: databaseId, migrations_dir: "../../packages/db/migrations" }] }, null, 2));' "$TMP_CONFIG" "$DB_NAME" "$D1_DATABASE_ID"
+
+    pnpm --filter @o11yfleet/worker exec wrangler d1 migrations apply "$DB_NAME" --remote --config "$TMP_CONFIG"
+
+# Print required Worker runtime secrets for shared deployments.
+worker-required-secrets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf '%s\n' \
+        O11YFLEET_API_BEARER_SECRET \
+        O11YFLEET_CLAIM_HMAC_SECRET \
+        O11YFLEET_SEED_ADMIN_EMAIL \
+        O11YFLEET_SEED_ADMIN_PASSWORD \
+        O11YFLEET_SEED_TENANT_USER_EMAIL \
+        O11YFLEET_SEED_TENANT_USER_PASSWORD
+
+# Print optional Worker runtime secrets that are provisioned when present.
+worker-optional-secrets:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf '%s\n' \
+        AI_GUIDANCE_MINIMAX_API_KEY
+
+# Verify required Worker runtime secrets exist before Terraform inherits bindings.
+worker-secrets-check env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) WRANGLER_ENV="" ;;
+      staging|dev) WRANGLER_ENV="{{env}}" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+    args=(secret list --format json)
+    if [ -n "$WRANGLER_ENV" ]; then
+        args+=(--env "$WRANGLER_ENV")
+    fi
+
+    SECRET_NAMES=$(pnpm --filter @o11yfleet/worker exec wrangler "${args[@]}" | jq -r '.[].name')
+    missing=()
+    while IFS= read -r name; do
+        if ! printf '%s\n' "$SECRET_NAMES" | grep -Fxq "$name"; then
+            missing+=("$name")
+        fi
+    done < <(just --quiet worker-required-secrets)
+    if [ "${#missing[@]}" -ne 0 ]; then
+        printf 'Missing required Worker secrets for %s:\n' "{{env}}" >&2
+        printf ' - %s\n' "${missing[@]}" >&2
+        if [ -n "$WRANGLER_ENV" ]; then
+            printf 'Provision each missing secret with: cd apps/worker && pnpm wrangler versions secret put <NAME> --env %s\n' "$WRANGLER_ENV" >&2
+        else
+            printf 'Provision each missing secret with: cd apps/worker && pnpm wrangler versions secret put <NAME>\n' >&2
+        fi
+        exit 1
+    fi
+
+# Provision required Worker runtime secrets from matching process environment
+# variables. Intended for CI bootstrap after the Worker script identity exists.
+worker-secrets-put env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) WRANGLER_ENV="" ;;
+      staging|dev) WRANGLER_ENV="{{env}}" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+    mapfile -t required < <(just --quiet worker-required-secrets)
+    mapfile -t optional < <(just --quiet worker-optional-secrets)
+
+    for name in "${required[@]}"; do
+        value="${!name:-}"
+        if [ -z "$value" ]; then
+            printf 'Missing process environment variable for Worker secret: %s\n' "$name" >&2
+            exit 1
+        fi
+    done
+    managed=("${required[@]}")
+    for name in "${optional[@]}"; do
+        if [ -n "${!name:-}" ]; then
+            managed+=("$name")
+        fi
+    done
+
+    version_args=(versions list --json)
+    if [ -n "$WRANGLER_ENV" ]; then
+        version_args+=(--env "$WRANGLER_ENV")
+    fi
+
+    versions_stderr="$(mktemp)"
+    trap 'rm -f "$versions_stderr"' EXIT
+    set +e
+    versions_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${version_args[@]}" 2>"$versions_stderr")"
+    versions_status=$?
+    set -e
+
+    if [ "$versions_status" -ne 0 ]; then
+        if grep -Eq "has no versions|no uploaded versions" "$versions_stderr"; then
+            just worker-bootstrap-secret-version "{{env}}"
+            for name in "${managed[@]}"; do
+                printf 'Provisioned Worker secret binding for %s in %s\n' "$name" "{{env}}"
+            done
+            exit 0
+        fi
+        cat "$versions_stderr" >&2
+        exit "$versions_status"
+    fi
+
+    if ! node -e 'const input = process.argv[1] || ""; let versions; try { versions = JSON.parse(input); } catch { process.exit(2); } process.exit(Array.isArray(versions) && versions.length > 0 ? 0 : 1);' "$versions_json"; then
+        just worker-bootstrap-secret-version "{{env}}"
+        for name in "${managed[@]}"; do
+            printf 'Provisioned Worker secret binding for %s in %s\n' "$name" "{{env}}"
+        done
+        exit 0
+    fi
+
+    for name in "${managed[@]}"; do
+        value="${!name}"
+        args=(versions secret put "$name")
+        if [ -n "$WRANGLER_ENV" ]; then
+            args+=(--env "$WRANGLER_ENV")
+        fi
+        printf '%s' "$value" | pnpm --filter @o11yfleet/worker exec wrangler "${args[@]}" >/dev/null
+        printf 'Provisioned Worker secret binding for %s in %s\n' "$name" "{{env}}"
+    done
+
+# Create the first Worker version with required secrets when Terraform has only
+# created the script identity. Cloudflare requires the first Worker upload to go
+# through wrangler deploy/C3 before versioned operations can run.
+worker-bootstrap-secret-version env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production|staging|dev) ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+    mapfile -t required < <(just --quiet worker-required-secrets)
+    mapfile -t optional < <(just --quiet worker-optional-secrets)
+    for name in "${required[@]}"; do
+        value="${!name:-}"
+        if [ -z "$value" ]; then
+            printf 'Missing process environment variable for Worker secret: %s\n' "$name" >&2
+            exit 1
+        fi
+    done
+    managed=("${required[@]}")
+    for name in "${optional[@]}"; do
+        if [ -n "${!name:-}" ]; then
+            managed+=("$name")
+        fi
+    done
+
+    WORKER_NAME="$(cd infra/terraform && terraform output -raw worker_name)"
+    TMP_DIR="$(mktemp -d)"
+    trap 'rm -rf "$TMP_DIR"' EXIT
+    node -e 'const fs = require("node:fs"); const [configPath, workerPath, secretsPath, workerName, ...secretNames] = process.argv.slice(1); fs.writeFileSync(workerPath, "export default { async fetch() { return new Response(\"Worker bootstrap in progress\", { status: 503 }); } };"); fs.writeFileSync(configPath, JSON.stringify({ name: workerName, main: "bootstrap.mjs", compatibility_date: "2026-04-29", workers_dev: false, routes: [] }, null, 2)); const secrets = {}; for (const name of secretNames) secrets[name] = process.env[name]; fs.writeFileSync(secretsPath, JSON.stringify(secrets)); fs.chmodSync(secretsPath, 0o600);' "$TMP_DIR/wrangler.jsonc" "$TMP_DIR/bootstrap.mjs" "$TMP_DIR/secrets.json" "$WORKER_NAME" "${managed[@]}"
+
+    pnpm --filter @o11yfleet/worker exec wrangler deploy --config "$TMP_DIR/wrangler.jsonc" --cwd "$TMP_DIR" --secrets-file "$TMP_DIR/secrets.json" --message "Temporary secret bootstrap for Terraform-managed rollout"
+
+# Import existing Worker identities that Cloudflare created but Terraform did not
+# record, which can happen when a first bootstrap apply fails after the API
+# accepts the create request.
+tf-import-existing-workers env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID to the Cloudflare account ID}"
+    case "{{env}}" in
+      prod|production)
+        worker_name="o11yfleet-worker"
+        site_worker_name="o11yfleet-site-worker"
+        ;;
+      staging|dev)
+        worker_name="o11yfleet-worker-{{env}}"
+        site_worker_name="o11yfleet-site-worker-{{env}}"
+        ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+
+    cd infra/terraform
+    for spec in "cloudflare_worker.fleet:${worker_name}" "cloudflare_worker.site:${site_worker_name}"; do
+        address="${spec%%:*}"
+        name="${spec#*:}"
+        if terraform state show "$address" >/dev/null 2>&1; then
+            printf 'Terraform state already has %s\n' "$address"
+            continue
+        fi
+
+        set +e
+        output="$(terraform import -var-file=envs/{{env}}.tfvars "$address" "${CLOUDFLARE_ACCOUNT_ID}/${name}" 2>&1)"
+        status=$?
+        set -e
+        if [ "$status" -eq 0 ]; then
+            printf 'Imported existing Cloudflare Worker %s into %s\n' "$name" "$address"
+        elif printf '%s\n' "$output" | grep -Eiq 'not found|does not exist|could not find|404|10007|script_not_found'; then
+            printf 'No existing Cloudflare Worker to import for %s (%s)\n' "$address" "$name"
+        else
+            printf 'Failed to import Cloudflare Worker %s into %s:\n%s\n' "$name" "$address" "$output" >&2
+            exit "$status"
+        fi
+    done
+
+# Terraform apply for long-lived control-plane resources only. Deployment
+# resources are intentionally handled by tf-apply-worker and tf-apply-site.
+tf-apply-control-plane env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_dns_record.api
+        -target=cloudflare_dns_record.site
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker.site
+        -target=cloudflare_zero_trust_access_application.admin
+    )
+    cd infra/terraform
+    terraform apply "${targets[@]}" -var-file=envs/{{env}}.tfvars -auto-approve
 
 # Terraform plan that includes the Worker code bundle and deployment rollout.
 tf-plan-worker env="prod": (tf-init-remote env)
@@ -699,10 +956,139 @@ tf-plan-worker env="prod": (tf-init-remote env)
         exit 1
     fi
     cd infra/terraform
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_dns_record.api
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker_version.fleet
+        -target=cloudflare_workers_deployment.fleet
+        -target=cloudflare_workers_cron_trigger.fleet
+        -target=cloudflare_workers_route.api
+        -target=cloudflare_queue_consumer.events
+    )
     terraform plan \
+        "${targets[@]}" \
         -var-file=envs/{{env}}.tfvars \
         -var=manage_worker_deployment=true \
+        -var=worker_include_durable_object_binding=true \
+        -var=worker_include_durable_object_migration=false \
         -var="worker_bundle_path=$BUNDLE_PATH"
+
+# First-time Durable Object migration bootstrap. Cloudflare requires the class
+# migration to be deployed before a Worker version can bind that class.
+tf-apply-worker-do-migration env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    BUNDLE_PATH="$(just --quiet worker-bundle {{env}})"
+    if [ -z "$BUNDLE_PATH" ]; then
+        echo "worker-bundle did not emit a bundle path" >&2
+        exit 1
+    fi
+    if [ ! -f "$BUNDLE_PATH" ]; then
+        printf 'Worker bundle path does not exist: %s\n' "$BUNDLE_PATH" >&2
+        exit 1
+    fi
+    cd infra/terraform
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker_version.fleet
+        -target=cloudflare_workers_deployment.fleet
+    )
+    terraform apply \
+        "${targets[@]}" \
+        -var-file=envs/{{env}}.tfvars \
+        -var=manage_worker_deployment=true \
+        -var=worker_include_durable_object_binding=false \
+        -var=worker_include_durable_object_migration=true \
+        -var="worker_bundle_path=$BUNDLE_PATH" \
+        -auto-approve
+
+# Run the Durable Object bootstrap only before Terraform owns an API Worker deployment.
+tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) WRANGLER_ENV="" ;;
+      staging|dev) WRANGLER_ENV="{{env}}" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+    cd infra/terraform
+    if terraform state list | grep -Fx 'cloudflare_workers_deployment.fleet[0]' >/dev/null 2>&1; then
+        echo "Terraform state already has cloudflare_workers_deployment.fleet[0]; skipping Durable Object migration bootstrap"
+        exit 0
+    fi
+    cd ../..
+    deployment_args=(deployments list --json)
+    version_args=(versions view)
+    if [ -n "$WRANGLER_ENV" ]; then
+        deployment_args+=(--env "$WRANGLER_ENV")
+        version_args+=(--env "$WRANGLER_ENV")
+    fi
+    set +e
+    deployments_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${deployment_args[@]}" 2>&1)"
+    deployments_status=$?
+    set -e
+    if [ "$deployments_status" -ne 0 ]; then
+        if printf '%s\n' "$deployments_json" | grep -Eiq 'no deployments|no versions|not found|does not exist|not been deployed|404'; then
+            deployments_json="[]"
+        else
+            printf 'Failed to inspect existing Cloudflare Worker deployments:\n%s\n' "$deployments_json" >&2
+            exit "$deployments_status"
+        fi
+    fi
+    current_version_id="$(node -e 'let deployments = []; try { deployments = JSON.parse(process.argv[1] || "[]"); } catch {} const latest = deployments.slice().sort((a, b) => String(a.created_on || "").localeCompare(String(b.created_on || ""))).at(-1); const active = latest?.versions?.find((version) => Number(version.percentage) > 0) || latest?.versions?.[0]; process.stdout.write(active?.version_id || "");' "$deployments_json")"
+    if [ -n "$current_version_id" ]; then
+        version_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${version_args[@]}" "$current_version_id" --json)"
+        if node -e 'const version = JSON.parse(process.argv[1] || "{}"); const runtime = version.resources?.script_runtime || {}; const migrations = runtime.migrations || {}; const tag = runtime.migration_tag || migrations.new_tag; process.exit(typeof tag === "string" && tag.length > 0 ? 0 : 1);' "$version_json"; then
+            echo "Current Cloudflare Worker deployment already has a Durable Object migration tag; skipping Durable Object migration bootstrap"
+            exit 0
+        fi
+    fi
+    just tf-apply-worker-do-migration {{env}}
+
+# Terraform plan that includes the static site Worker module and built assets.
+tf-plan-site env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SITE_ASSETS_DIR="$(pwd)/apps/site/dist"
+    SITE_WORKER_MODULE_PATH="$(pwd)/apps/site/public/_worker.js"
+    SITE_HEADERS_PATH="$(pwd)/apps/site/public/_headers"
+    if [ ! -d "$SITE_ASSETS_DIR" ]; then
+        printf 'Site assets directory does not exist: %s\nRun: just site-build %s\n' "$SITE_ASSETS_DIR" "{{env}}" >&2
+        exit 1
+    fi
+    if [ ! -f "$SITE_WORKER_MODULE_PATH" ]; then
+        printf 'Site Worker module does not exist: %s\n' "$SITE_WORKER_MODULE_PATH" >&2
+        exit 1
+    fi
+    if [ ! -f "$SITE_HEADERS_PATH" ]; then
+        printf 'Site headers file does not exist: %s\n' "$SITE_HEADERS_PATH" >&2
+        exit 1
+    fi
+    cd infra/terraform
+    targets=(
+        -target=cloudflare_worker.site
+        -target=cloudflare_dns_record.site
+        -target=cloudflare_worker_version.site
+        -target=cloudflare_workers_deployment.site
+        -target=cloudflare_workers_route.site
+        -target=cloudflare_zero_trust_access_application.admin
+    )
+    terraform plan \
+        "${targets[@]}" \
+        -var-file=envs/{{env}}.tfvars \
+        -var=manage_site_deployment=true \
+        -var="site_assets_directory=$SITE_ASSETS_DIR" \
+        -var="site_worker_module_path=$SITE_WORKER_MODULE_PATH" \
+        -var="site_headers_path=$SITE_HEADERS_PATH"
 
 # Terraform apply that includes the Worker code bundle and deployment rollout.
 tf-apply-worker env="prod": (tf-init-remote env)
@@ -718,13 +1104,70 @@ tf-apply-worker env="prod": (tf-init-remote env)
         exit 1
     fi
     cd infra/terraform
+    targets=(
+        -target=cloudflare_d1_database.fleet
+        -target=cloudflare_r2_bucket.configs
+        -target=cloudflare_queue.events
+        -target=cloudflare_dns_record.api
+        -target=cloudflare_worker.fleet
+        -target=cloudflare_worker_version.fleet
+        -target=cloudflare_workers_deployment.fleet
+        -target=cloudflare_workers_cron_trigger.fleet
+        -target=cloudflare_workers_route.api
+        -target=cloudflare_queue_consumer.events
+    )
     terraform apply \
+        "${targets[@]}" \
         -var-file=envs/{{env}}.tfvars \
         -var=manage_worker_deployment=true \
+        -var=worker_include_durable_object_binding=true \
+        -var=worker_include_durable_object_migration=false \
         -var="worker_bundle_path=$BUNDLE_PATH" \
         -auto-approve
 
-# Deploy control-plane resources, Worker code, D1 migrations, and Pages.
+# Terraform apply that includes the static site Worker module and built assets.
+tf-apply-site env="prod": (tf-init-remote env)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SITE_ASSETS_DIR="$(pwd)/apps/site/dist"
+    SITE_WORKER_MODULE_PATH="$(pwd)/apps/site/public/_worker.js"
+    SITE_HEADERS_PATH="$(pwd)/apps/site/public/_headers"
+    if [ ! -d "$SITE_ASSETS_DIR" ]; then
+        printf 'Site assets directory does not exist: %s\nRun: just site-build %s\n' "$SITE_ASSETS_DIR" "{{env}}" >&2
+        exit 1
+    fi
+    if [ ! -f "$SITE_WORKER_MODULE_PATH" ]; then
+        printf 'Site Worker module does not exist: %s\n' "$SITE_WORKER_MODULE_PATH" >&2
+        exit 1
+    fi
+    if [ ! -f "$SITE_HEADERS_PATH" ]; then
+        printf 'Site headers file does not exist: %s\n' "$SITE_HEADERS_PATH" >&2
+        exit 1
+    fi
+    cd infra/terraform
+    targets=(
+        -target=cloudflare_worker.site
+        -target=cloudflare_dns_record.site
+        -target=cloudflare_worker_version.site
+        -target=cloudflare_workers_deployment.site
+        -target=cloudflare_workers_route.site
+        -target=cloudflare_zero_trust_access_application.admin
+    )
+    terraform apply \
+        "${targets[@]}" \
+        -var-file=envs/{{env}}.tfvars \
+        -var=manage_site_deployment=true \
+        -var="site_assets_directory=$SITE_ASSETS_DIR" \
+        -var="site_worker_module_path=$SITE_WORKER_MODULE_PATH" \
+        -var="site_headers_path=$SITE_HEADERS_PATH" \
+        -auto-approve
+
+# Deploy the static site Worker and smoke-test all site surfaces.
+site-deploy env="prod":
+    just site-build {{env}}
+    just tf-apply-site {{env}}
+
+# Deploy control-plane resources, static site assets, D1 migrations, and Worker code.
 deploy-env env="staging":
     #!/usr/bin/env bash
     set -euo pipefail
@@ -747,11 +1190,17 @@ deploy-env env="staging":
         exit 2
         ;;
     esac
-    just tf-apply "$TARGET"
+    just tf-import-existing-workers "$TARGET"
+    just tf-apply-control-plane "$TARGET"
+    if [ "${AUTO_PROVISION_WORKER_SECRETS:-false}" = "true" ]; then
+        just worker-secrets-put "$TARGET"
+    fi
+    just worker-secrets-check "$TARGET"
     just d1-migrate "$TARGET"
+    just tf-apply-worker-do-migration-if-needed "$TARGET"
     just tf-apply-worker "$TARGET"
     just site-build "$TARGET"
-    just pages-deploy "$TARGET"
+    just tf-apply-site "$TARGET"
 
 # Deploy staging from CI after staging has been bootstrapped/imported.
 deploy-staging:
@@ -762,6 +1211,26 @@ deploy-staging:
         exit 1
     fi
     REQUIRE_TERRAFORM_STATE_READY=true just deploy-env staging
+
+# Dry-run Cloudflare deploy/state credential bootstrap.
+cloudflare-credentials-dry-run envs="dev staging prod" env_file="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=(--envs "{{envs}}")
+    if [ -n "{{env_file}}" ]; then
+        args+=(--env-file "{{env_file}}")
+    fi
+    ./scripts/bootstrap-cloudflare-credentials.sh "${args[@]}"
+
+# Create Cloudflare deploy/state credentials and store them as GitHub Environment secrets.
+cloudflare-credentials-apply envs="dev staging prod" env_file="":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    args=(--apply --envs "{{envs}}")
+    if [ -n "{{env_file}}" ]; then
+        args+=(--env-file "{{env_file}}")
+    fi
+    ./scripts/bootstrap-cloudflare-credentials.sh "${args[@]}"
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 
 # Run the extended local gate, including workerd and browser tests

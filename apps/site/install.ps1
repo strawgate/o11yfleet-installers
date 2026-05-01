@@ -1,10 +1,10 @@
 # O11yFleet Collector Installer for Windows
 #
-# Usage (download then run — required for param() to work):
-#   irm https://o11yfleet-site.pages.dev/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_enroll_..."
+# Usage (download then run - required for param() to work):
+#   irm https://o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_enroll_..."
 #
 # One-liner via scriptblock wrapper:
-#   & ([scriptblock]::Create((irm https://o11yfleet-site.pages.dev/install.ps1))) -Token "fp_enroll_..."
+#   & ([scriptblock]::Create((irm https://o11yfleet.com/install.ps1))) -Token "fp_enroll_..."
 #
 # Uninstall:
 #   .\install.ps1 -Uninstall
@@ -23,7 +23,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Fix #1: Enforce TLS 1.2+ — Windows PowerShell 5.1 defaults to TLS 1.0/1.1 which GitHub rejects
+# Fix #1: Enforce TLS 1.2+ - Windows PowerShell 5.1 defaults to TLS 1.0/1.1 which GitHub rejects
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
 function Write-Info  { Write-Host "  -> $args" -ForegroundColor Cyan }
@@ -31,13 +31,13 @@ function Write-Ok    { Write-Host "  OK $args" -ForegroundColor Green }
 function Write-Warn  { Write-Host "  !  $args" -ForegroundColor Yellow }
 function Write-Fail  { Write-Host "  X  $args" -ForegroundColor Red; exit 1 }
 
-# ─── Check admin ───────────────────────────────────────────────────────
+# --- Check admin -------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if (-not $isAdmin) {
-    Write-Fail "This script requires Administrator privileges. Right-click PowerShell → Run as Administrator."
+    Write-Fail "This script requires Administrator privileges. Right-click PowerShell -> Run as Administrator."
 }
 
-# ─── Uninstall ─────────────────────────────────────────────────────────
+# --- Uninstall ---------------------------------------------------------
 if ($Uninstall) {
     Write-Info "Uninstalling O11yFleet collector..."
     $svc = Get-Service -Name "o11yfleet-collector" -ErrorAction SilentlyContinue
@@ -50,22 +50,22 @@ if ($Uninstall) {
     exit 0
 }
 
-# ─── Validate token (required for install, not for uninstall) ─────────
+# --- Validate token (required for install, not for uninstall) ---------
 if ([string]::IsNullOrWhiteSpace($Token)) {
     Write-Fail ("Token is required for installation.`n" +
         "  Usage: .\install.ps1 -Token `"fp_enroll_...`"`n" +
-        "  Or:    & ([scriptblock]::Create((irm https://o11yfleet-site.pages.dev/install.ps1))) -Token `"fp_enroll_...`"")
+        "  Or:    & ([scriptblock]::Create((irm https://o11yfleet.com/install.ps1))) -Token `"fp_enroll_...`"")
 }
 if (-not $Token.StartsWith("fp_enroll_")) {
-    Write-Warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?"
+    Write-Warn "Token doesn't start with fp_enroll_ - are you sure this is an enrollment token?"
 }
 
 Write-Host ""
 Write-Host "  O11yFleet Collector Installer" -ForegroundColor Cyan
-Write-Host "  ──────────────────────────────"
+Write-Host "  ------------------------------"
 Write-Host ""
 
-# ─── Detect architecture ──────────────────────────────────────────────
+# --- Detect architecture ----------------------------------------------
 $osArch = [System.Runtime.InteropServices.RuntimeInformation]::OSArchitecture
 switch ($osArch) {
     "X64"   { $arch = "amd64" }
@@ -76,13 +76,13 @@ switch ($osArch) {
     }
 }
 
-# ─── Check for existing install (idempotent upgrade) ──────────────────
+# --- Check for existing install (idempotent upgrade) ------------------
 $isUpgrade = Test-Path "$InstallDir\bin\otelcol-contrib.exe"
 if ($isUpgrade) {
-    Write-Info "Existing installation detected — upgrading binary, preserving config."
+    Write-Info "Existing installation detected - upgrading binary, preserving config."
 }
 
-# ─── Download & install ───────────────────────────────────────────────
+# --- Download & install -----------------------------------------------
 $url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/otelcol-contrib_${Version}_windows_${arch}.tar.gz"
 $tmpDir = Join-Path $env:TEMP "o11yfleet-install"
 
@@ -100,7 +100,7 @@ try {
     Write-Info "Extracting..."
     tar -xzf $archive -C $tmpDir
 
-    # ─── Install binary ───────────────────────────────────────────────
+    # --- Install binary -----------------------------------------------
     New-Item -ItemType Directory -Force -Path "$InstallDir\bin" | Out-Null
     New-Item -ItemType Directory -Force -Path "$InstallDir\config" | Out-Null
 
@@ -117,13 +117,13 @@ try {
     Write-Ok "Installed otelcol-contrib to $InstallDir\bin\"
 
 } finally {
-    # ─── Cleanup temp dir regardless of success/failure ───────────────
+    # --- Cleanup temp dir regardless of success/failure ---------------
     if (Test-Path $tmpDir) {
         Remove-Item -Recurse -Force $tmpDir -ErrorAction SilentlyContinue
     }
 }
 
-# ─── Instance UID (persist across re-installs) ────────────────────────
+# --- Instance UID (persist across re-installs) ------------------------
 $uidPath = Join-Path $InstallDir "instance-uid"
 if (Test-Path $uidPath) {
     $uid = (Get-Content $uidPath -Raw).Trim()
@@ -134,7 +134,7 @@ if (Test-Path $uidPath) {
     Write-Info "Generated new instance UID."
 }
 
-# ─── Config (only written on fresh install, preserved on upgrade) ─────
+# --- Config (only written on fresh install, preserved on upgrade) -----
 $configPath = "$InstallDir\config\otelcol.yaml"
 if ($isUpgrade -and (Test-Path $configPath)) {
     Write-Info "Preserving existing config at $configPath"
@@ -186,7 +186,7 @@ service:
     [System.IO.File]::WriteAllText($configPath, $config)
     Write-Ok "Config written to $configPath"
 
-    # Restrict config file ACL — contains enrollment token
+    # Restrict config file ACL - contains enrollment token
     $acl = Get-Acl $configPath
     $acl.SetAccessRuleProtection($true, $false)
     $adminRule = New-Object System.Security.AccessControl.FileSystemAccessRule("BUILTIN\Administrators", "FullControl", "Allow")
@@ -197,8 +197,8 @@ service:
     Write-Ok "Config file permissions restricted to Administrators and SYSTEM."
 }
 
-# ─── Windows Service ──────────────────────────────────────────────────
-# NOTE: Service runs as LocalSystem. This is intentional — the collector needs
+# --- Windows Service --------------------------------------------------
+# NOTE: Service runs as LocalSystem. This is intentional - the collector needs
 # system-level access for metrics collection. Could be hardened with a dedicated
 # service account (e.g., NT SERVICE\o11yfleet-collector) in a future iteration.
 $svcExists = Get-Service -Name "o11yfleet-collector" -ErrorAction SilentlyContinue

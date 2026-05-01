@@ -20,6 +20,17 @@ just dev-up
 `just dev-up` starts the Worker and site, waits for `/healthz`, applies local D1
 migrations, seeds local data, and keeps both dev servers attached.
 
+## Hosted Environments
+
+| Environment | API                                         | Site                             | Portal                                              | Admin                                                |
+| ----------- | ------------------------------------------- | -------------------------------- | --------------------------------------------------- | ---------------------------------------------------- |
+| Dev         | <https://dev-api.o11yfleet.com/healthz>     | <https://dev.o11yfleet.com/>     | <https://dev-app.o11yfleet.com/portal/overview>     | <https://dev-admin.o11yfleet.com/admin/overview>     |
+| Staging     | <https://staging-api.o11yfleet.com/healthz> | <https://staging.o11yfleet.com/> | <https://staging-app.o11yfleet.com/portal/overview> | <https://staging-admin.o11yfleet.com/admin/overview> |
+| Production  | <https://api.o11yfleet.com/healthz>         | <https://o11yfleet.com/>         | <https://app.o11yfleet.com/portal/overview>         | <https://admin.o11yfleet.com/admin/overview>         |
+
+See [DEPLOY.md](DEPLOY.md) for deployment workflows, secrets, and CI smoke-test
+details.
+
 ## Useful Commands
 
 | Command                       | Purpose                                |

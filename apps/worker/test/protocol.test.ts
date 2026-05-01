@@ -122,42 +122,71 @@ describe("API Authentication", () => {
     }
   });
 
-  it("allows dev Pages preview origins in dev environment", async () => {
-    const previewOrigins = [
-      "https://def456.o11yfleet-dev-app.pages.dev",
-      "https://abc123.o11yfleet-dev-admin.pages.dev",
-    ];
-    for (const origin of previewOrigins) {
-      const response = await apiFetch("http://localhost/api/admin/tenants", {
-        method: "OPTIONS",
-        headers: { Origin: origin, "Access-Control-Request-Method": "GET" },
-      });
-      expect(response.status).toBe(204, `Expected ${origin} to be allowed`);
-      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(origin);
+  it("allows only the Terraform-managed static site Worker origin for the active environment", async () => {
+    const previousEnvironment = env.ENVIRONMENT;
+    const cases = [
+      {
+        environment: "production",
+        allowed: "https://o11yfleet-site-worker.o11yfleet.workers.dev",
+        rejected: "https://o11yfleet-site-worker-staging.o11yfleet.workers.dev",
+      },
+      {
+        environment: "staging",
+        allowed: "https://o11yfleet-site-worker-staging.o11yfleet.workers.dev",
+        rejected: "https://o11yfleet-site-worker-dev.o11yfleet.workers.dev",
+      },
+      {
+        environment: "dev",
+        allowed: "https://o11yfleet-site-worker-dev.o11yfleet.workers.dev",
+        rejected: "http://o11yfleet-site-worker-dev.o11yfleet.workers.dev",
+      },
+    ] as const;
+
+    try {
+      for (const testCase of cases) {
+        env.ENVIRONMENT = testCase.environment;
+        const allowedResponse = await apiFetch("http://localhost/api/admin/tenants", {
+          method: "OPTIONS",
+          headers: { Origin: testCase.allowed, "Access-Control-Request-Method": "GET" },
+        });
+        expect(allowedResponse.status).toBe(204, `Expected ${testCase.allowed} to be allowed`);
+        expect(allowedResponse.headers.get("Access-Control-Allow-Origin")).toBe(testCase.allowed);
+
+        const rejectedResponse = await apiFetch("http://localhost/api/admin/tenants", {
+          method: "OPTIONS",
+          headers: { Origin: testCase.rejected, "Access-Control-Request-Method": "GET" },
+        });
+        expect(rejectedResponse.status).toBe(204);
+        expect(rejectedResponse.headers.get("Access-Control-Allow-Origin")).toBe(
+          "https://app.o11yfleet.com",
+        );
+      }
+    } finally {
+      env.ENVIRONMENT = previousEnvironment;
     }
   });
 
-  it("does not allow staging Pages preview origins when ENVIRONMENT is dev", async () => {
-    const stagingPreviewOrigin = "https://abc123.o11yfleet-staging-app.pages.dev";
+  it("does not allow retired Pages preview origins", async () => {
+    const retiredPreviewOrigin = "https://abc123.o11yfleet-staging-app.pages.dev";
     const response = await apiFetch("http://localhost/api/admin/tenants", {
       method: "OPTIONS",
-      headers: { Origin: stagingPreviewOrigin, "Access-Control-Request-Method": "GET" },
+      headers: { Origin: retiredPreviewOrigin, "Access-Control-Request-Method": "GET" },
     });
     expect(response.status).toBe(204);
     expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
   });
 
-  it("allows staging Pages preview origins in staging environment", async () => {
+  it("allows staging origins in staging environment", async () => {
     const previousEnvironment = env.ENVIRONMENT;
     env.ENVIRONMENT = "staging";
     try {
-      const stagingPreviewOrigin = "https://abc123.o11yfleet-staging-app.pages.dev";
+      const stagingOrigin = "https://staging-app.o11yfleet.com";
       const response = await apiFetch("http://localhost/api/admin/tenants", {
         method: "OPTIONS",
-        headers: { Origin: stagingPreviewOrigin, "Access-Control-Request-Method": "GET" },
+        headers: { Origin: stagingOrigin, "Access-Control-Request-Method": "GET" },
       });
       expect(response.status).toBe(204);
-      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(stagingPreviewOrigin);
+      expect(response.headers.get("Access-Control-Allow-Origin")).toBe(stagingOrigin);
     } finally {
       env.ENVIRONMENT = previousEnvironment;
     }

@@ -1,6 +1,6 @@
 variable "cloudflare_account_id" {
   type        = string
-  description = "Cloudflare account ID that owns Workers, Pages, D1, R2, Analytics Engine, and Zero Trust resources."
+  description = "Cloudflare account ID that owns Workers, D1, R2, Queues, and Zero Trust resources."
 
   validation {
     condition     = length(trimspace(var.cloudflare_account_id)) > 0
@@ -38,23 +38,6 @@ variable "resource_prefix" {
   type        = string
   description = "Prefix used for Cloudflare resource names."
   default     = "o11yfleet"
-}
-
-variable "production_branch" {
-  type        = string
-  description = "Git branch Cloudflare Pages treats as production."
-  default     = "main"
-}
-
-variable "pages_functions_compatibility_date" {
-  type        = string
-  description = "Compatibility date Terraform applies to Pages Functions production and preview deployment configs."
-  default     = "2026-04-26"
-
-  validation {
-    condition     = can(regex("^\\d{4}-\\d{2}-\\d{2}$", var.pages_functions_compatibility_date))
-    error_message = "pages_functions_compatibility_date must use YYYY-MM-DD format."
-  }
 }
 
 variable "worker_script_name" {
@@ -122,13 +105,35 @@ variable "worker_analytics_engine_dataset" {
   default     = "fp_analytics"
 }
 
+variable "ai_guidance_provider" {
+  type        = string
+  description = "AI guidance provider mode exposed to the Worker. Use fixture/deterministic without an SDK key, or minimax/openai-compatible with AI_GUIDANCE_MINIMAX_API_KEY inherited."
+  default     = "fixture"
+
+  validation {
+    condition     = contains(["fixture", "deterministic", "minimax", "openai-compatible"], var.ai_guidance_provider)
+    error_message = "ai_guidance_provider must be fixture, deterministic, minimax, or openai-compatible."
+  }
+}
+
+variable "ai_guidance_model" {
+  type        = string
+  description = "AI guidance model name exposed to the Worker."
+  default     = "o11yfleet-guidance-fixture"
+}
+
+variable "ai_guidance_base_url" {
+  type        = string
+  description = "OpenAI-compatible AI guidance base URL exposed to the Worker. Empty for fixture mode."
+  default     = ""
+}
+
 variable "worker_inherited_binding_names" {
   type        = set(string)
   description = "Existing Worker bindings to inherit from the latest deployed version, primarily secrets that should not be stored in Terraform state."
   default = [
     "O11YFLEET_API_BEARER_SECRET",
     "O11YFLEET_CLAIM_HMAC_SECRET",
-    "AI_GUIDANCE_MINIMAX_API_KEY",
     "O11YFLEET_SEED_ADMIN_EMAIL",
     "O11YFLEET_SEED_ADMIN_PASSWORD",
     "O11YFLEET_SEED_TENANT_USER_EMAIL",
@@ -156,6 +161,111 @@ variable "worker_durable_object_migration_tag" {
   default     = "v1"
 }
 
+variable "worker_include_durable_object_binding" {
+  type        = bool
+  description = "Whether Terraform-managed Worker versions bind CONFIG_DO. Disable only for the first-time Durable Object migration bootstrap."
+  default     = true
+}
+
+variable "worker_include_durable_object_migration" {
+  type        = bool
+  description = "Whether Terraform-managed Worker versions apply the ConfigDurableObject class migration. Enable only for the first-time Durable Object migration bootstrap."
+  default     = false
+}
+
+variable "worker_queue_consumer_batch_size" {
+  type        = number
+  description = "Maximum number of messages delivered to the Worker queue consumer per batch."
+  default     = 100
+
+  validation {
+    condition     = var.worker_queue_consumer_batch_size >= 1 && var.worker_queue_consumer_batch_size <= 100 && floor(var.worker_queue_consumer_batch_size) == var.worker_queue_consumer_batch_size
+    error_message = "worker_queue_consumer_batch_size must be an integer between 1 and 100."
+  }
+}
+
+variable "worker_queue_consumer_max_wait_time_ms" {
+  type        = number
+  description = "Maximum time the queue waits for a batch to fill before invoking the Worker, in milliseconds."
+  default     = 5000
+
+  validation {
+    condition     = var.worker_queue_consumer_max_wait_time_ms >= 0 && var.worker_queue_consumer_max_wait_time_ms <= 60000 && floor(var.worker_queue_consumer_max_wait_time_ms) == var.worker_queue_consumer_max_wait_time_ms
+    error_message = "worker_queue_consumer_max_wait_time_ms must be an integer between 0 and 60000."
+  }
+}
+
+variable "site_worker_script_name" {
+  type        = string
+  description = "Optional Cloudflare Worker script name override for the static-assets site Worker. Defaults to o11yfleet-site-worker for prod and o11yfleet-site-worker-<env> for non-prod."
+  default     = null
+}
+
+variable "site_worker_subdomain_enabled" {
+  type        = bool
+  description = "Whether the static-assets Worker is available on the workers.dev subdomain."
+  default     = true
+}
+
+variable "site_worker_subdomain_previews_enabled" {
+  type        = bool
+  description = "Whether static-assets Worker preview URLs are enabled on workers.dev."
+  default     = true
+}
+
+variable "manage_site_deployment" {
+  type        = bool
+  description = "When true, Terraform uploads the built site assets and rolls the static-assets Worker deployment to them."
+  default     = false
+}
+
+variable "site_assets_directory" {
+  type        = string
+  description = "Path to the built site asset directory that Terraform uploads when manage_site_deployment is true."
+  default     = null
+}
+
+variable "site_worker_module_path" {
+  type        = string
+  description = "Path to the static-assets Worker module that handles SPA fallback and app/admin root redirects."
+  default     = null
+}
+
+variable "site_worker_module_name" {
+  type        = string
+  description = "Module name Terraform sends to Cloudflare for the static-assets Worker module. Defaults to basename(site_worker_module_path)."
+  default     = null
+}
+
+variable "site_worker_module_content_type" {
+  type        = string
+  description = "Content type for the static-assets Worker module uploaded by Terraform."
+  default     = "application/javascript+module"
+}
+
+variable "site_headers_path" {
+  type        = string
+  description = "Path to the static site _headers file uploaded as Workers Static Assets metadata."
+  default     = null
+}
+
+variable "site_worker_compatibility_date" {
+  type        = string
+  description = "Compatibility date Terraform applies to static-assets Worker versions."
+  default     = "2026-04-29"
+
+  validation {
+    condition     = can(regex("^\\d{4}-\\d{2}-\\d{2}$", var.site_worker_compatibility_date))
+    error_message = "site_worker_compatibility_date must use YYYY-MM-DD format."
+  }
+}
+
+variable "site_worker_compatibility_flags" {
+  type        = set(string)
+  description = "Compatibility flags Terraform applies to static-assets Worker versions."
+  default     = []
+}
+
 variable "d1_database_name" {
   type        = string
   description = "Override D1 database name, mainly for importing existing production resources."
@@ -168,33 +278,10 @@ variable "r2_bucket_name" {
   default     = null
 }
 
-variable "site_pages_project_name" {
+variable "queue_name" {
   type        = string
-  description = "Override marketing/docs Pages project name."
+  description = "Override Queue name, mainly for importing existing production resources."
   default     = null
-}
-
-variable "app_pages_project_name" {
-  type        = string
-  description = "Override customer app Pages project name."
-  default     = null
-}
-
-variable "admin_pages_project_name" {
-  type        = string
-  description = "Override admin Pages project name."
-  default     = null
-}
-
-variable "pages_custom_domains_to_attach" {
-  type        = set(string)
-  description = "Pages custom domains Terraform should attach now. Keep app/admin out until their deploy workflows are ready for cutover."
-  default     = ["site"]
-
-  validation {
-    condition     = alltrue([for domain in var.pages_custom_domains_to_attach : contains(["site", "app", "admin"], domain)])
-    error_message = "pages_custom_domains_to_attach may only contain site, app, or admin."
-  }
 }
 
 variable "site_domain" {

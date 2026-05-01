@@ -80,26 +80,26 @@ test("redirects environment-specific app and admin roots", async () => {
     "https://dev-admin.o11yfleet.com/admin/overview",
   );
 
-  const pagesApp = envWithAssets();
-  const pagesAppResponse = await worker.fetch(
-    new Request("https://o11yfleet-staging-app.pages.dev/"),
-    pagesApp.env,
+  const prodApp = envWithAssets();
+  const prodAppResponse = await worker.fetch(
+    new Request("https://app.o11yfleet.com/"),
+    prodApp.env,
   );
-  assert.equal(pagesAppResponse.status, 302);
+  assert.equal(prodAppResponse.status, 302);
   assert.equal(
-    pagesAppResponse.headers.get("location"),
-    "https://o11yfleet-staging-app.pages.dev/portal/overview",
+    prodAppResponse.headers.get("location"),
+    "https://app.o11yfleet.com/portal/overview",
   );
 
-  const pagesAdmin = envWithAssets();
-  const pagesAdminResponse = await worker.fetch(
-    new Request("https://o11yfleet-dev-admin.pages.dev/"),
-    pagesAdmin.env,
+  const prodAdmin = envWithAssets();
+  const prodAdminResponse = await worker.fetch(
+    new Request("https://admin.o11yfleet.com/"),
+    prodAdmin.env,
   );
-  assert.equal(pagesAdminResponse.status, 302);
+  assert.equal(prodAdminResponse.status, 302);
   assert.equal(
-    pagesAdminResponse.headers.get("location"),
-    "https://o11yfleet-dev-admin.pages.dev/admin/overview",
+    prodAdminResponse.headers.get("location"),
+    "https://admin.o11yfleet.com/admin/overview",
   );
 });
 

@@ -18,6 +18,16 @@ output "r2_bucket_id" {
   description = "R2 bucket Terraform/provider ID."
 }
 
+output "queue_name" {
+  value       = cloudflare_queue.events.queue_name
+  description = "Queue name for Wrangler FP_EVENTS producer and consumer bindings."
+}
+
+output "queue_id" {
+  value       = cloudflare_queue.events.queue_id
+  description = "Queue Terraform/provider ID."
+}
+
 output "api_domain" {
   value       = local.api_domain
   description = "API hostname routed to the Worker."
@@ -33,16 +43,24 @@ output "worker_deployment_id" {
   description = "Active Terraform-managed Worker deployment ID when manage_worker_deployment is enabled."
 }
 
-output "pages_projects" {
+output "site_worker_name" {
+  value       = cloudflare_worker.site.name
+  description = "Static-assets Worker script identity managed by Terraform."
+}
+
+output "site_worker_deployment_id" {
+  value       = var.manage_site_deployment ? cloudflare_workers_deployment.site[0].id : null
+  description = "Active Terraform-managed static-assets Worker deployment ID when manage_site_deployment is enabled."
+}
+
+output "site_surfaces" {
   value = {
-    for key, project in cloudflare_pages_project.pages : key => {
-      name                   = project.name
-      subdomain              = project.subdomain
-      intended_domain        = local.pages_projects[key].domain
-      custom_domain_attached = contains(var.pages_custom_domains_to_attach, key)
+    for key, surface in local.site_surfaces : key => {
+      domain = surface.domain
+      route  = cloudflare_workers_route.site[key].pattern
     }
   }
-  description = "Pages projects and domains managed by Terraform."
+  description = "Static site surfaces routed to the static-assets Worker."
 }
 
 output "admin_access_application_id" {

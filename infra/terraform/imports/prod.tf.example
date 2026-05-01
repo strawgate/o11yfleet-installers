@@ -18,6 +18,11 @@ import {
 }
 
 import {
+  to = cloudflare_queue.events
+  id = "<cloudflare-account-id>/<queue-id>"
+}
+
+import {
   to = cloudflare_worker.fleet
   id = "<cloudflare-account-id>/<worker-script-name>"
 }
@@ -28,18 +33,8 @@ import {
 }
 
 import {
-  to = cloudflare_pages_project.pages["site"]
-  id = "<cloudflare-account-id>/<site-pages-project-name>"
-}
-
-import {
-  to = cloudflare_pages_project.pages["app"]
-  id = "<cloudflare-account-id>/<app-pages-project-name>"
-}
-
-import {
-  to = cloudflare_pages_project.pages["admin"]
-  id = "<cloudflare-account-id>/<admin-pages-project-name>"
+  to = cloudflare_worker.site
+  id = "<cloudflare-account-id>/<site-worker-script-name>"
 }
 
 # Fill these IDs from the Cloudflare dashboard or cf-terraforming before use.
@@ -55,16 +50,36 @@ import {
 }
 
 import {
-  to = cloudflare_pages_domain.pages["site"]
-  id = "<cloudflare-account-id>/<site-pages-project-name>/<site-domain>"
+  to = cloudflare_dns_record.site["site"]
+  id = "<cloudflare-zone-id>/<site-dns-record-id>"
 }
 
 import {
-  to = cloudflare_pages_domain.pages["app"]
-  id = "<cloudflare-account-id>/<app-pages-project-name>/<app-domain>"
+  to = cloudflare_dns_record.site["app"]
+  id = "<cloudflare-zone-id>/<app-dns-record-id>"
 }
 
 import {
-  to = cloudflare_pages_domain.pages["admin"]
-  id = "<cloudflare-account-id>/<admin-pages-project-name>/<admin-domain>"
+  to = cloudflare_dns_record.site["admin"]
+  id = "<cloudflare-zone-id>/<admin-dns-record-id>"
+}
+
+import {
+  to = cloudflare_workers_route.site["site"]
+  id = "<cloudflare-zone-id>/<site-worker-route-id>"
+}
+
+import {
+  to = cloudflare_workers_route.site["app"]
+  id = "<cloudflare-zone-id>/<app-worker-route-id>"
+}
+
+import {
+  to = cloudflare_workers_route.site["admin"]
+  id = "<cloudflare-zone-id>/<admin-worker-route-id>"
+}
+
+import {
+  to = cloudflare_queue_consumer.events
+  id = "<cloudflare-account-id>/<queue-id>/<queue-consumer-id>"
 }

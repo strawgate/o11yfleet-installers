@@ -44,7 +44,7 @@ jobs:
       - name: Run all tests
         run: pnpm turbo test
 
-  deploy-worker:
+  deploy-production:
     needs: [test]
     if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
     runs-on: ubicloud-standard-2-arm
@@ -60,26 +60,13 @@ jobs:
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
       TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
+      TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
     steps:
       - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
+      - uses: ./.github/actions/setup-deploy
         with:
           node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: "1.9"
-
-      - uses: taiki-e/install-action@just
 
       - name: Check Terraform remote state configuration
         run: |
@@ -89,189 +76,37 @@ jobs:
           test -n "$AWS_SECRET_ACCESS_KEY"
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test -n "$O11YFLEET_API_BEARER_SECRET"
-          test -n "$O11YFLEET_SEED_ADMIN_EMAIL"
-          test -n "$O11YFLEET_SEED_ADMIN_PASSWORD"
           test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
-        env:
-          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
-          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
-          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
-
-      - name: Check production imports
-        run: just tf-check-prod-imports prod
-
-      - name: Check production Worker secrets
-        run: |
-          SECRET_NAMES=$(pnpm --filter @o11yfleet/worker exec wrangler secret list --format json \
-            | jq -r '.[].name')
-          for name in O11YFLEET_API_BEARER_SECRET O11YFLEET_CLAIM_HMAC_SECRET O11YFLEET_SEED_ADMIN_EMAIL O11YFLEET_SEED_ADMIN_PASSWORD O11YFLEET_SEED_TENANT_USER_EMAIL O11YFLEET_SEED_TENANT_USER_PASSWORD; do
-            if ! printf '%s\n' "$SECRET_NAMES" | grep -Fxq "$name"; then
-              echo "Missing production Worker secret: $name"
-              echo "Provision it on the Terraform-managed production script with: cd apps/worker && pnpm wrangler versions secret put $name"
-              exit 1
-            fi
-          done
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+          test "$TERRAFORM_PRODUCTION_APPLY_ENABLED" = "true"
 
       # Production D1 migrations are expected to be expand-only and backward
       # compatible with the currently deployed Worker. Contract/destructive
       # schema changes need a separate release after old code is gone.
-      - name: Run D1 migrations
-        run: just d1-migrate prod
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+      - name: Deploy production environment
+        run: just deploy-env prod
 
-      - name: Deploy worker to production with Terraform
-        run: just tf-apply-worker prod
-      - name: Smoke test production
+      - name: Resolve production site smoke targets
+        id: site-smoke
         run: |
-          WORKER_URL="https://api.o11yfleet.com"
-          echo "=== Health check ==="
-          for i in 1 2 3 4 5; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$WORKER_URL/healthz")
-            if [ "$STATUS" = "200" ]; then break; fi
-            echo "Attempt $i: status $STATUS, retrying..."
-            sleep 5
-          done
-          if [ "$STATUS" != "200" ]; then
-            echo "❌ Health check failed after 5 attempts: $STATUS"
-            exit 1
-          fi
-          echo "✓ Health check passed"
+          {
+            echo 'targets<<TARGETS'
+            just --quiet env-site-smoke-targets prod
+            echo 'TARGETS'
+          } >> "$GITHUB_OUTPUT"
 
-          echo "=== Seed auth/admin ==="
-          SEED_RESP=$(curl -s -X POST "$WORKER_URL/auth/seed" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET")
-          TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
-          if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
-            echo "Failed to seed: $SEED_RESP"
-            exit 1
-          fi
-          echo "✓ Demo tenant: $TENANT_ID"
+      - name: Smoke test site targets
+        uses: ./.github/actions/smoke-site
+        with:
+          smoke-targets: ${{ steps.site-smoke.outputs.targets }}
 
-          echo "=== Auth cookie smoke ==="
-          LOGIN_HEADERS=$(mktemp)
-          LOGIN_BODY=$(mktemp)
-          LOGIN_STATUS=$(curl -s -D "$LOGIN_HEADERS" -o "$LOGIN_BODY" -w "%{http_code}" \
-            -X POST "$WORKER_URL/auth/login" \
-            -H "Origin: https://o11yfleet.com" \
-            -H "Content-Type: application/json" \
-            -d "$(jq -nc --arg email "$O11YFLEET_SEED_ADMIN_EMAIL" --arg password "$O11YFLEET_SEED_ADMIN_PASSWORD" '{email:$email,password:$password}')")
-          if [ "$LOGIN_STATUS" != "200" ]; then
-            echo "Admin login smoke failed: HTTP $LOGIN_STATUS"
-            cat "$LOGIN_BODY"
-            exit 1
-          fi
-          SESSION_COOKIE=$(grep -i '^set-cookie: .*fp_session=' "$LOGIN_HEADERS" | head -n 1 || true)
-          if [ -z "$SESSION_COOKIE" ] \
-            || ! printf '%s\n' "$SESSION_COOKIE" | grep -Eqi '(^|;[[:space:]]*)Secure([;[:space:]]|$)' \
-            || ! printf '%s\n' "$SESSION_COOKIE" | grep -Eqi '(^|;[[:space:]]*)SameSite=None([;[:space:]]|$)'; then
-            echo "Admin login did not set a secure cross-site session cookie"
-            cat "$LOGIN_HEADERS"
-            exit 1
-          fi
-          rm -f "$LOGIN_HEADERS" "$LOGIN_BODY"
-          echo "✓ Auth cookie smoke passed"
-
-          echo "=== API smoke: create config (v1) ==="
-          CONFIG=$(curl -s -X POST "$WORKER_URL/api/v1/configurations" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
-            -H "X-Tenant-Id: $TENANT_ID" \
-            -d '{"name":"ci-release-config"}')
-          CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
-          if [ "$CONFIG_ID" = "null" ] || [ -z "$CONFIG_ID" ]; then
-            echo "Failed to create config: $CONFIG"
-            exit 1
-          fi
-          echo "✓ Created config: $CONFIG_ID"
-
-          echo "=== API smoke: create enrollment token (v1) ==="
-          TOKEN_RESP=$(curl -s -X POST "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-token" \
-            -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
-            -H "X-Tenant-Id: $TENANT_ID" \
-            -d '{"label":"ci-release"}')
-          TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
-          if [ -z "$TOKEN" ] || ! echo "$TOKEN" | grep -q "^fp_enroll_"; then
-            echo "Failed to create enrollment token: $TOKEN_RESP"
-            exit 1
-          fi
-          echo "✓ Created enrollment token"
-
-          echo "=== API smoke: config stats (v1) ==="
-          HTTP_STATUS=$(curl -s -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
-            -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
-            -H "X-Tenant-Id: $TENANT_ID")
-          if [ "$HTTP_STATUS" != "200" ]; then
-            echo "Stats endpoint failed: HTTP $HTTP_STATUS"
-            cat /tmp/stats.json
-            exit 1
-          fi
-          echo "Stats: $(cat /tmp/stats.json)"
-          echo "✓ Stats endpoint responding"
-
-          echo "✓ Production smoke tests passed"
+      - name: Smoke test production API
+        uses: ./.github/actions/smoke-api
+        with:
+          environment: prod
+          origin: https://o11yfleet.com
+          config-name: ci-release-config
+          token-label: ci-release
         env:
           O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
           O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
           O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
-
-  deploy-pages:
-    needs: [test]
-    if: ${{ always() && (needs.test.result == 'success' || needs.test.result == 'skipped') }}
-    runs-on: ubicloud-standard-2-arm
-    environment: production
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-        with:
-          version: ${{ env.PNPM_VERSION }}
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-
-      - uses: taiki-e/install-action@just
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - name: Build site
-        run: just site-build prod
-
-      - name: Deploy and smoke test Pages projects
-        uses: ./.github/actions/deploy-pages
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
-        with:
-          projects: |
-            o11yfleet-site
-            o11yfleet-app
-            o11yfleet-admin
-          smoke-targets: |
-            site|https://o11yfleet-site.pages.dev/
-            app|https://o11yfleet-app.pages.dev/portal/overview
-            admin|https://o11yfleet-admin.pages.dev/admin/overview
-
-  smoke-custom-domains:
-    needs: [deploy-pages]
-    runs-on: ubicloud-standard-2-arm
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Smoke test production custom domains
-        uses: ./.github/actions/deploy-pages
-        with:
-          smoke-targets: |
-            site-custom|https://o11yfleet.com/
-            app-custom|https://app.o11yfleet.com/portal/overview
-            admin-custom|https://admin.o11yfleet.com/admin/overview

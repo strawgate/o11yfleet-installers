@@ -1,0 +1,34 @@
+name: Setup deployment toolchain
+description: Install the shared toolchain used by o11yFleet deployment jobs.
+
+inputs:
+  node-version:
+    description: Node.js version to install.
+    default: "22"
+  terraform-version:
+    description: Terraform version to install.
+    default: "1.9"
+  install-dependencies:
+    description: Install pnpm workspace dependencies.
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v6
+
+    - uses: actions/setup-node@v6
+      with:
+        node-version: ${{ inputs.node-version }}
+        cache: pnpm
+
+    - name: Install dependencies
+      if: ${{ inputs.install-dependencies == 'true' }}
+      shell: bash
+      run: pnpm install --frozen-lockfile --prefer-offline
+
+    - uses: hashicorp/setup-terraform@v4
+      with:
+        terraform_version: ${{ inputs.terraform-version }}
+
+    - uses: taiki-e/install-action@just

@@ -1,0 +1,122 @@
+name: Smoke API
+description: Run the deploy-grade o11yFleet API smoke flow for one environment.
+
+inputs:
+  environment:
+    description: "Deployment environment name: dev, staging, or prod."
+    required: true
+  origin:
+    description: Browser origin to use for the auth cookie smoke.
+    required: true
+  config-name:
+    description: Name for the temporary smoke configuration.
+    default: ci-smoke-config
+  token-label:
+    description: Label for the temporary smoke enrollment token.
+    default: ci-smoke
+
+runs:
+  using: composite
+  steps:
+    - name: Smoke API
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        : "${O11YFLEET_API_BEARER_SECRET:?Set O11YFLEET_API_BEARER_SECRET for API smoke}"
+        : "${O11YFLEET_SEED_ADMIN_EMAIL:?Set O11YFLEET_SEED_ADMIN_EMAIL for API smoke}"
+        : "${O11YFLEET_SEED_ADMIN_PASSWORD:?Set O11YFLEET_SEED_ADMIN_PASSWORD for API smoke}"
+
+        WORKER_URL="$(just --quiet env-api-smoke-url "${{ inputs.environment }}")"
+        curl_json=(curl -sS --connect-timeout 5 --max-time 20)
+
+        echo "=== Health check ==="
+        STATUS=""
+        for attempt in 1 2 3 4 5; do
+          STATUS=$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/worker-health.json -w "%{http_code}" "$WORKER_URL/healthz" || true)
+          if [ "$STATUS" = "200" ]; then
+            break
+          fi
+          echo "Health check attempt $attempt failed with status ${STATUS:-curl-error}; retrying..."
+          sleep 5
+        done
+        if [ "$STATUS" != "200" ]; then
+          echo "Health check failed after retries: $STATUS"
+          [ ! -f /tmp/worker-health.json ] || cat /tmp/worker-health.json
+          exit 1
+        fi
+        echo "✓ Health check passed"
+
+        echo "=== Seed auth/admin ==="
+        SEED_RESP=$("${curl_json[@]}" -X POST "$WORKER_URL/auth/seed" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET")
+        TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
+        if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
+          echo "Failed to seed: $SEED_RESP"
+          exit 1
+        fi
+        echo "✓ Demo tenant: $TENANT_ID"
+
+        echo "=== Auth cookie smoke ==="
+        LOGIN_HEADERS=$(mktemp)
+        LOGIN_BODY=$(mktemp)
+        LOGIN_STATUS=$("${curl_json[@]}" -D "$LOGIN_HEADERS" -o "$LOGIN_BODY" -w "%{http_code}" \
+          -X POST "$WORKER_URL/auth/login" \
+          -H "Origin: ${{ inputs.origin }}" \
+          -H "Content-Type: application/json" \
+          -d "$(jq -nc --arg email "$O11YFLEET_SEED_ADMIN_EMAIL" --arg password "$O11YFLEET_SEED_ADMIN_PASSWORD" '{email:$email,password:$password}')")
+        if [ "$LOGIN_STATUS" != "200" ]; then
+          echo "Admin login smoke failed: HTTP $LOGIN_STATUS"
+          cat "$LOGIN_BODY"
+          exit 1
+        fi
+        SESSION_COOKIE=$(grep -i '^set-cookie: .*fp_session=' "$LOGIN_HEADERS" | head -n 1 || true)
+        if [ -z "$SESSION_COOKIE" ] \
+              || ! printf '%s\n' "$SESSION_COOKIE" | grep -Eqi '(^|;[[:space:]]*)Secure([;[:space:]]|$)' \
+              || ! printf '%s\n' "$SESSION_COOKIE" | grep -Eqi '(^|;[[:space:]]*)SameSite=None([;[:space:]]|$)'; then
+          echo "Admin login did not set a secure cross-site session cookie"
+          exit 1
+        fi
+        rm -f "$LOGIN_HEADERS" "$LOGIN_BODY"
+        echo "✓ Auth cookie smoke passed"
+
+        echo "=== API smoke: create config (v1) ==="
+        CONFIG=$("${curl_json[@]}" -X POST "$WORKER_URL/api/v1/configurations" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID" \
+          -d "$(jq -nc --arg name "${{ inputs.config-name }}" '{name:$name}')")
+        CONFIG_ID=$(echo "$CONFIG" | jq -r '.id')
+        if [ "$CONFIG_ID" = "null" ] || [ -z "$CONFIG_ID" ]; then
+          echo "Failed to create config: $CONFIG"
+          exit 1
+        fi
+        echo "✓ Created config: $CONFIG_ID"
+
+        echo "=== API smoke: create enrollment token (v1) ==="
+        TOKEN_RESP=$("${curl_json[@]}" -X POST "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-token" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID" \
+          -d "$(jq -nc --arg label "${{ inputs.token-label }}" '{label:$label}')")
+        TOKEN=$(echo "$TOKEN_RESP" | jq -r '.token')
+        if [ -z "$TOKEN" ] || ! echo "$TOKEN" | grep -q "^fp_enroll_"; then
+          echo "Failed to create enrollment token or response did not include fp_enroll_ token"
+          exit 1
+        fi
+        echo "✓ Created enrollment token"
+
+        echo "=== API smoke: config stats (v1) ==="
+        HTTP_STATUS=$("${curl_json[@]}" -o /tmp/stats.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/stats" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID")
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "Stats endpoint failed: HTTP $HTTP_STATUS"
+          cat /tmp/stats.json
+          exit 1
+        fi
+        echo "Stats: $(cat /tmp/stats.json)"
+        echo "✓ Stats endpoint responding"
+
+        echo "✓ API smoke passed"

@@ -1,0 +1,72 @@
+name: Smoke test site targets
+description: Smoke test one or more static site URLs.
+
+inputs:
+  smoke-targets:
+    description: Newline-delimited smoke targets as label|url.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Smoke test site targets
+      shell: bash
+      env:
+        SMOKE_TARGETS: ${{ inputs.smoke-targets }}
+      run: |
+        set -euo pipefail
+        sleep 5
+        targets_file="$(mktemp)"
+        response_file="$(mktemp)"
+        trap 'rm -f "$targets_file" "$response_file"' EXIT
+        printf '%s\n' "$SMOKE_TARGETS" > "$targets_file"
+
+        while IFS= read -r target; do
+          target="${target%$'\r'}"
+          [ -n "$target" ] || continue
+          if [[ "$target" != *"|"* ]]; then
+            echo "Malformed smoke target line; expected label|url: $target"
+            exit 1
+          fi
+          surface="${target%%|*}"
+          url="${target#*|}"
+          if [ -z "$surface" ] || [ -z "$url" ]; then
+            echo "Malformed smoke target line; label and url must both be non-empty: $target"
+            exit 1
+          fi
+          case "$url" in
+            http://* | https://*) ;;
+            *)
+              echo "Malformed smoke target URL for $surface: $url"
+              exit 1
+              ;;
+          esac
+          STATUS=""
+          : > "$response_file"
+
+          for attempt in 1 2 3 4 5; do
+            STATUS=$(curl -sS --connect-timeout 5 --max-time 20 \
+              -o "$response_file" -w "%{http_code}" "$url" || true)
+            [ "$STATUS" = "200" ] && break
+            echo "$surface smoke attempt $attempt failed with status ${STATUS:-curl-error}; retrying..."
+            sleep 3
+          done
+
+          if [ "$STATUS" != "200" ]; then
+            echo "$surface smoke failed: $STATUS"
+            [ ! -s "$response_file" ] || cat "$response_file"
+            exit 1
+          fi
+
+          if ! grep 'id="root"' "$response_file" >/dev/null; then
+            echo "$surface route did not include the React root marker"
+            head -c 500 "$response_file"
+            exit 1
+          fi
+          if grep -E 'Prototype|AI-powered insights are coming soon|portal-shared\.css' "$response_file" >/dev/null; then
+            echo "$surface route served stale prototype HTML"
+            exit 1
+          fi
+        done < "$targets_file"
+
+        echo "Site targets responding"

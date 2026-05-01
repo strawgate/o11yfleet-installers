@@ -1,4 +1,4 @@
-// Cloudflare Pages Function — subdomain routing + SPA fallback
+// Cloudflare static-assets Worker — subdomain routing + SPA fallback.
 // app-style hosts redirect root to /portal/overview.
 // admin-style hosts redirect root to /admin/overview.
 // site-style hosts serve the marketing/docs SPA.
@@ -19,20 +19,14 @@ function rootRedirectPath(host) {
   if (
     host === "app.o11yfleet.com" ||
     host === "staging-app.o11yfleet.com" ||
-    host === "dev-app.o11yfleet.com" ||
-    host.startsWith("o11yfleet-app.") ||
-    host.startsWith("o11yfleet-staging-app.") ||
-    host.startsWith("o11yfleet-dev-app.")
+    host === "dev-app.o11yfleet.com"
   ) {
     return "/portal/overview";
   }
   if (
     host === "admin.o11yfleet.com" ||
     host === "staging-admin.o11yfleet.com" ||
-    host === "dev-admin.o11yfleet.com" ||
-    host.startsWith("o11yfleet-admin.") ||
-    host.startsWith("o11yfleet-staging-admin.") ||
-    host.startsWith("o11yfleet-dev-admin.")
+    host === "dev-admin.o11yfleet.com"
   ) {
     return "/admin/overview";
   }
@@ -78,9 +72,9 @@ export default {
       return env.ASSETS.fetch(request);
     }
 
-    // SPA routes must always serve the current React index. Cloudflare Pages can
-    // keep old clean-route HTML assets addressable after deploys, so fetching the
-    // original path first can resurrect removed prototype pages.
+    // SPA routes must always serve the current React index. Fetching the
+    // original path first can resurrect removed prototype pages if stale clean
+    // route HTML files are still addressable after deploys.
     return serveSpaIndex(request, env);
   },
 };

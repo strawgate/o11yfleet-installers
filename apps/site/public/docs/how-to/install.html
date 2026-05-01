@@ -294,9 +294,8 @@ pnpm wrangler deploy</code></pre>
                   overflow-x: auto;
                   font-size: 13px;
                 "
-              ><code>cd apps/site
-pnpm build
-pnpm wrangler pages deploy dist</code></pre>
+              ><code>just site-build prod
+	just tf-apply-site prod</code></pre>
             </li>
           </ol>
 

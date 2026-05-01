@@ -91,11 +91,11 @@ export function detectApiBase(): string {
   if (host.endsWith(".o11yfleet.com") || host === "o11yfleet.com") {
     return "https://api.o11yfleet.com";
   }
-  if (host.endsWith(".pages.dev")) {
-    if (host.startsWith("o11yfleet-staging-")) {
+  if (host.endsWith(".workers.dev")) {
+    if (host === "o11yfleet-site-worker-staging.o11yfleet.workers.dev") {
       return "https://staging-api.o11yfleet.com";
     }
-    if (host.startsWith("o11yfleet-dev-")) {
+    if (host === "o11yfleet-site-worker-dev.o11yfleet.workers.dev") {
       return "https://dev-api.o11yfleet.com";
     }
     return "https://o11yfleet-worker.o11yfleet.workers.dev";

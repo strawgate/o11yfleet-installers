@@ -84,44 +84,44 @@ For each check below, record whether the pattern is **PRESENT** (vulnerable), **
 
 ### Authorization
 
-5. **Tenant DELETE role check** — Does the handler for `DELETE /api/v1/tenant` check that the user has `role === 'admin'` before proceeding?
-6. **Tenant PUT role check** — Does the handler for `PUT /api/v1/tenant` check that the user has `role === 'admin'`?
-7. **Impersonation in team list** — Does the handler for `GET /api/v1/team` filter out users with emails matching `impersonation+%@o11yfleet.local`?
+1. **Tenant DELETE role check** — Does the handler for `DELETE /api/v1/tenant` check that the user has `role === 'admin'` before proceeding?
+2. **Tenant PUT role check** — Does the handler for `PUT /api/v1/tenant` check that the user has `role === 'admin'`?
+3. **Impersonation in team list** — Does the handler for `GET /api/v1/team` filter out users with emails matching `impersonation+%@o11yfleet.local`?
 
 ### Crypto / Token handling
 
-8. **`iat` validation in verifyClaim** — Does `verifyClaim` in `claims.ts` check that `claim.iat <= now + clockSkew` and that `claim.exp - claim.iat` is within a max lifetime?
-9. **LIKE wildcard escaping** — In `agent-state-repo.ts`, does the search query use `LIKE ? ESCAPE '\\'` or a sanitiser, or is the user term directly wrapped as `%${q}%`?
+1. **`iat` validation in verifyClaim** — Does `verifyClaim` in `claims.ts` check that `claim.iat <= now + clockSkew` and that `claim.exp - claim.iat` is within a max lifetime?
+2. **LIKE wildcard escaping** — In `agent-state-repo.ts`, does the search query use `LIKE ? ESCAPE '\\'` or a sanitiser, or is the user term directly wrapped as `%${q}%`?
 
 ### YAML parsing
 
-10. **Explicit `maxAliasCount`** — Do the `parseYaml(yaml)` calls in `import.ts` and `config-store.ts` pass `{ maxAliasCount: N }` explicitly?
+1. **Explicit `maxAliasCount`** — Do the `parseYaml(yaml)` calls in `import.ts` and `config-store.ts` pass `{ maxAliasCount: N }` explicitly?
 
 ### Infrastructure
 
-11. **`workers_dev` in production** — Does `wrangler.jsonc` contain `"workers_dev": false` inside the `"production"` environment block?
-12. **Shared D1 database IDs** — Do all three wrangler blocks (top-level, staging, production) share the same `"database_id"` value?
-13. **`isPagesPreview` subdomain check** — Does `isPagesPreview` in `index.ts` enforce exactly 4 segments (not `>= 4`), or does it guard against arbitrary-depth subdomains?
+1. **`workers_dev` in production** — Does `wrangler.jsonc` contain `"workers_dev": false` inside the `"production"` environment block?
+2. **Shared D1 database IDs** — Do all three wrangler blocks (top-level, staging, production) share the same `"database_id"` value?
+3. **Static site Worker origin check** — Does the static site Worker subdomain allow-list in `index.ts` avoid arbitrary-depth or attacker-controlled subdomains?
 
 ### Frontend
 
-14. **`?api=` allow-list** — In `client.ts`, is there a hostname check (e.g. `=== "localhost"`) before accepting the `?api=` query parameter?
-15. **`localStorage` persistence** — Does `client.ts` call `localStorage.setItem("fp-api-base", ...)` unconditionally?
-16. **Sourcemaps** — Does `vite.config.ts` have `sourcemap: true` in the production build block?
+1. **`?api=` allow-list** — In `client.ts`, is there a hostname check (e.g. `=== "localhost"`) before accepting the `?api=` query parameter?
+2. **`localStorage` persistence** — Does `client.ts` call `localStorage.setItem("fp-api-base", ...)` unconditionally?
+3. **Sourcemaps** — Does `vite.config.ts` have `sourcemap: true` in the production build block?
 
 ### Security headers
 
-17. **CSP header** — Does `addSecurityHeaders` in `index.ts` add a `Content-Security-Policy` header?
-18. **`x-fp-admin-debug` stripped** — Is `"x-fp-admin-debug"` present in the `INTERNAL_HEADERS` list in `index.ts`?
-19. **Origin check on login** — Does `/auth/login` reject requests from untrusted origins before checking credentials (i.e. regardless of cookie presence)?
+1. **CSP header** — Does `addSecurityHeaders` in `index.ts` add a `Content-Security-Policy` header?
+2. **`x-fp-admin-debug` stripped** — Is `"x-fp-admin-debug"` present in the `INTERNAL_HEADERS` list in `index.ts`?
+3. **Origin check on login** — Does `/auth/login` reject requests from untrusted origins before checking credentials (i.e. regardless of cookie presence)?
 
 ### Session
 
-20. **Session cap per user** — After inserting a new session, does the login handler cap the number of active sessions per user (e.g. `DELETE WHERE user_id = ? ... LIMIT X`)?
+1. **Session cap per user** — After inserting a new session, does the login handler cap the number of active sessions per user (e.g. `DELETE WHERE user_id = ? ... LIMIT X`)?
 
 ### CLI
 
-21. **Auth file permissions** — In `cli/config.ts`, is the temporary auth file written with `{ mode: 0o600 }` at creation time, or is `chmod` applied afterwards (TOCTOU)?
+1. **Auth file permissions** — In `cli/config.ts`, is the temporary auth file written with `{ mode: 0o600 }` at creation time, or is `chmod` applied afterwards (TOCTOU)?
 
 ## Phase 4: Summarise and post issue
 

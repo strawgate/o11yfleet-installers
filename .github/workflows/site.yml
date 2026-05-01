@@ -1,4 +1,4 @@
-name: Deploy Site to Cloudflare Pages
+name: Deploy Site to Cloudflare Workers
 
 on:
   workflow_dispatch:
@@ -14,13 +14,24 @@ on:
           - prod
 
 concurrency:
-  group: pages-${{ inputs.environment }}-${{ github.ref }}
+  group: site-${{ inputs.environment }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  guard-branch:
+    runs-on: ubicloud-standard-2-arm
+    timeout-minutes: 5
+    steps:
+      - name: Require main branch for shared environments
+        run: test "${{ github.ref }}" = "refs/heads/main"
+
   deploy:
+    needs: guard-branch
     runs-on: ubicloud-standard-2-arm
     environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    env:
+      TF_IN_AUTOMATION: "true"
+      TF_INPUT: "false"
     steps:
       - uses: actions/checkout@v6
 
@@ -30,38 +41,32 @@ jobs:
           chmod +x apps/site/public/install.sh
           curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.ps1 -o apps/site/public/install.ps1
 
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
-      - uses: taiki-e/install-action@just
+      - uses: ./.github/actions/setup-deploy
 
       - name: Build site
         run: just site-build ${{ inputs.environment }}
 
-      - name: Deploy Pages projects
+      - name: Deploy static site Worker
         env:
+          TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+          TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+          TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
-        run: just pages-deploy ${{ inputs.environment }}
+        run: just tf-apply-site ${{ inputs.environment }}
 
-      - name: Smoke test Pages targets
+      - name: Resolve site smoke targets
+        id: site-smoke
         run: |
-          while IFS= read -r target; do
-            [ -n "$target" ] || continue
-            surface="${target%%|*}"
-            url="${target#*|}"
-            STATUS=$(curl -sS --connect-timeout 5 --max-time 20 -o /tmp/pages-smoke.html -w "%{http_code}" "$url" || true)
-            if [ "$STATUS" != "200" ]; then
-              echo "$surface smoke failed: $STATUS"
-              cat /tmp/pages-smoke.html
-              exit 1
-            fi
-            grep 'id="root"' /tmp/pages-smoke.html >/dev/null
-          done < <(just --quiet env-pages-smoke-targets ${{ inputs.environment }})
+          {
+            echo 'targets<<TARGETS'
+            just --quiet env-site-smoke-targets ${{ inputs.environment }}
+            echo 'TARGETS'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Smoke test site targets
+        uses: ./.github/actions/smoke-site
+        with:
+          smoke-targets: ${{ steps.site-smoke.outputs.targets }}

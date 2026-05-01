@@ -4,14 +4,14 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 
 - D1 database for tenants, auth, configuration metadata, and enrollment tokens.
 - R2 bucket for configuration YAML blobs.
-- Worker identity, Worker route, and the production Worker version/deployment.
-- DNS record for the API hostname.
-- Split Cloudflare Pages projects and custom domains for marketing, app, and admin.
+- Queue for fleet events.
+- API Worker identity, Worker route, queue consumer, and Worker version/deployment.
+- Static site Worker identity, routes, DNS records, assets, and Worker deployment.
 - Optional Cloudflare Access application and policy for the admin hostname.
 
-Wrangler still builds the Worker bundle and uploads Pages assets. Terraform owns
-the resources those deploys target, including Worker bindings, Worker rollout,
-Analytics Engine binding, and Pages deployment configuration. Add runtime
+Wrangler still builds the API Worker bundle and manages D1 migrations/secrets.
+Terraform owns the deployed Worker versions, static site assets, Worker bindings,
+Worker rollout, queue consumer settings, routes, and DNS. Add runtime
 configuration to Terraform unless it is a secret that must stay out of state.
 
 ## Best-Practice Baseline
@@ -23,7 +23,7 @@ This stack follows these rules from the current Cloudflare and Terraform docs:
   or deliberately retire/delete it and let Terraform create the replacement.
 - Do not manage the same Cloudflare resource through both Terraform and
   Wrangler/dashboard settings. Wrangler is allowed here only as a bundler,
-  secret provisioning helper, D1 migration runner, and Pages asset uploader.
+  secret provisioning helper, and D1 migration runner.
 - Keep Cloudflare credentials and state backend credentials out of committed
   files. Use GitHub environment secrets in CI and local environment variables or
   an approved secret manager locally.
@@ -52,18 +52,20 @@ Primary references:
 
 ## Target Layout
 
-| Surface               | Resource                                           |
-| --------------------- | -------------------------------------------------- |
-| `o11yfleet.com`       | Marketing/docs Pages project                       |
-| `app.o11yfleet.com`   | Customer app Pages project                         |
-| `admin.o11yfleet.com` | Admin Pages project protected by Cloudflare Access |
-| `api.o11yfleet.com`   | Worker route to `o11yfleet-worker`                 |
+| Surface               | Resource                                     |
+| --------------------- | -------------------------------------------- |
+| `o11yfleet.com`       | Static site Worker route                     |
+| `app.o11yfleet.com`   | Static site Worker route                     |
+| `admin.o11yfleet.com` | Static site Worker route protected by Access |
+| `api.o11yfleet.com`   | Worker route to `o11yfleet-worker`           |
 
 Non-production defaults use prefixed hostnames such as
 `staging-app.o11yfleet.com` and resource names such as
 `o11yfleet-staging-db`.
 
-Pages projects and Pages custom domains are intentionally separate. The production deploy workflows publish the same built SPA bundle to all three Pages projects, so production attaches the `site`, `app`, and `admin` custom domains to their split projects. For new non-production environments, add custom domains only after the matching deployment workflow is publishing the right asset bundle to that project.
+The same built SPA bundle is uploaded as Workers Static Assets and served by one
+static site Worker per environment. The Worker script in
+`apps/site/public/_worker.js` handles app/admin root redirects and SPA fallback.
 
 For stronger future isolation, create a second Cloudflare account and zone such
 as `o11yfleet-staging.com`, copy `envs/example.tfvars.example` to an untracked
@@ -104,6 +106,18 @@ export AWS_SECRET_ACCESS_KEY="$TERRAFORM_STATE_R2_SECRET_ACCESS_KEY"
 `.tfvars` files or backend config files. Terraform's S3 backend still reads the
 R2 credentials from the conventional `AWS_*` environment variables above.
 
+Create and rotate those credentials with the bootstrap script, not Terraform:
+
+```bash
+just cloudflare-credentials-dry-run "dev staging prod"
+just cloudflare-credentials-apply "dev staging prod"
+```
+
+The script creates per-environment Cloudflare deploy tokens and R2 state tokens
+and stores them as GitHub Environment secrets. Terraform should not manage these
+tokens in this stack because that creates a bootstrap cycle and would put the
+credentials or derived R2 secret material in Terraform state.
+
 The committed `envs/*.tfvars` files contain stable, non-secret identifiers and
 environment-specific names. If you need private or experimental variable values,
 put them in an untracked `*.auto.tfvars` file under `infra/terraform/` or pass
@@ -114,9 +128,12 @@ files.
 just tf-plan staging
 just tf-plan prod
 just tf-plan-worker prod
+just site-build prod
+just tf-plan-site prod
 ```
 
-The production tfvars intentionally point D1/R2 at the existing names so those data-bearing resources can be imported instead of recreated. They also attach all three Pages custom domains now that the deployment workflows publish to the split site/app/admin projects.
+The production tfvars intentionally point D1/R2/Queue at the existing names so
+those data-bearing resources can be imported instead of recreated.
 
 ## GitHub Deployment
 
@@ -128,9 +145,15 @@ The production tfvars intentionally point D1/R2 at the existing names so those d
 
 `.github/workflows/deploy-environment.yml` is the manual full-environment
 deploy path. It runs `just deploy-env <env>`, which applies Terraform control
-plane resources, uploads a Terraform-managed Worker version, runs D1
-migrations, builds the site for the target API URL, deploys all Pages projects,
-and smoke-tests Pages plus `/healthz`.
+plane resources, uploads the Terraform-managed static site Worker/assets, runs
+D1 migrations, uploads a Terraform-managed API Worker version, and smoke-tests
+the site plus the deploy-grade API flow. The workflow permits branch deploys for
+`dev` and `staging` so a PR can be live-validated before merge; `prod` deploys
+are still restricted to `main`.
+
+`.github/workflows/release.yml` is the production application release path. It
+is intentionally a thin wrapper around `just deploy-env prod`, so release,
+manual, and staging deploys keep the same ordering and preflights.
 
 `main` also has an automatic staging deploy in `.github/workflows/ci.yml`, but
 only when `TERRAFORM_STAGING_DEPLOY_ENABLED=true`. Keep that disabled until
@@ -207,22 +230,25 @@ during every plan. After the import lands in state, delete the active
 `imports.prod.tf` or archive it outside Terraform's active `.tf` files as an
 operator record.
 
-Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, and Access IDs before importing those resources. After imports, run:
+Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS
+record, Worker route, Worker, R2, Queue, and Access IDs before importing those
+resources. After imports, run:
 
 ```bash
 terraform plan -var-file=envs/prod.tfvars
 just tf-check-prod-imports prod
 ```
 
-The plan should show no replacement for D1, R2, or the Worker. If it wants to replace a data-bearing resource or recreate the Worker
+The plan should show no replacement for D1, R2, Queue, the Worker, or the Queue
+consumer. If it wants to replace a data-bearing resource or recreate the Worker
 identity, stop and fix the import or name override first.
 
-## Wrangler Boundary
+## Deployment Boundary
 
 `apps/worker/wrangler.jsonc` is now local-dev and bundling metadata. Terraform
-owns the production Worker identity, route, bindings, version,
-and deployment rollout, so production deploys should use `just tf-apply-worker
-prod` instead of `wrangler deploy`.
+owns the production API Worker identity, route, queue consumer, bindings,
+version, and deployment rollout, so production deploys should use
+`just tf-apply-worker prod` instead of `wrangler deploy`.
 
 The Worker migration uses provider 5.x resources:
 
@@ -230,11 +256,26 @@ The Worker migration uses provider 5.x resources:
 - `cloudflare_workers_cron_trigger` for the Worker schedules.
 - `cloudflare_worker_version` for code modules, compatibility date/flags, Durable Object migrations, and bindings.
 - `cloudflare_workers_deployment` for the active version rollout.
+- `cloudflare_queue_consumer` for the `fp-events` consumer settings.
+- `cloudflare_worker_version.site` for static site asset uploads.
 
 `manage_worker_deployment` defaults to `false` so normal Terraform validation and
 control-plane plans do not need a built bundle. `just tf-plan-worker prod` and
 `just tf-apply-worker prod` build `apps/worker/dist` with Wrangler, then pass the
 bundle path to Terraform with `manage_worker_deployment=true`.
+
+Brand-new environments run one extra targeted Worker apply through
+`just tf-apply-worker-do-migration-if-needed <env>` before the normal Worker
+rollout. Cloudflare documents that a Durable Object class migration must be
+applied before a Worker version can bind that class, so this first apply sets
+`worker_include_durable_object_migration=true` and
+`worker_include_durable_object_binding=false`. The normal rollout then sets the
+opposite flags, binding `CONFIG_DO` without repeating the migration. The helper
+skips itself once `cloudflare_workers_deployment.fleet[0]` exists in Terraform
+state, or when the current Cloudflare Worker deployment's version already has a
+Durable Object migration tag. See Cloudflare's Terraform Durable Objects
+consideration:
+<https://developers.cloudflare.com/workers/platform/infrastructure-as-code/#considerations-with-durable-objects>.
 
 Keep `worker_compatibility_date` in sync with `apps/worker/wrangler.jsonc`.
 Wrangler performs the dry-run bundle build and Terraform uploads the resulting
@@ -250,15 +291,16 @@ tag Terraform sends with new Worker versions. Change it only when the Durable
 Object migration list changes, such as adding, renaming, or deleting Durable
 Object classes.
 
-Terraform-managed Worker versions inherit `O11YFLEET_API_BEARER_SECRET`, `O11YFLEET_CLAIM_HMAC_SECRET`,
-seed-account secrets, and the optional `AI_GUIDANCE_MINIMAX_API_KEY` from the latest Worker version by
-default. Keep provisioning secret values with Wrangler until the project adopts Cloudflare
-Secrets Store or another Terraform-managed secret source. If a production Worker
-relies on additional dashboard/Wrangler-managed bindings, add their names to
-`worker_inherited_binding_names` before the first Terraform Worker deployment.
-Terraform validates that this inherited binding list still contains the runtime
-secrets declared in `apps/worker/wrangler.jsonc` `secrets.required`, so deploy
-plans cannot accidentally drop one of the required secret bindings.
+Terraform-managed Worker versions inherit `O11YFLEET_API_BEARER_SECRET`,
+`O11YFLEET_CLAIM_HMAC_SECRET`, and seed-account secrets from the latest Worker
+version by default. Keep provisioning secret values with Wrangler until the
+project adopts Cloudflare Secrets Store or another Terraform-managed secret
+source. Optional secrets such as `AI_GUIDANCE_MINIMAX_API_KEY` should only be
+added to `worker_inherited_binding_names` in environments whose tfvars also set
+the matching non-secret provider mode, such as `ai_guidance_provider =
+"minimax"`. Terraform validates that this inherited binding list still contains
+the runtime secrets declared in `apps/worker/wrangler.jsonc` `secrets.required`,
+so deploy plans cannot accidentally drop one of the required secret bindings.
 
 Cloudflare's Terraform Worker version resource also supports `secret_text`
 bindings, but those values are Terraform inputs and therefore become part of
@@ -277,16 +319,35 @@ to inherit from, recover by redeploying a temporary Wrangler version with the
 required secrets or by moving those secrets to a Terraform-managed secret
 source before running `tf-apply-worker` again.
 
-Cloudflare Pages uses Wrangler only for asset uploads. Terraform owns Pages
-project settings and both production and preview `deployment_configs`. If Pages
-Functions later need bindings or secrets, add them to this Terraform stack so a
-plan can show the full runtime config drift.
+The static site uses Workers Static Assets. `just site-build <env>` builds
+`apps/site/dist`, writes an `.assetsignore` that excludes Worker control
+files, and `just tf-apply-site <env>` passes the asset directory plus
+`apps/site/public/_worker.js` to Terraform with `manage_site_deployment=true`.
+This keeps the public frontend deploy in Terraform rather than a separate
+Wrangler asset upload.
 
 The `deploy-env` just recipe uses Terraform for environment control-plane
-resources and Worker rollout, then Wrangler only for D1 migrations and Pages
-asset upload. `deploy-staging` is the CI-safe wrapper around
-`deploy-env staging`: it requires `TERRAFORM_STAGING_DEPLOY_ENABLED=true` and
-checks staging state before applying.
+resources, static site rollout, and API Worker rollout, then Wrangler only for
+D1 migrations and secret inventory checks. It imports Worker identities left by
+partial bootstrap attempts, runs a targeted control-plane Terraform pass so new
+environments can create Worker script identities, then runs
+`worker-secrets-check` before D1 migrations or API Worker rollout so Terraform
+does not inherit an incomplete binding set. Fresh Workers with no uploaded
+versions use one temporary `wrangler deploy --secrets-file` bootstrap version
+because Cloudflare requires the first Worker upload to use Wrangler deploy or
+C3; existing Workers keep using `wrangler versions secret put`. Optional
+runtime secrets are only provisioned when the matching process environment
+variable is set. D1 migrations use a temporary Wrangler config populated from
+Terraform's real D1 database ID, so checked-in non-production Wrangler
+placeholders are not used for remote migrations. New environments then run a
+Terraform Durable Object migration-only Worker deployment before the normal
+Worker rollout, because Cloudflare requires the class migration to exist before
+the Worker version binds `CONFIG_DO`. Worker routes, cron triggers, queue
+consumers, and site routes are applied by the targeted code-rollout recipes
+after their Worker deployments exist.
+`deploy-staging` is the CI-safe wrapper around `deploy-env staging`: it requires
+`TERRAFORM_STAGING_DEPLOY_ENABLED=true` and checks staging state before
+applying.
 
 The preferred staging cutover is to retire/delete any Wrangler-created staging
 Worker and let Terraform create `o11yfleet-worker-staging`; import the old
@@ -313,11 +374,15 @@ the deploy flag.
 Plan/apply commands for local staging rollout:
 
 ```bash
+just site-build staging
+just tf-plan-site staging
+just tf-apply-site staging
 just tf-plan-worker staging
 just tf-apply-worker staging
 ```
 
-Both commands build the Worker module using Wrangler dry-run output, then pass
+The site commands upload the built SPA bundle as Workers Static Assets. The
+Worker commands build the API Worker module using Wrangler dry-run output, then pass
 `manage_worker_deployment=true` and `worker_bundle_path=...` to Terraform.
 This ensures staging exercises the same Worker version/deployment resources that
 production rollout (#230) will rely on.
@@ -343,6 +408,13 @@ just deploy-env staging
 After that succeeds, run `just tf-check-staging-readiness staging`, set
 `TERRAFORM_STAGING_DEPLOY_ENABLED=true`, and let the automatic `main` staging
 deploy take over.
+
+When cutting an environment over from Cloudflare Pages, use the application
+deploy path (`just deploy-env <env>`, the **Deploy Environment** workflow, or
+the release workflow) so Terraform creates the static site Worker version,
+deployment, DNS records, and routes together. A control-plane-only Terraform
+apply can create the Worker identity, DNS, and routes, but it intentionally does
+not upload the built site assets unless `manage_site_deployment=true`.
 
 ## Admin Access
 

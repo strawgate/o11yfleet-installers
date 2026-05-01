@@ -4,5 +4,3 @@
 cloudflare_account_id = "417e8c0fd8f1a64e9f2c4845afa6dc56"
 cloudflare_zone_id    = "2650adcd696a6e400201a68323e90c5e"
 environment           = "dev"
-
-pages_custom_domains_to_attach = ["site", "app", "admin"]

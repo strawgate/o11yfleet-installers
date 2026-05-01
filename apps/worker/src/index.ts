@@ -41,25 +41,18 @@ const PRODUCTION_ORIGINS = [
   "https://admin.o11yfleet.com",
   "https://o11yfleet.com",
   "https://www.o11yfleet.com",
-  "https://o11yfleet-site.pages.dev",
 ];
 
 const STAGING_ORIGINS = [
   "https://staging-app.o11yfleet.com",
   "https://staging-admin.o11yfleet.com",
   "https://staging.o11yfleet.com",
-  "https://o11yfleet-staging-app.pages.dev",
-  "https://o11yfleet-staging-admin.pages.dev",
-  "https://o11yfleet-staging.pages.dev",
 ];
 
 const DEV_ORIGINS = [
   "https://dev-app.o11yfleet.com",
   "https://dev-admin.o11yfleet.com",
   "https://dev.o11yfleet.com",
-  "https://o11yfleet-dev-app.pages.dev",
-  "https://o11yfleet-dev-admin.pages.dev",
-  "https://o11yfleet-dev.pages.dev",
 ];
 
 function isLocalDevOrigin(origin: string): boolean {
@@ -74,27 +67,24 @@ function isLocalDevOrigin(origin: string): boolean {
   }
 }
 
-/** Check if origin is a Cloudflare Pages preview deploy for the active environment. */
-function isPagesPreview(origin: string, environment: NonNullable<Env["ENVIRONMENT"]>): boolean {
+function staticSiteWorkerOriginsForEnv(environment: Env["ENVIRONMENT"]): string[] {
+  switch (environment) {
+    case "dev":
+      return ["https://o11yfleet-site-worker-dev.o11yfleet.workers.dev"];
+    case "staging":
+      return ["https://o11yfleet-site-worker-staging.o11yfleet.workers.dev"];
+    default:
+      return ["https://o11yfleet-site-worker.o11yfleet.workers.dev"];
+  }
+}
+
+/** Check if origin is the Terraform-managed static site Worker for this environment. */
+function isStaticSiteWorkerOrigin(origin: string, environment: Env["ENVIRONMENT"]): boolean {
   try {
-    const host = new URL(origin).hostname;
-    if (!host.endsWith(".pages.dev")) return false;
-    const base = host.replace(/^[^.]+\./, "");
-    if (environment === "staging") {
-      return (
-        base === "o11yfleet-staging-app.pages.dev" ||
-        base === "o11yfleet-staging-admin.pages.dev" ||
-        base === "o11yfleet-staging.pages.dev"
-      );
-    }
-    if (environment === "dev") {
-      return (
-        base === "o11yfleet-dev-app.pages.dev" ||
-        base === "o11yfleet-dev-admin.pages.dev" ||
-        base === "o11yfleet-dev.pages.dev"
-      );
-    }
-    return base === "o11yfleet-site.pages.dev";
+    const url = new URL(origin);
+    return (
+      url.protocol === "https:" && staticSiteWorkerOriginsForEnv(environment).includes(url.origin)
+    );
   } catch {
     return false;
   }
@@ -103,7 +93,7 @@ function isPagesPreview(origin: string, environment: NonNullable<Env["ENVIRONMEN
 function isAllowedOrigin(origin: string, env: Env): boolean {
   const environment = env.ENVIRONMENT ?? "production";
   if (PRODUCTION_ORIGINS.includes(origin)) return true;
-  if (isPagesPreview(origin, environment)) return true;
+  if (isStaticSiteWorkerOrigin(origin, environment)) return true;
   if (environment === "staging" && STAGING_ORIGINS.includes(origin)) return true;
   if (environment === "dev" && DEV_ORIGINS.includes(origin)) return true;
   if (environment !== "production" && isLocalDevOrigin(origin)) return true;
@@ -265,6 +255,10 @@ export default {
         }),
       );
     }
+  },
+
+  async queue(batch: MessageBatch<unknown>, _env: Env, _ctx: ExecutionContext): Promise<void> {
+    console.warn("Received fleet event batch", { messages: batch.messages.length });
   },
 
   /** Daily stale-agent audit. This is rare reconciliation for missed close/error events. */
