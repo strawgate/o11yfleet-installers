@@ -13,10 +13,8 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
-import { configurationAgentMetrics } from "../../utils/config-stats";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../../ai/page-context";
 import {
   DataTable,
   EmptyState,
@@ -28,7 +26,8 @@ import {
 } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { agentConnectionTone, agentHealthView, agentSyncView } from "./agent-view-model";
+import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
+import { buildAgentSectionModel } from "./agents-page-model";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 const EMPTY_AGENTS: Agent[] = [];
@@ -61,22 +60,37 @@ function AgentSection({
   const agents = agentsPage?.agents ?? EMPTY_AGENTS;
   const stats = useConfigurationStats(config.stats || !expanded ? undefined : config.id);
   const statsData = config.stats ?? stats.data;
-  const list = agents;
-  const fallbackHash = config.current_config_hash ?? undefined;
-  const agentMetrics = useMemo(
-    () => configurationAgentMetrics(statsData, agents, fallbackHash),
-    [agents, fallbackHash, statsData],
-  );
-  const desiredHash = agentMetrics.desiredConfigHash;
-  const connectedCount = agentMetrics.connectedAgents;
-  const healthyCount = agentMetrics.healthyAgents;
-  const degradedCount = agentMetrics.degradedAgents;
   const insightSurface = insightSurfaces.portalAgent;
-  const driftedCount = agentMetrics.driftedAgents;
-  const hasSnapshotStats = Boolean(statsData);
-  const hasDegradedStats = typeof statsData?.status_counts?.["degraded"] === "number";
-  const hasDriftStats = typeof statsData?.drifted_agents === "number";
   const aggregateStatsReady = Boolean(config.stats) || (stats.isFetched && !stats.error);
+  const model = useMemo(
+    () =>
+      buildAgentSectionModel({
+        config,
+        agents,
+        stats: statsData,
+        filter,
+        expanded,
+        isLoading,
+        hasError: Boolean(error),
+        aggregateStatsReady,
+      }),
+    [agents, aggregateStatsReady, config, error, expanded, filter, isLoading, statsData],
+  );
+  const {
+    desiredHash,
+    totalAgents,
+    visibleAgents,
+    connectedAgents,
+    healthyAgents,
+    degradedAgents,
+    driftedAgents,
+    hasSnapshotStats,
+    hasDegradedStats,
+    hasDriftStats,
+    shouldRequestGuidance,
+    guidanceContext,
+    pageContext,
+  } = model;
   const sectionId = `agents-${config.id}`;
   const filterId = `agents-filter-${config.id}`;
   const columns = useMemo(() => agentColumns(config.id, desiredHash), [config.id, desiredHash]);
@@ -95,92 +109,8 @@ function AgentSection({
     ],
     [config.id, config.name, insightSurface],
   );
-  const guidanceContext = useMemo(
-    () => ({
-      configuration_id: config.id,
-      configuration_name: config.name,
-      total_agents: agentMetrics.totalAgents,
-      visible_agents: agentMetrics.visibleAgents,
-      connected_agents: connectedCount,
-      healthy_agents: healthyCount,
-      degraded_agents: degradedCount,
-      drifted_agents: driftedCount,
-      agents: agents.slice(0, 12).map((agent) => ({
-        id: agentUid(agent),
-        hostname: agentHost(agent),
-        status: agent.status ?? null,
-        last_seen: agentLastSeen(agent) ?? null,
-      })),
-    }),
-    [
-      agentMetrics.totalAgents,
-      agentMetrics.visibleAgents,
-      agents,
-      config.id,
-      config.name,
-      connectedCount,
-      degradedCount,
-      driftedCount,
-      healthyCount,
-    ],
-  );
-  const shouldRequestGuidance = hasMaterialAgentGuidanceSignal({
-    totalAgents: agentMetrics.totalAgents,
-    connectedAgents: connectedCount,
-    degradedAgents: degradedCount,
-    driftedAgents: driftedCount,
-  });
-  const pageContext =
-    expanded && !error && agents && !isLoading && aggregateStatsReady
-      ? buildBrowserPageContext({
-          title: `${config.name} collectors`,
-          filters: filter ? { search: filter } : undefined,
-          visible_text: [
-            "Status is connectivity; health is collector runtime state; drift is config hash mismatch.",
-          ],
-          metrics: [
-            pageMetric("total_agents", "Total collectors", agentMetrics.totalAgents),
-            pageMetric("visible_agents", "Visible collectors", list.length),
-            pageMetric("connected_agents", "Connected collectors", connectedCount),
-            pageMetric("healthy_agents", "Healthy collectors", healthyCount),
-            pageMetric("degraded_agents", "Degraded collectors", degradedCount),
-            pageMetric("drifted_agents", "Drifted collectors", driftedCount),
-          ],
-          details: [
-            pageDetail("configuration_id", "Configuration ID", config.id),
-            pageDetail("configuration_name", "Configuration name", config.name),
-            pageDetail("desired_config_hash", "Desired config hash", desiredHash ?? null),
-          ],
-          tables: [
-            pageTable(
-              "agents",
-              "Visible collectors",
-              list.map((agent) => {
-                const health = agentHealthView(agent);
-                const sync = agentSyncView(agent, desiredHash);
-                return {
-                  id: agentUid(agent),
-                  hostname: agentHost(agent),
-                  status: agent.status ?? null,
-                  health: health.label,
-                  config_sync: sync.label,
-                  current_hash: sync.hashLabel,
-                  last_seen: agentLastSeen(agent) ?? null,
-                };
-              }),
-              { totalRows: list.length, maxRows: 20 },
-            ),
-          ],
-        })
-      : null;
   const guidanceRequest: AiGuidanceRequest | null =
-    expanded &&
-    shouldRequestGuidance &&
-    !error &&
-    agents &&
-    !isLoading &&
-    aggregateStatsReady &&
-    pageContext
+    expanded && shouldRequestGuidance && !error && !isLoading && aggregateStatsReady && pageContext
       ? buildInsightRequest(insightSurface, guidanceTargets, guidanceContext, {
           intent: "triage_state",
           pageContext,
@@ -199,17 +129,24 @@ function AgentSection({
   );
   useRegisterBrowserContext(browserContext);
   const guidance = usePortalGuidance(guidanceRequest);
+  const totalAgentsLabel = totalAgents !== null ? totalAgents.toLocaleString() : "—";
+  const connectedAgentsLabel = connectedAgents !== null ? connectedAgents.toLocaleString() : "—";
+  const healthyAgentsLabel = healthyAgents !== null ? healthyAgents.toLocaleString() : "—";
+  const summaryText =
+    expanded && totalAgents !== null && visibleAgents !== totalAgents
+      ? `${visibleAgents} visible / ${totalAgents.toLocaleString()} total`
+      : totalAgents !== null
+        ? `${totalAgents.toLocaleString()} total`
+        : expanded
+          ? `${visibleAgents.toLocaleString()} visible`
+          : "Metrics unavailable";
 
   return (
     <section className="mt-6 rounded-md border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
         <div>
           <h3 className="text-sm font-medium text-foreground">{config.name}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">
-            {expanded && list.length !== agentMetrics.totalAgents
-              ? `${list.length} visible / ${agentMetrics.totalAgents} total`
-              : `${agentMetrics.totalAgents} total`}
-          </p>
+          <p className="mt-1 text-xs text-muted-foreground">{summaryText}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           {expanded ? (
@@ -242,23 +179,22 @@ function AgentSection({
             className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]"
             aria-label={`${config.name} collector summary`}
           >
-            <MetricCard
-              label="Total"
-              value={hasSnapshotStats ? agentMetrics.totalAgents.toLocaleString() : "—"}
-            />
-            <MetricCard
-              label="Connected"
-              value={hasSnapshotStats ? connectedCount.toLocaleString() : "—"}
-            />
-            <MetricCard
-              label="Healthy"
-              value={hasSnapshotStats ? healthyCount.toLocaleString() : "—"}
-            />
+            <MetricCard label="Total" value={hasSnapshotStats ? totalAgentsLabel : "—"} />
+            <MetricCard label="Connected" value={hasSnapshotStats ? connectedAgentsLabel : "—"} />
+            <MetricCard label="Healthy" value={hasSnapshotStats ? healthyAgentsLabel : "—"} />
             {hasDegradedStats ? (
-              <MetricCard label="Degraded" value={degradedCount.toLocaleString()} tone="warn" />
+              <MetricCard
+                label="Degraded"
+                value={degradedAgents?.toLocaleString() ?? "—"}
+                tone="warn"
+              />
             ) : null}
             {hasDriftStats ? (
-              <MetricCard label="Drifted" value={driftedCount.toLocaleString()} tone="warn" />
+              <MetricCard
+                label="Drifted"
+                value={driftedAgents?.toLocaleString() ?? "—"}
+                tone="warn"
+              />
             ) : null}
           </div>
           <p className="text-sm text-muted-foreground">
@@ -284,7 +220,7 @@ function AgentSection({
             <>
               <DataTable
                 columns={columns}
-                data={list}
+                data={agents}
                 getRowId={(agent) => agentUid(agent)}
                 emptyState={
                   <EmptyState
@@ -355,11 +291,10 @@ function agentColumns(configId: string, desiredHash: string | null): ColumnDef<A
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <StatusBadge tone={agentConnectionTone(row.original.status)}>
-          {row.original.status ?? "unknown"}
-        </StatusBadge>
-      ),
+      cell: ({ row }) => {
+        const status = agentStatusView(row.original.status);
+        return <StatusBadge tone={status.tone}>{status.label}</StatusBadge>;
+      },
     },
     {
       id: "health",
@@ -392,25 +327,6 @@ function agentColumns(configId: string, desiredHash: string | null): ColumnDef<A
       ),
     },
   ];
-}
-
-function hasMaterialAgentGuidanceSignal(input: {
-  totalAgents: number;
-  connectedAgents: number;
-  degradedAgents: number;
-  driftedAgents: number;
-}): boolean {
-  if (input.totalAgents < 5) return false;
-  const disconnectedAgents = Math.max(input.totalAgents - input.connectedAgents, 0);
-  return (
-    hasMaterialShare(disconnectedAgents, input.totalAgents, 0.5) ||
-    hasMaterialShare(input.degradedAgents, input.totalAgents, 0.25) ||
-    hasMaterialShare(input.driftedAgents, input.totalAgents, 0.25)
-  );
-}
-
-function hasMaterialShare(affected: number, total: number, ratio: number): boolean {
-  return affected >= 3 && affected / Math.max(total, 1) >= ratio;
 }
 
 export default function AgentsPage() {

@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { configurationAgentMetrics } from "../src/utils/config-stats";
+import {
+  configurationAgentMetrics,
+  configurationAgentSnapshotMetrics,
+} from "../src/utils/config-stats";
 import type { Agent, ConfigStats } from "../src/api/hooks/portal";
 
 test("prefers server configuration stats over the visible agents page", () => {
@@ -57,6 +60,42 @@ test("falls back to visible agents when server stats are unavailable", () => {
     activeWebSockets: undefined,
     desiredConfigHash: "desired",
   });
+});
+
+test("snapshot metrics do not fall back to visible rows for aggregate counts", () => {
+  assert.deepEqual(configurationAgentSnapshotMetrics(undefined, "desired"), {
+    hasSnapshotStats: false,
+    totalAgents: null,
+    connectedAgents: null,
+    healthyAgents: null,
+    degradedAgents: null,
+    driftedAgents: null,
+    activeWebSockets: null,
+    desiredConfigHash: "desired",
+    hasDegradedStats: false,
+    hasDriftStats: false,
+  });
+});
+
+test("snapshot metrics preserve unavailable optional aggregate fields", () => {
+  assert.deepEqual(
+    configurationAgentSnapshotMetrics(
+      { total_agents: 12, connected_agents: 10, healthy_agents: 9 },
+      null,
+    ),
+    {
+      hasSnapshotStats: true,
+      totalAgents: 12,
+      connectedAgents: 10,
+      healthyAgents: 9,
+      degradedAgents: null,
+      driftedAgents: null,
+      activeWebSockets: null,
+      desiredConfigHash: null,
+      hasDegradedStats: false,
+      hasDriftStats: false,
+    },
+  );
 });
 
 test("does not synthesize missing snapshot drift fields from visible rows", () => {

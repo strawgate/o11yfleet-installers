@@ -25,8 +25,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { EnrollmentDialogBody, enrollmentTokenFailureMessage } from "./EnrollmentDialogBody";
 import { relTime, trunc } from "../../utils/format";
-import { agentHost, agentLastSeen, agentUid, hashLabel } from "../../utils/agents";
-import { configurationAgentMetrics } from "../../utils/config-stats";
+import { agentLastSeen, agentUid, hashLabel } from "../../utils/agents";
 import {
   buildInsightRequest,
   insightSurfaces,
@@ -34,15 +33,7 @@ import {
   tabInsightTarget,
 } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import {
-  buildBrowserPageContext,
-  includedFetch,
-  pageDetail,
-  pageMetric,
-  pageTable,
-  pageYaml,
-  unavailableFetch,
-} from "../../ai/page-context";
+import { includedFetch, pageYaml, unavailableFetch } from "../../ai/page-context";
 import {
   DataTable,
   EmptyState,
@@ -54,14 +45,19 @@ import {
 } from "@/components/app";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { agentConnectionTone, agentHealthView, agentSyncView } from "./agent-view-model";
+import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
+import {
+  buildConfigurationDetailModel,
+  type ConfigurationDetailTab,
+} from "./configuration-detail-model";
 import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
 
-type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
+type Tab = ConfigurationDetailTab;
 
 const EMPTY_AGENTS: Agent[] = [];
 const EMPTY_VERSIONS: ConfigVersion[] = [];
 const EMPTY_TOKENS: EnrollmentToken[] = [];
+const EMPTY_GUIDANCE_CONTEXT: Record<string, unknown> = {};
 
 export default function ConfigurationDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -98,18 +94,27 @@ export default function ConfigurationDetailPage() {
   const agentList = agents.data?.agents ?? EMPTY_AGENTS;
   const versionList = versions.data ?? EMPTY_VERSIONS;
   const tokenList = tokens.data ?? EMPTY_TOKENS;
-  const agentMetrics = useMemo(
-    () => configurationAgentMetrics(stats.data, agentList, c?.current_config_hash ?? undefined),
-    [agentList, c?.current_config_hash, stats.data],
+  const model = useMemo(
+    () =>
+      c
+        ? buildConfigurationDetailModel({
+            configuration: c,
+            activeTab,
+            agents: agentList,
+            versions: versionList,
+            tokens: tokenList,
+            stats: stats.data,
+            yaml: yaml.data,
+          })
+        : null,
+    [activeTab, agentList, c, stats.data, tokenList, versionList, yaml.data],
   );
-  const connectedAgents = agentMetrics.connectedAgents;
-  const totalAgents = agentMetrics.totalAgents;
-  const healthyAgents = agentMetrics.healthyAgents;
-  const activeWebSockets = agentMetrics.activeWebSockets;
-  const desiredHash = agentMetrics.desiredConfigHash;
-  // Drift and connection counts are derived from server-side aggregates when
-  // available so they remain accurate beyond the first paginated agents page.
-  const driftedAgents = agentMetrics.driftedAgents;
+  const connectedAgents = model?.connectedAgents ?? null;
+  const totalAgents = model?.totalAgents ?? null;
+  const healthyAgents = model?.healthyAgents ?? null;
+  const activeWebSockets = model?.activeWebSockets ?? null;
+  const desiredHash = model?.desiredHash ?? null;
+  const driftedAgents = model?.driftedAgents ?? null;
   const agentColumns = useMemo(() => configurationAgentColumns(id, desiredHash), [desiredHash, id]);
   const guidanceReady =
     Boolean(c) &&
@@ -117,95 +122,13 @@ export default function ConfigurationDetailPage() {
     versions.isFetched &&
     tokens.isFetched &&
     stats.isFetched &&
+    !stats.error &&
+    Boolean(stats.data) &&
     (!hasConfigContent || yaml.isFetched);
   const insightSurface = insightSurfaces.portalConfiguration;
-  const buildConfigurationPageContext = useCallback(
-    (options: { includeYaml?: boolean; lightFetches?: AiLightFetch[] } = {}) =>
-      c
-        ? buildBrowserPageContext({
-            title: `Configuration: ${c.name}`,
-            active_tab: activeTab,
-            visible_text: [
-              "Configuration detail shows rollout state, collector health, version history, enrollment tokens, and YAML.",
-            ],
-            metrics: [
-              pageMetric("total_agents", "Total collectors", totalAgents),
-              pageMetric("connected_agents", "Connected collectors", connectedAgents),
-              pageMetric("healthy_agents", "Healthy collectors", healthyAgents),
-              pageMetric("drifted_agents", "Drifted collectors", driftedAgents),
-              pageMetric("versions", "Versions", versionList.length),
-              pageMetric("total_active_tokens", "Active enrollment tokens", tokenList.length),
-            ],
-            details: [
-              pageDetail("configuration_id", "Configuration ID", c.id),
-              pageDetail("configuration_name", "Configuration name", c.name),
-              pageDetail("status", "Status", c.status ?? null),
-              pageDetail("desired_config_hash", "Desired config hash", desiredHash),
-              pageDetail(
-                "latest_version_created_at",
-                "Latest version",
-                versionList[0]?.created_at ?? null,
-              ),
-            ],
-            tables: [
-              ...(activeTab === "agents"
-                ? [
-                    pageTable(
-                      "agents",
-                      "Collectors",
-                      agentList.slice(0, 20).map((agent) => ({
-                        id: agentUid(agent),
-                        hostname: agentHost(agent),
-                        status: agent.status ?? null,
-                        health: agentHealthView(agent).label,
-                        config_sync: agentSyncView(agent, desiredHash).label,
-                        last_seen: agentLastSeen(agent) ?? null,
-                      })),
-                      { totalRows: agentList.length },
-                    ),
-                  ]
-                : []),
-              ...(activeTab === "versions"
-                ? [
-                    pageTable(
-                      "versions",
-                      "Versions",
-                      versionList.slice(0, 10).map((version) => ({
-                        id: version.id,
-                        version: version.version,
-                        hash: (version["config_hash"] as string | undefined) ?? null,
-                        created_at: version.created_at,
-                        size_bytes: (version["size_bytes"] as number | undefined) ?? null,
-                      })),
-                      { totalRows: versionList.length },
-                    ),
-                  ]
-                : []),
-            ],
-            yaml:
-              options.includeYaml && yaml.data
-                ? pageYaml("Current configuration YAML", yaml.data)
-                : undefined,
-            light_fetches: options.lightFetches ?? [],
-          })
-        : null,
-    [
-      activeTab,
-      agentList,
-      c,
-      connectedAgents,
-      desiredHash,
-      driftedAgents,
-      healthyAgents,
-      tokenList.length,
-      totalAgents,
-      versionList,
-      yaml.data,
-    ],
-  );
   const pageContext = useMemo(
-    () => (guidanceReady && c ? buildConfigurationPageContext() : null),
-    [buildConfigurationPageContext, c, guidanceReady],
+    () => (guidanceReady && model ? model.pageContext : null),
+    [guidanceReady, model],
   );
   const buildConfigurationTargets = useCallback(
     (options: { includeCopilotTargets?: boolean } = {}) => {
@@ -281,39 +204,7 @@ export default function ConfigurationDetailPage() {
       yaml.data,
     ],
   );
-  const guidanceContext = useMemo(
-    () => ({
-      configuration_id: c?.id ?? null,
-      configuration_name: c?.name ?? null,
-      status: c?.status ?? null,
-      active_tab: activeTab,
-      total_agents: totalAgents,
-      connected_agents: connectedAgents,
-      healthy_agents: healthyAgents,
-      drifted_agents: driftedAgents,
-      active_websockets: activeWebSockets ?? null,
-      desired_config_hash: desiredHash,
-      versions: versionList.length,
-      total_active_tokens: tokenList.length,
-      latest_version_created_at: versionList[0]?.created_at ?? null,
-      yaml_available: Boolean(yaml.data),
-    }),
-    [
-      activeTab,
-      activeWebSockets,
-      c?.id,
-      c?.name,
-      c?.status,
-      connectedAgents,
-      desiredHash,
-      driftedAgents,
-      healthyAgents,
-      tokenList.length,
-      totalAgents,
-      versionList,
-      yaml.data,
-    ],
-  );
+  const guidanceContext = model?.guidanceContext ?? EMPTY_GUIDANCE_CONTEXT;
   const guidanceTargets = useMemo(() => buildConfigurationTargets(), [buildConfigurationTargets]);
   const browserTargets = useMemo(
     () =>
@@ -464,14 +355,17 @@ export default function ConfigurationDetailPage() {
     const lightFetches = await loadCopilotLightFetches(lightFetchMode);
     if (latestCopilotRunRef.current !== runId) return;
     const includeYaml = intent === "explain_page" || intent === "draft_config_change";
-    const copilotPageContext = buildConfigurationPageContext({
+    const copilotPageContext = buildConfigurationDetailModel({
+      configuration: c,
+      activeTab,
+      agents: agentList,
+      versions: versionList,
+      tokens: tokenList,
+      stats: stats.data,
+      yaml: yaml.data,
       includeYaml,
       lightFetches,
-    });
-    if (!copilotPageContext) {
-      toast("Copilot unavailable", "Configuration context is not available.", "err");
-      return;
-    }
+    }).pageContext;
     if (latestCopilotRunRef.current !== runId) return;
     setCopilotTitle(title);
     setCopilotRequest(
@@ -537,6 +431,30 @@ export default function ConfigurationDetailPage() {
     { key: "yaml", label: "YAML" },
     { key: "settings", label: "Settings" },
   ];
+  const totalAgentsValue = formatMetricValue(totalAgents);
+  const connectedAgentsValue =
+    totalAgents !== null && connectedAgents !== null
+      ? `${connectedAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`
+      : "—";
+  const healthyAgentsValue =
+    totalAgents !== null && healthyAgents !== null
+      ? `${healthyAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`
+      : "—";
+  const connectedTone =
+    connectedAgents !== null &&
+    totalAgents !== null &&
+    connectedAgents === totalAgents &&
+    totalAgents > 0
+      ? "ok"
+      : "neutral";
+  const healthyTone =
+    healthyAgents !== null &&
+    totalAgents !== null &&
+    healthyAgents === totalAgents &&
+    totalAgents > 0
+      ? "ok"
+      : "neutral";
+  const driftTone = driftedAgents !== null && driftedAgents > 0 ? "warn" : "neutral";
 
   return (
     <PageShell width="wide">
@@ -573,24 +491,12 @@ export default function ConfigurationDetailPage() {
 
       {/* Stat cards */}
       <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
-        <MetricCard label="Total collectors" value={totalAgents.toLocaleString()}>
+        <MetricCard label="Total collectors" value={totalAgentsValue}>
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </MetricCard>
-        <MetricCard
-          label="Connected"
-          value={`${connectedAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`}
-          tone={connectedAgents === totalAgents && totalAgents > 0 ? "ok" : "neutral"}
-        />
-        <MetricCard
-          label="Healthy"
-          value={`${healthyAgents.toLocaleString()} / ${totalAgents.toLocaleString()}`}
-          tone={healthyAgents === totalAgents && totalAgents > 0 ? "ok" : "neutral"}
-        />
-        <MetricCard
-          label="Drifted"
-          value={driftedAgents.toLocaleString()}
-          tone={driftedAgents > 0 ? "warn" : "neutral"}
-        />
+        <MetricCard label="Connected" value={connectedAgentsValue} tone={connectedTone} />
+        <MetricCard label="Healthy" value={healthyAgentsValue} tone={healthyTone} />
+        <MetricCard label="Drifted" value={formatMetricValue(driftedAgents)} tone={driftTone} />
         <MetricCard
           label="Active WebSockets"
           value={activeWebSockets ?? "—"}
@@ -845,9 +751,15 @@ export default function ConfigurationDetailPage() {
             }
           >
             <p>
-              This will set the current YAML as desired config for{" "}
-              <strong>{connectedAgents}</strong> connected collector
-              {connectedAgents !== 1 ? "s" : ""}.
+              {connectedAgents !== null ? (
+                <>
+                  This will set the current YAML as desired config for{" "}
+                  <strong>{connectedAgents}</strong> connected collector
+                  {connectedAgents !== 1 ? "s" : ""}.
+                </>
+              ) : (
+                "This will set the current YAML as desired config for connected collectors in this configuration."
+              )}
             </p>
           </Modal>
         </div>
@@ -1026,6 +938,10 @@ export default function ConfigurationDetailPage() {
   );
 }
 
+function formatMetricValue(value: number | null): string {
+  return value === null ? "—" : value.toLocaleString();
+}
+
 function configurationAgentColumns(
   configurationId: string | undefined,
   desiredHash: string | null,
@@ -1049,11 +965,10 @@ function configurationAgentColumns(
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => (
-        <StatusBadge tone={agentConnectionTone(row.original.status)}>
-          {row.original.status ?? "unknown"}
-        </StatusBadge>
-      ),
+      cell: ({ row }) => {
+        const status = agentStatusView(row.original.status);
+        return <StatusBadge tone={status.tone}>{status.label}</StatusBadge>;
+      },
     },
     {
       id: "health",

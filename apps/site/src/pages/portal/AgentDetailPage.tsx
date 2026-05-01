@@ -7,10 +7,14 @@ import {
   type AgentDetail,
   type AgentDescription,
 } from "../../api/hooks/portal";
+import { usePortalGuidance } from "../../api/hooks/ai";
+import { GuidancePanel, GuidanceSlot } from "../../components/ai";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
 import { hashLabel } from "../../utils/agents";
+import { buildInsightRequest, insightSurfaces } from "../../ai/insight-registry";
+import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import {
   parsePipelineTopology,
   extractAgentIdentity,
@@ -18,6 +22,26 @@ import {
   type PipelineComponent,
   type ComponentHealthEntry,
 } from "../../utils/pipeline";
+import {
+  buildAgentDetailGuidanceTargets,
+  buildAgentDetailModel,
+  pipelineRows,
+  type ConfigSyncView,
+  type ComponentSummary,
+  type PipelineRow,
+} from "./agent-detail-model";
+import { agentStatusView } from "./agent-view-model";
+import {
+  DataTable,
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  StatusBadge as AppStatusBadge,
+  type ColumnDef,
+} from "@/components/app";
+import { Button } from "@/components/ui/button";
+import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 type Tab = "overview" | "pipeline" | "config";
 
@@ -54,6 +78,107 @@ export default function AgentDetailPage() {
     [agent?.effective_config_body, agent?.component_health_map],
   );
 
+  const model = useMemo(
+    () =>
+      buildAgentDetailModel({
+        agent,
+        agentUid,
+        configId,
+        configurationName: config.data?.name,
+        configCurrentHash:
+          (config.data?.["current_config_hash"] as string | null | undefined) ?? undefined,
+        statsDesiredHash: stats.data?.desired_config_hash ?? undefined,
+        identity,
+        topology,
+        tab,
+      }),
+    [
+      agent,
+      agentUid,
+      configId,
+      config.data,
+      stats.data?.desired_config_hash,
+      identity,
+      topology,
+      tab,
+    ],
+  );
+  const {
+    desiredHash,
+    currentHash,
+    healthy,
+    acceptsRemoteConfig,
+    drift,
+    isConnected,
+    hostname,
+    capabilities,
+    componentCounts,
+    configSync,
+    guidanceContext,
+    pageContext,
+  } = model;
+  const insightSurface = insightSurfaces.portalAgent;
+  const guidanceTargets = useMemo(
+    () =>
+      buildAgentDetailGuidanceTargets({
+        agent,
+        tab,
+        healthy,
+        isConnected,
+        componentCounts,
+        configSync,
+        acceptsRemoteConfig,
+        topology,
+      }),
+    [acceptsRemoteConfig, agent, componentCounts, configSync, healthy, isConnected, tab, topology],
+  );
+  const guidanceRequest: AiGuidanceRequest | null = useMemo(
+    () =>
+      agent && configId && agentUid && !config.isLoading && !agentQuery.isLoading
+        ? buildInsightRequest(insightSurface, guidanceTargets, guidanceContext, {
+            intent: "triage_state",
+            pageContext,
+          })
+        : null,
+    [
+      agent,
+      agentQuery.isLoading,
+      config.isLoading,
+      configId,
+      agentUid,
+      guidanceContext,
+      guidanceTargets,
+      insightSurface,
+      pageContext,
+    ],
+  );
+  const browserContext = useMemo(
+    () => ({
+      id: `portal.agent.${configId}.${agentUid}`,
+      title: `${hostname} collector`,
+      surface: insightSurface.surface,
+      context: guidanceContext,
+      targets: guidanceTargets,
+      pageContext,
+    }),
+    [
+      agentUid,
+      configId,
+      guidanceContext,
+      guidanceTargets,
+      hostname,
+      insightSurface.surface,
+      pageContext,
+    ],
+  );
+  useRegisterBrowserContext(guidanceRequest ? browserContext : null);
+  const guidance = usePortalGuidance(guidanceRequest);
+  const healthInsight = guidance.data?.items.find((item) => item.target_key === "agent.health");
+  const configInsight = guidance.data?.items.find(
+    (item) => item.target_key === "agent.configuration",
+  );
+  const pipelineInsight = guidance.data?.items.find((item) => item.target_key === "agent.pipeline");
+
   if (!configId || !agentUid) {
     return <ErrorState error={new Error("Missing configuration or agent id in URL")} />;
   }
@@ -63,73 +188,111 @@ export default function AgentDetailPage() {
     return <ErrorState error={agentQuery.error} retry={() => void agentQuery.refetch()} />;
   if (!agent) return <ErrorState error={new Error("Agent not found")} />;
 
-  const desiredHash =
-    agent.desired_config_hash ??
-    stats.data?.desired_config_hash ??
-    (config.data?.["current_config_hash"] as string | undefined);
-  const currentHash = agent.current_config_hash;
-  const healthy =
-    agent.healthy === true || agent.healthy === 1
-      ? true
-      : agent.healthy === false || agent.healthy === 0
-        ? false
-        : null;
-  const acceptsRemoteConfig = (Number(agent.capabilities) & 0x02) !== 0;
-  const drift = acceptsRemoteConfig
-    ? (agent.is_drifted ?? (currentHash && desiredHash ? currentHash !== desiredHash : false))
-    : false;
-  const isConnected =
-    agent.is_connected === true ? true : agent.is_connected === false ? false : null;
-
-  const hostname = identity.hostname ?? agentUid;
-  const capabilities = parseCapabilities(agent.capabilities as number | null);
-
   return (
-    <div className="main-wide">
-      {/* Header */}
-      <div className="page-head mt-6">
-        <div>
-          <h1>{hostname}</h1>
-          <p className="meta">
-            {identity.serviceName && (
-              <span>
+    <PageShell width="wide">
+      <PageHeader
+        title={hostname}
+        description={
+          <>
+            {identity.serviceName ? (
+              <span className="block">
                 {identity.serviceName}
-                {identity.serviceVersion && ` v${identity.serviceVersion}`}
-                {" · "}
+                {identity.serviceVersion ? ` v${identity.serviceVersion}` : ""}
               </span>
-            )}
-            Configuration:{" "}
-            <Link to={`/portal/configurations/${configId}`}>{config.data?.name ?? configId}</Link>
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <ConnectionBadge connected={isConnected} />
-          <StatusBadge status={agent.status as string} />
-          <HealthBadge healthy={healthy} />
-          <ConfigBadge
-            drift={drift}
-            currentHash={currentHash}
-            acceptsRemoteConfig={acceptsRemoteConfig}
-          />
-        </div>
+            ) : null}
+            <span>
+              Configuration:{" "}
+              <Link to={`/portal/configurations/${configId}`}>{config.data?.name ?? configId}</Link>
+            </span>
+          </>
+        }
+        actions={
+          <>
+            <ConnectionBadge connected={isConnected} />
+            <StatusBadge status={agent.status as string} />
+            <HealthBadge healthy={healthy} />
+            <ConfigBadge sync={configSync} />
+          </>
+        }
+      />
+
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+        <MetricCard
+          label="Connection"
+          value={isConnected === true ? "online" : isConnected === false ? "offline" : "unknown"}
+          tone={isConnected === true ? "ok" : isConnected === false ? "error" : "neutral"}
+        />
+        <MetricCard
+          label="Health"
+          value={healthy === true ? "healthy" : healthy === false ? "unhealthy" : "unknown"}
+          tone={healthy === true ? "ok" : healthy === false ? "error" : "neutral"}
+        >
+          <GuidanceSlot item={healthInsight} loading={guidance.isLoading} />
+        </MetricCard>
+        <MetricCard label="Config sync" value={configSync.label} tone={configSync.tone}>
+          <GuidanceSlot item={configInsight} loading={guidance.isLoading} />
+        </MetricCard>
+        <MetricCard
+          label="Components"
+          value={componentCounts.total.toLocaleString()}
+          detail={
+            componentCounts.total > 0
+              ? `${componentCounts.healthy} healthy / ${componentCounts.degraded} degraded`
+              : "No component health reported"
+          }
+          tone={componentCounts.degraded > 0 ? "warn" : "neutral"}
+        >
+          <GuidanceSlot item={pipelineInsight} loading={guidance.isLoading} />
+        </MetricCard>
+        <MetricCard label="Desired config" value={hashLabel(desiredHash)} />
+        <MetricCard
+          label="Current config"
+          value={hashLabel(currentHash)}
+          tone={drift ? "warn" : "neutral"}
+        />
       </div>
 
+      <GuidancePanel
+        title="Agent guidance"
+        guidance={guidance.data}
+        isLoading={guidance.isLoading}
+        error={guidance.error}
+        onRefresh={() => void guidance.refetch()}
+        excludeTargetKeys={["agent.health", "agent.configuration", "agent.pipeline"]}
+      />
+
       {/* Tabs */}
-      <div className="tabs mt-6">
+      <div
+        className="mt-6 flex flex-wrap gap-2 border-b border-border"
+        role="tablist"
+        aria-label="Agent detail sections"
+      >
         <button
-          className={`tab ${tab === "overview" ? "tab-active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === "overview"}
+          aria-controls="agent-tab-overview"
+          className={tabClassName(tab === "overview")}
           onClick={() => setTab("overview")}
         >
           Overview
         </button>
         <button
-          className={`tab ${tab === "pipeline" ? "tab-active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === "pipeline"}
+          aria-controls="agent-tab-pipeline"
+          className={tabClassName(tab === "pipeline")}
           onClick={() => setTab("pipeline")}
         >
           Pipeline
         </button>
         <button
-          className={`tab ${tab === "config" ? "tab-active" : ""}`}
+          type="button"
+          role="tab"
+          aria-selected={tab === "config"}
+          aria-controls="agent-tab-config"
+          className={tabClassName(tab === "config")}
           onClick={() => setTab("config")}
         >
           Configuration
@@ -144,11 +307,11 @@ export default function AgentDetailPage() {
           agentUid={agentUid!}
           healthy={healthy}
           isConnected={isConnected}
-          drift={drift}
+          configSync={configSync}
           desiredHash={desiredHash}
           currentHash={currentHash}
           capabilities={capabilities}
-          topology={topology}
+          componentCounts={componentCounts}
         />
       )}
       {tab === "pipeline" && <PipelineTab topology={topology} />}
@@ -159,35 +322,11 @@ export default function AgentDetailPage() {
           desiredHash={desiredHash}
         />
       )}
-    </div>
+    </PageShell>
   );
 }
 
 // ─── Overview Tab ──────────────────────────────────────────────────
-
-/** Recursively count leaf components in a component_health_map. */
-function countLeaves(map: Record<string, ComponentHealthEntry>): {
-  total: number;
-  healthy: number;
-  degraded: number;
-} {
-  let total = 0,
-    healthy = 0,
-    degraded = 0;
-  for (const entry of Object.values(map)) {
-    if (entry.component_health_map && Object.keys(entry.component_health_map).length > 0) {
-      const sub = countLeaves(entry.component_health_map);
-      total += sub.total;
-      healthy += sub.healthy;
-      degraded += sub.degraded;
-    } else {
-      total++;
-      if (entry.healthy === true) healthy++;
-      else if (entry.healthy === false) degraded++;
-    }
-  }
-  return { total, healthy, degraded };
-}
 
 function OverviewTab({
   agent,
@@ -195,47 +334,29 @@ function OverviewTab({
   agentUid,
   healthy,
   isConnected,
-  drift,
+  configSync,
   desiredHash,
   currentHash,
   capabilities,
-  topology,
+  componentCounts,
 }: {
   agent: AgentDetail;
   identity: ReturnType<typeof extractAgentIdentity>;
   agentUid: string;
   healthy: boolean | null;
   isConnected: boolean | null;
-  drift: boolean;
+  configSync: ConfigSyncView;
   desiredHash: string | undefined;
   currentHash: string | null | undefined;
   capabilities: string[];
-  topology: PipelineTopology | null;
+  componentCounts: ComponentSummary;
 }) {
-  // Count components from topology if available, otherwise from component_health_map
-  const healthMap = agent.component_health_map as Record<string, ComponentHealthEntry> | null;
-  let componentCount = 0;
-  let healthyComponents = 0;
-  let degradedComponents = 0;
-  if (topology) {
-    const all = [
-      ...topology.receivers,
-      ...topology.processors,
-      ...topology.exporters,
-      ...topology.extensions,
-    ];
-    componentCount = all.length;
-    healthyComponents = all.filter((c) => c.healthy === true).length;
-    degradedComponents = all.filter((c) => c.healthy === false).length;
-  } else if (healthMap) {
-    const counts = countLeaves(healthMap);
-    componentCount = counts.total;
-    healthyComponents = counts.healthy;
-    degradedComponents = counts.degraded;
-  }
-
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+    <div
+      id="agent-tab-overview"
+      role="tabpanel"
+      className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2"
+    >
       {/* Identity card */}
       <div className="card card-pad">
         <h3 className="card-title">Identity</h3>
@@ -289,14 +410,14 @@ function OverviewTab({
           </dd>
           <dt>Components</dt>
           <dd>
-            {componentCount > 0 ? (
+            {componentCounts.total > 0 ? (
               <span>
-                {componentCount} total
-                {healthyComponents > 0 && (
-                  <span className="text-green-600 ml-1">({healthyComponents} ok)</span>
+                {componentCounts.total} total
+                {componentCounts.healthy > 0 && (
+                  <span className="text-green-600 ml-1">({componentCounts.healthy} ok)</span>
                 )}
-                {degradedComponents > 0 && (
-                  <span className="text-amber-600 ml-1">({degradedComponents} degraded)</span>
+                {componentCounts.degraded > 0 && (
+                  <span className="text-amber-600 ml-1">({componentCounts.degraded} degraded)</span>
                 )}
               </span>
             ) : (
@@ -316,11 +437,7 @@ function OverviewTab({
         <dl className="detail-list">
           <dt>Config sync</dt>
           <dd>
-            <ConfigBadge
-              drift={drift}
-              currentHash={currentHash}
-              acceptsRemoteConfig={capabilities.includes("AcceptsRemoteConfig")}
-            />
+            <ConfigBadge sync={configSync} />
           </dd>
           <dt>Desired hash</dt>
           <dd className="mono-cell text-sm">{hashLabel(desiredHash)}</dd>
@@ -357,14 +474,21 @@ function OverviewTab({
 function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
   if (!topology) {
     return (
-      <div className="card card-pad mt-4">
-        <p className="meta">No effective configuration reported — pipeline cannot be visualized.</p>
+      <div id="agent-tab-pipeline" role="tabpanel" className="mt-6">
+        <EmptyState
+          icon="file"
+          title="No pipeline to visualize"
+          description="This agent has not reported an effective configuration yet."
+        />
       </div>
     );
   }
 
+  const rows = pipelineRows(topology);
+  const columns = pipelineColumns();
+
   return (
-    <div className="mt-4 space-y-4">
+    <div id="agent-tab-pipeline" role="tabpanel" className="mt-6 space-y-4">
       {/* Pipeline flow */}
       <div className="card card-pad">
         <h3 className="card-title mb-3">Pipeline Flow</h3>
@@ -413,36 +537,12 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
       )}
 
       {/* Component detail table */}
-      <div className="card card-pad">
-        <h3 className="card-title mb-3">All Components</h3>
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Type</th>
-              <th>Name</th>
-              <th>Health</th>
-              <th>Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {[
-              ...topology.receivers.map((c) => ({ ...c, category: "receiver" })),
-              ...topology.processors.map((c) => ({ ...c, category: "processor" })),
-              ...topology.exporters.map((c) => ({ ...c, category: "exporter" })),
-              ...topology.extensions.map((c) => ({ ...c, category: "extension" })),
-            ].map((c) => (
-              <tr key={`${c.category}-${c.name}`}>
-                <td className="meta">{c.category}</td>
-                <td className="mono-cell">{c.name}</td>
-                <td>
-                  <ComponentHealthDot healthy={c.healthy} />
-                </td>
-                <td className="text-sm">{c.status ?? c.lastError ?? "—"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        title="All components"
+        columns={columns}
+        data={rows}
+        getRowId={(row) => `${row.category}-${row.name}`}
+      />
     </div>
   );
 }
@@ -513,14 +613,18 @@ function ConfigTab({
 }) {
   if (!effectiveConfig) {
     return (
-      <div className="card card-pad mt-4">
-        <p className="meta">No effective configuration has been reported by this agent.</p>
+      <div id="agent-tab-config" role="tabpanel" className="mt-6">
+        <EmptyState
+          icon="file"
+          title="No effective configuration"
+          description="This agent has not reported the configuration it is actually running."
+        />
       </div>
     );
   }
 
   return (
-    <div className="mt-4 space-y-4">
+    <div id="agent-tab-config" role="tabpanel" className="mt-6 space-y-4">
       <div className="card card-pad">
         <div className="flex items-center justify-between mb-3">
           <h3 className="card-title">Effective Configuration</h3>
@@ -546,8 +650,9 @@ function ConfigTab({
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
-    <button
-      className="btn btn-sm"
+    <Button
+      size="sm"
+      variant="secondary"
       onClick={() => {
         navigator.clipboard.writeText(text).then(
           () => {
@@ -561,55 +666,80 @@ function CopyButton({ text }: { text: string }) {
       }}
     >
       {copied ? "✓ Copied" : "Copy"}
-    </button>
+    </Button>
   );
 }
 
 // ─── Badge Components ──────────────────────────────────────────────
 
 function StatusBadge({ status }: { status: string | undefined }) {
-  const okStatuses = ["connected", "running", "starting"];
-  const warnStatuses = ["degraded", "stopping"];
-  const cls = okStatuses.includes(status ?? "")
-    ? "tag-ok"
-    : warnStatuses.includes(status ?? "")
-      ? "tag-warn"
-      : "tag-err";
-  return <span className={`tag ${cls}`}>{status ?? "unknown"}</span>;
+  const view = agentStatusView(status);
+  return <AppStatusBadge tone={view.tone}>{view.label}</AppStatusBadge>;
 }
 
 function ConnectionBadge({ connected }: { connected: boolean | null }) {
   return (
-    <span className={`tag ${connected === true ? "tag-ok" : connected === false ? "tag-err" : ""}`}>
+    <AppStatusBadge tone={connected === true ? "ok" : connected === false ? "error" : "neutral"}>
       {connected === true ? "● connected" : connected === false ? "○ disconnected" : "unknown"}
-    </span>
+    </AppStatusBadge>
   );
 }
 
 function HealthBadge({ healthy }: { healthy: boolean | null }) {
   return (
-    <span className={`tag ${healthy === true ? "tag-ok" : healthy === false ? "tag-err" : ""}`}>
+    <AppStatusBadge tone={healthy === true ? "ok" : healthy === false ? "error" : "neutral"}>
       {healthy === true ? "healthy" : healthy === false ? "unhealthy" : "unknown"}
-    </span>
+    </AppStatusBadge>
   );
 }
 
-function ConfigBadge({
-  drift,
-  currentHash,
-  acceptsRemoteConfig,
-}: {
-  drift: boolean;
-  currentHash: string | null | undefined;
-  acceptsRemoteConfig?: boolean;
-}) {
-  if (acceptsRemoteConfig === false) return <span className="tag">n/a</span>;
-  if (drift) return <span className="tag tag-warn">config drift</span>;
-  if (currentHash) return <span className="tag tag-ok">in sync</span>;
-  return <span className="tag">not reported</span>;
+function ConfigBadge({ sync }: { sync: ConfigSyncView }) {
+  return <AppStatusBadge tone={sync.tone}>{sync.label}</AppStatusBadge>;
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
+
+function tabClassName(active: boolean): string {
+  return `border-b-2 px-3 py-2 text-sm font-medium ${
+    active
+      ? "border-primary text-foreground"
+      : "border-transparent text-muted-foreground hover:text-foreground"
+  }`;
+}
+
+function pipelineColumns(): ColumnDef<PipelineRow>[] {
+  return [
+    {
+      id: "category",
+      header: "Type",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{row.original.category}</span>
+      ),
+    },
+    {
+      id: "name",
+      header: "Name",
+      cell: ({ row }) => <span className="font-mono text-xs">{row.original.name}</span>,
+    },
+    {
+      id: "health",
+      header: "Health",
+      cell: ({ row }) => {
+        const healthy = row.original.healthy;
+        return (
+          <AppStatusBadge tone={healthy === true ? "ok" : healthy === false ? "error" : "neutral"}>
+            {healthy === true ? "healthy" : healthy === false ? "unhealthy" : "unknown"}
+          </AppStatusBadge>
+        );
+      },
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => <span className="text-sm">{row.original.status ?? "—"}</span>,
+    },
+  ];
+}
 
 function safeJsonParse(str: string): AgentDescription | null {
   try {
@@ -617,31 +747,6 @@ function safeJsonParse(str: string): AgentDescription | null {
   } catch {
     return null;
   }
-}
-
-const CAPABILITY_NAMES: Record<number, string> = {
-  0x01: "ReportsStatus",
-  0x02: "AcceptsRemoteConfig",
-  0x04: "ReportsEffectiveConfig",
-  0x08: "AcceptsPackages",
-  0x10: "ReportsPackageStatuses",
-  0x20: "ReportsOwnTraces",
-  0x40: "ReportsOwnMetrics",
-  0x80: "ReportsOwnLogs",
-  0x100: "AcceptsOpAMPConnectionSettings",
-  0x200: "AcceptsOtherConnectionSettings",
-  0x400: "AcceptsRestartCommand",
-  0x800: "ReportsHealth",
-  0x1000: "ReportsRemoteConfig",
-};
-
-function parseCapabilities(caps: number | null): string[] {
-  if (!caps) return [];
-  const result: string[] = [];
-  for (const [bit, name] of Object.entries(CAPABILITY_NAMES)) {
-    if (caps & Number(bit)) result.push(name);
-  }
-  return result;
 }
 
 function tsToIso(value: string | number | null | undefined): string | undefined {

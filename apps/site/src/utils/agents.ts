@@ -48,6 +48,12 @@ export function agentHasDrift(agent: Agent, desiredHash: string | null | undefin
   return !!desiredHash && !!currentHash && currentHash !== desiredHash;
 }
 
+export function agentAcceptsRemoteConfig(
+  agent: Pick<Agent, "capabilities"> | null | undefined,
+): boolean {
+  return Boolean(Number(agent?.capabilities ?? 0) & 0x02);
+}
+
 export function hashLabel(hash: string | null | undefined, length = 12): string {
   return hash ? trunc(hash, length) : "—";
 }

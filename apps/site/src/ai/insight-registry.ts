@@ -82,7 +82,33 @@ export const insightSurfaces = {
       kind: "metric",
     },
   }),
-  portalAgent: defineInsightSurface("portal.agent", {}),
+  portalAgent: defineInsightSurface("portal.agent", {
+    page: {
+      key: "agent.page",
+      label: "Agent detail",
+      kind: "page",
+    },
+    health: {
+      key: "agent.health",
+      label: "Agent health",
+      kind: "section",
+    },
+    configuration: {
+      key: "agent.configuration",
+      label: "Agent configuration",
+      kind: "section",
+    },
+    pipeline: {
+      key: "agent.pipeline",
+      label: "Agent pipeline",
+      kind: "table",
+    },
+    effectiveConfig: {
+      key: "agent.effective-config",
+      label: "Effective configuration",
+      kind: "editor_selection",
+    },
+  }),
   portalBuilder: defineInsightSurface("portal.builder", {
     page: {
       key: "builder.page",

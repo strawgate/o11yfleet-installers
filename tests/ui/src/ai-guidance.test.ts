@@ -729,6 +729,207 @@ test.describe("AI guidance surfaces", () => {
     expect(runtime.errors).toEqual([]);
   });
 
+  test("agent detail sends scoped guidance with visible tab context", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    const guidanceRequests: Array<{
+      surface?: string;
+      context?: Record<string, unknown>;
+      targets?: Array<{ key: string }>;
+      page_context?: {
+        active_tab?: string;
+        yaml?: { content?: string };
+        tables?: Array<{ key: string; rows?: unknown[] }>;
+      };
+    }> = [];
+
+    await mockJson(page, "/auth/me", {
+      user: {
+        userId: "user-1",
+        email: "demo@o11yfleet.com",
+        displayName: "Demo User",
+        role: "member",
+        tenantId: "tenant-1",
+      },
+    });
+    await mockJson(page, "/api/v1/tenant", { id: "tenant-1", name: "Demo Org", plan: "pro" });
+    await mockJson(page, "/api/v1/configurations/config-1", {
+      id: "config-1",
+      name: "prod-collectors",
+      status: "active",
+      current_config_hash: "desired-hash",
+      updated_at: "2026-04-28T20:00:00.000Z",
+    });
+    await mockJson(page, "/api/v1/configurations/config-1/stats", {
+      desired_config_hash: "desired-hash",
+    });
+    await mockJson(page, "/api/v1/configurations/config-1/agents/agent-prod-1", {
+      instance_uid: "agent-prod-1",
+      hostname: "collector-1",
+      status: "degraded",
+      healthy: false,
+      is_connected: true,
+      is_drifted: true,
+      capabilities: 0x1002,
+      current_config_hash: "current-hash",
+      desired_config_hash: "desired-hash",
+      effective_config_hash: "effective-hash",
+      effective_config_body:
+        "receivers:\n  otlp: {}\nprocessors:\n  batch: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      processors: [batch]\n      exporters: [debug]\n",
+      component_health_map: {
+        "pipeline:logs": {
+          healthy: false,
+          status: "degraded",
+          component_health_map: {
+            "receiver:otlp": { healthy: true, status: "ok" },
+            "processor:batch": { healthy: true, status: "ok" },
+            "exporter:debug": { healthy: false, last_error: "exporter failed" },
+          },
+        },
+      },
+      agent_description: {
+        identifying_attributes: [
+          { key: "service.name", value: { string_value: "otelcol" } },
+          { key: "service.version", value: { string_value: "0.124.0" } },
+          { key: "host.name", value: { string_value: "collector-1" } },
+        ],
+        non_identifying_attributes: [],
+      },
+      uptime_ms: 120000,
+      connected_at: "2026-04-28T19:00:00.000Z",
+      last_seen_at: "2026-04-28T20:00:00.000Z",
+      available_components: {},
+    });
+    await page.route(`${API_URL}/api/v1/ai/guidance`, async (route) => {
+      const requestBody = route.request().postDataJSON();
+      expect(requestBody).toMatchObject({ surface: "portal.agent" });
+      expectUniqueTargetKeys(requestBody);
+      guidanceRequests.push(
+        requestBody as {
+          surface?: string;
+          context?: Record<string, unknown>;
+          targets?: Array<{ key: string }>;
+          page_context?: {
+            active_tab?: string;
+            yaml?: { content?: string };
+            tables?: Array<{ key: string; rows?: unknown[] }>;
+          };
+        },
+      );
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          summary: "Agent guidance from test data.",
+          generated_at: "2026-04-28T20:00:00.000Z",
+          model: "o11yfleet-guidance-fixture",
+          items: [
+            {
+              target_key: "agent.health",
+              headline: "Exporter is reporting unhealthy",
+              detail: "The component health map contains one degraded exporter.",
+              severity: "warning",
+              confidence: 0.8,
+              evidence: [{ label: "Degraded components", value: "1" }],
+            },
+            {
+              target_key: "agent.configuration",
+              headline: "Remote config drift is visible",
+              detail: "The current hash differs from the desired hash.",
+              severity: "warning",
+              confidence: 0.8,
+              evidence: [{ label: "Config sync", value: "config drift" }],
+            },
+            {
+              target_key: "agent.pipeline",
+              headline: "Pipeline context includes three components",
+              detail: "The visible page exposes receiver, processor, and exporter state.",
+              severity: "notice",
+              confidence: 0.8,
+              evidence: [{ label: "Components", value: "3" }],
+            },
+          ],
+        }),
+      });
+    });
+
+    await page.goto(
+      `${UI_URL}/portal/agents/config-1/agent-prod-1?api=${encodeURIComponent(API_URL)}`,
+    );
+
+    await expect(page.getByRole("heading", { name: "collector-1" })).toBeVisible();
+    await expect(page.getByRole("group", { name: "Health" })).toContainText(
+      "Exporter is reporting unhealthy",
+    );
+    await expect(page.getByRole("group", { name: "Config sync" })).toContainText(
+      "Remote config drift is visible",
+    );
+    await expect(page.getByRole("group", { name: "Components" })).toContainText(
+      "Pipeline context includes three components",
+    );
+    await expect(page.locator(".ai-panel")).toHaveCount(0);
+
+    await expect.poll(() => guidanceRequests.length).toBeGreaterThanOrEqual(1);
+    const overviewRequest = guidanceRequests.at(-1);
+    expect(overviewRequest?.targets?.map((target) => target.key)).toEqual([
+      "agent.page",
+      "agent.health",
+      "agent.configuration",
+    ]);
+    expect(overviewRequest?.context).toMatchObject({
+      agent_uid: "agent-prod-1",
+      hostname: "collector-1",
+      connected: true,
+      healthy: false,
+      config_sync: "config drift",
+      pipeline_components: 3,
+      degraded_components: 1,
+      active_tab: "overview",
+    });
+    expect(overviewRequest?.page_context?.yaml).toBeUndefined();
+    expect(overviewRequest?.page_context?.tables).toEqual([]);
+
+    await page.getByRole("tab", { name: "Pipeline" }).click();
+    await expect(page.getByRole("cell", { name: "debug" })).toBeVisible();
+    await expect
+      .poll(() => guidanceRequests.some((request) => request.context?.active_tab === "pipeline"))
+      .toBe(true);
+    const pipelineRequest = guidanceRequests.find(
+      (request) => request.context?.active_tab === "pipeline",
+    );
+    expect(pipelineRequest?.page_context?.tables?.[0]).toMatchObject({
+      key: "pipeline_components",
+    });
+    expect(pipelineRequest?.targets?.map((target) => target.key)).toEqual([
+      "agent.page",
+      "agent.health",
+      "agent.configuration",
+      "agent.pipeline",
+    ]);
+    expect(pipelineRequest?.page_context?.tables?.[0]?.rows).toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "debug", healthy: false })]),
+    );
+    expect(pipelineRequest?.page_context?.yaml).toBeUndefined();
+
+    await page.getByRole("tab", { name: "Configuration" }).click();
+    await expect(page.getByText("receivers:")).toBeVisible();
+    await expect
+      .poll(() => guidanceRequests.some((request) => request.context?.active_tab === "config"))
+      .toBe(true);
+    const configRequest = guidanceRequests.find(
+      (request) => request.context?.active_tab === "config",
+    );
+    expect(configRequest?.targets?.map((target) => target.key)).toEqual([
+      "agent.page",
+      "agent.health",
+      "agent.configuration",
+      "agent.effective-config",
+    ]);
+    expect(configRequest?.page_context?.yaml?.content).toContain("receivers:");
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
   test("configuration detail sends unique guidance target keys for the active tab", async ({
     page,
   }) => {

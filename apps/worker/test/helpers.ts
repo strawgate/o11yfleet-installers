@@ -5,7 +5,7 @@ import { env, exports } from "cloudflare:workers";
 import { expect } from "vitest";
 import { signClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { encodeFrame, decodeFrame, AgentCapabilities } from "@o11yfleet/core/codec";
+import { AgentCapabilities } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
 import { uint8ToHex } from "@o11yfleet/core/hex";
 import {

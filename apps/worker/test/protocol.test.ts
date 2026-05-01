@@ -2,14 +2,9 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import {
-  encodeFrame,
-  decodeFrame,
-  AgentCapabilities,
-  ServerCapabilities,
-  ServerToAgentFlags,
-} from "@o11yfleet/core/codec";
+import { AgentCapabilities, ServerCapabilities, ServerToAgentFlags } from "@o11yfleet/core/codec";
 import type { ServerToAgent } from "@o11yfleet/core/codec";
+import { encodeFrame, decodeFrame } from "@o11yfleet/test-utils";
 import { apiFetch, O11YFLEET_CLAIM_HMAC_SECRET, buildHello, buildHeartbeat } from "./helpers.js";
 
 beforeAll(async () => {

@@ -1,7 +1,18 @@
 import type { Agent } from "@/api/hooks/portal";
-import { agentCurrentHash, agentHasDrift, agentIsHealthy, hashLabel } from "@/utils/agents";
+import {
+  agentAcceptsRemoteConfig,
+  agentCurrentHash,
+  agentHasDrift,
+  agentIsHealthy,
+  hashLabel,
+} from "@/utils/agents";
 
 export type AgentBadgeTone = "neutral" | "ok" | "warn" | "error" | "info";
+
+export interface AgentStatusView {
+  label: string;
+  tone: AgentBadgeTone;
+}
 
 export interface AgentSyncView {
   label: string;
@@ -9,10 +20,21 @@ export interface AgentSyncView {
   hashLabel: string;
 }
 
+const OK_AGENT_STATUSES = new Set(["connected", "running", "starting"]);
+const WARN_AGENT_STATUSES = new Set(["degraded", "stopping"]);
+const ERROR_AGENT_STATUSES = new Set(["disconnected", "error", "failed"]);
+
+export function agentStatusView(status: string | null | undefined): AgentStatusView {
+  const normalized = status?.trim();
+  if (!normalized) return { label: "unknown", tone: "neutral" };
+  if (OK_AGENT_STATUSES.has(normalized)) return { label: normalized, tone: "ok" };
+  if (WARN_AGENT_STATUSES.has(normalized)) return { label: normalized, tone: "warn" };
+  if (ERROR_AGENT_STATUSES.has(normalized)) return { label: normalized, tone: "error" };
+  return { label: normalized, tone: "neutral" };
+}
+
 export function agentConnectionTone(status: string | null | undefined): AgentBadgeTone {
-  if (status === "connected") return "ok";
-  if (status === "degraded") return "warn";
-  return "error";
+  return agentStatusView(status).tone;
 }
 
 export function agentHealthView(agent: Agent): { label: string; tone: AgentBadgeTone } {
@@ -24,7 +46,7 @@ export function agentHealthView(agent: Agent): { label: string; tone: AgentBadge
 
 export function agentSyncView(agent: Agent, desiredHash: string | null | undefined): AgentSyncView {
   const currentHash = agentCurrentHash(agent);
-  const acceptsRemoteConfig = Boolean(Number(agent.capabilities ?? 0) & 0x02);
+  const acceptsRemoteConfig = agentAcceptsRemoteConfig(agent);
   if (!acceptsRemoteConfig) {
     return { label: "not reported", tone: "neutral", hashLabel: hashLabel(currentHash) };
   }

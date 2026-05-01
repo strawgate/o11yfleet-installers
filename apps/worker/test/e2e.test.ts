@@ -2,13 +2,8 @@ import { env } from "cloudflare:workers";
 import { describe, it, expect, beforeAll } from "vitest";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import {
-  decodeFrame,
-  encodeFrame,
-  ServerToAgentFlags,
-  AgentCapabilities,
-  type ServerToAgent,
-} from "@o11yfleet/core/codec";
+import { ServerToAgentFlags, AgentCapabilities, type ServerToAgent } from "@o11yfleet/core/codec";
+import { decodeFrame, encodeFrame } from "@o11yfleet/test-utils";
 import { apiFetch, buildHello, buildHeartbeat } from "./helpers.js";
 
 const O11YFLEET_CLAIM_HMAC_SECRET = env.O11YFLEET_CLAIM_HMAC_SECRET;

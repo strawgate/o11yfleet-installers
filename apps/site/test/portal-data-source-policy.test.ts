@@ -12,6 +12,7 @@ function readSource(rel: string): string {
 
 test("Portal agents loads agent rows only for the expanded configuration", () => {
   const src = readSource("pages/portal/AgentsPage.tsx");
+  const modelSrc = readSource("pages/portal/agents-page-model.ts");
   const agentQuery = src.match(/useConfigurationAgents\(config\.id,\s*\{[\s\S]*?\}\);/);
 
   assert.ok(agentQuery, "could not locate the AgentsPage useConfigurationAgents call");
@@ -26,18 +27,18 @@ test("Portal agents loads agent rows only for the expanded configuration", () =>
     "AgentsPage should keep the initial render metrics-only and expand at most one config",
   );
   assert.match(
-    src,
-    /const hasDriftStats = typeof statsData\?\.drifted_agents === "number"/,
+    modelSrc,
+    /const hasDriftStats = snapshot\.hasDriftStats/,
     "AgentsPage should not render drift counts unless the snapshot includes them",
   );
   assert.match(
-    src,
-    /const hasDegradedStats = typeof statsData\?\.status_counts\?\.\["degraded"\] === "number"/,
+    modelSrc,
+    /const hasDegradedStats = snapshot\.hasDegradedStats/,
     "AgentsPage should not render degraded counts unless the snapshot includes them",
   );
   assert.match(
     src,
-    /\{hasSnapshotStats \? agentMetrics\.totalAgents\.toLocaleString\(\) : "—"\}/,
+    /value=\{hasSnapshotStats \? totalAgentsLabel : "—"\}/,
     "AgentsPage should show missing snapshot metrics as unavailable, not as zero collectors",
   );
 });

@@ -58,11 +58,13 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
     };
   }, [open, handleKeyDown]);
 
+  if (!open) return null;
+
   return (
     <>
-      <div className={`sheet-backdrop${open ? " open" : ""}`} onClick={onClose} />
+      <div className="sheet-backdrop open" onClick={onClose} />
       <div
-        className={`sheet${open ? " open" : ""}`}
+        className="sheet open"
         ref={sheetRef}
         role="dialog"
         aria-modal="true"

@@ -12,6 +12,19 @@ export interface ConfigurationAgentMetrics {
   desiredConfigHash: string | null;
 }
 
+export interface ConfigurationAgentSnapshotMetrics {
+  hasSnapshotStats: boolean;
+  totalAgents: number | null;
+  connectedAgents: number | null;
+  healthyAgents: number | null;
+  degradedAgents: number | null;
+  driftedAgents: number | null;
+  activeWebSockets: number | null;
+  desiredConfigHash: string | null;
+  hasDegradedStats: boolean;
+  hasDriftStats: boolean;
+}
+
 export function configurationAgentMetrics(
   stats: ConfigStats | undefined,
   visibleAgents: Agent[],
@@ -32,6 +45,29 @@ export function configurationAgentMetrics(
     driftedAgents: hasSnapshot ? numberOr(stats?.drifted_agents, 0) : visible.driftedAgents,
     activeWebSockets: stats?.active_websockets,
     desiredConfigHash,
+  };
+}
+
+export function configurationAgentSnapshotMetrics(
+  stats: ConfigStats | undefined,
+  fallbackDesiredConfigHash?: string | null,
+): ConfigurationAgentSnapshotMetrics {
+  const hasSnapshotStats = Boolean(stats);
+  const desiredConfigHash = stats?.desired_config_hash ?? fallbackDesiredConfigHash ?? null;
+  const degradedAgents = numberOrNull(stats?.status_counts?.["degraded"]);
+  const driftedAgents = numberOrNull(stats?.drifted_agents);
+
+  return {
+    hasSnapshotStats,
+    totalAgents: numberOrNull(stats?.total_agents),
+    connectedAgents: numberOrNull(stats?.connected_agents),
+    healthyAgents: numberOrNull(stats?.healthy_agents),
+    degradedAgents,
+    driftedAgents,
+    activeWebSockets: numberOrNull(stats?.active_websockets),
+    desiredConfigHash,
+    hasDegradedStats: degradedAgents !== null,
+    hasDriftStats: driftedAgents !== null,
   };
 }
 
@@ -63,4 +99,8 @@ function visibleAgentMetrics(
 
 function numberOr(value: number | null | undefined, fallback: number): number {
   return typeof value === "number" && Number.isFinite(value) ? value : fallback;
+}
+
+function numberOrNull(value: number | null | undefined): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }

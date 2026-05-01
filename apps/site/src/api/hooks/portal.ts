@@ -34,6 +34,7 @@ export interface ConfigVersion {
   id: string;
   version: number;
   config_hash?: string;
+  size_bytes?: number;
   created_at?: string;
   [key: string]: unknown;
 }
