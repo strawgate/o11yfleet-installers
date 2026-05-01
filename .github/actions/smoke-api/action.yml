@@ -50,7 +50,8 @@ runs:
         echo "=== Seed auth/admin ==="
         SEED_RESP=$("${curl_json[@]}" -X POST "$WORKER_URL/auth/seed" \
           -H "Content-Type: application/json" \
-          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET")
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -d '{}')
         TENANT_ID=$(echo "$SEED_RESP" | jq -r '.tenantId')
         if [ "$TENANT_ID" = "null" ] || [ -z "$TENANT_ID" ]; then
           echo "Failed to seed: $SEED_RESP"
