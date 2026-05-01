@@ -1,4 +1,4 @@
-import { AgentCapabilities, decodeAgentToServer, detectCodecFormat } from "@o11yfleet/core/codec";
+import { AgentCapabilities, decodeAgentToServer } from "@o11yfleet/core/codec";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { uint8ToHex } from "@o11yfleet/core/hex";
@@ -12,34 +12,19 @@ export interface SessionContext {
   ensureAlarm: () => Promise<void>;
 }
 
-/**
- * Handle the first message on a new WebSocket — enrollment or reconnection.
- * Detects codec format, processes enrollment/reconnection claims, and
- * updates the attachment accordingly.
- *
- * Returns the updated attachment and whether the message was fully processed
- * (i.e. the caller should NOT continue to processFrame for enrollment failures).
- */
 export async function handleFirstMessage(
   ctx: SessionContext,
   ws: WebSocket,
   attachment: WSAttachment,
   message: ArrayBuffer,
 ): Promise<{ attachment: WSAttachment; earlyReturn: boolean }> {
-  attachment.codec_format = detectCodecFormat(message);
-
-  // Complete enrollment on first message (OpAMP spec: client sends first)
   if (attachment.is_enrollment) {
     try {
-      const codec = attachment.codec_format;
-
-      // Use the agent's own instance_uid from the message (both codecs)
-      const agentMsg = decodeAgentToServer(message, codec!);
+      const agentMsg = decodeAgentToServer(message);
       if (agentMsg.instance_uid && agentMsg.instance_uid.byteLength > 0) {
         attachment.instance_uid = uint8ToHex(agentMsg.instance_uid);
       }
 
-      // Generate signed assignment claim for reconnection
       const currentGen = ctx.repo.getAgentGeneration(attachment.instance_uid);
       const nextGen = currentGen + 1;
       const claim: AssignmentClaim = {
@@ -53,22 +38,7 @@ export async function handleFirstMessage(
       };
       const assignmentToken = await signClaim(claim, ctx.hmacSecret);
 
-      // Store assignment token to inject as proper ConnectionSettingsOffers
-      // on the first processFrame response (spec: "Registration On First Use").
       attachment.pending_connection_settings = assignmentToken;
-
-      // Send enrollment_complete text frame for JSON clients (backward compatibility
-      // with our FakeOpampAgent test harness which expects this custom message).
-      // Protobuf clients (real OTel Collectors) get connection_settings in the binary response.
-      if (attachment.codec_format === "json") {
-        ws.send(
-          JSON.stringify({
-            type: "enrollment_complete",
-            instance_uid: attachment.instance_uid,
-            assignment_claim: assignmentToken,
-          }),
-        );
-      }
 
       await ctx.ensureAlarm();
 
@@ -79,16 +49,13 @@ export async function handleFirstMessage(
       ws.close(4500, "Enrollment failed");
       return { attachment, earlyReturn: true };
     }
-    // Fall through to process this first message normally
   } else {
-    // Reconnecting agent — check if they want fresh connection_settings
     try {
-      const agentHello = decodeAgentToServer(message, attachment.codec_format!);
+      const agentHello = decodeAgentToServer(message);
       if (
         agentHello.capabilities &&
         agentHello.capabilities & AgentCapabilities.AcceptsOpAMPConnectionSettings
       ) {
-        // Generate a fresh assignment claim for the reconnecting agent
         const reconnectGen = ctx.repo.getAgentGeneration(attachment.instance_uid) + 1;
         const claim: AssignmentClaim = {
           v: 1,

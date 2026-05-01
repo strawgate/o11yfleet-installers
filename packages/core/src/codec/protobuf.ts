@@ -20,13 +20,26 @@ import {
   ServerErrorResponseType as PbServerErrorResponseType,
   CommandType as PbCommandType,
   ConnectionSettingsStatuses as PbConnectionSettingsStatuses,
+  AgentDescriptionSchema,
+  ComponentHealthSchema,
+  EffectiveConfigSchema,
+  AgentDisconnectSchema,
+  RemoteConfigStatusSchema,
 } from "./gen/opamp_pb.js";
+import {
+  KeyValueSchema,
+  AnyValueSchema,
+  ArrayValueSchema,
+  KeyValueListSchema,
+} from "./gen/anyvalue_pb.js";
 import type {
   AgentToServer as PbAgentToServer,
   ServerToAgent as PbServerToAgent,
   AgentDescription as PbAgentDescription,
   ComponentHealth as PbComponentHealth,
   RemoteConfigStatus as PbRemoteConfigStatus,
+  EffectiveConfig as PbEffectiveConfig,
+  AgentDisconnect as PbAgentDisconnect,
 } from "./gen/opamp_pb.js";
 import type { KeyValue as PbKeyValue, AnyValue as PbAnyValue } from "./gen/anyvalue_pb.js";
 import type {
@@ -183,6 +196,69 @@ function pbAnyValueToInternal(pb: PbAnyValue | undefined): AnyValue {
   }
 }
 
+function internalAnyValueToPb(val: AnyValue | undefined): PbAnyValue | undefined {
+  if (!val) return undefined;
+  if (val.string_value !== undefined) {
+    return create(AnyValueSchema, {
+      value: { case: "stringValue" as const, value: val.string_value },
+    });
+  }
+  if (val.bool_value !== undefined) {
+    return create(AnyValueSchema, { value: { case: "boolValue" as const, value: val.bool_value } });
+  }
+  if (val.int_value !== undefined) {
+    return create(AnyValueSchema, { value: { case: "intValue" as const, value: val.int_value } });
+  }
+  if (val.double_value !== undefined) {
+    return create(AnyValueSchema, {
+      value: { case: "doubleValue" as const, value: val.double_value },
+    });
+  }
+  if (val.bytes_value !== undefined) {
+    return create(AnyValueSchema, {
+      value: { case: "bytesValue" as const, value: val.bytes_value },
+    });
+  }
+  if (val.array_value !== undefined) {
+    return create(AnyValueSchema, {
+      value: {
+        case: "arrayValue" as const,
+        value: create(ArrayValueSchema, {
+          values: val.array_value.map(internalAnyValueToPb) as PbAnyValue[],
+        }),
+      },
+    });
+  }
+  if (val.kvlist_value !== undefined) {
+    return create(AnyValueSchema, {
+      value: {
+        case: "kvlistValue" as const,
+        value: create(KeyValueListSchema, {
+          values: val.kvlist_value.map((kv) =>
+            create(KeyValueSchema, { key: kv.key, value: internalAnyValueToPb(kv.value) }),
+          ),
+        }),
+      },
+    });
+  }
+  return undefined;
+}
+
+function internalComponentHealthToPb(health: ComponentHealth): PbComponentHealth {
+  const childMap: Record<string, PbComponentHealth> = {};
+  for (const [key, val] of Object.entries(health.component_health_map ?? {})) {
+    childMap[key] = internalComponentHealthToPb(val);
+  }
+  return create(ComponentHealthSchema, {
+    healthy: health.healthy,
+    startTimeUnixNano: health.start_time_unix_nano,
+    lastError: health.last_error,
+    status: health.status,
+    statusTimeUnixNano: health.status_time_unix_nano,
+    componentHealthMap: childMap,
+  });
+}
+
 // ─── Encode: internal types → protobuf binary ─────────────────────
 
 export function encodeServerToAgentProto(msg: ServerToAgent): ArrayBuffer {
@@ -299,6 +375,113 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
   }
 
   return pb;
+}
+
+// ─── Agent→Server encode/decode (for fake-agent and tests) ────────
+
+export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
+  let data = new Uint8Array(buf);
+  if (data.length > 0 && data[0] === 0x00) {
+    data = data.subarray(1);
+  }
+  const pb = fromBinary(ServerToAgentSchema, data);
+  return {
+    instance_uid: pb.instanceUid,
+    flags: Number(pb.flags),
+    capabilities: Number(pb.capabilities),
+    error_response: pb.errorResponse
+      ? {
+          type:
+            pb.errorResponse.type === PbServerErrorResponseType.ServerErrorResponseType_BadRequest
+              ? ServerErrorResponseType.BadRequest
+              : pb.errorResponse.type ===
+                  PbServerErrorResponseType.ServerErrorResponseType_Unavailable
+                ? ServerErrorResponseType.Unavailable
+                : ServerErrorResponseType.Unknown,
+          error_message: pb.errorResponse.errorMessage ?? "",
+        }
+      : undefined,
+    remote_config: pb.remoteConfig
+      ? {
+          config: {
+            config_map: Object.fromEntries(
+              Object.entries(pb.remoteConfig.config?.configMap ?? {}).map(([k, v]) => [
+                k,
+                {
+                  body: v.body,
+                  content_type: v.contentType,
+                },
+              ]),
+            ),
+          },
+          config_hash: pb.remoteConfig.configHash,
+        }
+      : undefined,
+    agent_identification: pb.agentIdentification
+      ? { new_instance_uid: pb.agentIdentification.newInstanceUid }
+      : undefined,
+    heart_beat_interval: pb.heartBeatInterval > 0n ? Number(pb.heartBeatInterval) : undefined,
+  };
+}
+
+export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
+  const pb = create(AgentToServerSchema, {
+    instanceUid: msg.instance_uid,
+    sequenceNum: BigInt(msg.sequence_num),
+    capabilities: BigInt(msg.capabilities),
+    flags: BigInt(msg.flags),
+  });
+  if (msg.agent_description) {
+    pb.agentDescription = create(AgentDescriptionSchema, {
+      identifyingAttributes: msg.agent_description.identifying_attributes.map((kv) =>
+        create(KeyValueSchema, { key: kv.key, value: internalAnyValueToPb(kv.value) }),
+      ),
+      nonIdentifyingAttributes: msg.agent_description.non_identifying_attributes.map((kv) =>
+        create(KeyValueSchema, { key: kv.key, value: internalAnyValueToPb(kv.value) }),
+      ),
+    });
+  }
+  if (msg.health) {
+    pb.health = internalComponentHealthToPb(msg.health);
+  }
+  if (msg.effective_config) {
+    const configMap: Record<string, { body: Uint8Array; contentType: string }> = {};
+    for (const [key, val] of Object.entries(msg.effective_config.config_map?.config_map ?? {})) {
+      configMap[key] = create(AgentConfigFileSchema, {
+        body: val.body,
+        contentType: val.content_type,
+      });
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pb.effectiveConfig = create(EffectiveConfigSchema as any, {
+      configMap: create(AgentConfigMapSchema, { configMap }),
+    }) as unknown as PbEffectiveConfig;
+  }
+  if (msg.remote_config_status) {
+    const statusMap: Record<number, PbRemoteConfigStatuses> = {
+      [RemoteConfigStatuses.UNSET]: PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
+      [RemoteConfigStatuses.APPLIED]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLIED,
+      [RemoteConfigStatuses.APPLYING]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLYING,
+      [RemoteConfigStatuses.FAILED]: PbRemoteConfigStatuses.RemoteConfigStatuses_FAILED,
+    };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pb.remoteConfigStatus = create(RemoteConfigStatusSchema as any, {
+      lastRemoteConfigHash: msg.remote_config_status.last_remote_config_hash,
+      status:
+        statusMap[msg.remote_config_status.status] ??
+        PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
+      errorMessage: msg.remote_config_status.error_message,
+    }) as unknown as PbRemoteConfigStatus;
+  }
+  if (msg.agent_disconnect) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    pb.agentDisconnect = create(AgentDisconnectSchema as any, {}) as unknown as PbAgentDisconnect;
+  }
+  const payload = toBinary(AgentToServerSchema, pb);
+  const result = new Uint8Array(1 + payload.length);
+  result[0] = 0x00;
+  result.set(payload, 1);
+  return result.buffer.slice(result.byteOffset, result.byteOffset + result.byteLength);
 }
 
 // ─── Format detection ─────────────────────────────────────────────

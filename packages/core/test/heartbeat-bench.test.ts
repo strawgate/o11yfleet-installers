@@ -6,22 +6,23 @@
  *
  * Target: 250K agents @ 3600s heartbeat = 69 msg/s  (zero-wake model)
  * Budget: < 14ms per message (to stay under DO CPU limits)
+ *
+ * Note: JSON framing has been removed (PERF-CRIT-20). All codec operations
+ * now use protobuf only.
  */
 
 import { describe, it, expect } from "vitest";
-import { encodeFrame, decodeFrame } from "../src/codec/framing.js";
-import { encodeServerToAgentProto, isProtobufFrame } from "../src/codec/protobuf.js";
+import {
+  encodeServerToAgentProto,
+  encodeAgentToServerProto,
+  isProtobufFrame,
+} from "../src/codec/protobuf.js";
 import { processFrame, DEFAULT_HEARTBEAT_INTERVAL_NS } from "../src/state-machine/processor.js";
 import type { AgentState } from "../src/state-machine/types.js";
 import type { AgentToServer, ServerToAgent } from "../src/codec/types.js";
 import { AgentCapabilities, ServerCapabilities, ServerToAgentFlags } from "../src/codec/types.js";
-import {
-  detectCodecFormat,
-  encodeServerToAgent,
-  decodeAgentToServer,
-} from "../src/codec/decoder.js";
+import { decodeAgentToServer } from "../src/codec/decoder.js";
 
-// Build a realistic heartbeat message (what FakeOpampAgent.sendHeartbeat sends)
 function makeHeartbeatMsg(seq: number): AgentToServer {
   return {
     instance_uid: new Uint8Array(16).fill(0xab),
@@ -34,7 +35,6 @@ function makeHeartbeatMsg(seq: number): AgentToServer {
   };
 }
 
-// Build a realistic heartbeat response (what processFrame returns)
 function makeHeartbeatResponse(): ServerToAgent {
   return {
     instance_uid: new Uint8Array(16).fill(0xab),
@@ -47,7 +47,6 @@ function makeHeartbeatResponse(): ServerToAgent {
   };
 }
 
-// Build a realistic AgentState (what loadAgentState returns from SQLite)
 function makeAgentState(seq: number): AgentState {
   return {
     instance_uid: new Uint8Array(16).fill(0xab),
@@ -59,7 +58,7 @@ function makeAgentState(seq: number): AgentState {
     status: "running",
     last_error: "",
     current_config_hash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
-    desired_config_hash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]), // same = no push
+    desired_config_hash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
     effective_config_hash: "abcd1234",
     effective_config_body: null,
     last_seen_at: Date.now() - 30_000,
@@ -78,7 +77,6 @@ async function bench(
   fn: () => unknown,
   iterations = 10_000,
 ): Promise<{ opsPerSec: number; avgNs: number }> {
-  // Warm up
   for (let i = 0; i < 100; i++) await fn();
 
   const start = performance.now();
@@ -95,112 +93,67 @@ async function bench(
 describe("Heartbeat hot-path benchmark", () => {
   it("measures each step of the heartbeat pipeline", async () => {
     const msg = makeHeartbeatMsg(42);
-    const state = makeAgentState(41); // seq - 1 so it matches
+    const state = makeAgentState(41);
 
-    // Step 1: JSON encode (what FakeOpampAgent does)
-    const jsonEncoded = encodeFrame(msg);
-    const r1 = await bench("JSON encode (AgentToServer)", () => encodeFrame(msg));
+    const protoEncodedHeartbeat = encodeAgentToServerProto(msg);
 
-    // Step 2: Protobuf encode (what real OTel Collectors do)
-    // We don't have a direct AgentToServer proto encoder, so test the response encode
     const protoResponse = makeHeartbeatResponse();
-    const protoEncoded = encodeServerToAgentProto(protoResponse);
+    const r1 = await bench("Proto encode (AgentToServer)", () => encodeAgentToServerProto(msg));
+
     const r2encode = await bench("Proto encode (ServerToAgent)", () =>
       encodeServerToAgentProto(protoResponse),
     );
 
-    // Step 3: Format detection
-    const r3json = await bench("detectCodecFormat (JSON frame)", () =>
-      detectCodecFormat(jsonEncoded),
-    );
-    const r3proto = await bench("isProtobufFrame (Proto frame)", () =>
-      isProtobufFrame(protoEncoded),
+    const r3 = await bench("isProtobufFrame (Proto frame)", () =>
+      isProtobufFrame(protoEncodedHeartbeat),
     );
 
-    // Step 4: JSON decode
-    const r4 = await bench("JSON decode (AgentToServer)", () =>
-      decodeFrame<AgentToServer>(jsonEncoded),
+    const r4 = await bench("decodeAgentToServer (Proto)", () =>
+      decodeAgentToServer(protoEncodedHeartbeat),
     );
 
-    // Step 5: Full decode with format detection (JSON path)
-    const r5json = await bench("decodeAgentToServer (JSON)", () =>
-      decodeAgentToServer(jsonEncoded),
+    const r5 = await bench("processFrame (heartbeat)", () => processFrame(state, msg, null));
+
+    const r6 = await bench("Proto encode (ServerToAgent)", () =>
+      encodeServerToAgentProto(protoResponse),
     );
 
-    // Step 6: processFrame (pure function — the state machine)
-    const r6 = await bench("processFrame (heartbeat)", () => processFrame(state, msg, null));
-
-    // Step 7: JSON encode response
-    const response = makeHeartbeatResponse();
-    const r7json = await bench("JSON encode (ServerToAgent)", () => encodeFrame(response));
-    const r7proto = await bench("Proto encode (ServerToAgent)", () =>
-      encodeServerToAgentProto(response),
-    );
-
-    // Step 8: Full pipeline (decode + processFrame + encode response) — JSON path
-    const r8json = await bench("Full pipeline (JSON)", async () => {
-      const decoded = decodeFrame<AgentToServer>(jsonEncoded);
+    const fullPipeline = async () => {
+      const decoded = decodeAgentToServer(protoEncodedHeartbeat);
       const result = await processFrame(state, decoded, null);
-      if (result.response) encodeFrame(result.response);
-    });
+      if (result.response) encodeServerToAgentProto(result.response);
+    };
+    const r7 = await bench("Full pipeline (Proto)", fullPipeline);
 
-    // Step 9: Full pipeline — Protobuf decode path
-    // Create a protobuf-encoded heartbeat using the AgentToServer proto encoder
-    // We need to build one manually since we only have the JSON framing encoder for AgentToServer
-    const r9 = await bench("encodeServerToAgent (full, proto)", () =>
-      encodeServerToAgent(response, "protobuf"),
-    );
-    const r9json_full = await bench("encodeServerToAgent (full, json)", () =>
-      encodeServerToAgent(response, "json"),
-    );
-
-    // Print results
     console.log("\n╔══════════════════════════════════════════════════════════════╗");
-    console.log("║       Heartbeat Hot-Path Microbenchmark                     ║");
+    console.log("║       Heartbeat Hot-Path Microbenchmark (Protobuf-only)     ║");
     console.log("╠══════════════════════════════════════════════════════════════╣");
     console.log(
-      `║ JSON encode (AgentToServer)     │ ${String(r1.avgNs).padStart(7)}ns │ ${String(r1.opsPerSec).padStart(10)} ops/s ║`,
+      `║ Proto encode (AgentToServer)    │ ${String(r1.avgNs).padStart(7)}ns │ ${String(r1.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log(
-      `║ Proto encode (ServerToAgent)    │ ${String(r2encode.avgNs).padStart(7)}ns │ ${String(r2encode.opsPerSec).padStart(10)} ops/s ║`,
+      `║ Proto encode (ServerToAgent)   │ ${String(r2encode.avgNs).padStart(7)}ns │ ${String(r2encode.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log(
-      `║ detectCodecFormat (JSON)        │ ${String(r3json.avgNs).padStart(7)}ns │ ${String(r3json.opsPerSec).padStart(10)} ops/s ║`,
+      `║ isProtobufFrame (Proto)          │ ${String(r3.avgNs).padStart(7)}ns │ ${String(r3.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log(
-      `║ detectCodecFormat (Proto)       │ ${String(r3proto.avgNs).padStart(7)}ns │ ${String(r3proto.opsPerSec).padStart(10)} ops/s ║`,
+      `║ decodeAgentToServer (Proto)     │ ${String(r4.avgNs).padStart(7)}ns │ ${String(r4.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log(
-      `║ JSON decode (AgentToServer)     │ ${String(r4.avgNs).padStart(7)}ns │ ${String(r4.opsPerSec).padStart(10)} ops/s ║`,
+      `║ processFrame (heartbeat)         │ ${String(r5.avgNs).padStart(7)}ns │ ${String(r5.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log(
-      `║ decodeAgentToServer (JSON full) │ ${String(r5json.avgNs).padStart(7)}ns │ ${String(r5json.opsPerSec).padStart(10)} ops/s ║`,
-    );
-    console.log(
-      `║ processFrame (heartbeat)        │ ${String(r6.avgNs).padStart(7)}ns │ ${String(r6.opsPerSec).padStart(10)} ops/s ║`,
-    );
-    console.log(
-      `║ JSON encode (ServerToAgent)     │ ${String(r7json.avgNs).padStart(7)}ns │ ${String(r7json.opsPerSec).padStart(10)} ops/s ║`,
-    );
-    console.log(
-      `║ Proto encode (ServerToAgent)    │ ${String(r7proto.avgNs).padStart(7)}ns │ ${String(r7proto.opsPerSec).padStart(10)} ops/s ║`,
+      `║ Proto encode (ServerToAgent)    │ ${String(r6.avgNs).padStart(7)}ns │ ${String(r6.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log("╠══════════════════════════════════════════════════════════════╣");
     console.log(
-      `║ Full pipeline (JSON path)       │ ${String(r8json.avgNs).padStart(7)}ns │ ${String(r8json.opsPerSec).padStart(10)} ops/s ║`,
-    );
-    console.log(
-      `║ encodeServerToAgent (proto)     │ ${String(r9.avgNs).padStart(7)}ns │ ${String(r9.opsPerSec).padStart(10)} ops/s ║`,
-    );
-    console.log(
-      `║ encodeServerToAgent (json)      │ ${String(r9json_full.avgNs).padStart(7)}ns │ ${String(r9json_full.opsPerSec).padStart(10)} ops/s ║`,
+      `║ Full pipeline (Proto)            │ ${String(r7.avgNs).padStart(7)}ns │ ${String(r7.opsPerSec).padStart(10)} ops/s ║`,
     );
     console.log("╚══════════════════════════════════════════════════════════════╝");
 
-    const totalJsonNs = r5json.avgNs + r6.avgNs + r7json.avgNs;
-    const totalProtoNs = r5json.avgNs + r6.avgNs + r7proto.avgNs; // approx
+    const totalProtoNs = r4.avgNs + r5.avgNs + r6.avgNs;
     console.log(`\nEstimated per-heartbeat CPU (excl. SQL + WS send):`);
-    console.log(`  JSON path:  ~${totalJsonNs}ns (${(totalJsonNs / 1000).toFixed(1)}µs)`);
     console.log(`  Proto path: ~${totalProtoNs}ns (${(totalProtoNs / 1000).toFixed(1)}µs)`);
 
     const msgPerSec = Math.floor(250_000 / 3600);
@@ -210,10 +163,9 @@ describe("Heartbeat hot-path benchmark", () => {
       `CPU budget per message: ${budgetNsPerMsg}ns (${(budgetNsPerMsg / 1000).toFixed(0)}µs)`,
     );
     console.log(
-      `JSON headroom: ${(((budgetNsPerMsg - totalJsonNs) / budgetNsPerMsg) * 100).toFixed(0)}%`,
+      `Proto headroom: ${(((budgetNsPerMsg - totalProtoNs) / budgetNsPerMsg) * 100).toFixed(0)}%`,
     );
 
-    // The test passes — this is a benchmark, not a correctness test
     expect(r1.opsPerSec).toBeGreaterThan(0);
   });
 
@@ -223,13 +175,9 @@ describe("Heartbeat hot-path benchmark", () => {
 
     const result = await processFrame(state, msg, null);
 
-    // Should persist (sequence_num + last_seen_at update)
     expect(result.shouldPersist).toBe(true);
-    // No events for a pure heartbeat
     expect(result.events).toHaveLength(0);
-    // Response should include heartbeat interval
     expect(result.response?.heart_beat_interval).toBe(DEFAULT_HEARTBEAT_INTERVAL_NS);
-    // Sequence number updated
     expect(result.newState.sequence_num).toBe(42);
   });
 });

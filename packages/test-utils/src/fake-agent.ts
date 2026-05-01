@@ -5,8 +5,8 @@
 // wrangler dev, and in any browser-like environment.
 
 import {
-  encodeFrame,
-  decodeFrame,
+  encodeAgentToServerProto,
+  decodeServerToAgentProto,
   type AgentToServer,
   type ServerToAgent,
   AgentCapabilities,
@@ -188,7 +188,7 @@ export class FakeOpampAgent {
               : event.data;
         if (!data) return;
 
-        const msg = decodeFrame<ServerToAgent>(data as ArrayBuffer);
+        const msg = decodeServerToAgentProto(data as ArrayBuffer);
 
         // Process server-directed heartbeat interval
         this.processHeartbeatInterval(msg);
@@ -502,6 +502,6 @@ export class FakeOpampAgent {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket not connected");
     }
-    this.ws.send(encodeFrame(msg));
+    this.ws.send(encodeAgentToServerProto(msg));
   }
 }

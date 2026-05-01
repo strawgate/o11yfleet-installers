@@ -1,12 +1,11 @@
+export { decodeAgentToServer, encodeServerToAgent, prepareBroadcastMessage } from "./decoder.js";
 export {
-  decodeAgentToServer,
-  encodeServerToAgent,
-  detectCodecFormat,
-  prepareBroadcastMessage,
-} from "./decoder.js";
-export type { CodecFormat } from "./decoder.js";
-export { encodeFrame, decodeFrame } from "./framing.js";
-export { decodeAgentToServerProto, encodeServerToAgentProto, isProtobufFrame } from "./protobuf.js";
+  decodeAgentToServerProto,
+  decodeServerToAgentProto,
+  encodeAgentToServerProto,
+  encodeServerToAgentProto,
+  isProtobufFrame,
+} from "./protobuf.js";
 export type { AgentToServer, ServerToAgent } from "./types.js";
 export {
   AgentCapabilities,

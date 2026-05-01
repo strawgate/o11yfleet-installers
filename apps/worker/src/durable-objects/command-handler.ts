@@ -4,11 +4,11 @@ import {
   CommandType,
   AgentCapabilities,
 } from "@o11yfleet/core/codec";
-import type { CodecFormat, ServerToAgent } from "@o11yfleet/core/codec";
+import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { hexToUint8Array } from "@o11yfleet/core/hex";
 import { setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
 import type { AgentStateRepository } from "./agent-state-repo-interface.js";
-import { parseAttachment, type WSAttachment } from "./ws-attachment.js";
+import { parseAttachment } from "./ws-attachment.js";
 import { STALE_AGENT_THRESHOLD_MS, SERVER_CAPABILITIES } from "./constants.js";
 
 export interface CommandContext {
@@ -18,9 +18,6 @@ export interface CommandContext {
   analytics?: AnalyticsEngineDataset;
 }
 
-/**
- * Build the config_map with actual YAML content if available.
- */
 function buildConfigMap(
   content: string | null,
 ): Record<string, { body: Uint8Array; content_type: string }> {
@@ -31,11 +28,6 @@ function buildConfigMap(
       content_type: "text/yaml",
     },
   };
-}
-
-/** Resolve the codec for a socket, or undefined if not yet negotiated. */
-function resolveSocketCodec(attachment: WSAttachment): CodecFormat | undefined {
-  return attachment.codec_format ?? (attachment.is_enrollment ? undefined : "json");
 }
 
 export async function handleSetDesiredConfig(
@@ -54,17 +46,14 @@ export async function handleSetDesiredConfig(
   }
   const body = parsed.data;
 
-  // Persist to SQLite (sync, ~µs)
   ctx.repo.saveDesiredConfig(body.config_hash, body.config_content ?? null);
 
   const sockets = ctx.getWebSockets();
   const desiredHashBytes = hexToUint8Array(body.config_hash);
   let pushed = 0;
 
-  // Build config_map with YAML content if available
   const configMap = buildConfigMap(body.config_content ?? null);
 
-  // Pre-build the broadcast template (everything except instance_uid)
   const broadcastTemplate: Omit<ServerToAgent, "instance_uid"> = {
     flags: 0,
     capabilities: SERVER_CAPABILITIES,
@@ -74,15 +63,12 @@ export async function handleSetDesiredConfig(
     },
   };
 
-  // Pre-encode once per codec format for O(1) per-socket send cost
-  const protoBroadcast = prepareBroadcastMessage(broadcastTemplate, "protobuf");
-  const jsonBroadcast = prepareBroadcastMessage(broadcastTemplate, "json");
+  const protoBroadcast = prepareBroadcastMessage(broadcastTemplate);
 
   for (const ws of sockets) {
     const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) continue;
 
-    // Skip agents that don't accept remote config
     if (
       attachment.capabilities !== undefined &&
       !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
@@ -91,14 +77,11 @@ export async function handleSetDesiredConfig(
     }
 
     try {
-      const socketCodec = resolveSocketCodec(attachment);
-      if (!socketCodec) continue;
       const uid = hexToUint8Array(attachment.instance_uid);
-      const encoded = socketCodec === "protobuf" ? protoBroadcast(uid) : jsonBroadcast(uid);
-      ws.send(encoded);
+      ws.send(protoBroadcast(uid));
       pushed++;
     } catch {
-      // Socket may have closed
+      /* Socket may have closed */
     }
   }
 
@@ -123,25 +106,16 @@ export function handleDisconnectAll(ctx: CommandContext): Response {
 export function handleRestartCommand(ctx: CommandContext): Response {
   const sockets = ctx.getWebSockets();
   let sent = 0;
-  let skippedNoCodec = 0;
   let skippedNoCap = 0;
   for (const ws of sockets) {
     try {
       const attachment = parseAttachment(ws.deserializeAttachment());
       if (!attachment) continue;
-      // Skip agents that didn't advertise AcceptsRestartCommand capability.
       if (
         attachment.capabilities !== undefined &&
         !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
       ) {
         skippedNoCap++;
-        continue;
-      }
-      // Skip sockets that haven't negotiated a codec yet — sending a
-      // JSON frame to a protobuf client would corrupt the connection.
-      const codec = resolveSocketCodec(attachment);
-      if (!codec) {
-        skippedNoCodec++;
         continue;
       }
       const msg: ServerToAgent = {
@@ -150,7 +124,7 @@ export function handleRestartCommand(ctx: CommandContext): Response {
         capabilities: SERVER_CAPABILITIES,
         command: { type: CommandType.Restart },
       };
-      ws.send(encodeServerToAgent(msg, codec));
+      ws.send(encodeServerToAgent(msg));
       sent++;
     } catch {
       /* skip broken sockets */
@@ -158,7 +132,6 @@ export function handleRestartCommand(ctx: CommandContext): Response {
   }
   return Response.json({
     restarted: sent,
-    skipped_no_codec: skippedNoCodec,
     skipped_no_cap: skippedNoCap,
   });
 }
@@ -181,8 +154,6 @@ export async function handleSweep(
 
   const headerTenantId = request.headers.get("x-fp-tenant-id");
   const headerConfigId = request.headers.get("x-fp-config-id");
-  // Prefer authoritative identity from worker route headers; fall back to
-  // DO-local state only when headers are absent (best-effort for analytics).
   const tenantId = headerTenantId || staleUids[0]?.tenant_id || "unknown";
   const configId = headerConfigId || staleUids[0]?.config_id || "unknown";
   if (headerTenantId && headerConfigId) {

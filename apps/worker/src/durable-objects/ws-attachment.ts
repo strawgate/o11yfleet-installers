@@ -1,12 +1,9 @@
-import type { CodecFormat } from "@o11yfleet/core/codec";
-
 export interface WSAttachment {
   tenant_id: string;
   config_id: string;
   instance_uid: string;
   connected_at: number;
   is_enrollment?: boolean;
-  codec_format?: CodecFormat;
   /** Agent-reported capabilities bitmask (from last AgentToServer message). */
   capabilities?: number;
   /** Signed assignment claim to deliver via ConnectionSettingsOffers on first response. */
@@ -37,10 +34,6 @@ export function parseAttachment(raw: unknown): WSAttachment | null {
     instance_uid: obj["instance_uid"],
     connected_at,
     is_enrollment: typeof obj["is_enrollment"] === "boolean" ? obj["is_enrollment"] : undefined,
-    codec_format:
-      obj["codec_format"] === "protobuf" || obj["codec_format"] === "json"
-        ? obj["codec_format"]
-        : undefined,
     capabilities: typeof obj["capabilities"] === "number" ? obj["capabilities"] : undefined,
     pending_connection_settings:
       typeof obj["pending_connection_settings"] === "string"

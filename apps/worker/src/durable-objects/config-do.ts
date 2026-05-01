@@ -247,13 +247,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return;
     }
 
-    // Detect codec format on first message and complete enrollment/reconnection
-    if (!attachment.codec_format) {
-      const result = await handleFirstMessage(this.sessionCtx(), ws, attachment, message);
-      if (result.earlyReturn) return;
-      attachment = result.attachment;
-    }
-    const codec = attachment.codec_format!;
+    // Handle first message (enrollment or reconnection)
+    const result = await handleFirstMessage(this.sessionCtx(), ws, attachment, message);
+    if (result.earlyReturn) return;
+    attachment = result.attachment;
 
     // Rate limit — atomic check-and-increment in SQLite
     if (this.repo.checkRateLimit(attachment.instance_uid, MAX_MESSAGES_PER_MINUTE)) {
@@ -269,7 +266,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             retry_info: { retry_after_nanoseconds: retryDelayNs },
           },
         };
-        ws.send(encodeServerToAgent(errorResponse, codec));
+        ws.send(encodeServerToAgent(errorResponse));
       } catch {
         // Best-effort — socket may already be broken
       }
@@ -286,9 +283,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       attachment.config_id,
     );
     try {
-      const agentMsg = decodeAgentToServer(message, codec);
+      const agentMsg = decodeAgentToServer(message);
       span.setAttribute("opamp.sequence_num", agentMsg.sequence_num);
-      span.setAttribute("opamp.codec", codec);
+      span.setAttribute("opamp.codec", "protobuf");
 
       // Duplicate UID detection (OpAMP spec §3.2.1.2)
       if (agentMsg.sequence_num === 0) {
@@ -323,7 +320,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             capabilities: SERVER_CAPABILITIES,
             agent_identification: { new_instance_uid: newUid },
           };
-          ws.send(encodeServerToAgent(dupResponse, codec));
+          ws.send(encodeServerToAgent(dupResponse));
           span.end();
           return;
         }
@@ -393,7 +390,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           ws.serializeAttachment(attachment);
         }
 
-        ws.send(encodeServerToAgent(result.response, codec));
+        ws.send(encodeServerToAgent(result.response));
         if (result.response.remote_config) {
           span.setAttribute("opamp.config_offered", true);
         }
@@ -412,7 +409,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             error_message: err instanceof Error ? err.message : "Malformed message",
           },
         };
-        ws.send(encodeServerToAgent(errorResponse, codec));
+        ws.send(encodeServerToAgent(errorResponse));
       } catch {
         try {
           ws.close(1011, "Internal error");
