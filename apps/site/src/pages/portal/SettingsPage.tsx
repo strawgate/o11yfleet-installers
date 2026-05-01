@@ -1,11 +1,14 @@
-import { useState, useEffect } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useTenant, useUpdateTenant, useDeleteTenant } from "../../api/hooks/portal";
-import { useAuth } from "../../api/hooks/auth";
-import { useToast } from "../../components/common/Toast";
-import { Modal } from "../../components/common/Modal";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { ErrorState } from "../../components/common/ErrorState";
+import { useAuth } from "@/api/hooks/auth";
+import { useDeleteTenant, useTenant, useUpdateTenant } from "@/api/hooks/portal";
+import { PageHeader, PageShell } from "@/components/app";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { Modal } from "@/components/common/Modal";
+import { useToast } from "@/components/common/Toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 export default function SettingsPage() {
   const tenant = useTenant();
@@ -18,12 +21,14 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const seededTenantId = useRef<string | null>(null);
 
   useEffect(() => {
-    if (tenant.data?.name && !name) {
+    if (tenant.data && tenant.data.id !== seededTenantId.current) {
+      seededTenantId.current = tenant.data.id;
       setName(tenant.data.name);
     }
-  }, [tenant.data, name]);
+  }, [tenant.data]);
 
   if (tenant.isLoading) return <LoadingSpinner />;
   if (tenant.error) return <ErrorState error={tenant.error} retry={() => void tenant.refetch()} />;
@@ -43,88 +48,86 @@ export default function SettingsPage() {
     try {
       await deleteTenant.mutateAsync();
       toast("Workspace deleted");
-      navigate("/");
+      void navigate("/");
     } catch (err) {
       toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
     }
   }
 
   return (
-    <div className="main-narrow">
-      <div className="page-head">
-        <h1>Settings</h1>
-      </div>
+    <PageShell width="narrow">
+      <PageHeader title="Settings" />
 
-      {/* Admin banner */}
-      {user && (
-        <div className="admin-banner mb-6">
-          <span className="pulse" />
-          <span className="lbl">Signed in as</span>
-          <span className="who">{user.name ?? user.email}</span>
+      {user ? (
+        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm">
+          <span className="size-2 rounded-full bg-primary" />
+          <span className="text-muted-foreground">Signed in as</span>
+          <span className="font-medium text-foreground">{user.name ?? user.email}</span>
         </div>
-      )}
+      ) : null}
 
-      {/* General */}
-      <div className="card card-pad">
-        <h3>General</h3>
+      <section className="rounded-md border border-border bg-card p-4">
+        <h3 className="text-sm font-medium text-foreground">General</h3>
 
-        <div className="field mt-6">
-          <label htmlFor="workspace-name">Workspace name</label>
-          <input
+        <div className="mt-6 grid gap-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="workspace-name">
+            Workspace name
+          </label>
+          <Input
             id="workspace-name"
-            className="input"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => setName(event.target.value)}
           />
         </div>
 
-        <div className="field mt-6">
-          <label htmlFor="workspace-tenant-id">Tenant ID</label>
-          <input id="workspace-tenant-id" className="input mono" value={t?.id ?? ""} readOnly />
-          <span className="help">Read-only identifier for your workspace.</span>
+        <div className="mt-6 grid gap-2">
+          <label className="text-sm font-medium text-foreground" htmlFor="workspace-tenant-id">
+            Tenant ID
+          </label>
+          <Input id="workspace-tenant-id" className="font-mono" value={t?.id ?? ""} readOnly />
+          <span className="text-xs text-muted-foreground">
+            Read-only identifier for your workspace.
+          </span>
         </div>
 
-        <button
-          className="btn btn-primary mt-6"
+        <Button
+          className="mt-6"
           onClick={() => void handleSave()}
           disabled={updateTenant.isPending || name.trim() === (t?.name ?? "")}
         >
-          {updateTenant.isPending ? "Saving…" : "Save changes"}
-        </button>
-      </div>
+          {updateTenant.isPending ? "Saving..." : "Save changes"}
+        </Button>
+      </section>
 
-      <div className="card card-pad mt-6">
-        <h3>Remote config authority</h3>
-        <p className="meta mt-2">
+      <section className="mt-6 rounded-md border border-border bg-card p-4">
+        <h3 className="text-sm font-medium text-foreground">Remote config authority</h3>
+        <p className="mt-2 text-sm text-muted-foreground">
           This workspace can assign desired config to enrolled collectors. Enrollment tokens are
           bootstrap-only secrets; future API tokens should be scoped separately for automation.
         </p>
-        <div className="banner info mt-6">
-          <div>
-            <div className="b-title">Governance model to wire</div>
-            <div className="b-body">
-              Role checks, plan gates, API-token scopes, and audit events must agree with backend
-              authorization before remote-config mutation controls become broadly available.
-            </div>
-          </div>
+        <div className="mt-6 rounded-md border border-[color:var(--info)]/30 bg-[color:var(--info)]/10 p-4">
+          <div className="text-sm font-medium text-foreground">Governance model to wire</div>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Role checks, plan gates, API-token scopes, and audit events must agree with backend
+            authorization before remote-config mutation controls become broadly available.
+          </p>
         </div>
-      </div>
+      </section>
 
-      {/* Danger zone */}
-      <div className="danger-zone mt-6">
-        <div className="dz-head">Danger zone</div>
-        <div className="row">
-          <div className="desc">
-            <strong>Delete workspace</strong>
-            <p className="meta">
+      <section className="mt-6 rounded-md border border-destructive/40 bg-card p-4">
+        <div className="text-sm font-medium text-destructive">Danger zone</div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="font-medium text-foreground">Delete workspace</div>
+            <p className="mt-1 text-sm text-muted-foreground">
               Permanently delete this workspace and all its data. This action cannot be undone.
             </p>
           </div>
-          <button className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
             Delete workspace
-          </button>
+          </Button>
         </div>
-      </div>
+      </section>
 
       <Modal
         open={deleteOpen}
@@ -135,36 +138,37 @@ export default function SettingsPage() {
         title="Delete workspace"
         footer={
           <>
-            <button
-              className="btn btn-secondary"
+            <Button
+              variant="secondary"
               onClick={() => {
                 setDeleteOpen(false);
                 setConfirmText("");
               }}
             >
               Cancel
-            </button>
-            <button
-              className="btn btn-danger"
+            </Button>
+            <Button
+              variant="destructive"
               onClick={() => void handleDelete()}
               disabled={confirmText !== "delete" || deleteTenant.isPending}
             >
-              {deleteTenant.isPending ? "Deleting…" : "Delete permanently"}
-            </button>
+              {deleteTenant.isPending ? "Deleting..." : "Delete permanently"}
+            </Button>
           </>
         }
       >
-        <p>
-          Type <strong>delete</strong> to confirm.
-        </p>
-        <input
-          className="input mt-2"
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          placeholder="delete"
-          autoFocus
-        />
+        <div className="grid gap-2">
+          <p className="text-sm text-muted-foreground">
+            Type <strong className="text-foreground">delete</strong> to confirm.
+          </p>
+          <Input
+            value={confirmText}
+            onChange={(event) => setConfirmText(event.target.value)}
+            placeholder="delete"
+            autoFocus
+          />
+        </div>
       </Modal>
-    </div>
+    </PageShell>
   );
 }

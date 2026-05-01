@@ -37,11 +37,14 @@ test("builds a guidance request from visible browser context", () => {
 
   assert.equal(request?.surface, "portal.overview");
   assert.equal(request?.targets[0]?.key, "browser.page");
-  assert.equal(request?.context.visible_text, "Overview 3 configurations 2 collectors connected");
-  assert.deepEqual(request?.context.facts, [
+  assert.equal(
+    request?.context["visible_text"],
+    "Overview 3 configurations 2 collectors connected",
+  );
+  assert.deepEqual(request?.context["facts"], [
     { label: "Workspace", value: "Acme", source: "layout" },
   ]);
-  assert.equal(request?.context.tenant_id, "tenant_123");
+  assert.equal(request?.context["tenant_id"], "tenant_123");
 });
 
 test("merges structured page context and approved light fetches into browser guidance", () => {
@@ -118,14 +121,22 @@ test("keeps page context that only contains meaningful UI state", () => {
       pageContext: {
         active_tab: "versions",
         filters: { state: "drifted" },
-        selection: { configuration_id: "cfg_1" },
+        selection: {
+          kind: "row",
+          key: "configuration",
+          data: { configuration_id: "cfg_1" },
+        },
       },
     },
   ]);
 
   assert.equal(snapshot.pageContext?.active_tab, "versions");
   assert.deepEqual(snapshot.pageContext?.filters, { state: "drifted" });
-  assert.deepEqual(snapshot.pageContext?.selection, { configuration_id: "cfg_1" });
+  assert.deepEqual(snapshot.pageContext?.selection, {
+    kind: "row",
+    key: "configuration",
+    data: { configuration_id: "cfg_1" },
+  });
 });
 
 test("clamps browser guidance prompts to the API schema limit", () => {
@@ -145,9 +156,9 @@ test("keeps canonical route and title authoritative in merged context", () => {
     },
   ]);
 
-  assert.equal(snapshot.context.route, "/portal/overview");
-  assert.equal(snapshot.context.title, "Source title");
-  assert.equal(snapshot.context.tenant_id, "tenant_123");
+  assert.equal(snapshot.context["route"], "/portal/overview");
+  assert.equal(snapshot.context["title"], "Source title");
+  assert.equal(snapshot.context["tenant_id"], "tenant_123");
 });
 
 test("caps browser guidance targets to the API schema limit", () => {

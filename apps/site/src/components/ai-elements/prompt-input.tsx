@@ -405,7 +405,7 @@ export const PromptInputActionAddAttachments = ({
   );
 
   return (
-    <DropdownMenuItem {...props} onSelect={handleSelect}>
+    <DropdownMenuItem {...props} onSelect={(event) => void handleSelect(event)}>
       <ImageIcon className="mr-2 size-4" /> {label}
     </DropdownMenuItem>
   );
@@ -448,7 +448,7 @@ export const PromptInputActionAddScreenshot = ({
   );
 
   return (
-    <DropdownMenuItem {...props} onSelect={handleSelect}>
+    <DropdownMenuItem {...props} onSelect={(event) => void handleSelect(event)}>
       <Monitor className="mr-2 size-4" />
       {label}
     </DropdownMenuItem>
@@ -791,11 +791,8 @@ export const PromptInput = ({
     [referencedSources, clearReferencedSources],
   );
 
-  const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
-    async (event) => {
-      event.preventDefault();
-
-      const form = event.currentTarget;
+  const submitForm = useCallback(
+    async (form: HTMLFormElement, event: FormEvent<HTMLFormElement>) => {
       const text = usingProvider
         ? controller.textInput.value
         : (() => {
@@ -832,6 +829,14 @@ export const PromptInput = ({
       }
     },
     [usingProvider, controller, files, onSubmit, clear],
+  );
+
+  const handleSubmit: FormEventHandler<HTMLFormElement> = useCallback(
+    (event) => {
+      event.preventDefault();
+      void submitForm(event.currentTarget, event);
+    },
+    [submitForm],
   );
 
   // Render with or without local provider

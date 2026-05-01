@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPut, apiDel } from "../client";
+import { apiGet, apiPost, apiPut, apiDel, normalizeUser, type User } from "../client";
+import type { AuthUser } from "@o11yfleet/core/api";
 import type { AdminHealthPayload } from "../../pages/admin/support-model";
 
 /* ------------------------------------------------------------------ */
@@ -295,7 +296,10 @@ export function useDeleteAdminTenant(id: string) {
 
 export function useImpersonateTenant(id: string) {
   return useMutation({
-    mutationFn: () => apiPost(`/api/admin/tenants/${id}/impersonate`),
+    mutationFn: async (): Promise<{ user: User }> => {
+      const response = await apiPost<{ user: AuthUser }>(`/api/admin/tenants/${id}/impersonate`);
+      return { user: normalizeUser(response.user) };
+    },
   });
 }
 

@@ -1,21 +1,32 @@
 import { useState } from "react";
+import { Plus } from "lucide-react";
 import {
   useConfigurations,
   useConfigurationTokens,
   useCreateEnrollmentToken,
   useDeleteEnrollmentToken,
   type Configuration,
-} from "../../api/hooks/portal";
-import { useToast } from "../../components/common/Toast";
-import { Modal } from "../../components/common/Modal";
-import { CopyButton } from "../../components/common/CopyButton";
-import { EmptyState } from "../../components/common/EmptyState";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { ErrorState } from "../../components/common/ErrorState";
-import { relTime } from "../../utils/format";
+  type EnrollmentToken,
+} from "@/api/hooks/portal";
+import {
+  DataTable,
+  EmptyState,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  type ColumnDef,
+} from "@/components/app";
+import { CopyButton } from "@/components/common/CopyButton";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { Modal } from "@/components/common/Modal";
+import { useToast } from "@/components/common/Toast";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { relTime } from "@/utils/format";
 
 function TokenSection({ config }: { config: Configuration }) {
-  const { data: tokens, isLoading } = useConfigurationTokens(config.id);
+  const { data: tokens, isLoading, error, refetch } = useConfigurationTokens(config.id);
   const createToken = useCreateEnrollmentToken(config.id);
   const deleteToken = useDeleteEnrollmentToken(config.id);
   const { toast } = useToast();
@@ -24,6 +35,11 @@ function TokenSection({ config }: { config: Configuration }) {
   const [tokenLabel, setTokenLabel] = useState("");
   const [newTokenValue, setNewTokenValue] = useState<string | null>(null);
   const tokenLabelId = `token-label-${config.id}`;
+  const tokenList = tokens ?? [];
+  const columns = tokenColumns({
+    deletePending: deleteToken.isPending,
+    onDelete: handleDelete,
+  });
 
   async function handleCreate() {
     try {
@@ -49,95 +65,64 @@ function TokenSection({ config }: { config: Configuration }) {
     }
   }
 
-  const tokenList = tokens ?? [];
-
   return (
-    <div className="dt-card mt-6">
-      <div className="dt-toolbar">
-        <h3>
-          {config.name} <span className="count">{tokenList.length}</span>
-        </h3>
-        <div className="spacer" />
-        <button className="btn btn-primary btn-sm" onClick={() => setCreateOpen(true)}>
-          New token
-        </button>
-      </div>
-
-      {newTokenValue && (
-        <div className="banner info">
-          <div className="b-title">Token created — copy it now</div>
-          <div className="b-body">
-            This token will not be shown again.
-            <div className="flex-row gap-sm mt-2">
-              <code className="mono-cell">{newTokenValue}</code>
-              <CopyButton value={newTokenValue} />
+    <section className="mt-6 grid gap-4">
+      {newTokenValue ? (
+        <div className="rounded-md border border-[color:var(--info)]/30 bg-[color:var(--info)]/10 p-4">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-medium text-foreground">Token created - copy it now</div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                This token will not be shown again.
+              </p>
+              <div className="mt-3 flex min-w-0 flex-wrap items-center gap-2">
+                <code className="max-w-full overflow-x-auto rounded-md border border-border bg-background px-2 py-1 font-mono text-xs text-foreground">
+                  {newTokenValue}
+                </code>
+                <CopyButton value={newTokenValue} />
+              </div>
             </div>
+            <Button variant="ghost" size="sm" onClick={() => setNewTokenValue(null)}>
+              Dismiss
+            </Button>
           </div>
-          <button className="btn btn-ghost btn-sm" onClick={() => setNewTokenValue(null)}>
-            Dismiss
-          </button>
         </div>
-      )}
+      ) : null}
 
-      {isLoading ? (
-        <LoadingSpinner />
-      ) : (
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Label</th>
-              <th>Status</th>
-              <th>Created</th>
-              <th>
-                <span className="sr-only">Open</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {tokenList.length === 0 ? (
-              <tr>
-                <td colSpan={4}>
-                  <EmptyState
-                    icon="key"
-                    title="No enrollment tokens"
-                    description="Create a token when you are ready to connect a collector to this configuration."
-                  >
-                    <button className="btn btn-primary btn-sm" onClick={() => setCreateOpen(true)}>
-                      New token
-                    </button>
-                  </EmptyState>
-                </td>
-              </tr>
-            ) : (
-              tokenList.map((t) => {
-                const revoked = !!(t["revoked_at"] as string | undefined);
-                return (
-                  <tr key={t.id}>
-                    <td className="name">{(t["label"] as string) ?? t.id}</td>
-                    <td>
-                      <span className={`tag ${revoked ? "tag-err" : "tag-ok"}`}>
-                        {revoked ? "revoked" : "active"}
-                      </span>
-                    </td>
-                    <td className="meta">{relTime(t.created_at)}</td>
-                    <td className="row-actions">
-                      {!revoked && (
-                        <button
-                          className="btn btn-danger btn-sm"
-                          onClick={() => void handleDelete(t.id)}
-                          disabled={deleteToken.isPending}
-                        >
-                          Revoke
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      )}
+      <DataTable
+        title={
+          <span>
+            {config.name} <span className="text-muted-foreground">{tokenList.length}</span>
+          </span>
+        }
+        actions={
+          <Button size="sm" onClick={() => setCreateOpen(true)}>
+            <Plus className="size-4" />
+            New token
+          </Button>
+        }
+        columns={columns}
+        data={isLoading || error ? [] : tokenList}
+        getRowId={(row) => row.id}
+        emptyState={
+          isLoading ? (
+            <LoadingSpinner />
+          ) : error ? (
+            <ErrorState error={error} retry={() => void refetch()} />
+          ) : (
+            <EmptyState
+              icon="key"
+              title="No enrollment tokens"
+              description="Create a token when you are ready to connect a collector to this configuration."
+            >
+              <Button size="sm" onClick={() => setCreateOpen(true)}>
+                <Plus className="size-4" />
+                New token
+              </Button>
+            </EmptyState>
+          )
+        }
+      />
 
       <Modal
         open={createOpen}
@@ -145,32 +130,29 @@ function TokenSection({ config }: { config: Configuration }) {
         title="New enrollment token"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setCreateOpen(false)}>
+            <Button variant="secondary" onClick={() => setCreateOpen(false)}>
               Cancel
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => void handleCreate()}
-              disabled={createToken.isPending}
-            >
-              {createToken.isPending ? "Creating…" : "Create token"}
-            </button>
+            </Button>
+            <Button onClick={() => void handleCreate()} disabled={createToken.isPending}>
+              {createToken.isPending ? "Creating..." : "Create token"}
+            </Button>
           </>
         }
       >
-        <div className="field">
-          <label htmlFor={tokenLabelId}>Label (optional)</label>
-          <input
+        <div className="grid gap-2">
+          <label className="text-sm font-medium text-foreground" htmlFor={tokenLabelId}>
+            Label (optional)
+          </label>
+          <Input
             id={tokenLabelId}
-            className="input"
             value={tokenLabel}
-            onChange={(e) => setTokenLabel(e.target.value)}
+            onChange={(event) => setTokenLabel(event.target.value)}
             placeholder="e.g. production-fleet"
             autoFocus
           />
         </div>
       </Modal>
-    </div>
+    </section>
   );
 }
 
@@ -183,38 +165,93 @@ export default function TokensPage() {
   const cfgList = configs ?? [];
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <div>
-          <h1>Enrollment tokens</h1>
-          <p className="meta">
-            Enrollment tokens are bootstrap credentials for collectors. They are separate from API
-            tokens and should not grant general control-plane write authority.
-          </p>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Enrollment tokens"
+        description="Enrollment tokens are bootstrap credentials for collectors. They are separate from API tokens and should not grant general control-plane write authority."
+      />
 
-      <div className="banner info mb-6">
-        <div>
-          <div className="b-title">Token boundary</div>
-          <div className="b-body">
-            Create enrollment tokens per configuration group, copy them once, and revoke/rotate them
-            if exposed. API automation tokens will use a separate scoped credential model.
-          </div>
-        </div>
-      </div>
+      <section className="mb-6 rounded-md border border-[color:var(--info)]/30 bg-[color:var(--info)]/10 p-4">
+        <div className="text-sm font-medium text-foreground">Token boundary</div>
+        <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
+          Create enrollment tokens per configuration group, copy them once, and revoke or rotate
+          them if exposed. API automation tokens will use a separate scoped credential model.
+        </p>
+      </section>
 
       {cfgList.length === 0 ? (
-        <div className="card card-pad">
+        <section className="rounded-md border border-border bg-card">
           <EmptyState
             icon="file"
             title="No configurations yet"
             description="Create a configuration first to manage enrollment tokens."
           />
-        </div>
+        </section>
       ) : (
-        cfgList.map((c) => <TokenSection key={c.id} config={c} />)
+        cfgList.map((config) => <TokenSection key={config.id} config={config} />)
       )}
-    </div>
+    </PageShell>
   );
+}
+
+function tokenColumns({
+  deletePending,
+  onDelete,
+}: {
+  deletePending: boolean;
+  onDelete: (tokenId: string) => Promise<void>;
+}): ColumnDef<EnrollmentToken>[] {
+  return [
+    {
+      id: "label",
+      header: "Label",
+      cell: ({ row }) => (
+        <span className="font-medium text-foreground">{tokenLabel(row.original)}</span>
+      ),
+    },
+    {
+      id: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const revoked = tokenRevoked(row.original);
+        return (
+          <StatusBadge tone={revoked ? "error" : "ok"}>
+            {revoked ? "revoked" : "active"}
+          </StatusBadge>
+        );
+      },
+    },
+    {
+      accessorKey: "created_at",
+      header: "Created",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{relTime(row.original.created_at)}</span>
+      ),
+    },
+    {
+      id: "actions",
+      header: () => <span className="sr-only">Actions</span>,
+      cell: ({ row }) =>
+        tokenRevoked(row.original) ? null : (
+          <div className="flex justify-end">
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void onDelete(row.original.id)}
+              disabled={deletePending}
+            >
+              Revoke
+            </Button>
+          </div>
+        ),
+    },
+  ];
+}
+
+function tokenLabel(token: EnrollmentToken): string {
+  return (token["label"] as string | undefined) ?? token.id;
+}
+
+function tokenRevoked(token: EnrollmentToken): boolean {
+  return Boolean(token["revoked_at"] as string | undefined);
 }

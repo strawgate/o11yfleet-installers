@@ -1,35 +1,44 @@
-import { Link } from "react-router-dom";
 import { useMemo } from "react";
-import { useOverview } from "../../api/hooks/portal";
-import { usePortalGuidance } from "../../api/hooks/ai";
-import { GuidancePanel, GuidanceSlot } from "../../components/ai";
-import { EmptyState } from "../../components/common/EmptyState";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { ErrorState } from "../../components/common/ErrorState";
-import { relTime } from "../../utils/format";
-import { hashLabel } from "../../utils/agents";
-import { configurationAgentMetrics } from "../../utils/config-stats";
-import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
-import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import { buildBrowserPageContext, pageMetric, pageTable } from "../../ai/page-context";
+import { Link } from "react-router-dom";
+import { ArrowRight } from "lucide-react";
+import { useOverview, type Configuration } from "@/api/hooks/portal";
+import { usePortalGuidance } from "@/api/hooks/ai";
+import { normalizeFleetOverview } from "@/api/models/fleet-overview";
+import type { Observed } from "@/api/models/observed";
+import { GuidancePanel, GuidanceSlot } from "@/components/ai";
+import { Button } from "@/components/ui/button";
+import {
+  DataTable,
+  EmptyState,
+  MetricCard,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  type ColumnDef,
+} from "@/components/app";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { ErrorState } from "@/components/common/ErrorState";
+import { relTime } from "@/utils/format";
+import { hashLabel } from "@/utils/agents";
+import { configurationAgentMetrics } from "@/utils/config-stats";
+import { buildInsightRequest, insightSurfaces, insightTarget } from "@/ai/insight-registry";
+import { useRegisterBrowserContext } from "@/ai/browser-context-react";
+import { buildBrowserPageContext, pageMetric, pageTable } from "@/ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
 export default function OverviewPage() {
   const overview = useOverview();
-  const ov = overview.data;
-  const cfgList = Array.isArray(ov?.configurations) ? ov.configurations : [];
-  const totalConfigs =
-    typeof ov?.configs_count === "number"
-      ? ov.configs_count
-      : Array.isArray(ov?.configurations)
-        ? ov.configurations.length
-        : cfgList.length;
-  const totalAgents = typeof ov?.total_agents === "number" ? ov.total_agents : 0;
-  const connectedAgents = typeof ov?.connected_agents === "number" ? ov.connected_agents : 0;
-  const healthyAgents = typeof ov?.healthy_agents === "number" ? ov.healthy_agents : 0;
-  const activeRollouts = typeof ov?.active_rollouts === "number" ? ov.active_rollouts : null;
+  const view = overview.data ? normalizeFleetOverview(overview.data) : null;
+  const cfgList = view?.configurations.rows ?? [];
+  const totalConfigs = view?.configurations.total.value ?? cfgList.length;
+  const totalAgents = view?.agents.total.value ?? null;
+  const connectedAgents = view?.agents.connected.value ?? null;
+  const healthyAgents = view?.agents.healthy.value ?? null;
+  const activeRollouts = view?.rollouts.active.value ?? null;
   const insightSurface = insightSurfaces.portalOverview;
-  const pageContext = overview.data
+  const recentConfigurations = cfgList.slice(0, 5);
+
+  const pageContext = view
     ? buildBrowserPageContext({
         title: "Fleet overview",
         visible_text: [
@@ -47,7 +56,7 @@ export default function OverviewPage() {
           pageTable(
             "recent_configurations",
             "Recent configurations",
-            cfgList.slice(0, 8).map((config) => ({
+            recentConfigurations.map((config) => ({
               id: config.id,
               name: config.name,
               status: config.status ?? null,
@@ -59,7 +68,7 @@ export default function OverviewPage() {
       })
     : null;
   const guidanceRequest: AiGuidanceRequest | null =
-    overview.data && pageContext
+    view && pageContext
       ? buildInsightRequest(
           insightSurface,
           [
@@ -69,21 +78,23 @@ export default function OverviewPage() {
             }),
             insightTarget(insightSurface, insightSurface.targets.agents, {
               total_agents: totalAgents,
+              connected_agents: connectedAgents,
+              healthy_agents: healthyAgents,
             }),
             insightTarget(insightSurface, insightSurface.targets.recentConfigurations),
           ],
           {
-            configs_count: totalConfigs,
-            total_agents: totalAgents,
-            connected_agents: connectedAgents,
-            healthy_agents: healthyAgents,
-            active_rollouts: activeRollouts,
-            configurations: cfgList.slice(0, 8).map((config) => ({
-              id: config.id,
-              name: config.name,
-              status: config.status ?? null,
-              updated_at: config.updated_at ?? null,
-            })),
+            configurations: {
+              total: view.configurations.total,
+              rows: recentConfigurations.map((config) => ({
+                id: config.id,
+                name: config.name,
+                status: config.status ?? null,
+                updated_at: config.updated_at ?? null,
+              })),
+            },
+            agents: view.agents,
+            rollouts: view.rollouts,
           },
           { intent: "triage_state", pageContext },
         )
@@ -100,64 +111,58 @@ export default function OverviewPage() {
     [guidanceRequest?.context, guidanceRequest?.targets, insightSurface.surface, pageContext],
   );
   useRegisterBrowserContext(browserContext);
+
   const guidance = usePortalGuidance(guidanceRequest);
   const configurationInsight = guidance.data?.items.find(
     (item) => item.target_key === "overview.configurations",
   );
   const agentInsight = guidance.data?.items.find((item) => item.target_key === "overview.agents");
+  const columns = useMemo(() => recentConfigurationColumns(), []);
 
   if (overview.isLoading) return <LoadingSpinner />;
   if (overview.error)
     return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <div>
-          <h1>Fleet overview</h1>
-          <p className="meta">
-            Collector status, health, and drift are separate signals. A collector can be connected
-            and still report unhealthy runtime state.
-          </p>
-        </div>
-        <div className="actions">
-          <Link to="/portal/getting-started" className="btn btn-primary">
-            Getting started
-          </Link>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Fleet overview"
+        description="Collector status, health, and drift are separate signals. A collector can be connected and still report unhealthy runtime state."
+        actions={
+          <Button asChild>
+            <Link to="/portal/getting-started">Getting started</Link>
+          </Button>
+        }
+      />
 
-      <div className="stat-grid">
-        <div className="stat">
-          <div className="val">{totalConfigs}</div>
-          <div className="label">Configurations</div>
+      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+        <MetricCard label="Configurations" value={formatMetric(view?.configurations.total)}>
           <GuidanceSlot item={configurationInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">{totalAgents}</div>
-          <div className="label">Total collectors</div>
+        </MetricCard>
+        <MetricCard
+          label="Total collectors"
+          value={formatMetric(view?.agents.total)}
+          observation={view?.agents.total.observation}
+        >
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">
-            {connectedAgents > 0 ? <span className="live-dot" /> : null}
-            {connectedAgents}
-            <span className="denom">/{totalAgents}</span>
-          </div>
-          <div className="label">Connected</div>
-        </div>
-        <div className="stat">
-          <div className="val">
-            {healthyAgents}
-            <span className="denom">/{totalAgents}</span>
-          </div>
-          <div className="label">Healthy</div>
-        </div>
-        <div className="stat">
-          <div className="val">{activeRollouts ?? "—"}</div>
-          <div className="label">Active rollouts</div>
-          {activeRollouts === null ? <div className="delta">Not exposed by API yet</div> : null}
-        </div>
+        </MetricCard>
+        <MetricCard
+          label="Connected"
+          value={formatMetric(view?.agents.connected)}
+          observation={view?.agents.connected.observation}
+        />
+        <MetricCard
+          label="Healthy"
+          value={formatMetric(view?.agents.healthy)}
+          observation={view?.agents.healthy.observation}
+          tone={fleetHealthTone(totalAgents, healthyAgents)}
+        />
+        <MetricCard
+          label="Active rollouts"
+          value={formatMetric(view?.rollouts.active)}
+          observation={view?.rollouts.active.observation}
+          detail={activeRollouts === null ? "Not exposed by API yet" : undefined}
+        />
       </div>
 
       <GuidancePanel
@@ -169,91 +174,128 @@ export default function OverviewPage() {
         excludeTargetKeys={["overview.configurations", "overview.agents"]}
       />
 
-      <div className="dt-card mt-6">
-        <div className="dt-toolbar">
-          <h3>Recent configurations</h3>
-          <div className="spacer" />
-          <Link to="/portal/configurations" className="btn btn-ghost btn-sm">
-            View all
+      <DataTable
+        className="mt-6"
+        title="Recent configurations"
+        columns={columns}
+        data={recentConfigurations}
+        getRowId={(row) => row.id}
+        actions={
+          <Button asChild variant="ghost" size="sm">
+            <Link to="/portal/configurations">View all</Link>
+          </Button>
+        }
+        emptyState={
+          <EmptyState
+            icon="file"
+            title="No configurations yet"
+            description="Create a configuration to start managing collectors and rollouts."
+          >
+            <Button asChild size="sm">
+              <Link to="/portal/getting-started">Get started</Link>
+            </Button>
+          </EmptyState>
+        }
+      />
+    </PageShell>
+  );
+}
+
+function recentConfigurationColumns(): ColumnDef<Configuration>[] {
+  return [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <Link
+          className="font-medium text-foreground hover:text-primary"
+          to={configurationPath(row.original)}
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      id: "collectors",
+      header: "Collectors",
+      cell: ({ row }) => <CollectorSnapshot config={row.original} />,
+    },
+    {
+      id: "desired_config",
+      header: "Desired config",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {hashLabel(row.original.current_config_hash ?? undefined)}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "updated_at",
+      header: "Updated",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{relTime(row.original.updated_at)}</span>
+      ),
+    },
+    {
+      id: "open",
+      header: () => <span className="sr-only">Open</span>,
+      cell: ({ row }) => (
+        <Button asChild variant="ghost" size="icon-xs">
+          <Link aria-label="Open configuration" to={configurationPath(row.original)}>
+            <ArrowRight className="size-3" />
           </Link>
-        </div>
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Collectors</th>
-              <th>Desired config</th>
-              <th>Updated</th>
-              <th>
-                <span className="sr-only">Open</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {cfgList.length === 0 ? (
-              <tr>
-                <td colSpan={5}>
-                  <EmptyState
-                    icon="file"
-                    title="No configurations yet"
-                    description="Create a configuration to start managing collectors and rollouts."
-                  >
-                    <Link to="/portal/getting-started" className="btn btn-primary btn-sm">
-                      Get started
-                    </Link>
-                  </EmptyState>
-                </td>
-              </tr>
-            ) : (
-              cfgList.slice(0, 5).map((c) => {
-                const metrics = configurationAgentMetrics(
-                  c.stats,
-                  [],
-                  c.current_config_hash ?? undefined,
-                );
-                const hasSnapshot =
-                  typeof c.stats?.snapshot_at === "string" ||
-                  typeof c.stats?.snapshot_at === "number";
-                const healthyTagClass =
-                  metrics.totalAgents === 0
-                    ? "tag"
-                    : metrics.healthyAgents === metrics.totalAgents
-                      ? "tag tag-ok"
-                      : metrics.healthyAgents > 0
-                        ? "tag tag-warn"
-                        : "tag tag-err";
-                const desiredHash = c.current_config_hash ?? undefined;
-                return (
-                  <tr key={c.id}>
-                    <td className="name">
-                      <Link to={`/portal/configurations/${c.id}`}>{c.name}</Link>
-                    </td>
-                    <td>
-                      {hasSnapshot ? (
-                        <>
-                          <span className="tag">
-                            {metrics.connectedAgents} / {metrics.totalAgents} connected
-                          </span>
-                          <span className={healthyTagClass} style={{ marginLeft: 6 }}>
-                            {metrics.healthyAgents} healthy
-                          </span>
-                        </>
-                      ) : (
-                        <span className="tag">Snapshot unavailable</span>
-                      )}
-                    </td>
-                    <td className="mono-cell">{hashLabel(desiredHash)}</td>
-                    <td className="meta">{relTime(c.updated_at)}</td>
-                    <td style={{ width: 32 }}>
-                      <Link to={`/portal/configurations/${c.id}`}>→</Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+        </Button>
+      ),
+    },
+  ];
+}
+
+function CollectorSnapshot({ config }: { config: Configuration }) {
+  const metrics = configurationAgentMetrics(
+    config.stats,
+    [],
+    config.current_config_hash ?? undefined,
+  );
+  const hasSnapshot =
+    typeof config.stats?.snapshot_at === "string" || typeof config.stats?.snapshot_at === "number";
+  const healthyTone =
+    metrics.totalAgents === 0
+      ? "neutral"
+      : metrics.healthyAgents === metrics.totalAgents
+        ? "ok"
+        : metrics.healthyAgents > 0
+          ? "warn"
+          : "error";
+
+  if (!hasSnapshot) {
+    return <StatusBadge>Snapshot unavailable</StatusBadge>;
+  }
+
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      <StatusBadge>
+        {metrics.connectedAgents} / {metrics.totalAgents} connected
+      </StatusBadge>
+      <StatusBadge tone={healthyTone}>{metrics.healthyAgents} healthy</StatusBadge>
     </div>
   );
+}
+
+function formatMetric(metric: Observed<number> | undefined): string {
+  if (!metric || metric.value === null) return "-";
+  return metric.value.toLocaleString();
+}
+
+function fleetHealthTone(
+  totalAgents: number | null,
+  healthyAgents: number | null,
+): "neutral" | "ok" | "warn" | "error" {
+  if (totalAgents === null || healthyAgents === null || totalAgents === 0) return "neutral";
+  if (healthyAgents === totalAgents) return "ok";
+  if (healthyAgents > 0) return "warn";
+  return "error";
+}
+
+function configurationPath(config: Configuration): string {
+  return `/portal/configurations/${config.id}`;
 }

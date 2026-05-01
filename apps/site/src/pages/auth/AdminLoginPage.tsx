@@ -17,7 +17,7 @@ export default function AdminLoginPage() {
     try {
       const res = await login.mutateAsync({ email, password });
       if (res.user.role === "admin") {
-        navigate("/admin/overview");
+        void navigate("/admin/overview");
       } else {
         setError("Admin access required");
       }
@@ -60,7 +60,7 @@ export default function AdminLoginPage() {
           </div>
         )}
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={(event) => void handleSubmit(event)}>
           <div className="field">
             <label htmlFor="admin-email">Email</label>
             <input

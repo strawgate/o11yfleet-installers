@@ -47,13 +47,23 @@ test("Portal overview renders collector health with non-misleading state", () =>
 
   assert.match(
     src,
-    /const healthyTagClass =/,
-    "OverviewPage should derive health tag styling from collector health counts",
+    /<MetricCard[\s\S]*label="Healthy"[\s\S]*tone=\{/,
+    "OverviewPage should derive healthy-card tone from collector health data",
+  );
+  assert.match(
+    src,
+    /normalizeFleetOverview/,
+    "OverviewPage should consume normalized observed metrics instead of backend-shaped count fields directly",
+  );
+  assert.match(
+    src,
+    /<MetricCard/,
+    "OverviewPage should render metrics through the shared app metric component",
   );
   assert.doesNotMatch(
     src,
-    /<span className="tag tag-ok"[^>]*>\s*\{metrics\.healthyAgents\} healthy/,
-    "OverviewPage must not always style collector health as success",
+    /const totalAgents =[\s\S]*?: 0;/,
+    "OverviewPage must not synthesize missing fleet metrics as zero collectors",
   );
   assert.doesNotMatch(
     src,

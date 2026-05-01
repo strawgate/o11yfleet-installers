@@ -46,7 +46,7 @@ export default function TenantsPage() {
       setModalOpen(false);
       setName("");
       setPlan("starter");
-      navigate(`/admin/tenants/${result.id}`);
+      void navigate(`/admin/tenants/${result.id}`);
     } catch (err) {
       toast("Failed to create tenant", err instanceof Error ? err.message : "Unknown error", "err");
     }

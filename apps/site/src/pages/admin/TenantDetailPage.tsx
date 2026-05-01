@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   useAdminTenant,
   useAdminTenantConfigs,
@@ -9,7 +10,6 @@ import {
   useImpersonateTenant,
 } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
-import { apiBase } from "../../api/client";
 import { GuidancePanel } from "../../components/ai";
 import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
@@ -38,6 +38,7 @@ const isTab = (value: string | null): value is Tab =>
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const { toast } = useToast();
 
@@ -134,7 +135,7 @@ export default function TenantDetailPage() {
     try {
       await deleteTenant.mutateAsync();
       toast("Tenant deleted", t!.name);
-      navigate("/admin/tenants");
+      void navigate("/admin/tenants");
     } catch (err) {
       toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
     }
@@ -142,15 +143,10 @@ export default function TenantDetailPage() {
 
   async function handleImpersonate() {
     try {
-      await impersonateTenant.mutateAsync();
-      const destination = new URL("/portal/overview", window.location.origin);
-      if (
-        apiBase &&
-        (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1")
-      ) {
-        destination.searchParams.set("api", apiBase);
-      }
-      window.location.assign(destination.pathname + destination.search);
+      const result = await impersonateTenant.mutateAsync();
+      queryClient.clear();
+      queryClient.setQueryData(["auth", "me"], result);
+      void navigate("/portal/overview");
     } catch (err) {
       toast("Failed to view tenant", err instanceof Error ? err.message : "Unknown error", "err");
     }

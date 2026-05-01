@@ -333,14 +333,16 @@ export default function PortalLayout() {
 
   const handleLogout = useCallback(() => {
     logoutMutation.mutate(undefined, {
-      onSuccess: () => navigate("/"),
+      onSuccess: () => {
+        void navigate("/");
+      },
     });
   }, [logoutMutation, navigate]);
 
   // Redirect unauthenticated users
   useEffect(() => {
     if (!isLoading && !user) {
-      navigate("/login", { replace: true });
+      void navigate("/login", { replace: true });
     }
   }, [isLoading, user, navigate]);
 

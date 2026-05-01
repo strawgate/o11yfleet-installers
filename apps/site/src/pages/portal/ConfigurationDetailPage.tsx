@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   useConfiguration,
@@ -12,6 +12,9 @@ import {
   useRolloutConfig,
   fetchConfigurationVersionDiff,
   fetchRolloutCohortSummary,
+  type Agent,
+  type ConfigVersion,
+  type EnrollmentToken,
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
@@ -53,6 +56,10 @@ import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfle
 
 type Tab = "agents" | "versions" | "rollout" | "yaml" | "settings";
 
+const EMPTY_AGENTS: Agent[] = [];
+const EMPTY_VERSIONS: ConfigVersion[] = [];
+const EMPTY_TOKENS: EnrollmentToken[] = [];
+
 export default function ConfigurationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -85,12 +92,12 @@ export default function ConfigurationDetailPage() {
   const rollout = useRolloutConfig(id ?? "");
 
   const c = config.data;
-  const agentList = agents.data?.agents ?? [];
-  const versionList = versions.data ?? [];
-  const tokenList = tokens.data ?? [];
+  const agentList = agents.data?.agents ?? EMPTY_AGENTS;
+  const versionList = versions.data ?? EMPTY_VERSIONS;
+  const tokenList = tokens.data ?? EMPTY_TOKENS;
   const agentMetrics = useMemo(
     () => configurationAgentMetrics(stats.data, agentList, c?.current_config_hash ?? undefined),
-    [agentList, c, stats.data],
+    [agentList, c?.current_config_hash, stats.data],
   );
   const connectedAgents = agentMetrics.connectedAgents;
   const totalAgents = agentMetrics.totalAgents;
@@ -180,67 +187,80 @@ export default function ConfigurationDetailPage() {
         })
       : null;
   const pageContext = guidanceReady && c ? buildConfigurationPageContext() : null;
-  const buildConfigurationTargets = (options: { includeCopilotTargets?: boolean } = {}) => {
-    const targets = [insightTarget(insightSurface, insightSurface.targets.page)];
-    const addActiveTabTarget = () => {
-      if (activeTab === "agents") {
+  const buildConfigurationTargets = useCallback(
+    (options: { includeCopilotTargets?: boolean } = {}) => {
+      const targets = [insightTarget(insightSurface, insightSurface.targets.page)];
+      const addActiveTabTarget = () => {
+        if (activeTab === "agents") {
+          targets.push(
+            insightTarget(insightSurface, insightSurface.targets.agents, {
+              total_agents: totalAgents,
+              connected_agents: connectedAgents,
+            }),
+          );
+        } else if (activeTab === "versions") {
+          targets.push(
+            insightTarget(insightSurface, insightSurface.targets.versions, {
+              versions: versionList.length,
+            }),
+          );
+        } else if (activeTab === "rollout") {
+          targets.push(
+            insightTarget(insightSurface, insightSurface.targets.rollout, {
+              desired_config_hash: desiredHash,
+              drifted_agents: driftedAgents,
+            }),
+          );
+        } else if (activeTab === "yaml") {
+          targets.push(
+            insightTarget(insightSurface, insightSurface.targets.yaml, {
+              yaml_available: Boolean(yaml.data),
+              yaml_truncated: yaml.data
+                ? pageYaml("Current configuration YAML", yaml.data).truncated
+                : false,
+            }),
+          );
+        } else if (activeTab === "settings") {
+          targets.push(
+            insightTarget(insightSurface, insightSurface.targets.tokens, {
+              total_active_tokens: tokenList.length,
+            }),
+          );
+        }
+      };
+
+      if (options.includeCopilotTargets) {
+        addActiveTabTarget();
+      } else {
         targets.push(
           insightTarget(insightSurface, insightSurface.targets.agents, {
             total_agents: totalAgents,
             connected_agents: connectedAgents,
           }),
-        );
-      } else if (activeTab === "versions") {
-        targets.push(
           insightTarget(insightSurface, insightSurface.targets.versions, {
             versions: versionList.length,
           }),
-        );
-      } else if (activeTab === "rollout") {
-        targets.push(
-          insightTarget(insightSurface, insightSurface.targets.rollout, {
-            desired_config_hash: desiredHash,
-            drifted_agents: driftedAgents,
-          }),
-        );
-      } else if (activeTab === "yaml") {
-        targets.push(
-          insightTarget(insightSurface, insightSurface.targets.yaml, {
-            yaml_available: Boolean(yaml.data),
-            yaml_truncated: yaml.data
-              ? pageYaml("Current configuration YAML", yaml.data).truncated
-              : false,
-          }),
-        );
-      } else if (activeTab === "settings") {
-        targets.push(
           insightTarget(insightSurface, insightSurface.targets.tokens, {
             total_active_tokens: tokenList.length,
           }),
         );
       }
-    };
 
-    if (options.includeCopilotTargets) {
-      addActiveTabTarget();
-    } else {
-      targets.push(
-        insightTarget(insightSurface, insightSurface.targets.agents, {
-          total_agents: totalAgents,
-          connected_agents: connectedAgents,
-        }),
-        insightTarget(insightSurface, insightSurface.targets.versions, {
-          versions: versionList.length,
-        }),
-        insightTarget(insightSurface, insightSurface.targets.tokens, {
-          total_active_tokens: tokenList.length,
-        }),
-      );
-    }
-
-    targets.push(tabInsightTarget(insightSurface, "configuration.tab", activeTab));
-    return targets;
-  };
+      targets.push(tabInsightTarget(insightSurface, "configuration.tab", activeTab));
+      return targets;
+    },
+    [
+      activeTab,
+      connectedAgents,
+      desiredHash,
+      driftedAgents,
+      insightSurface,
+      tokenList.length,
+      totalAgents,
+      versionList.length,
+      yaml.data,
+    ],
+  );
   const guidanceRequest: AiGuidanceRequest | null =
     guidanceReady && c && pageContext
       ? buildInsightRequest(
@@ -343,7 +363,7 @@ export default function ConfigurationDetailPage() {
     try {
       await deleteConfig.mutateAsync(id!);
       toast("Configuration deleted", c!.name);
-      navigate("/portal/configurations");
+      void navigate("/portal/configurations");
     } catch (err) {
       toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
     }

@@ -27,6 +27,8 @@ import MarketingLayout from "../src/layouts/MarketingLayout";
 import { LoadingSpinner } from "../src/components/common/LoadingSpinner";
 import { ToastProvider } from "../src/components/common/Toast";
 
+void React;
+
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const SRC = (rel: string) => join(__dirname, "..", "src", rel);
 

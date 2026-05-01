@@ -1,21 +1,49 @@
-import { useTeam } from "../../api/hooks/portal";
-import { EmptyState } from "../../components/common/EmptyState";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { ErrorState } from "../../components/common/ErrorState";
-import { relTime } from "../../utils/format";
+import { useMemo } from "react";
+import { useTeam, type TeamMember } from "@/api/hooks/portal";
+import {
+  DataTable,
+  EmptyState,
+  PageHeader,
+  PageShell,
+  StatusBadge,
+  type ColumnDef,
+  type StatusTone,
+} from "@/components/app";
+import { ErrorState } from "@/components/common/ErrorState";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { relTime } from "@/utils/format";
+import { initials, memberDisplayName, roleTone } from "./team-model";
 
-function initials(name: string | undefined): string {
-  if (!name) return "?";
-  return name
-    .split(" ")
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase()
-    .slice(0, 2);
-}
+const roleCards: Array<{
+  role: string;
+  tone: StatusTone;
+  description: string;
+}> = [
+  {
+    role: "owner",
+    tone: "warn",
+    description: "Workspace deletion, billing authority, and highest-risk admin delegation.",
+  },
+  {
+    role: "admin",
+    tone: "info",
+    description: "Team, billing, enrollment policy, and destructive workspace actions.",
+  },
+  {
+    role: "operator",
+    tone: "ok",
+    description: "Configuration versions, rollout operations, and enrollment tokens.",
+  },
+  {
+    role: "viewer",
+    tone: "neutral",
+    description: "Read fleet state, versions, rollouts, and audit history.",
+  },
+];
 
 export default function TeamPage() {
   const { data: members, isLoading, error, refetch } = useTeam();
+  const columns = useMemo(() => teamColumns(), []);
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
@@ -23,105 +51,76 @@ export default function TeamPage() {
   const memberList = members ?? [];
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <div>
-          <h1>Team</h1>
-          <p className="meta">
-            Roles should separate read-only fleet visibility from remote-config mutation and
-            workspace administration.
-          </p>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Team"
+        description="Roles separate read-only fleet visibility from remote-config mutation and workspace administration."
+      />
 
-      <div className="card card-pad mb-6">
-        <h3>Target role model</h3>
-        <div
-          className="mt-6"
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
-            gap: 12,
-          }}
-        >
-          <div>
-            <span className="tag tag-ok">owner</span>
-            <p className="meta mt-2">
-              Own workspace deletion, billing authority, and highest-risk admin delegation.
-            </p>
-          </div>
-          <div>
-            <span className="tag">viewer</span>
-            <p className="meta mt-2">Read fleet state, versions, rollouts, and audit history.</p>
-          </div>
-          <div>
-            <span className="tag tag-warn">operator</span>
-            <p className="meta mt-2">
-              Create versions, roll out config, and manage enrollment tokens.
-            </p>
-          </div>
-          <div>
-            <span className="tag tag-warn">admin</span>
-            <p className="meta mt-2">
-              Manage team, billing, enrollment policy, and destructive workspace actions.
-            </p>
-          </div>
+      <section className="mb-6 rounded-md border border-border bg-card p-4">
+        <h3 className="text-sm font-medium text-foreground">Target role model</h3>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {roleCards.map((item) => (
+            <div key={item.role} className="grid content-start gap-2">
+              <StatusBadge tone={item.tone}>{item.role}</StatusBadge>
+              <p className="text-sm text-muted-foreground">{item.description}</p>
+            </div>
+          ))}
         </div>
-      </div>
+      </section>
 
-      <div className="dt-card">
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Member</th>
-              <th>Role</th>
-              <th>Joined</th>
-            </tr>
-          </thead>
-          <tbody>
-            {memberList.length === 0 ? (
-              <tr>
-                <td colSpan={3}>
-                  <EmptyState
-                    icon="users"
-                    title="No team members found"
-                    description="Team members will appear here after they are invited or provisioned."
-                  />
-                </td>
-              </tr>
-            ) : (
-              memberList.map((m) => (
-                <tr key={m.id}>
-                  <td>
-                    <div className="flex-row gap-sm">
-                      <span className="avatar">
-                        {initials(m["display_name"] as string | undefined)}
-                      </span>
-                      <div>
-                        <div className="name">{(m["display_name"] as string) ?? m.email}</div>
-                        <div className="meta">{m.email}</div>
-                      </div>
-                    </div>
-                  </td>
-                  <td>
-                    <span
-                      className="tag"
-                      style={
-                        m.role === "admin"
-                          ? { color: "var(--accent)", borderColor: "var(--accent)" }
-                          : undefined
-                      }
-                    >
-                      {m.role ?? "member"}
-                    </span>
-                  </td>
-                  <td className="meta">{relTime(m["created_at"] as string | undefined)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </div>
+      <DataTable
+        columns={columns}
+        data={memberList}
+        getRowId={(row) => row.id}
+        emptyState={
+          <EmptyState
+            icon="users"
+            title="No team members found"
+            description="Team members will appear here after they are invited or provisioned."
+          />
+        }
+      />
+    </PageShell>
   );
+}
+
+function teamColumns(): ColumnDef<TeamMember>[] {
+  return [
+    {
+      id: "member",
+      header: "Member",
+      cell: ({ row }) => {
+        const displayName = memberDisplayName(row.original);
+        return (
+          <div className="flex items-center gap-3">
+            <span className="grid size-8 place-items-center rounded-full border border-border bg-muted font-mono text-xs text-muted-foreground">
+              {initials(displayName)}
+            </span>
+            <div className="min-w-0">
+              <div className="truncate font-medium text-foreground">{displayName}</div>
+              <div className="truncate text-sm text-muted-foreground">{row.original.email}</div>
+            </div>
+          </div>
+        );
+      },
+    },
+    {
+      accessorKey: "role",
+      header: "Role",
+      cell: ({ row }) => {
+        const role = row.original.role ?? "member";
+        return <StatusBadge tone={roleTone(role)}>{role}</StatusBadge>;
+      },
+    },
+    {
+      id: "joined",
+      header: "Joined",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">
+          {relTime(row.original["created_at"] as string | undefined)}
+        </span>
+      ),
+    },
+  ];
 }

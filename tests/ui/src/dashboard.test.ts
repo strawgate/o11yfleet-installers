@@ -1,5 +1,4 @@
 import { expect, test, type ConsoleMessage, type Page, type Route } from "@playwright/test";
-import type { OverviewResponse, ConfigurationWithStats, Tenant } from "@o11yfleet/core/api";
 
 const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
 const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
@@ -46,7 +45,6 @@ async function mockPortalSession(page: Page) {
 async function mockPortalOverview(page: Page) {
   const configuration = {
     id: "config-1",
-    tenant_id: "tenant-1",
     name: "prod-collectors",
     status: "active",
     current_config_hash: "abcdef1234567890",
@@ -58,10 +56,10 @@ async function mockPortalOverview(page: Page) {
       healthy_agents: 2,
       snapshot_at: "2026-04-28T20:00:00.000Z",
     },
-  } satisfies ConfigurationWithStats;
+  };
 
   await mockJson(page, "/api/v1/overview", {
-    tenant: { id: "tenant-1", name: "Demo Org", plan: "pro" } satisfies Tenant,
+    tenant: { id: "tenant-1", name: "Demo Org" },
     configs_count: 1,
     total_agents: 4,
     connected_agents: 2,
@@ -70,8 +68,7 @@ async function mockPortalOverview(page: Page) {
     metrics_source: "analytics_engine",
     metrics_error: null,
     configurations: [configuration],
-  } satisfies OverviewResponse);
-  await mockJson(page, "/api/v1/configurations", { configurations: [configuration] });
+  });
   await mockEmptyGuidance(page);
   return configuration;
 }
@@ -138,18 +135,17 @@ test.describe("portal smoke coverage", () => {
     await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
-    await expect(page.locator(".stat", { hasText: "Configurations" }).locator(".val")).toHaveText(
-      "1",
-    );
-    await expect(page.locator(".stat", { hasText: "Total collectors" }).locator(".val")).toHaveText(
-      "4",
-    );
-    // The Connected stat now renders `{connected}/{total}` inline (with a
-    // `.denom` span around `/total`). Match the rendered text instead of the
-    // numerator alone.
-    await expect(page.locator(".stat", { hasText: "Connected" }).locator(".val")).toHaveText("2/4");
+    await expect(
+      page.getByRole("group", { name: "Configurations" }).getByText("1", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Total collectors" }).getByText("4", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("group", { name: "Connected" }).getByText("2", { exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("2 / 4 connected")).toBeVisible();
-    await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "prod-collectors", exact: true })).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
@@ -164,7 +160,7 @@ test.describe("portal smoke coverage", () => {
 
     await expect(page.getByRole("heading", { name: "Configurations" })).toBeVisible();
     await expect(page.getByRole("button", { name: "New configuration" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "prod-collectors" })).toBeVisible();
+    await expect(page.getByRole("link", { name: "prod-collectors", exact: true })).toBeVisible();
     await expect(page.getByText("abcdef123456")).toBeVisible();
     await expect(page.getByText("Production collector group")).toBeVisible();
     runtime.dispose();

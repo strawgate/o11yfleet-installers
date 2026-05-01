@@ -4,6 +4,7 @@ import {
   useOverview,
   useConfigurationAgents,
   useConfigurationStats,
+  type Agent,
   type Configuration,
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
@@ -26,6 +27,8 @@ import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/in
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { buildBrowserPageContext, pageDetail, pageMetric, pageTable } from "../../ai/page-context";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
+
+const EMPTY_AGENTS: Agent[] = [];
 
 function AgentSection({
   config,
@@ -52,7 +55,7 @@ function AgentSection({
     q: filter || undefined,
     enabled: expanded,
   });
-  const agents = agentsPage?.agents ?? [];
+  const agents = agentsPage?.agents ?? EMPTY_AGENTS;
   const stats = useConfigurationStats(config.stats || !expanded ? undefined : config.id);
   const statsData = config.stats ?? stats.data;
   const list = agents;

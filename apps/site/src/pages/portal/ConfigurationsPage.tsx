@@ -1,13 +1,17 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useOverview, useCreateConfiguration } from "../../api/hooks/portal";
-import { useToast } from "../../components/common/Toast";
-import { Modal } from "../../components/common/Modal";
-import { EmptyState } from "../../components/common/EmptyState";
-import { LoadingSpinner } from "../../components/common/LoadingSpinner";
-import { ErrorState } from "../../components/common/ErrorState";
-import { relTime, trunc } from "../../utils/format";
-import { configurationAgentMetrics } from "../../utils/config-stats";
+import { ArrowRight } from "lucide-react";
+import { useCreateConfiguration, useOverview, type Configuration } from "@/api/hooks/portal";
+import { normalizeFleetOverview } from "@/api/models/fleet-overview";
+import { useToast } from "@/components/common/Toast";
+import { Modal } from "@/components/common/Modal";
+import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { ErrorState } from "@/components/common/ErrorState";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { DataTable, EmptyState, PageHeader, PageShell, type ColumnDef } from "@/components/app";
+import { relTime, trunc } from "@/utils/format";
+import { configurationAgentMetrics } from "@/utils/config-stats";
 
 export default function ConfigurationsPage() {
   const overview = useOverview();
@@ -18,13 +22,14 @@ export default function ConfigurationsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const columns = useMemo(() => configurationColumns(), []);
 
   if (overview.isLoading) return <LoadingSpinner />;
   if (overview.error)
     return <ErrorState error={overview.error} retry={() => void overview.refetch()} />;
 
-  const cfgList = overview.data?.configurations ?? [];
-  const metricsAvailable = overview.data?.metrics_source === "analytics_engine";
+  const view = overview.data ? normalizeFleetOverview(overview.data) : null;
+  const cfgList = view?.configurations.rows ?? [];
 
   async function handleCreate() {
     if (!name.trim()) return;
@@ -37,7 +42,7 @@ export default function ConfigurationsPage() {
       setModalOpen(false);
       setName("");
       setDescription("");
-      navigate(`/portal/configurations/${result.id}`);
+      void navigate(`/portal/configurations/${result.id}`);
     } catch (err) {
       toast(
         "Failed to create configuration",
@@ -48,83 +53,28 @@ export default function ConfigurationsPage() {
   }
 
   return (
-    <div className="main-wide">
-      <div className="page-head">
-        <h1>Configurations</h1>
-        <div className="actions">
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            New configuration
-          </button>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Configurations"
+        actions={<Button onClick={() => setModalOpen(true)}>New configuration</Button>}
+      />
 
-      <div className="dt-card">
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Config hash</th>
-              <th>Collectors</th>
-              <th>Description</th>
-              <th>Updated</th>
-              <th>
-                <span className="sr-only">Open</span>
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {cfgList.length === 0 ? (
-              <tr>
-                <td colSpan={6}>
-                  <EmptyState
-                    icon="file"
-                    title="No configurations yet"
-                    description="Create a configuration before enrolling collectors or pushing rollout updates."
-                  >
-                    <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
-                      New configuration
-                    </button>
-                  </EmptyState>
-                </td>
-              </tr>
-            ) : (
-              cfgList.map((c) => {
-                const metrics = configurationAgentMetrics(
-                  c.stats,
-                  [],
-                  c.current_config_hash ?? undefined,
-                );
-                const hasSnapshot =
-                  metricsAvailable &&
-                  (typeof c.stats?.snapshot_at === "string" ||
-                    typeof c.stats?.snapshot_at === "number");
-                return (
-                  <tr key={c.id} className="clickable">
-                    <td className="name">
-                      <Link to={`/portal/configurations/${c.id}`}>{c.name}</Link>
-                    </td>
-                    <td className="mono-cell">{trunc(c.current_config_hash ?? undefined, 12)}</td>
-                    <td>
-                      {hasSnapshot ? (
-                        <span className="tag">
-                          {metrics.connectedAgents} / {metrics.totalAgents} connected
-                        </span>
-                      ) : (
-                        <span className="tag tag-warn">Metrics unavailable</span>
-                      )}
-                    </td>
-                    <td className="meta">{trunc(c.description, 40)}</td>
-                    <td className="meta">{relTime(c.updated_at)}</td>
-                    <td style={{ width: 32 }}>
-                      <Link to={`/portal/configurations/${c.id}`}>→</Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <DataTable
+        columns={columns}
+        data={cfgList}
+        getRowId={(row) => row.id}
+        emptyState={
+          <EmptyState
+            icon="file"
+            title="No configurations yet"
+            description="Create a configuration before enrolling collectors or pushing rollout updates."
+          >
+            <Button size="sm" onClick={() => setModalOpen(true)}>
+              New configuration
+            </Button>
+          </EmptyState>
+        }
+      />
 
       <Modal
         open={modalOpen}
@@ -132,16 +82,15 @@ export default function ConfigurationsPage() {
         title="New configuration"
         footer={
           <>
-            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>
+            <Button variant="secondary" onClick={() => setModalOpen(false)}>
               Cancel
-            </button>
-            <button
-              className="btn btn-primary"
+            </Button>
+            <Button
               onClick={() => void handleCreate()}
               disabled={!name.trim() || createConfig.isPending}
             >
-              {createConfig.isPending ? "Creating…" : "Create configuration"}
-            </button>
+              {createConfig.isPending ? "Creating..." : "Create configuration"}
+            </Button>
           </>
         }
       >
@@ -151,7 +100,7 @@ export default function ConfigurationsPage() {
             id="config-name"
             className="input mono"
             value={name}
-            onChange={(e) => setName(e.target.value)}
+            onChange={(event) => setName(event.target.value)}
             placeholder="my-config"
             autoFocus
           />
@@ -162,12 +111,99 @@ export default function ConfigurationsPage() {
             id="config-description"
             className="textarea"
             value={description}
-            onChange={(e) => setDescription(e.target.value)}
+            onChange={(event) => setDescription(event.target.value)}
             placeholder="Optional description"
             rows={3}
           />
         </div>
       </Modal>
-    </div>
+    </PageShell>
   );
+}
+
+function configurationColumns(): ColumnDef<Configuration>[] {
+  return [
+    {
+      accessorKey: "name",
+      header: "Name",
+      cell: ({ row }) => (
+        <Link
+          className="font-medium text-foreground hover:text-primary"
+          to={configurationPath(row.original)}
+        >
+          {row.original.name}
+        </Link>
+      ),
+    },
+    {
+      id: "config_hash",
+      header: "Config hash",
+      cell: ({ row }) => (
+        <span className="font-mono text-xs text-muted-foreground">
+          {trunc(row.original.current_config_hash ?? undefined, 12)}
+        </span>
+      ),
+    },
+    {
+      id: "collectors",
+      header: "Collectors",
+      cell: ({ row }) => <CollectorCount config={row.original} />,
+    },
+    {
+      accessorKey: "description",
+      header: "Description",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{trunc(row.original.description, 40)}</span>
+      ),
+    },
+    {
+      accessorKey: "updated_at",
+      header: "Updated",
+      cell: ({ row }) => (
+        <span className="text-sm text-muted-foreground">{relTime(row.original.updated_at)}</span>
+      ),
+    },
+    {
+      id: "open",
+      header: () => <span className="sr-only">Open</span>,
+      cell: ({ row }) => (
+        <Button asChild variant="ghost" size="icon-xs">
+          <Link aria-label="Open configuration" to={configurationPath(row.original)}>
+            <ArrowRight className="size-3" />
+          </Link>
+        </Button>
+      ),
+    },
+  ];
+}
+
+function CollectorCount({ config }: { config: Configuration }) {
+  const metrics = configurationAgentMetrics(
+    config.stats,
+    [],
+    config.current_config_hash ?? undefined,
+  );
+  const hasSnapshot =
+    typeof config.stats?.snapshot_at === "string" || typeof config.stats?.snapshot_at === "number";
+
+  if (!hasSnapshot) {
+    return (
+      <Badge
+        variant="outline"
+        className="border-transparent bg-[color:var(--warn)]/15 text-[color:var(--warn)]"
+      >
+        Metrics unavailable
+      </Badge>
+    );
+  }
+
+  return (
+    <Badge variant="outline">
+      {metrics.connectedAgents} / {metrics.totalAgents} connected
+    </Badge>
+  );
+}
+
+function configurationPath(config: Configuration): string {
+  return `/portal/configurations/${config.id}`;
 }

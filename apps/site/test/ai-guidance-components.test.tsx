@@ -6,6 +6,8 @@ import { MemoryRouter } from "react-router-dom";
 import { GuidancePanel } from "../src/components/ai/GuidancePanel";
 import { GuidanceSlot } from "../src/components/ai/GuidanceSlot";
 
+void React;
+
 const guidanceItem = {
   target_key: "overview.agents",
   headline: "Collectors offline",

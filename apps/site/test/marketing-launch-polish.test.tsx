@@ -8,6 +8,8 @@ import MarketingNotFoundPage from "../src/pages/marketing/NotFoundPage";
 import ProductConfigPage from "../src/pages/marketing/ProductConfigPage";
 import GitOpsPage from "../src/pages/marketing/GitOpsPage";
 
+void React;
+
 function renderMarketingAt(path: string) {
   return renderToStaticMarkup(
     <MemoryRouter initialEntries={[path]}>

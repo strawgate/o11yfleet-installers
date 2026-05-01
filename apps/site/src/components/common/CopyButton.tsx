@@ -21,7 +21,11 @@ export function CopyButton({ value, label }: CopyButtonProps) {
   }, [value]);
 
   return (
-    <button className={`copy${copied ? " copied" : ""}`} onClick={handleCopy}>
+    <button
+      type="button"
+      className={`copy${copied ? " copied" : ""}`}
+      onClick={() => void handleCopy()}
+    >
       {copied ? (
         <>
           <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6">

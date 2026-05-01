@@ -8,6 +8,8 @@ import {
   enrollmentTokenFailureMessage,
 } from "../src/pages/portal/EnrollmentDialogBody";
 
+void React;
+
 test("enrollment dialog renders inline token creation failures", () => {
   const html = renderToStaticMarkup(
     <MemoryRouter>

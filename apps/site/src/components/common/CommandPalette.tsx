@@ -40,7 +40,7 @@ export function CommandPalette({ open, onClose, items, placeholder }: CommandPal
 
   function activate(item: CommandItem) {
     if (item.disabled) return;
-    navigate(item.href);
+    void navigate(item.href);
     onClose();
   }
 

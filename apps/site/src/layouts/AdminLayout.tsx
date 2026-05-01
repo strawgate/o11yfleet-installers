@@ -313,14 +313,16 @@ export default function AdminLayout() {
 
   const handleLogout = useCallback(() => {
     logoutMutation.mutate(undefined, {
-      onSuccess: () => navigate("/"),
+      onSuccess: () => {
+        void navigate("/");
+      },
     });
   }, [logoutMutation, navigate]);
 
   // Must be admin
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
-      navigate(user ? "/portal/overview" : "/admin/login", { replace: true });
+      void navigate(user ? "/portal/overview" : "/admin/login", { replace: true });
     }
   }, [isLoading, user, isAdmin, navigate]);
 
