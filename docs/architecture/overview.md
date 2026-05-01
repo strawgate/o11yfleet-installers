@@ -1,8 +1,8 @@
 # Architecture Overview
 
 o11yFleet is one Cloudflare Worker plus one Durable Object class. The Worker owns
-auth, REST APIs, OpAMP ingress, Queue consumption, and admin/usage routes. The
-Durable Object owns live collector sessions for one `(tenant_id, config_id)`.
+auth, REST APIs, OpAMP ingress, scheduled reconciliation, and admin/usage routes.
+The Durable Object owns live collector sessions for one `(tenant_id, config_id)`.
 
 ## Runtime Planes
 
@@ -11,7 +11,7 @@ Durable Object owns live collector sessions for one `(tenant_id, config_id)`.
 | Auth                | D1                                            | Users, sessions, seed accounts, tenant/admin role checks                  |
 | Management API      | D1 + R2 + DO reads                            | Tenant/config/token CRUD, config versions, rollout commands, admin views  |
 | Agent control plane | Durable Object SQLite + hibernated WebSockets | Enrollment handoff, reconnects, applied config delivery, live agent state |
-| Event/read model    | Queue + D1 + Analytics Engine                 | Batched state summaries, usage signals, historical analytics              |
+| Metrics/read model  | Durable Object SQLite + Analytics Engine      | Live state, aggregate snapshots, usage signals                            |
 
 ## Data Flow
 
@@ -20,8 +20,7 @@ Collector
   -> /v1/opamp Worker ingress
   -> Config DO named tenant_id:config_id
   -> DO SQLite for live state and applied config delivery
-  -> Queue for state/config events
-  -> D1 and Analytics Engine read models
+  -> Analytics Engine for aggregate metrics snapshots
 
 Portal/Admin
   -> /auth/* for cookie sessions
@@ -80,22 +79,18 @@ a separate D1-declared action that sends the selected hash/content and generatio
 to the Config DO. The DO updates its applied delivery snapshot and pushes remote
 config to connected collectors that advertise remote-config support.
 
-## Events
+## Metrics And Observability
 
-The WebSocket hot path does not write D1. The DO buffers events in SQLite and an
-alarm drains them to Cloudflare Queues in batches. The Queue consumer updates D1
-read models and Analytics Engine.
+The WebSocket hot path does not write D1. The Config DO stores live state in
+DO-local SQLite and emits compact aggregate metrics to Analytics Engine from
+alarms and sweep reconciliation. Config rejection details are written as
+structured Worker logs so they show up in Cloudflare Workers Logs/Logpush
+without making an event queue a correctness dependency.
 
-Event categories should stay small and explicit:
-
-- `auth`
-- `config`
-- `collector`
-- `token`
-- `team`
-- `billing`
-- `support`
-- `platform`
+The Worker also runs a daily UTC `0 0 * * *` cron that emits product-level
+tenant plan counts to Analytics Engine. That job is separate from the
+per-config DO alarm path. The `17 3 * * *` cron is reserved for stale-agent
+reconciliation.
 
 ## Component Map
 

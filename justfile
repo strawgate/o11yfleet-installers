@@ -516,11 +516,10 @@ tf-required-imports:
     printf '%s\n' \
         cloudflare_d1_database.fleet \
         cloudflare_r2_bucket.configs \
-        cloudflare_queue.events \
         cloudflare_dns_record.api \
         cloudflare_worker.fleet \
-        cloudflare_workers_route.api \
-        cloudflare_queue_consumer.events
+        cloudflare_workers_cron_trigger.fleet \
+        cloudflare_workers_route.api
 
 # Verify production imports are in remote state before enabling v5 apply paths.
 tf-check-prod-imports env="prod": (tf-init-remote env)

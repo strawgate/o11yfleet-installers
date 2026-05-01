@@ -6,11 +6,8 @@
 // in DO-local storage (~µs per query), so this is effectively free.
 
 import type { AgentState } from "@o11yfleet/core/state-machine";
+import type { AgentMetricsInput } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
-
-// ─── Event buffer lifecycle constants ───────────────────────────────
-const MAX_PENDING_EVENTS = 10_000;
-const EVENT_TTL_SECONDS = 3600; // 1 hour
 
 /**
  * Initialize all tables in DO-local SQLite.
@@ -49,6 +46,8 @@ export function initSchema(sql: SqlStorage): void {
       id INTEGER PRIMARY KEY CHECK (id = 1),
       desired_config_hash TEXT,
       desired_config_content TEXT,
+      tenant_id TEXT NOT NULL DEFAULT '',
+      config_id TEXT NOT NULL DEFAULT '',
       last_sweep_at INTEGER NOT NULL DEFAULT 0,
       last_sweep_stale_count INTEGER NOT NULL DEFAULT 0,
       last_sweep_active_socket_count INTEGER NOT NULL DEFAULT 0,
@@ -57,17 +56,6 @@ export function initSchema(sql: SqlStorage): void {
       total_sweeps INTEGER NOT NULL DEFAULT 0,
       total_stale_swept INTEGER NOT NULL DEFAULT 0,
       sweeps_with_stale INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  // Buffered events — written synchronously on the hot path (~µs),
-  // drained in batches by the alarm handler (no async on hot path).
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS pending_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      event_id TEXT,
-      dedupe_key TEXT,
-      payload TEXT NOT NULL
     )
   `);
   // Ensure singleton row exists
@@ -84,11 +72,16 @@ export function initSchema(sql: SqlStorage): void {
 /** Idempotent schema migrations for existing DOs. */
 function migrateSchema(sql: SqlStorage): void {
   const cols = sql.exec(`PRAGMA table_info(do_config)`).toArray();
-  const addDoConfigColumn = (name: string): void => {
+  const addDoConfigColumn = (
+    name: string,
+    definition = `${name} INTEGER NOT NULL DEFAULT 0`,
+  ): void => {
     if (!cols.some((c) => c["name"] === name)) {
-      sql.exec(`ALTER TABLE do_config ADD COLUMN ${name} INTEGER NOT NULL DEFAULT 0`);
+      sql.exec(`ALTER TABLE do_config ADD COLUMN ${definition}`);
     }
   };
+  addDoConfigColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
+  addDoConfigColumn("config_id", "config_id TEXT NOT NULL DEFAULT ''");
   // Migration 1: add stale sweep tracking columns to do_config
   for (const column of [
     "last_sweep_at",
@@ -102,20 +95,8 @@ function migrateSchema(sql: SqlStorage): void {
   ]) {
     addDoConfigColumn(column);
   }
-  // Migration 2: add created_at column to pending_events
-  const eventCols = sql.exec(`PRAGMA table_info(pending_events)`).toArray();
-  if (!eventCols.some((c) => c["name"] === "created_at")) {
-    sql.exec(`ALTER TABLE pending_events ADD COLUMN created_at INTEGER`);
-    sql.exec(`UPDATE pending_events SET created_at = unixepoch() WHERE created_at IS NULL`);
-  }
-  if (!eventCols.some((c) => c["name"] === "event_id")) {
-    sql.exec(`ALTER TABLE pending_events ADD COLUMN event_id TEXT`);
-  }
-  if (!eventCols.some((c) => c["name"] === "dedupe_key")) {
-    sql.exec(`ALTER TABLE pending_events ADD COLUMN dedupe_key TEXT`);
-  }
-  // Migration 3: add config_snapshots table (CREATE IF NOT EXISTS handles this)
-  // Migration 4: migrate legacy effective_config_body values into config_snapshots.
+  // Migration 2: add config_snapshots table (CREATE IF NOT EXISTS handles this)
+  // Migration 3: migrate legacy effective_config_body values into config_snapshots.
   const agentCols = sql.exec(`PRAGMA table_info(agents)`).toArray();
   if (agentCols.some((c) => c["name"] === "effective_config_body")) {
     // Move existing bodies to config_snapshots.
@@ -158,6 +139,24 @@ export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string
     hash,
     content,
   );
+}
+
+export interface DoIdentity {
+  tenant_id: string;
+  config_id: string;
+}
+
+export function loadDoIdentity(sql: SqlStorage): DoIdentity {
+  const row = sql.exec(`SELECT tenant_id, config_id FROM do_config WHERE id = 1`).one();
+  return {
+    tenant_id: (row["tenant_id"] as string) ?? "",
+    config_id: (row["config_id"] as string) ?? "",
+  };
+}
+
+export function saveDoIdentity(sql: SqlStorage, tenantId: string, configId: string): void {
+  if (!tenantId || !configId) return;
+  sql.exec(`UPDATE do_config SET tenant_id = ?, config_id = ? WHERE id = 1`, tenantId, configId);
 }
 
 // ─── Rate Limiting ──────────────────────────────────────────────────
@@ -510,6 +509,28 @@ export function listAgentsPage(
       : null;
   return { agents, hasMore, nextCursor };
 }
+
+export function loadAgentsForMetrics(sql: SqlStorage): Map<string, AgentMetricsInput> {
+  const rows = sql
+    .exec(
+      `SELECT instance_uid, status, healthy, capabilities, current_config_hash, last_error, last_seen_at FROM agents`,
+    )
+    .toArray();
+
+  const result = new Map<string, AgentMetricsInput>();
+  for (const row of rows) {
+    const instanceUid = (row["instance_uid"] as string | null) ?? "unknown";
+    result.set(instanceUid, {
+      status: (row["status"] as string | null) ?? "unknown",
+      healthy: (row["healthy"] as number | null) ?? 0,
+      capabilities: (row["capabilities"] as number | null) ?? 0,
+      current_config_hash: row["current_config_hash"] as string | null,
+      last_error: (row["last_error"] as string | null) ?? "",
+      last_seen_at: (row["last_seen_at"] as number | null) ?? 0,
+    });
+  }
+  return result;
+}
 // ─── Stale Agent Detection ──────────────────────────────────────────
 
 /**
@@ -554,97 +575,6 @@ export function sweepStaleAgents(
   }
 
   return stale;
-}
-
-// ─── Event Buffer ───────────────────────────────────────────────────
-// Events are written to SQLite synchronously (~µs) on the hot path,
-// then drained in batches by the alarm handler. Zero async on hot path.
-//
-// Lifecycle: events have a 1-hour TTL and a 10K row hard cap.
-// Overflow is trimmed on write; expired events are pruned each alarm tick.
-
-/**
- * Buffer events into SQLite for later batch delivery.
- * Synchronous — adds ~1µs per event to the hot path.
- */
-export function bufferEvents(sql: SqlStorage, events: unknown[]): void {
-  if (events.length === 0) return;
-  for (const event of events) {
-    const maybeEvent = event as { event_id?: unknown; dedupe_key?: unknown };
-    const eventId = typeof maybeEvent.event_id === "string" ? maybeEvent.event_id : null;
-    const dedupeKey = typeof maybeEvent.dedupe_key === "string" ? maybeEvent.dedupe_key : null;
-    sql.exec(
-      `INSERT INTO pending_events (created_at, event_id, dedupe_key, payload) VALUES (unixepoch(), ?, ?, ?)`,
-      eventId,
-      dedupeKey,
-      JSON.stringify(event),
-    );
-  }
-  trimOverflowEvents(sql);
-}
-
-function trimOverflowEvents(sql: SqlStorage): number {
-  const count = sql.exec(`SELECT COUNT(*) as c FROM pending_events`).one()["c"] as number;
-  if (count <= MAX_PENDING_EVENTS) return 0;
-
-  return sql
-    .exec(
-      `DELETE FROM pending_events WHERE id NOT IN (
-        SELECT id FROM pending_events ORDER BY id DESC LIMIT ?
-      ) RETURNING id`,
-      MAX_PENDING_EVENTS,
-    )
-    .toArray().length;
-}
-
-/**
- * Prune expired and overflow events. Called at the start of each alarm tick.
- * Returns the number of events pruned.
- */
-export function pruneEvents(sql: SqlStorage): number {
-  // 1. Drop events older than TTL
-  const ttlCutoff = Math.floor(Date.now() / 1000) - EVENT_TTL_SECONDS;
-  const expired = sql
-    .exec(`DELETE FROM pending_events WHERE created_at < ? RETURNING id`, ttlCutoff)
-    .toArray().length;
-
-  // 2. Drop overflow (keep newest MAX_PENDING_EVENTS rows)
-  return expired + trimOverflowEvents(sql);
-}
-
-/**
- * Read up to `limit` buffered events from SQLite without deleting them.
- * Returns parsed event payloads and the row IDs for later deletion.
- */
-export function peekBufferedEvents(
-  sql: SqlStorage,
-  limit = 500,
-): { events: unknown[]; ids: number[] } {
-  const rows = sql
-    .exec(`SELECT id, payload FROM pending_events ORDER BY id LIMIT ?`, limit)
-    .toArray();
-  if (rows.length === 0) return { events: [], ids: [] };
-
-  return {
-    events: rows.map((r) => JSON.parse(r["payload"] as string)),
-    ids: rows.map((r) => r["id"] as number),
-  };
-}
-
-/**
- * Delete specific buffered events by ID after successful delivery.
- */
-export function deleteBufferedEvents(sql: SqlStorage, ids: number[]): void {
-  if (ids.length === 0) return;
-  const placeholders = ids.map(() => "?").join(",");
-  sql.exec(`DELETE FROM pending_events WHERE id IN (${placeholders})`, ...ids);
-}
-
-/**
- * Count pending events (for alarm scheduling decisions).
- */
-export function countPendingEvents(sql: SqlStorage): number {
-  return sql.exec(`SELECT COUNT(*) as c FROM pending_events`).one()["c"] as number;
 }
 
 // ─── Alarm Sweep Tracking ───────────────────────────────────────────

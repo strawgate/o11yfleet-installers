@@ -58,7 +58,7 @@ const adminEndpoints: AdminEndpoint[] = [
   {
     method: "GET",
     path: "/api/admin/health",
-    use: "Check D1, R2, queue, and Durable Object health",
+    use: "Check D1, R2, Durable Object, and Analytics Engine health",
   },
   {
     method: "GET",

@@ -425,7 +425,7 @@ async function main() {
         worker_errors_proxy: Object.fromEntries(counters.errors),
       },
       notes: {
-        queue_backlog_proxy:
+        backlog_proxy:
           "Use /stats drift + reconnect failures + Worker logs; direct queue depth not exposed in this harness.",
       },
     };

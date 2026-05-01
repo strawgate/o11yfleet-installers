@@ -8,17 +8,22 @@ import {
 } from "@o11yfleet/core/codec";
 import type { CodecFormat, ServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame } from "@o11yfleet/core/state-machine";
-import { FleetEventType, makeFleetEvent } from "@o11yfleet/core/events";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { adminDoQueryRequestSchema, setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
+import {
+  computeConfigMetrics,
+  configMetricsToDoubles,
+  FLEET_CONFIG_SNAPSHOT_INTERVAL,
+} from "@o11yfleet/core/metrics";
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
   recordSpanError,
   SpanStatusCode,
 } from "../tracing.js";
+import { logTransitionEvents } from "../observability-events.js";
 import {
   initSchema,
   loadAgentState,
@@ -33,19 +38,16 @@ import {
   saveDesiredConfig,
   checkRateLimit,
   sweepStaleAgents,
-  bufferEvents,
-  peekBufferedEvents,
-  deleteBufferedEvents,
-  pruneEvents,
-  countPendingEvents,
   recordSweep,
   getSweepStats,
+  loadDoIdentity,
+  saveDoIdentity,
+  loadAgentsForMetrics,
 } from "./agent-state-repo.js";
 
 export interface ConfigDOEnv {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
-  FP_EVENTS: Queue;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   O11YFLEET_CLAIM_HMAC_SECRET: string;
 }
@@ -118,12 +120,9 @@ const MAX_AGENTS_PER_CONFIG = 50_000;
 // is old AND no longer have an active WebSocket. The primary disconnect signal
 // is webSocketClose() (instant). This is the fallback for silent deaths only.
 const STALE_AGENT_THRESHOLD_MS = 3_600_000 * 3; // 3 hours (3× heartbeat interval)
-const ALARM_DRAIN_BATCH_SIZE = 500;
-const QUEUE_SEND_BATCH_SIZE = 100;
 
-// Alarm tick interval for event drain. The alarm only runs while events
-// are pending — no perpetual wake loop. Cost: one lightweight alarm tick
-// that drains events and stops when empty.
+// Alarm tick interval for config metrics. The alarm is scheduled only after
+// state-changing activity, then emits one aggregate snapshot and stops.
 const ALARM_TICK_MS = 5_000;
 
 // Config Durable Object — per tenant:config stateful actor for OpAMP agent management
@@ -159,8 +158,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     return config.content ? new TextEncoder().encode(config.content) : null;
   }
 
-  /** Schedule an alarm tick to drain buffered events. Only called when
-   *  events are actually buffered — the DO stays fully asleep otherwise. */
+  /** Schedule one deferred aggregate metrics snapshot after state changes. */
   private async ensureAlarm(): Promise<void> {
     const existing = await this.ctx.storage.getAlarm();
     if (!existing) {
@@ -304,6 +302,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         { status: 429 },
       );
     }
+    saveDoIdentity(this.ctx.storage.sql, tenantId, configId);
 
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
@@ -380,18 +379,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             );
           }
 
-          // Buffer enrollment event to SQLite (sync, ~µs). Alarm drains in batches.
-          bufferEvents(this.ctx.storage.sql, [
-            makeFleetEvent({
-              type: FleetEventType.AGENT_ENROLLED,
-              tenant_id: attachment.tenant_id,
-              config_id: attachment.config_id,
-              instance_uid: attachment.instance_uid,
-              timestamp: Date.now(),
-              generation: 1,
-              dedupe_key: `enrolled:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:1`,
-            }),
-          ]);
           await this.ensureAlarm();
 
           attachment.is_enrollment = false;
@@ -461,10 +448,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         saveAgentState(this.ctx.storage.sql, result.newState);
       }
 
-      // Buffer events to SQLite (sync, ~µs). Alarm drains in batches.
       if (result.events.length > 0) {
         span.setAttribute("opamp.events_emitted", result.events.length);
-        bufferEvents(this.ctx.storage.sql, result.events);
+        logTransitionEvents(result.events);
         await this.ensureAlarm();
       }
 
@@ -509,20 +495,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (state.status === "disconnected") {
         return;
       }
-      const timestamp = Date.now();
-      bufferEvents(this.ctx.storage.sql, [
-        makeFleetEvent({
-          type: FleetEventType.AGENT_DISCONNECTED,
-          tenant_id: attachment.tenant_id,
-          config_id: attachment.config_id,
-          instance_uid: attachment.instance_uid,
-          timestamp,
-          reason: "websocket_close",
-          dedupe_key: `disconnected:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:websocket_close:${attachment.connected_at}`,
-        }),
-      ]);
-      // Ensure alarm fires soon to drain this disconnect event,
-      // even if the DO was about to go idle.
       await this.ensureAlarm();
     } finally {
       span.end();
@@ -538,9 +510,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     try {
       if (attachment) {
         // The runtime may deliver `close` followed by `error` for the same
-        // socket. Inspect state before buffering so we don't enqueue a second
-        // disconnect with a divergent dedupe_key that downstream consumers
-        // can't collapse.
+        // socket. Inspect state before scheduling metrics so duplicate close
+        // signals do not create extra work.
         const config = this.getDesiredConfig();
         const state = loadAgentState(
           this.ctx.storage.sql,
@@ -551,19 +522,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         );
         markDisconnected(this.ctx.storage.sql, attachment.instance_uid);
         if (state.status !== "disconnected") {
-          const timestamp = Date.now();
-          bufferEvents(this.ctx.storage.sql, [
-            makeFleetEvent({
-              type: FleetEventType.AGENT_DISCONNECTED,
-              tenant_id: attachment.tenant_id,
-              config_id: attachment.config_id,
-              instance_uid: attachment.instance_uid,
-              timestamp,
-              reason: "websocket_error",
-              dedupe_key: `disconnected:${attachment.tenant_id}:${attachment.config_id}:${attachment.instance_uid}:websocket_error:${attachment.connected_at}`,
-            }),
-          ]);
-          // Ensure alarm fires soon to drain this error event
           await this.ensureAlarm();
         }
       }
@@ -577,50 +535,47 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  // ─── Alarm: Event Drain ─────────────────────────────────────────────
+  // ─── Alarm: Metrics Snapshot ───────────────────────────────────────
   //
-  // Fires only when events are pending. Each tick: prune → drain → stop.
-  // No perpetual wake loop — the DO stays fully hibernated when idle.
+  // Fires after state-changing activity and emits one aggregate snapshot.
   // Stale sweeps are triggered externally via cron → /command/sweep.
 
   override async alarm(): Promise<void> {
     this.ensureInit();
-
-    // 1. Prune expired/overflow events (safety valve)
-    const pruned = pruneEvents(this.ctx.storage.sql);
-    if (pruned > 0) {
-      console.warn(`[alarm] pruned ${pruned} expired/overflow events`);
+    try {
+      this.emitMetrics();
+    } catch {
+      // Metrics writes are best-effort and should not make the alarm retry.
     }
+  }
 
-    // 2. Drain buffered events → queue (peek + delete-on-success)
-    const { events: pending, ids: pendingIds } = peekBufferedEvents(
-      this.ctx.storage.sql,
-      ALARM_DRAIN_BATCH_SIZE,
-    );
-    if (pending.length > 0) {
-      for (let i = 0; i < pending.length; i += QUEUE_SEND_BATCH_SIZE) {
-        const chunk = pending.slice(i, i + QUEUE_SEND_BATCH_SIZE);
-        const chunkIds = pendingIds.slice(i, i + QUEUE_SEND_BATCH_SIZE);
-        try {
-          await this.env.FP_EVENTS.sendBatch(chunk.map((event) => ({ body: event })));
-          deleteBufferedEvents(this.ctx.storage.sql, chunkIds);
-        } catch (err) {
-          console.error(`[alarm] sendBatch failed (${chunk.length} events), will retry:`, err);
-          break;
-        }
-      }
-    }
+  private emitMetrics(): void {
+    if (!this.env.FP_ANALYTICS) return;
 
-    // 3. Reschedule only if more events remain
-    const remaining = countPendingEvents(this.ctx.storage.sql);
-    if (remaining > 0) {
-      await this.ctx.storage.setAlarm(Date.now() + ALARM_TICK_MS);
-    }
+    const identity = loadDoIdentity(this.ctx.storage.sql);
+    if (!identity.tenant_id || !identity.config_id) return;
+
+    const agents = loadAgentsForMetrics(this.ctx.storage.sql);
+    const config = this.getDesiredConfig();
+    const metrics = computeConfigMetrics(agents, config.hash);
+    metrics.websocket_count = this.ctx.getWebSockets().length;
+
+    this.env.FP_ANALYTICS.writeDataPoint({
+      indexes: [identity.tenant_id],
+      blobs: [identity.tenant_id, identity.config_id, FLEET_CONFIG_SNAPSHOT_INTERVAL],
+      doubles: configMetricsToDoubles(metrics),
+    });
   }
 
   // ─── Internal Commands ────────────────────────────────────────────
 
   private async handleSetDesiredConfig(request: Request): Promise<Response> {
+    saveDoIdentity(
+      this.ctx.storage.sql,
+      request.headers.get("x-fp-tenant-id") ?? "",
+      request.headers.get("x-fp-config-id") ?? "",
+    );
+
     const parsed = setDesiredConfigRequestSchema.safeParse(await request.json().catch(() => null));
     if (!parsed.success) {
       return Response.json({ error: "Invalid request body" }, { status: 400 });
@@ -669,6 +624,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       }
     }
 
+    await this.ensureAlarm();
     return Response.json({ pushed, config_hash: body.config_hash });
   }
 
@@ -775,24 +731,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       STALE_AGENT_THRESHOLD_MS,
       activeInstanceUids,
     );
-    if (staleUids.length > 0) {
-      bufferEvents(
-        this.ctx.storage.sql,
-        staleUids.map((agent) => {
-          const timestamp = Date.now();
-          return makeFleetEvent({
-            type: FleetEventType.AGENT_DISCONNECTED as const,
-            tenant_id: agent.tenant_id,
-            config_id: agent.config_id,
-            instance_uid: agent.instance_uid,
-            timestamp,
-            reason: "stale_timeout",
-            dedupe_key: `disconnected:${agent.tenant_id}:${agent.config_id}:${agent.instance_uid}:stale_timeout:${timestamp}`,
-          });
-        }),
-      );
-      await this.ensureAlarm();
-    }
     const durationMs = Date.now() - start;
     recordSweep(this.ctx.storage.sql, {
       staleCount: staleUids.length,
@@ -802,6 +740,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     const tenantId = request.headers.get("x-fp-tenant-id") ?? staleUids[0]?.tenant_id ?? "unknown";
     const configId = request.headers.get("x-fp-config-id") ?? staleUids[0]?.config_id ?? "unknown";
+    saveDoIdentity(this.ctx.storage.sql, tenantId, configId);
+
     try {
       this.env.FP_ANALYTICS?.writeDataPoint({
         blobs: ["stale_sweep", tenantId, configId],
@@ -810,6 +750,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       });
     } catch {
       // Analytics write failure should never block stale reconciliation.
+    }
+    try {
+      this.emitMetrics();
+    } catch {
+      // Metrics writes are best-effort and should not block stale reconciliation.
     }
 
     return Response.json({

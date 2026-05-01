@@ -1,7 +1,6 @@
 import type { Env } from "./index.js";
 
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
-const SQL_API_BASE = "https://api.cloudflare.com/client/v4/accounts";
 
 type UsageEnv = Env & {
   CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
@@ -9,10 +8,9 @@ type UsageEnv = Env & {
   CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
   CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
   CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
-  CLOUDFLARE_USAGE_ANALYTICS_DATASET?: string;
 };
 
-type ServiceId = "workers" | "durable_objects" | "d1" | "r2" | "queues";
+type ServiceId = "workers" | "durable_objects" | "d1" | "r2";
 
 export interface UsageLineItem {
   label: string;
@@ -152,10 +150,6 @@ interface R2QueryData {
   };
 }
 
-interface AnalyticsSqlResponse {
-  data?: Array<Record<string, unknown>>;
-}
-
 interface DailySpendAllocation {
   unitKey: string;
   lineItem: UsageLineItem;
@@ -189,10 +183,6 @@ const PRICING = {
     class_a_per_million_usd: 4.5,
     included_class_b_operations: 10_000_000,
     class_b_per_million_usd: 0.36,
-  },
-  queues: {
-    included_operations: 1_000_000,
-    operations_per_million_usd: 0.4,
   },
 } as const;
 
@@ -333,24 +323,11 @@ export function cloudflareUsageRequiredEnv(env: Partial<UsageEnv>): string[] {
     "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME",
     "CLOUDFLARE_USAGE_D1_DATABASE_ID",
     "CLOUDFLARE_USAGE_R2_BUCKET_NAME",
-    "CLOUDFLARE_USAGE_ANALYTICS_DATASET",
   ].filter((key) => !hasNonEmptyString(env[key as keyof UsageEnv]));
   if (!hasNonEmptyString(apiToken(env as UsageEnv))) {
     requiredEnv.unshift("CLOUDFLARE_USAGE_API_TOKEN");
   }
   return requiredEnv;
-}
-
-function analyticsDatasetIdentifier(value: string): string {
-  const dataset = value.trim();
-  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(dataset)) {
-    throw new Error("CLOUDFLARE_USAGE_ANALYTICS_DATASET must be a valid SQL identifier");
-  }
-  return dataset;
-}
-
-function sqlStringLiteral(value: string): string {
-  return `'${value.replaceAll("'", "''")}'`;
 }
 
 function addDaily(
@@ -927,92 +904,6 @@ async function r2Usage(
   }
 }
 
-async function queuesUsage(
-  env: UsageEnv,
-  window: ReturnType<typeof currentWindow>,
-): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_ANALYTICS_DATASET) {
-    return emptyService("queues", "Queues", "not_configured", "Workers Analytics Engine SQL API", [
-      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_ANALYTICS_DATASET to estimate Queue usage from consumed event datapoints.",
-    ]);
-  }
-
-  try {
-    const token = apiToken(env);
-    if (!token) throw new Error("Cloudflare analytics API token is not configured");
-    const dataset = analyticsDatasetIdentifier(env.CLOUDFLARE_USAGE_ANALYTICS_DATASET);
-    const sql = `
-      SELECT
-        toDate(timestamp) AS date,
-        sum(_sample_interval) AS events
-      FROM ${dataset}
-      WHERE timestamp >= ${sqlStringLiteral(window.startDatetime)}
-        AND timestamp <= ${sqlStringLiteral(window.endDatetime)}
-      GROUP BY date
-      ORDER BY date
-      FORMAT JSON`;
-    const response = await fetch(
-      `${SQL_API_BASE}/${env.CLOUDFLARE_USAGE_ACCOUNT_ID}/analytics_engine/sql`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "text/plain",
-        },
-        body: sql,
-      },
-    );
-    const body = (await response.json()) as AnalyticsSqlResponse;
-    if (!response.ok) throw new Error(response.statusText);
-    const daily = new Map<string, Record<string, number>>();
-    let events = 0;
-    for (const row of body.data ?? []) {
-      const date = typeof row["date"] === "string" ? row["date"] : null;
-      const value = typeof row["events"] === "number" ? row["events"] : Number(row["events"] ?? 0);
-      events += Number.isFinite(value) ? value : 0;
-      addDaily(daily, date, { events: value, estimated_queue_operations: value * 3 });
-    }
-    const estimatedOperations = events * 3;
-    const operationLineItem = item(
-      "Estimated Queue operations",
-      estimatedOperations,
-      "operations",
-      PRICING.queues.included_operations,
-      PRICING.queues.operations_per_million_usd,
-      1_000_000,
-    );
-    const lineItems = [operationLineItem];
-    const spend = roundMoney(lineItems.reduce((sum, entry) => sum + entry.estimated_spend_usd, 0));
-    return {
-      id: "queues",
-      name: "Queues",
-      status: "ready",
-      source: "Workers Analytics Engine SQL API / FP_ANALYTICS consumed event datapoints",
-      daily: dailyRows(daily, [
-        { unitKey: "estimated_queue_operations", lineItem: operationLineItem },
-      ]),
-      line_items: lineItems,
-      month_to_date_estimated_spend_usd: spend,
-      projected_month_estimated_spend_usd: roundMoney(
-        monthProjection(spend, window.daysElapsed, window.daysInMonth),
-      ),
-      notes: [
-        `Dataset: ${env.CLOUDFLARE_USAGE_ANALYTICS_DATASET}`,
-        "Queue operations are estimated as one write, one read, and one delete per consumed event.",
-      ],
-    };
-  } catch (error) {
-    return emptyService(
-      "queues",
-      "Queues",
-      "error",
-      "Workers Analytics Engine SQL API",
-      [],
-      error instanceof Error ? error.message : "Unknown Analytics Engine SQL error",
-    );
-  }
-}
-
 export async function buildCloudflareUsage(
   env: Env,
   now = new Date(),
@@ -1024,7 +915,6 @@ export async function buildCloudflareUsage(
     durableObjectUsage(usageEnv, window),
     d1Usage(usageEnv, window),
     r2Usage(usageEnv, window),
-    queuesUsage(usageEnv, window),
   ]);
   const monthToDate = roundMoney(
     services.reduce((sum, service) => sum + service.month_to_date_estimated_spend_usd, 0),

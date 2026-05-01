@@ -18,16 +18,6 @@ output "r2_bucket_id" {
   description = "R2 bucket Terraform/provider ID."
 }
 
-output "queue_name" {
-  value       = cloudflare_queue.events.queue_name
-  description = "Queue name for Wrangler FP_EVENTS producer and consumer bindings."
-}
-
-output "queue_id" {
-  value       = cloudflare_queue.events.queue_id
-  description = "Queue Terraform/provider ID."
-}
-
 output "api_domain" {
   value       = local.api_domain
   description = "API hostname routed to the Worker."

@@ -349,7 +349,7 @@ export async function getConfigStats(configId: string): Promise<{
 }
 
 /**
- * Get agent summaries from D1 (the read model populated by queue consumer).
+ * Get agent summaries from the config API.
  */
 export async function getAgentSummaries(
   configId: string,

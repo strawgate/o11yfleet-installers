@@ -1,4 +1,4 @@
-// o11yfleet event types — used by Config DO → Queue → Consumer
+// o11yfleet transition event types emitted by the pure state machine.
 
 export interface FleetEvent {
   type: FleetEventType;

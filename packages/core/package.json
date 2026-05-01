@@ -17,7 +17,8 @@
     "./pipeline": "./src/pipeline/index.ts",
     "./events": "./src/events.ts",
     "./assert-never": "./src/assert-never.ts",
-    "./hex": "./src/hex.ts"
+    "./hex": "./src/hex.ts",
+    "./metrics": "./src/metrics/index.ts"
   },
   "scripts": {
     "lint": "oxlint src test",

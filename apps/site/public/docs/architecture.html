@@ -6,7 +6,7 @@
     <title>Architecture — O11yFleet</title>
     <meta
       name="description"
-      content="Deep dive into O11yFleet's architecture: Cloudflare Workers, Durable Objects, D1, R2, and Queues."
+      content="Deep dive into O11yFleet's architecture: Cloudflare Workers, Durable Objects, D1, R2, and Analytics Engine."
     />
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
 
@@ -131,8 +131,8 @@
 
           <p class="lede">
             O11yFleet is built on Cloudflare's edge platform using Workers, Durable Objects, D1, R2,
-            and Queues. This architecture provides global distribution, automatic scaling, and
-            sub-millisecond latency for agent management.
+            and Analytics Engine. This architecture provides global distribution, automatic scaling,
+            and low-latency agent management.
           </p>
 
           <h2 id="overview">System overview</h2>
@@ -173,22 +173,15 @@
     │ (per-tenant)    │     Manages agent state, sends configs
     └────────┬────────┘
              │
-      ┌──────┼──────┐
-      │      │      │
-      ▼      ▼      ▼
-    R2    Queue   SQLite
-    (config  │    (agent state
-     content) │     inside DO)
-              ▼
-       ┌──────────────┐
-       │ Event        │
-       │ Consumer     │  ← Batches agent updates
-       └────────┬─────┘
-                │
-                ▼
-           ┌──────────────────┐
-           │ Analytics Engine │  ← Event datapoints
-           └──────────────────┘</code></pre>
+      ┌──────┼────────────┐
+      │      │            │
+      ▼      ▼            ▼
+    R2    SQLite    Analytics Engine
+    (config  │       (aggregate metrics)
+     content)│
+             ▼
+            D1
+       (tenant/config metadata)</code></pre>
             </div>
           </div>
 
@@ -228,11 +221,11 @@
             <li>Config DO references hash; never stores full YAML</li>
           </ul>
 
-          <h3 id="queue-analytics">Queue-based analytics</h3>
+          <h3 id="metrics-observability">Metrics and observability</h3>
           <p>
-            Config DO emits events to a Queue on agent state changes. The current consumer writes
-            analytics datapoints to Analytics Engine. Agent state for API reads lives in DO-local
-            SQLite; the old D1 <code class="mono">agent_summaries</code> read model is not used.
+            Config DO stores live agent state in DO-local SQLite and emits aggregate snapshots
+            directly to Analytics Engine. Config rejection details are written as structured Worker
+            logs for troubleshooting.
           </p>
 
           <h2 id="component-map">Component map</h2>
@@ -307,21 +300,14 @@
                 </td>
                 <td style="padding: 10px 14px">CF Worker + R2</td>
               </tr>
-              <tr style="border-bottom: 1px solid var(--line)">
-                <td style="padding: 10px 14px">Event Consumer</td>
-                <td style="padding: 10px 14px">
-                  <code class="mono">apps/worker/src/event-consumer.ts</code>
-                </td>
-                <td style="padding: 10px 14px">CF Queue</td>
-              </tr>
             </tbody>
           </table>
 
           <h2 id="infrastructure">Infrastructure</h2>
           <p>
             The entire stack is defined as Infrastructure as Code using Terraform. Cloudflare
-            resources (Workers, Durable Objects, D1 databases, R2 buckets, Queues) are provisioned
-            automatically on deploy.
+            resources (Workers, Durable Objects, D1 databases, R2 buckets, and Analytics Engine
+            bindings) are provisioned automatically on deploy.
           </p>
           <p>
             See <code class="mono">infra/terraform/</code> in the repository for full definitions.

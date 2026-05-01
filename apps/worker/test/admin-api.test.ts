@@ -535,7 +535,7 @@ describe("admin API routes", () => {
     expect(healthBody.checks.d1?.status).toBe("healthy");
     expect(healthBody.checks.r2?.status).toBe("healthy");
     expect(healthBody.checks.durable_objects?.status).toBe("healthy");
-    expect(["healthy", "unavailable"].includes(healthBody.checks.queue?.status ?? "")).toBe(true);
+    expect(healthBody.checks.queue).toBeUndefined();
     expect(healthBody.checks.d1?.detail).toContain("fleet counters");
     expect(healthBody.metrics.total_tenants).toBeTypeOf("number");
     expect(healthBody.metrics.total_configurations).toBeTypeOf("number");
@@ -557,6 +557,8 @@ describe("admin API routes", () => {
     expect(["connected", "degraded", "unavailable"]).toContain(
       healthBody.sources.binding_probes?.status,
     );
+    expect(["write_only", "not_bound"]).toContain(healthBody.sources.analytics_engine?.status);
+    expect(healthBody.sources.analytics_engine?.detail).toContain("write datapoints");
     expect(healthBody.sources.cloudflare_account_metrics?.status).toBe("not_configured");
     expect(healthBody.sources.cloudflare_account_metrics?.detail).toContain("No Cloudflare");
 
@@ -583,7 +585,6 @@ describe("admin API routes", () => {
       "durable_objects",
       "d1",
       "r2",
-      "queues",
     ]);
     expect(usageBody.services.every((service) => service.status === "not_configured")).toBe(true);
     expect(usageBody.month_to_date_estimated_spend_usd).toBe(0);

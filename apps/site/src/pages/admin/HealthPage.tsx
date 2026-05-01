@@ -10,7 +10,6 @@ const serviceLabels: Record<string, string> = {
   d1: "D1 Database",
   r2: "R2 Storage",
   durable_objects: "Durable Objects",
-  queue: "Queue",
 };
 
 function statusTag(status: string) {

@@ -82,7 +82,7 @@ Separate health planes:
 
 | Plane                | Belongs in                                 | Examples                                                                                                   |
 | -------------------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
-| Control-plane health | Admin health                               | Worker/API, D1, R2, Durable Objects, Queues, Analytics Engine, auth/session services                       |
+| Control-plane health | Admin health                               | Worker/API, D1, R2, Durable Objects, Analytics Engine, auth/session services                               |
 | Runtime fleet health | Customer portal and admin tenant drilldown | connected/disconnected counts, healthy/unhealthy counts, drift, rollout convergence, last seen, last error |
 
 ## UI Rules

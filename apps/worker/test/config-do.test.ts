@@ -143,7 +143,11 @@ describe("Config Durable Object", () => {
     const response = await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
       body: JSON.stringify({ config_hash: "abc123" }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-fp-tenant-id": "tenant-1",
+        "x-fp-config-id": "config-1",
+      },
     });
     expect(response.status).toBe(200);
     const body = await response.json<{ pushed: number; config_hash: string }>();
@@ -154,6 +158,15 @@ describe("Config Durable Object", () => {
     const statsRes = await stub.fetch("http://internal/stats");
     const stats = await statsRes.json<{ desired_config_hash: string }>();
     expect(stats.desired_config_hash).toBe("abc123");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const row = state.storage.sql.exec(`SELECT tenant_id, config_id FROM do_config`).one();
+        expect(row["tenant_id"]).toBe("tenant-1");
+        expect(row["config_id"]).toBe("config-1");
+      },
+    );
   });
 
   it("POST /command/set-desired-config requires config_hash", async () => {
@@ -232,6 +245,8 @@ describe("Config Durable Object", () => {
       async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
         const row = state.storage.sql.exec(`SELECT * FROM do_config WHERE id = 1`).one();
         expect(row["last_sweep_at"]).toBeGreaterThan(0);
+        expect(row["tenant_id"]).toBe("tenant-1");
+        expect(row["config_id"]).toBe("config-sweep-stats");
         expect(row["last_sweep_stale_count"]).toBe(1);
         expect(row["total_sweeps"]).toBe(1);
         expect(row["total_stale_swept"]).toBe(1);
@@ -306,159 +321,5 @@ describe("Config Durable Object", () => {
     expect(response.status).toBe(200);
     const body = await response.json<{ agents: Array<{ effective_config_body: string | null }> }>();
     expect(body.agents[0]?.effective_config_body).toBe("receivers:\n  otlp:\n");
-  });
-
-  it("migrates legacy pending events and writes created_at explicitly", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-pending-events-migration");
-    const stub = env.CONFIG_DO.get(id);
-
-    await runInDurableObject(
-      stub,
-      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
-        state.storage.sql.exec(
-          `CREATE TABLE pending_events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            payload TEXT NOT NULL
-          )`,
-        );
-        state.storage.sql.exec(`INSERT INTO pending_events (payload) VALUES (?)`, "{}");
-
-        const { initSchema, bufferEvents } =
-          await import("../src/durable-objects/agent-state-repo.js");
-        initSchema(state.storage.sql);
-        bufferEvents(state.storage.sql, [{ type: "test_event" }]);
-
-        const columns = state.storage.sql.exec(`PRAGMA table_info(pending_events)`).toArray();
-        expect(columns.some((c) => c["name"] === "created_at")).toBe(true);
-        expect(columns.some((c) => c["name"] === "event_id")).toBe(true);
-        expect(columns.some((c) => c["name"] === "dedupe_key")).toBe(true);
-
-        const rows = state.storage.sql
-          .exec(`SELECT created_at FROM pending_events ORDER BY id`)
-          .toArray();
-        expect(rows).toHaveLength(2);
-        expect(rows.every((r) => typeof r["created_at"] === "number")).toBe(true);
-      },
-    );
-  });
-
-  it("enforces the pending event hard cap on write", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-pending-events-cap");
-    const stub = env.CONFIG_DO.get(id);
-    await stub.fetch("http://internal/stats");
-
-    await runInDurableObject(
-      stub,
-      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
-        const { bufferEvents, countPendingEvents } =
-          await import("../src/durable-objects/agent-state-repo.js");
-        bufferEvents(
-          state.storage.sql,
-          Array.from({ length: 10_050 }, (_, i) => ({ type: "test_event", i })),
-        );
-
-        expect(countPendingEvents(state.storage.sql)).toBe(10_000);
-        const oldest = state.storage.sql
-          .exec(`SELECT payload FROM pending_events ORDER BY id LIMIT 1`)
-          .one()["payload"] as string;
-        expect(JSON.parse(oldest)).toEqual({ type: "test_event", i: 50 });
-      },
-    );
-  });
-
-  it("drains buffered events in queue-safe chunks", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-queue-chunks");
-    const stub = env.CONFIG_DO.get(id);
-    await stub.fetch("http://internal/stats");
-
-    await runInDurableObject(
-      stub,
-      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
-        const { bufferEvents, countPendingEvents } =
-          await import("../src/durable-objects/agent-state-repo.js");
-        bufferEvents(
-          state.storage.sql,
-          Array.from({ length: 250 }, (_, i) => ({ type: "test_event", i })),
-        );
-
-        const batchSizes: number[] = [];
-        (
-          instance as unknown as {
-            env: {
-              FP_EVENTS: {
-                sendBatch: (messages: Array<{ body: unknown }>) => Promise<void>;
-              };
-            };
-          }
-        ).env.FP_EVENTS = {
-          sendBatch: async (messages: Array<{ body: unknown }>) => {
-            batchSizes.push(messages.length);
-          },
-        };
-
-        await instance.alarm();
-
-        expect(batchSizes).toEqual([100, 100, 50]);
-        expect(countPendingEvents(state.storage.sql)).toBe(0);
-      },
-    );
-  });
-
-  it("preserves event identity across queue retry", async () => {
-    const id = env.CONFIG_DO.idFromName("tenant-1:config-queue-identity-retry");
-    const stub = env.CONFIG_DO.get(id);
-    await stub.fetch("http://internal/stats");
-
-    await runInDurableObject(
-      stub,
-      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
-        const { bufferEvents, peekBufferedEvents, countPendingEvents } =
-          await import("../src/durable-objects/agent-state-repo.js");
-
-        const original = {
-          type: "test_event",
-          event_id: "evt-123",
-          dedupe_key: "dedupe-123",
-          timestamp: Date.now(),
-        };
-        bufferEvents(state.storage.sql, [original]);
-
-        let attempts = 0;
-        (
-          instance as unknown as {
-            env: {
-              FP_EVENTS: { sendBatch: (messages: Array<{ body: unknown }>) => Promise<void> };
-            };
-          }
-        ).env.FP_EVENTS = {
-          sendBatch: async () => {
-            attempts += 1;
-            if (attempts === 1) throw new Error("queue temporarily unavailable");
-          },
-        };
-
-        await instance.alarm();
-        expect(countPendingEvents(state.storage.sql)).toBe(1);
-        const firstPeek = peekBufferedEvents(state.storage.sql, 1).events[0] as {
-          event_id?: string;
-          dedupe_key?: string;
-        };
-        expect(firstPeek.event_id).toBe("evt-123");
-        expect(firstPeek.dedupe_key).toBe("dedupe-123");
-
-        // Also verify the dedicated columns were persisted, not just the
-        // JSON payload — `peekBufferedEvents` falls back to the payload when
-        // the columns are missing, so this protects against a regression
-        // where `bufferEvents` quietly drops `event_id` / `dedupe_key`.
-        const persisted = state.storage.sql
-          .exec(`SELECT event_id, dedupe_key FROM pending_events`)
-          .one() as { event_id: string; dedupe_key: string };
-        expect(persisted.event_id).toBe("evt-123");
-        expect(persisted.dedupe_key).toBe("dedupe-123");
-
-        await instance.alarm();
-        expect(countPendingEvents(state.storage.sql)).toBe(0);
-      },
-    );
   });
 });

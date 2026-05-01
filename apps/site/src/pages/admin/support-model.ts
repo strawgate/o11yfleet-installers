@@ -133,7 +133,7 @@ export const SYMPTOMS: SupportSymptom[] = [
     steps: [
       {
         label: "Open system health",
-        description: "Check Worker/API, D1, R2, Queues, and Durable Objects.",
+        description: "Check Worker/API, D1, R2, Durable Objects, and Analytics Engine.",
         path: () => "/admin/health",
       },
       {

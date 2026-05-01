@@ -25,11 +25,10 @@ const resolveConfig = (env: any, _trigger: any) => {
 
 // Auto-instrumented handler: fetch, D1, R2, DO bindings.
 // Preserve non-fetch module handlers explicitly; production uses this entrypoint,
-// so cron and queue handlers must be present here too.
+// so cron handlers must be present here too.
 const instrumentedHandler = instrument(handler, resolveConfig);
 export default {
   ...instrumentedHandler,
-  queue: handler.queue,
   scheduled: handler.scheduled,
 };
 

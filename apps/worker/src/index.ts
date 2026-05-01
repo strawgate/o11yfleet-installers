@@ -4,15 +4,12 @@ export { ConfigDurableObject } from "./durable-objects/config-do.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
-import { handleQueueBatch } from "./event-consumer.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyClaim, hashEnrollmentToken } from "@o11yfleet/core/auth";
-import type { AnyFleetEvent } from "@o11yfleet/core/events";
 
 export interface Env {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
-  FP_EVENTS: Queue;
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   O11YFLEET_CLAIM_HMAC_SECRET: string;
@@ -31,7 +28,6 @@ export interface Env {
   CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
   CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
   CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
-  CLOUDFLARE_USAGE_ANALYTICS_DATASET?: string;
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   GITHUB_APP_ID?: string;
@@ -103,6 +99,25 @@ const INTERNAL_HEADERS = [
 
 const CRON_SWEEP_CONCURRENCY = 100;
 const CRON_SWEEP_TIMEOUT_MS = 2_000;
+const STALE_AGENT_SWEEP_CRON = "17 3 * * *";
+const PRODUCT_METRICS_CRON = "0 0 * * *";
+
+type TenantPlanBucket = "free" | "paid" | "enterprise";
+
+function tenantPlanBucket(plan: string): TenantPlanBucket {
+  switch (plan) {
+    case "enterprise":
+      return "enterprise";
+    case "hobby":
+      return "free";
+    case "pro":
+    case "starter":
+    case "growth":
+      return "paid";
+    default:
+      return "paid";
+  }
+}
 
 async function withTimeout<T>(
   start: (signal: AbortSignal) => Promise<T>,
@@ -214,22 +229,28 @@ export default {
     }
   },
 
-  async queue(batch: MessageBatch<AnyFleetEvent>, env: Env): Promise<void> {
-    await handleQueueBatch(batch, env as unknown as { FP_ANALYTICS: AnalyticsEngineDataset });
-  },
-
   /** Daily stale-agent audit. This is rare reconciliation for missed close/error events. */
   async scheduled(
-    _controller: ScheduledController,
+    controller: ScheduledController,
     env: Env,
     _ctx: ExecutionContext,
   ): Promise<void> {
+    if (controller.cron === PRODUCT_METRICS_CRON) {
+      await emitProductMetrics(env);
+      return;
+    }
+    if (controller.cron !== STALE_AGENT_SWEEP_CRON) {
+      return;
+    }
+
     const configs = await env.FP_DB.prepare(`SELECT id, tenant_id FROM configurations`).all<{
       id: string;
       tenant_id: string;
     }>();
 
-    if (!configs.results?.length) return;
+    if (!configs.results?.length) {
+      return;
+    }
 
     const results = await mapWithConcurrency(
       configs.results,
@@ -272,6 +293,31 @@ export default {
     }
   },
 };
+
+async function emitProductMetrics(env: Env): Promise<void> {
+  if (!env.FP_ANALYTICS) return;
+
+  const { results } = await env.FP_DB.prepare(
+    `SELECT plan, COUNT(*) as c FROM tenants GROUP BY plan`,
+  ).all<{ plan: string; c: number }>();
+
+  const totals = { total: 0, free: 0, paid: 0, enterprise: 0 };
+  for (const row of results ?? []) {
+    const bucket = tenantPlanBucket(row.plan);
+    totals[bucket] += row.c;
+    totals.total += row.c;
+  }
+
+  try {
+    env.FP_ANALYTICS.writeDataPoint({
+      indexes: ["daily"],
+      blobs: ["product", "tenants", "daily"],
+      doubles: [totals.total, totals.free, totals.paid, totals.enterprise, Date.now() / 1000],
+    });
+  } catch {
+    // Analytics Engine write failures should not fail the cron invocation.
+  }
+}
 
 async function handleRequest(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);

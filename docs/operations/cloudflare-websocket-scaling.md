@@ -34,12 +34,12 @@ reconciliation, not liveness.
 
 ### Keep The Message Hot Path Synchronous
 
-Do not send Queue events from `webSocketMessage()` with unresolved async work.
+Do not start network writes from `webSocketMessage()` for per-frame analytics.
 The stable model is:
 
 ```text
-message -> process -> INSERT pending_events -> respond
-alarm -> SELECT/DELETE batch -> queue.sendBatch()
+message -> process -> update DO SQLite -> respond
+alarm -> emit compact Analytics Engine snapshot
 ```
 
 This prevents promise accumulation from disconnecting large fleets.
@@ -55,7 +55,7 @@ the DO instance and drop every connected collector.
 | Symptom                                        | Likely cause                                                                       | Fix                                                                       |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
 | Mass disconnects after 2-5 minutes             | Edge idle timeout or heartbeat wake storm                                          | Use auto-response keepalive; keep OpAMP heartbeats infrequent             |
-| Mass disconnects during event-heavy enrollment | Async Queue promises in message handler                                            | Buffer events in DO SQLite and drain by alarm                             |
+| Mass disconnects during event-heavy enrollment | Async network promises in message handler                                          | Keep hot-path writes local to DO SQLite; emit aggregate metrics by alarm  |
 | Agents connect but never receive config        | opamp-go frame prefix misdetected as JSON framing                                  | Keep 3-way frame detection: raw protobuf, opamp-go protobuf, JSON framing |
 | opamp-go collectors crash on enrollment        | Text `enrollment_complete` sent to protobuf clients                                | Send text completion only to JSON-framing test clients                    |
 | Connected count is zero                        | Counting SQL status instead of active sockets                                      | Use `ctx.getWebSockets().length` for live connected count                 |

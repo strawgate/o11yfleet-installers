@@ -70,7 +70,7 @@ JSON file includes:
 - `metrics.stats_latency`: API stats latency summary.
 - `metrics.reconnect_latency`: reconnect latency summary.
 - `metrics.reconnect_success` / `metrics.reconnect_failed`.
-- `notes.queue_backlog_proxy`: interpretation guidance when queue depth is not directly exposed.
+- `notes.backlog_proxy`: interpretation guidance for detecting delayed recovery.
 
 ## Suggested runs
 
@@ -113,14 +113,14 @@ Decision-grade evidence (gate quality):
 - 10k run completes without CPU-limit errors.
 - rollout push p95 < 5s (or revised with explicit rationale).
 - API list p95 < 500ms (after pagination behavior is confirmed).
-- no sustained backlog proxy growth after rollout + storm.
+- no sustained recovery/backlog proxy growth after rollout + storm.
 - reconnect storm recovers 95% of agents within 2 minutes.
 
 ## Gaps / missing evidence for 25k
 
-This harness does not directly query Queue depth. For 25k decision quality, pair harness output with:
+For 25k decision quality, pair harness output with:
 
-- Cloudflare Queue metrics,
 - Worker/DO CPU and error metrics,
+- Analytics Engine config snapshots,
 - logs filtered for websocket close/error spikes,
 - repeated-run variance analysis.

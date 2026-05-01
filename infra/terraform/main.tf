@@ -19,7 +19,6 @@ locals {
 
   d1_database_name = coalesce(var.d1_database_name, "${local.name_prefix}-db")
   r2_bucket_name   = coalesce(var.r2_bucket_name, "${local.name_prefix}-configs")
-  queue_name       = coalesce(var.queue_name, "${local.name_prefix}-events")
   worker_name      = coalesce(var.worker_script_name, local.env_slug == "prod" ? "${var.resource_prefix}-worker" : "${var.resource_prefix}-worker-${local.env_slug}")
 
   site_domain     = coalesce(var.site_domain, local.env_slug == "prod" ? var.zone_name : "${local.env_slug}.${var.zone_name}")
@@ -53,6 +52,7 @@ locals {
 
   worker_environment_name   = local.env_slug == "prod" ? "production" : local.env_slug
   worker_bundle_module_name = coalesce(var.worker_bundle_module_name, var.worker_bundle_path == null ? "index.js" : basename(var.worker_bundle_path))
+  worker_crons              = ["0 0 * * *", "17 3 * * *"]
 
   worker_resource_bindings = [
     {
@@ -64,11 +64,6 @@ locals {
       name        = "FP_CONFIGS"
       type        = "r2_bucket"
       bucket_name = cloudflare_r2_bucket.configs.name
-    },
-    {
-      name       = "FP_EVENTS"
-      type       = "queue"
-      queue_name = cloudflare_queue.events.queue_name
     },
     {
       name        = "CONFIG_DO"
@@ -130,15 +125,6 @@ resource "cloudflare_r2_bucket" "configs" {
   }
 }
 
-resource "cloudflare_queue" "events" {
-  account_id = var.cloudflare_account_id
-  queue_name = local.queue_name
-
-  lifecycle {
-    prevent_destroy = true
-  }
-}
-
 resource "cloudflare_dns_record" "api" {
   zone_id = var.cloudflare_zone_id
   name    = local.api_record_name
@@ -161,6 +147,17 @@ resource "cloudflare_worker" "fleet" {
   lifecycle {
     prevent_destroy = true
   }
+}
+
+resource "cloudflare_workers_cron_trigger" "fleet" {
+  account_id  = var.cloudflare_account_id
+  script_name = cloudflare_worker.fleet.name
+
+  schedules = [
+    for cron in local.worker_crons : {
+      cron = cron
+    }
+  ]
 }
 
 resource "cloudflare_workers_route" "api" {
@@ -217,17 +214,6 @@ resource "cloudflare_workers_deployment" "fleet" {
   }
 }
 
-resource "cloudflare_queue_consumer" "events" {
-  account_id  = var.cloudflare_account_id
-  queue_id    = cloudflare_queue.events.queue_id
-  type        = "worker"
-  script_name = cloudflare_worker.fleet.name
-
-  settings = {
-    batch_size       = var.worker_queue_consumer_batch_size
-    max_wait_time_ms = var.worker_queue_consumer_max_wait_time_ms
-  }
-}
 
 resource "cloudflare_pages_project" "pages" {
   for_each = local.pages_projects

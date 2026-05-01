@@ -1,6 +1,6 @@
 variable "cloudflare_account_id" {
   type        = string
-  description = "Cloudflare account ID that owns Workers, Pages, D1, R2, Queues, and Zero Trust resources."
+  description = "Cloudflare account ID that owns Workers, Pages, D1, R2, Analytics Engine, and Zero Trust resources."
 
   validation {
     condition     = length(trimspace(var.cloudflare_account_id)) > 0
@@ -156,28 +156,6 @@ variable "worker_durable_object_migration_tag" {
   default     = "v1"
 }
 
-variable "worker_queue_consumer_batch_size" {
-  type        = number
-  description = "Maximum number of messages delivered to the Worker queue consumer per batch."
-  default     = 100
-
-  validation {
-    condition     = var.worker_queue_consumer_batch_size >= 1 && var.worker_queue_consumer_batch_size <= 100
-    error_message = "worker_queue_consumer_batch_size must be between 1 and 100."
-  }
-}
-
-variable "worker_queue_consumer_max_wait_time_ms" {
-  type        = number
-  description = "Maximum time the queue waits for a batch to fill before invoking the Worker, in milliseconds."
-  default     = 5000
-
-  validation {
-    condition     = var.worker_queue_consumer_max_wait_time_ms >= 0 && var.worker_queue_consumer_max_wait_time_ms <= 60000
-    error_message = "worker_queue_consumer_max_wait_time_ms must be between 0 and 60000."
-  }
-}
-
 variable "d1_database_name" {
   type        = string
   description = "Override D1 database name, mainly for importing existing production resources."
@@ -187,12 +165,6 @@ variable "d1_database_name" {
 variable "r2_bucket_name" {
   type        = string
   description = "Override R2 bucket name, mainly for importing existing production resources."
-  default     = null
-}
-
-variable "queue_name" {
-  type        = string
-  description = "Override Queue name, mainly for importing existing production resources."
   default     = null
 }
 

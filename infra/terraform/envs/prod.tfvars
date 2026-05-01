@@ -8,7 +8,6 @@ environment           = "prod"
 # Existing production data-bearing resources. Import these before first apply.
 d1_database_name = "fp-db"
 r2_bucket_name   = "fp-configs"
-queue_name       = "fp-events"
 
 # Keep the existing marketing project name during adoption; app/admin are new split targets.
 site_pages_project_name  = "o11yfleet-site"

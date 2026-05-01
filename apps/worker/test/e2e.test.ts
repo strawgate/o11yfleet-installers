@@ -351,29 +351,6 @@ describe("E2E Scenario #6: Hibernation attachment", () => {
   });
 });
 
-describe("E2E Scenario #7: Queue consumer idempotency", () => {
-  it("duplicate D1 upserts are safe", async () => {
-    const uid = "s7-uid-" + Date.now();
-
-    for (let i = 0; i < 2; i++) {
-      await env.FP_DB.prepare(
-        `INSERT INTO agent_summaries (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, created_at, updated_at)
-         VALUES (?, 's7-t', 's7-c', 'connected', 1, datetime('now'), datetime('now'), datetime('now'), datetime('now'))
-         ON CONFLICT(instance_uid) DO UPDATE SET status = 'connected', last_seen_at = datetime('now')`,
-      )
-        .bind(uid)
-        .run();
-    }
-
-    const result = await env.FP_DB.prepare(
-      `SELECT COUNT(*) as count FROM agent_summaries WHERE instance_uid = ?`,
-    )
-      .bind(uid)
-      .first<{ count: number }>();
-    expect(result!.count).toBe(1);
-  });
-});
-
 describe("E2E Scenario #8: R2 dedup", () => {
   it("same YAML → deduplicated on second upload", async () => {
     const tenantRes = await apiFetch("http://localhost/api/admin/tenants", {

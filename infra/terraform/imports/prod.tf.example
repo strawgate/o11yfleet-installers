@@ -18,12 +18,12 @@ import {
 }
 
 import {
-  to = cloudflare_queue.events
-  id = "<cloudflare-account-id>/<queue-id>"
+  to = cloudflare_worker.fleet
+  id = "<cloudflare-account-id>/<worker-script-name>"
 }
 
 import {
-  to = cloudflare_worker.fleet
+  to = cloudflare_workers_cron_trigger.fleet
   id = "<cloudflare-account-id>/<worker-script-name>"
 }
 
@@ -52,11 +52,6 @@ import {
 import {
   to = cloudflare_workers_route.api
   id = "<cloudflare-zone-id>/<api-worker-route-id>"
-}
-
-import {
-  to = cloudflare_queue_consumer.events
-  id = "<cloudflare-account-id>/<queue-id>/<queue-consumer-id>"
 }
 
 import {

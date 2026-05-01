@@ -126,11 +126,11 @@ Allowed duplication:
 - R2 has immutable YAML content.
 - Config DO has the applied desired version hash/content and generation needed
   for active control-plane broadcast.
-- D1 has agent summary read models asynchronously updated from DO events.
+- Config DO has live agent state; Analytics Engine has aggregate snapshots.
 
 That duplication is acceptable because each copy has a different purpose and a
 clear owner: D1 for management queries, R2 for immutable artifacts, DO for live
-coordination, and Queue-fed D1 rows for read models.
+coordination, and Analytics Engine for metrics snapshots.
 
 Rollout state needs an explicit generation boundary:
 
@@ -139,8 +139,8 @@ D1 configuration_rollouts
   -> target config hash + rollout generation + declared status
   -> command to Config DO
   -> DO applies generation/hash/content for connected agents
-  -> DO emits idempotent events
-  -> D1 read model records applied/observed status
+  -> DO records live applied/observed status
+  -> Analytics Engine records aggregate rollout metrics
 ```
 
 If a DO restarts, loses derived state, or detects a generation mismatch, D1/R2
@@ -168,7 +168,7 @@ settings.
 
 Use bindings/secrets for:
 
-- D1, R2, Queue, Durable Object, Analytics Engine, and service bindings,
+- D1, R2, Durable Object, Analytics Engine, and service bindings,
 - deployment-level non-secret defaults,
 - managed-provider secret keys,
 - values required before D1 is reachable.
@@ -508,10 +508,8 @@ Examples:
   paced executor/progress work.
 - Make rollout writes D1-first, then send `applyRollout(hash, generation, ...)`
   to the Config DO.
-- Make DO event emission idempotent by rollout generation/event ID so Queue
-  retries cannot duplicate state transitions.
-- Store rollout event IDs in `rollout_events` with a primary key or equivalent
-  unique constraint before updating derived rollout status.
+- Make DO rollout observations idempotent by rollout generation before updating
+  derived rollout status.
 - Add a reconciliation helper that can compare D1 declared rollout generation
   with the DO applied generation for targeted admin/debug views.
 
@@ -558,7 +556,6 @@ Ask the reviewer to validate:
 - Cloudflare D1 read replication: <https://developers.cloudflare.com/d1/best-practices/read-replication/>
 - Cloudflare KV consistency: <https://developers.cloudflare.com/kv/concepts/how-kv-works/>
 - Cloudflare R2 consistency: <https://developers.cloudflare.com/r2/reference/consistency/>
-- Cloudflare Queues limits: <https://developers.cloudflare.com/queues/platform/limits/>
 - Cloudflare Cache API: <https://developers.cloudflare.com/workers/runtime-apis/cache/>
 - Bindplane library resources: <https://docs.bindplane.com/feature-guides/library>
 - Bindplane rollouts: <https://docs.bindplane.com/feature-guides/rollouts>

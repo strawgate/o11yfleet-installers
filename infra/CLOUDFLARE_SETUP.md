@@ -66,7 +66,6 @@ Environment-level Worker and smoke-test secrets, configured separately for the
 | `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Optional admin usage/spend estimates                              |
 | `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Optional admin usage/spend estimates                              |
 | `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Optional admin usage/spend estimates                              |
-| `CLOUDFLARE_USAGE_ANALYTICS_DATASET`  | Optional admin usage/spend estimates                              |
 
 ### CF API Token Permissions
 
@@ -78,7 +77,6 @@ Create at Dashboard > My Profile > API Tokens > Create Token > Custom Token:
 - **Account > Workers Tail > Read**
 - **Account > D1 > Edit**
 - **Account > R2 > Edit**
-- **Account > Queues > Edit**
 - **Account > Cloudflare Pages > Edit**
 - **Account > Access: Apps and Policies > Edit** (for admin Access)
 

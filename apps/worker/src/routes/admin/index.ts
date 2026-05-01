@@ -579,25 +579,11 @@ async function handleHealthCheck(env: Env): Promise<Response> {
     };
   }
 
-  // Queue — check binding exists
-  try {
-    if (env.FP_EVENTS) {
-      checks["queue"] = { status: "healthy", detail: "Event queue binding is present" };
-    } else {
-      checks["queue"] = { status: "unavailable", error: "Queue not bound" };
-    }
-  } catch (e) {
-    checks["queue"] = {
-      status: "unhealthy",
-      error: e instanceof Error ? e.message : "Unknown error",
-    };
-  }
-
   const overall = Object.values(checks).every((c) => c.status === "healthy")
     ? "healthy"
     : "degraded";
   const bindingProbeEntries = Object.entries(checks).filter(([key]) =>
-    ["d1", "r2", "durable_objects", "queue"].includes(key),
+    ["d1", "r2", "durable_objects"].includes(key),
   );
   const degradedBindings = bindingProbeEntries.filter(
     ([, check]) => check.status !== "healthy" && check.status !== "ok",
@@ -610,7 +596,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
         : "degraded";
   const bindingProbeDetail =
     degradedBindings.length === 0
-      ? "Live Worker binding probes for D1, R2, Durable Objects, and Queues"
+      ? "Live Worker binding probes for D1, R2, and Durable Objects"
       : `Needs attention: ${degradedBindings.map(([key]) => key).join(", ")}`;
   const cloudflareAccountMetricsConfigured = cloudflareUsageRequiredEnv(env).length === 0;
   const sources: Record<string, HealthDataSource> = {
@@ -626,7 +612,7 @@ async function handleHealthCheck(env: Env): Promise<Response> {
     analytics_engine: {
       status: env.FP_ANALYTICS ? "write_only" : "not_bound",
       detail:
-        "Queue events can write datapoints when the binding exists; this health endpoint does not query Analytics Engine yet",
+        "Config and product metrics can write datapoints when the binding exists; this health endpoint does not query Analytics Engine yet",
     },
     cloudflare_account_metrics: {
       status: cloudflareAccountMetricsConfigured ? "configured" : "not_configured",

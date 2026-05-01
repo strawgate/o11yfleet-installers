@@ -4,15 +4,14 @@ This stack owns the stable Cloudflare control-plane resources for o11yFleet:
 
 - D1 database for tenants, auth, configuration metadata, and enrollment tokens.
 - R2 bucket for configuration YAML blobs.
-- Queue for fleet events.
-- Worker identity, Worker route, queue consumer, and the production Worker version/deployment.
+- Worker identity, Worker route, and the production Worker version/deployment.
 - DNS record for the API hostname.
 - Split Cloudflare Pages projects and custom domains for marketing, app, and admin.
 - Optional Cloudflare Access application and policy for the admin hostname.
 
 Wrangler still builds the Worker bundle and uploads Pages assets. Terraform owns
 the resources those deploys target, including Worker bindings, Worker rollout,
-Queue consumer settings, and Pages deployment configuration. Add runtime
+Analytics Engine binding, and Pages deployment configuration. Add runtime
 configuration to Terraform unless it is a secret that must stay out of state.
 
 ## Best-Practice Baseline
@@ -117,7 +116,7 @@ just tf-plan prod
 just tf-plan-worker prod
 ```
 
-The production tfvars intentionally point D1/R2/Queue at the existing names so those data-bearing resources can be imported instead of recreated. They also attach all three Pages custom domains now that the deployment workflows publish to the split site/app/admin projects.
+The production tfvars intentionally point D1/R2 at the existing names so those data-bearing resources can be imported instead of recreated. They also attach all three Pages custom domains now that the deployment workflows publish to the split site/app/admin projects.
 
 ## GitHub Deployment
 
@@ -164,7 +163,7 @@ The `production` GitHub environment should require reviewer approval when the
 GitHub plan supports it. If required reviewers are not available, restrict the
 environment to the `main` deployment branch policy and leave
 `TERRAFORM_PRODUCTION_APPLY_ENABLED` unset until the first production imports are complete
-and the plan shows no replacement for D1, R2, or Queue.
+and the plan shows no replacement for D1 or R2.
 
 Provider v5 cannot refresh every provider v4 state shape directly. Leave
 `TERRAFORM_PROVIDER_V5_STATE_READY` unset while this migration PR is under
@@ -208,30 +207,29 @@ during every plan. After the import lands in state, delete the active
 `imports.prod.tf` or archive it outside Terraform's active `.tf` files as an
 operator record.
 
-Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, Queue, and Access IDs before importing those resources. After imports, run:
+Use `cf-terraforming` or the Cloudflare dashboard to look up existing DNS record, Worker route, Pages project/domain, R2, and Access IDs before importing those resources. After imports, run:
 
 ```bash
 terraform plan -var-file=envs/prod.tfvars
 just tf-check-prod-imports prod
 ```
 
-The plan should show no replacement for D1, R2, Queue, the Worker, or the Queue
-consumer. If it wants to replace a data-bearing resource or recreate the Worker
+The plan should show no replacement for D1, R2, or the Worker. If it wants to replace a data-bearing resource or recreate the Worker
 identity, stop and fix the import or name override first.
 
 ## Wrangler Boundary
 
 `apps/worker/wrangler.jsonc` is now local-dev and bundling metadata. Terraform
-owns the production Worker identity, route, queue consumer, bindings, version,
+owns the production Worker identity, route, bindings, version,
 and deployment rollout, so production deploys should use `just tf-apply-worker
 prod` instead of `wrangler deploy`.
 
 The Worker migration uses provider 5.x resources:
 
 - `cloudflare_worker` for the script identity and `workers.dev` subdomain settings.
+- `cloudflare_workers_cron_trigger` for the Worker schedules.
 - `cloudflare_worker_version` for code modules, compatibility date/flags, Durable Object migrations, and bindings.
 - `cloudflare_workers_deployment` for the active version rollout.
-- `cloudflare_queue_consumer` for the `fp-events` consumer settings.
 
 `manage_worker_deployment` defaults to `false` so normal Terraform validation and
 control-plane plans do not need a built bundle. `just tf-plan-worker prod` and
@@ -243,6 +241,9 @@ Wrangler performs the dry-run bundle build and Terraform uploads the resulting
 module, so both tools should use the same compatibility date and flags. Bump
 the date only after testing the Worker against the new Cloudflare runtime
 behavior.
+Keep `local.worker_crons` in sync with `apps/worker/wrangler.jsonc` triggers.
+Terraform owns deployed Worker schedules; Wrangler triggers are retained for
+local dry-runs and emergency Wrangler deployments.
 
 `worker_durable_object_migration_tag` is the Worker Durable Object migration
 tag Terraform sends with new Worker versions. Change it only when the Durable

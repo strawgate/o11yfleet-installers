@@ -31,21 +31,6 @@
       "bucket_name": "fp-configs",
     },
   ],
-  "queues": {
-    "producers": [
-      {
-        "binding": "FP_EVENTS",
-        "queue": "fp-events",
-      },
-    ],
-    "consumers": [
-      {
-        "queue": "fp-events",
-        "max_batch_size": 100,
-        "max_batch_timeout": 5,
-      },
-    ],
-  },
   "durable_objects": {
     "bindings": [
       {
@@ -54,10 +39,10 @@
       },
     ],
   },
-  // Daily reconciliation fallback. Normal liveness is handled by WebSocket
-  // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+  // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
+  // reconciliation fallback at 03:17 UTC.
   "triggers": {
-    "crons": ["17 3 * * *"],
+    "crons": ["0 0 * * *", "17 3 * * *"],
   },
   "migrations": [
     {
@@ -105,21 +90,6 @@
           "bucket_name": "o11yfleet-staging-configs",
         },
       ],
-      "queues": {
-        "producers": [
-          {
-            "binding": "FP_EVENTS",
-            "queue": "o11yfleet-staging-events",
-          },
-        ],
-        "consumers": [
-          {
-            "queue": "o11yfleet-staging-events",
-            "max_batch_size": 100,
-            "max_batch_timeout": 5,
-          },
-        ],
-      },
       "durable_objects": {
         "bindings": [
           {
@@ -128,10 +98,10 @@
           },
         ],
       },
-      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
-      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
+      // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["17 3 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *"],
       },
       "analytics_engine_datasets": [
         {
@@ -176,21 +146,6 @@
           "bucket_name": "o11yfleet-dev-configs",
         },
       ],
-      "queues": {
-        "producers": [
-          {
-            "binding": "FP_EVENTS",
-            "queue": "o11yfleet-dev-events",
-          },
-        ],
-        "consumers": [
-          {
-            "queue": "o11yfleet-dev-events",
-            "max_batch_size": 100,
-            "max_batch_timeout": 5,
-          },
-        ],
-      },
       "durable_objects": {
         "bindings": [
           {
@@ -199,10 +154,10 @@
           },
         ],
       },
-      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
-      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
+      // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["17 3 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *"],
       },
       "analytics_engine_datasets": [
         {
@@ -240,21 +195,6 @@
           "bucket_name": "fp-configs",
         },
       ],
-      "queues": {
-        "producers": [
-          {
-            "binding": "FP_EVENTS",
-            "queue": "fp-events",
-          },
-        ],
-        "consumers": [
-          {
-            "queue": "fp-events",
-            "max_batch_size": 100,
-            "max_batch_timeout": 5,
-          },
-        ],
-      },
       "durable_objects": {
         "bindings": [
           {
@@ -263,10 +203,10 @@
           },
         ],
       },
-      // Daily reconciliation fallback. Normal liveness is handled by WebSocket
-      // close and heartbeat paths; sweep stats/Analytics tell us how often this catches drift.
+      // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
+      // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["17 3 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *"],
       },
       "analytics_engine_datasets": [
         {

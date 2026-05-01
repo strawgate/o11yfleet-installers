@@ -81,7 +81,6 @@ Cloudflare billing totals. Configure these Worker runtime secrets to enable it:
 | `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Yes      | Worker script name for invocation analytics. Local/prod: `o11yfleet-worker`; staging: `o11yfleet-worker-staging`; dev: `o11yfleet-worker-dev`. |
 | `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Yes      | D1 database id from `apps/worker/wrangler.jsonc`.                                                                                              |
 | `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Yes      | R2 bucket name from `apps/worker/wrangler.jsonc`.                                                                                              |
-| `CLOUDFLARE_USAGE_ANALYTICS_DATASET`  | Yes      | Analytics Engine dataset from `apps/worker/wrangler.jsonc`.                                                                                    |
 
 Use `CLOUDFLARE_USAGE_API_TOKEN` for the runtime analytics token. The admin
 usage page does not fall back to the deployment token; deployment tooling maps

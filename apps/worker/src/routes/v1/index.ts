@@ -685,7 +685,11 @@ async function handleRollout(
         config_hash: config["current_config_hash"],
         config_content: configContent,
       }),
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-fp-tenant-id": tenantId,
+        "x-fp-config-id": configId,
+      },
     }),
   );
 }

@@ -46,7 +46,7 @@ describe("Cost Guardrails", () => {
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("no-op heartbeat: zero events emitted (no queue cost)", () => {
+  it("no-op heartbeat: zero transition events emitted", () => {
     const result = processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
@@ -74,7 +74,7 @@ describe("Cost Guardrails", () => {
     expect(result.shouldPersist).toBe(true);
   });
 
-  it("health change: emits event (queue write justified)", () => {
+  it("health change: emits transition event", () => {
     const result = processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
