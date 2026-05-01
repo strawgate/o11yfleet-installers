@@ -1,4 +1,4 @@
-name: Get Resource IDs (Temp)
+name: Import Prod Resources
 
 on:
   workflow_dispatch:
@@ -6,31 +6,72 @@ on:
 permissions:
   contents: read
 
+env:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+  AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
 jobs:
-  get-ids:
+  import-resources:
     runs-on: ubuntu-latest
     steps:
-      - name: Get Resource IDs
+      - uses: actions/checkout@v6
+
+      - uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - uses: taiki-e/install-action@just
+
+      - name: Terraform init remote
+        run: just tf-init-remote prod
+
+      - name: Import resources
         run: |
-          echo "=== DNS Records ==="
-          curl -s "https://api.cloudflare.com/client/v4/zones/2650adcd696a6e400201a68323e90c5e/dns_records" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" | jq '.result[] | {id, name, type}'
-          
+          cd infra/terraform
+
+          echo "=== Importing cloudflare_worker.fleet ==="
+          terraform import -var-file=envs/prod.tfvars \
+            cloudflare_worker.fleet \
+            "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+
           echo ""
-          echo "=== Workers Routes ==="
-          curl -s "https://api.cloudflare.com/client/v4/zones/2650adcd696a6e400201a68323e90c5e/workers/routes" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" | jq '.result[] | {id, pattern, script}'
-          
+          echo "=== Importing cloudflare_dns_record.api ==="
+          terraform import -var-file=envs/prod.tfvars \
+            "cloudflare_dns_record.api" \
+            "2650adcd696a6e400201a68323e90c5e/6a4c27a938e75523570a7d8d2fbbb140"
+
           echo ""
-          echo "=== Workers Cron Triggers ==="
-          curl -s "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6dc56/workers/scripts/o11yfleet-worker/schedules" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" | jq '.result'
-          
+          echo "=== Importing cloudflare_workers_route.api ==="
+          terraform import -var-file=envs/prod.tfvars \
+            "cloudflare_workers_route.api" \
+            "2650adcd696a6e400201a68323e90c5e/f04d7e7161514559806187706d345826"
+
           echo ""
-          echo "=== Queue Consumers ==="
-          curl -s "https://api.cloudflare.com/client/v4/accounts/417e8c0fd8f1a64e9f2c4845afa6dc56/workers/queues/471d349a1e5a41a4a6f0c7e6e9076912" \
-            -H "Authorization: Bearer ${{ secrets.CLOUDFLARE_API_TOKEN }}" \
-            -H "Content-Type: application/json" | jq '.result'
+          echo "=== Importing cloudflare_workers_cron_trigger.fleet ==="
+          terraform import -var-file=envs/prod.tfvars \
+            "cloudflare_workers_cron_trigger.fleet" \
+            "417e8c0fd8f1a64e9f2c4845afa6dc56/o11yfleet-worker"
+
+          echo ""
+          echo "=== Importing cloudflare_queue_consumer.events ==="
+          terraform import -var-file=envs/prod.tfvars \
+            "cloudflare_queue_consumer.events" \
+            "417e8c0fd8f1a64e9f2c4845afa6dc56/471d349a1e5a41a4a6f0c7e6e9076912"
+
+      - name: Verify imports
+        run: |
+          cd infra/terraform
+          echo "=== Checking Terraform state ==="
+          just --quiet tf-required-imports | while read resource; do
+            if terraform state show "$resource" >/dev/null 2>&1; then
+              echo "✓ $resource"
+            else
+              echo "✗ $resource NOT FOUND"
+            fi
+          done
