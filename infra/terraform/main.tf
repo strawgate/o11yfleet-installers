@@ -300,13 +300,13 @@ resource "cloudflare_worker" "site" {
 resource "cloudflare_dns_record" "site" {
   for_each = local.site_dns_records
 
-  zone_id = var.cloudflare_zone_id
-  name    = each.value.record_name
-  type    = "AAAA"
-  content = "100::"
-  ttl     = 1
-  proxied = true
-  comment = "Routes ${each.value.domain} to the ${cloudflare_worker.site.name} static-assets Worker"
+  zone_id  = var.cloudflare_zone_id
+  name     = each.value.record_name
+  type     = "CNAME"
+  content  = "${cloudflare_worker.site.name}.${var.cloudflare_account_id}.workers.dev"
+  ttl      = 1
+  proxied  = true
+  comment  = "Routes ${each.value.domain} to the ${cloudflare_worker.site.name} static-assets Worker"
 }
 
 resource "cloudflare_workers_route" "site" {
