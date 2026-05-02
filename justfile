@@ -577,6 +577,7 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
         refresh_arg=(-refresh=false)
     fi
     targets=(
+        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
@@ -584,7 +585,9 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
         -target=cloudflare_worker.site
     )
     cd infra/terraform
-    terraform plan "${refresh_arg[@]}" "${targets[@]}" -var-file=envs/{{env}}.tfvars
+    # Use the `${arr[@]+...}` idiom so the empty `refresh_arg=()` doesn't trip
+    # `set -u` ("unbound variable") when refresh defaults to "true".
+    terraform plan ${refresh_arg[@]+"${refresh_arg[@]}"} "${targets[@]}" -var-file=envs/{{env}}.tfvars
 
 # Terraform plan for PR validation while remote state is still provider-v4 shaped.
 tf-plan-empty-state env="staging":
@@ -658,12 +661,14 @@ tf-check-staging-readiness env="staging": (tf-init-remote env)
         exit 1
     fi
 
-# Terraform apply for an environment tfvars file against remote state.
-# Note: D1 database excluded due to provider API issues
+# Terraform apply for an environment tfvars file against remote state. Narrow to
+# the long-lived control-plane resources (Worker code/version/deployment lifecycle
+# is owned by tf-apply-worker / tf-apply-site).
 tf-apply env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     targets=(
+        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
@@ -1055,11 +1060,11 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
 
 # Terraform apply for long-lived control-plane resources only. Deployment
 # resources are intentionally handled by tf-apply-worker and tf-apply-site.
-# Note: D1 database excluded due to provider API issues
 tf-apply-control-plane env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     targets=(
+        -target=cloudflare_d1_database.fleet
         -target=cloudflare_r2_bucket.configs
         -target=cloudflare_dns_record.api
         -target=cloudflare_dns_record.site
