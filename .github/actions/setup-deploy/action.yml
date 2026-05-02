@@ -7,7 +7,7 @@ inputs:
     default: "22"
   terraform-version:
     description: Terraform version to install.
-    default: "1.9"
+    default: "1.11"
   install-dependencies:
     description: Install pnpm workspace dependencies.
     default: "true"
