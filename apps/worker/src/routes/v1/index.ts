@@ -39,6 +39,7 @@ import {
   listConfigsForTenant,
   type ConfigurationRow,
 } from "../../shared/db-helpers.js";
+import { PLAN_DEFINITIONS, normalizePlan } from "../../shared/plans.js";
 import { isAnalyticsSqlConfigured, runAnalyticsSql } from "../../analytics-sql.js";
 import { latestSnapshotForTenant } from "@o11yfleet/core/metrics";
 
@@ -576,6 +577,18 @@ async function handleCreateEnrollmentToken(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
+  // Plan gate: only plans with supports_direct_enrollment can issue enrollment tokens.
+  // This is the enforcement point — the WebSocket connect path trusts HMAC + expiry only.
+  const tenant = await findTenantById(env, tenantId);
+  if (!tenant) return jsonError("Tenant not found", 404);
+  const plan = normalizePlan(tenant.plan);
+  if (!plan || !PLAN_DEFINITIONS[plan].supports_direct_enrollment) {
+    return jsonError(
+      "Your plan does not support direct enrollment. Use pending enrollment instead.",
+      403,
+    );
+  }
+
   const body = await validateJsonBody(request, createEnrollmentTokenRequestSchema);
 
   let expiresInSeconds: number | undefined;
@@ -1075,7 +1088,10 @@ async function handleGetAgent(
   const agentResp = await stub.fetch(
     new Request(`http://internal/agents/${encodeURIComponent(agentUid)}`),
   );
-  if (agentResp.status === 404) return jsonError("Agent not found", 404);
+  if (agentResp.status === 404) {
+    await agentResp.body?.cancel();
+    return jsonError("Agent not found", 404);
+  }
   return agentResp;
 }
 
@@ -1136,12 +1152,13 @@ async function handleCreatePendingToken(
   const id = crypto.randomUUID();
   const jti = id;
   const now = Math.floor(Date.now() / 1000);
+  const PENDING_TOKEN_TTL_SECONDS = 24 * 60 * 60; // 24 hours
   const claim = {
     v: 1,
     tenant_id: tenantId,
     jti,
     iat: now,
-    exp: 0,
+    exp: now + PENDING_TOKEN_TTL_SECONDS,
   };
 
   const payload = btoa(JSON.stringify(claim))
@@ -1205,6 +1222,7 @@ async function handleListPendingDevices(env: Env, tenantId: string): Promise<Res
     }),
   );
   if (!resp.ok) {
+    await resp.body?.cancel();
     return jsonError("Failed to fetch pending devices", 502);
   }
   return resp;
@@ -1236,8 +1254,14 @@ async function handleAssignPendingDevice(
       body: JSON.stringify({ config_id: body.config_id, assigned_by: "api" }),
     }),
   );
-  if (resp.status === 404) return jsonError("Pending device not found", 404);
-  if (!resp.ok) return jsonError("Failed to assign device", 502);
+  if (resp.status === 404) {
+    await resp.body?.cancel();
+    return jsonError("Pending device not found", 404);
+  }
+  if (!resp.ok) {
+    await resp.body?.cancel();
+    return jsonError("Failed to assign device", 502);
+  }
 
   return resp;
 }

@@ -6,13 +6,7 @@ import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
-import {
-  hashEnrollmentToken,
-  verifyClaim,
-  verifyEnrollmentToken,
-  isApiKey,
-  verifyApiKey,
-} from "@o11yfleet/core/auth";
+import { verifyClaim, verifyEnrollmentToken, isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
 import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
 
 export interface Env {
@@ -258,7 +252,8 @@ export default {
           `[cron] sweep timed out for ${doName}`,
         );
         if (!resp.ok) {
-          throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status}`);
+          const body = await resp.text().catch(() => "");
+          throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status} ${body}`);
         }
         return resp.json<{ swept: number }>();
       },
@@ -391,8 +386,14 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
       }
     }
 
-    // Try session-based auth (cookie)
-    const sessionAuth = await authenticate(request, env);
+    // Try session-based auth (cookie) — non-fatal if D1 is overloaded
+    let sessionAuth: Awaited<ReturnType<typeof authenticate>> = null;
+    try {
+      sessionAuth = await authenticate(request, env);
+    } catch {
+      // D1 overloaded — session auth unavailable, fall through to
+      // API key / Bearer / OIDC auth which don't need D1
+    }
 
     let resp: Response;
 
@@ -501,23 +502,18 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   if (!token.startsWith("fp_enroll_") && !token.startsWith("fp_pending_")) {
     try {
       const claim = await verifyClaim(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
-      // Route to DO based on claim
+      // Route to DO based on claim — HMAC verification is the only auth
+      // gate here. The DO enforces agent limits from its own SQLite policy
+      // (seeded via /init or /sync-policy), so no D1 query is needed.
       const doName = `${claim.tenant_id}:${claim.config_id}`;
       const doId = env.CONFIG_DO.idFromName(doName);
       const stub = env.CONFIG_DO.get(doId);
 
-      // Set internal headers for DO. The DO derives tenant/config
-      // identity from `ctx.id.name` (set via idFromName above) — no
-      // x-fp-tenant-id/x-fp-config-id needed. `x-fp-instance-uid` is
-      // the agent's identity (not the DO's) and `x-fp-max-agents-per-config`
-      // is resolved from D1 here so the DO doesn't have to call back.
-      // External x-fp-* headers were stripped above, so an attacker
-      // can't spoof these.
+      // The DO derives tenant/config identity from ctx.id.name — no
+      // x-fp-tenant-id/x-fp-config-id headers needed. Agent limits are
+      // enforced from the DO's own SQLite policy (seeded via /init or
+      // /sync-policy), so no D1 query is needed here either.
       cleanHeaders.set("x-fp-instance-uid", claim.instance_uid);
-      const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
-      if (tenantLimit !== null) {
-        cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
-      }
 
       return stub.fetch(
         new Request(request.url, {
@@ -551,46 +547,30 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     return Response.json({ error: msg }, { status: 401 });
   }
 
-  // Step 2: Check plan supports_direct_enrollment — hobby/pro must use pending flow
-  const tenantPlan = await resolveTenantPlan(env, claim.tenant_id);
-  if (tenantPlan === "hobby" || tenantPlan === "pro") {
-    return Response.json(
-      { error: "This plan does not support direct enrollment. Use a pending enrollment token." },
-      { status: 403 },
-    );
-  }
-
-  // Step 3: Infrastructure operations — D1/stub failures → 500
+  // Step 2: Route to DO — zero D1 queries on the enrollment path.
+  //
+  // Plan enforcement (hobby/pro → must use pending flow) is handled at
+  // token generation time: the admin API refuses to issue fp_enroll_
+  // tokens for plans that don't support direct enrollment.
+  //
+  // Token revocation is a future DO-push concern — when an admin revokes
+  // a token, the revocation will be pushed to the DO's SQLite so the
+  // check stays local. Until then, revoked tokens are short-lived (they
+  // carry an exp claim) and HMAC verification is the primary gate.
+  //
+  // Agent limits are enforced by the DO from its own SQLite policy
+  // (seeded via /init or /sync-policy from PR #426).
   try {
-    const tokenHash = await hashEnrollmentToken(token);
-    const tokenRow = await env.FP_DB.prepare(
-      `SELECT revoked_at FROM enrollment_tokens WHERE token_hash = ? LIMIT 1`,
-    )
-      .bind(tokenHash)
-      .first<{ revoked_at: string | null }>();
-    if (!tokenRow) {
-      return Response.json({ error: "Enrollment token not found" }, { status: 401 });
-    }
-    if (tokenRow.revoked_at) {
-      return Response.json({ error: "Enrollment token revoked" }, { status: 401 });
-    }
-
-    // Route to DO
     const doName = `${claim.tenant_id}:${claim.config_id}`;
     const doId = env.CONFIG_DO.idFromName(doName);
     const stub = env.CONFIG_DO.get(doId);
 
-    // Generate a temporary instance UID for the enrolling agent
     const instanceUid = crypto.randomUUID().replace(/-/g, "");
 
     // Identity (tenant_id/config_id) flows via ctx.id.name on the DO;
     // only the per-agent uid + enrollment flag travel as headers.
     cleanHeaders.set("x-fp-instance-uid", instanceUid);
     cleanHeaders.set("x-fp-enrollment", "true");
-    const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
-    if (tenantLimit !== null) {
-      cleanHeaders.set("x-fp-max-agents-per-config", String(tenantLimit));
-    }
 
     return stub.fetch(
       new Request(request.url, {
@@ -603,33 +583,6 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     console.error("Enrollment cold path infrastructure error:", msg);
     return Response.json({ error: "Internal server error" }, { status: 500 });
   }
-}
-
-/**
- * Look up the tenant's `max_agents_per_config` plan limit so the
- * Config DO can enforce the per-tenant cap rather than only the global
- * MAX_AGENTS_PER_CONFIG constant. Returns `null` if the tenant row is
- * missing or the value is not a positive integer — the DO falls back
- * to the global cap in that case.
- */
-async function resolveTenantAgentLimit(env: Env, tenantId: string): Promise<number | null> {
-  const row = await env.FP_DB.prepare(
-    `SELECT max_agents_per_config FROM tenants WHERE id = ? LIMIT 1`,
-  )
-    .bind(tenantId)
-    .first<{ max_agents_per_config: number | null }>();
-  const value = row?.max_agents_per_config;
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) {
-    return null;
-  }
-  return Math.floor(value);
-}
-
-async function resolveTenantPlan(env: Env, tenantId: string): Promise<string | null> {
-  const row = await env.FP_DB.prepare(`SELECT plan FROM tenants WHERE id = ? LIMIT 1`)
-    .bind(tenantId)
-    .first<{ plan: string | null }>();
-  return row?.plan ?? null;
 }
 
 async function handlePendingTokenRequest(
@@ -688,28 +641,17 @@ async function handlePendingTokenRequest(
     return Response.json({ error: "Pending token expired" }, { status: 401 });
   }
 
+  // Token revocation and geo_enabled — zero D1 queries on the pending path.
+  //
+  // Revocation: same reasoning as enrollment — HMAC + exp claim is the
+  // primary gate. Revocation-push-to-DO is a future concern (avoids
+  // permanently growing revocation lists).
+  //
+  // Geo headers: always forwarded from Cloudflare's cf-* headers (free,
+  // already on the request). The DO decides whether to store them based
+  // on its own policy.
+
   try {
-    const tokenHash = await hashEnrollmentToken(token);
-    const tokenRow = await env.FP_DB.prepare(
-      `SELECT revoked_at FROM pending_tokens WHERE token_hash = ? LIMIT 1`,
-    )
-      .bind(tokenHash)
-      .first<{ revoked_at: string | null }>();
-    if (!tokenRow) {
-      return Response.json({ error: "Pending token not found" }, { status: 401 });
-    }
-    if (tokenRow.revoked_at) {
-      return Response.json({ error: "Pending token revoked" }, { status: 401 });
-    }
-
-    // Check geo_enabled for this tenant
-    const tenantRow = await env.FP_DB.prepare(
-      `SELECT geo_enabled FROM tenants WHERE id = ? LIMIT 1`,
-    )
-      .bind(claim.tenant_id)
-      .first<{ geo_enabled: number | null }>();
-    const geoEnabled = tenantRow?.geo_enabled === 1;
-
     const doName = `${claim.tenant_id}:${PENDING_DO_CONFIG_ID}`;
     const doId = env.CONFIG_DO.idFromName(doName);
     const stub = env.CONFIG_DO.get(doId);
@@ -720,17 +662,15 @@ async function handlePendingTokenRequest(
     cleanHeaders.set("x-fp-instance-uid", instanceUid);
     cleanHeaders.set("x-fp-enrollment", "true");
 
-    // Pass geo headers to DO only if tenant has geo_enabled
-    if (geoEnabled) {
-      const cfCountry = request.headers.get("cf-ipcountry");
-      const cfCity = request.headers.get("cf-ipcity");
-      const cfLat = request.headers.get("cf-ip-latitude");
-      const cfLon = request.headers.get("cf-ip-longitude");
-      if (cfCountry) cleanHeaders.set("x-fp-geo-country", cfCountry);
-      if (cfCity) cleanHeaders.set("x-fp-geo-city", cfCity);
-      if (cfLat) cleanHeaders.set("x-fp-geo-lat", cfLat);
-      if (cfLon) cleanHeaders.set("x-fp-geo-lon", cfLon);
-    }
+    // Always pass geo headers — CF provides them for free on every request
+    const cfCountry = request.headers.get("cf-ipcountry");
+    const cfCity = request.headers.get("cf-ipcity");
+    const cfLat = request.headers.get("cf-ip-latitude");
+    const cfLon = request.headers.get("cf-ip-longitude");
+    if (cfCountry) cleanHeaders.set("x-fp-geo-country", cfCountry);
+    if (cfCity) cleanHeaders.set("x-fp-geo-city", cfCity);
+    if (cfLat) cleanHeaders.set("x-fp-geo-lat", cfLat);
+    if (cfLon) cleanHeaders.set("x-fp-geo-lon", cfLon);
 
     return stub.fetch(
       new Request(request.url, {

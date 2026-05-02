@@ -803,7 +803,10 @@ async function handleGitHubManifestCallback(request: Request, env: Env): Promise
       },
     },
   );
-  if (!res.ok) return jsonError("GitHub App manifest conversion failed", 502);
+  if (!res.ok) {
+    await res.body?.cancel();
+    return jsonError("GitHub App manifest conversion failed", 502);
+  }
   const app = await res.json<GitHubManifestConversion>();
   return htmlResponse(
     `<!doctype html>

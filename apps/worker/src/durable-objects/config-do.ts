@@ -12,6 +12,7 @@ import { configMetricsToDoubles, FLEET_CONFIG_SNAPSHOT_INTERVAL } from "@o11yfle
 import {
   startWsMessageSpan,
   startWsLifecycleSpan,
+  startWsConnectSpan,
   recordSpanError,
   SpanStatusCode,
 } from "../tracing.js";
@@ -283,9 +284,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ??
       null;
 
-    console.warn(
-      `[ws.connect] tenant=${tenantId} config=${configId} uid=${instanceUid} enrollment=${isEnrollment} pending=${isPendingDo}`,
-    );
+    // Lifecycle logging intentionally omitted at scale; use OTel spans for observability.
+    const connectSpan = startWsConnectSpan(instanceUid, tenantId, configId, isEnrollment);
 
     if (isPendingDo) {
       const { upsertPendingDevice, checkPendingDeviceRateLimit } =
@@ -293,6 +293,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       if (
         checkPendingDeviceRateLimit(this.ctx.storage.sql, instanceUid, PENDING_MESSAGES_PER_MINUTE)
       ) {
+        connectSpan.setStatus({ code: SpanStatusCode.ERROR, message: "rate_limited" });
+        connectSpan.end();
         return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
       }
       upsertPendingDevice(this.ctx.storage.sql, {
@@ -321,6 +323,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
       const count = this.repo.getAgentCount();
       if (count >= limit && !this.repo.agentExists(instanceUid)) {
+        connectSpan.setStatus({ code: SpanStatusCode.ERROR, message: "agent_limit_reached" });
+        connectSpan.end();
         return Response.json(
           { error: "Agent limit reached for this configuration" },
           { status: 429 },
@@ -342,6 +346,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     };
     server.serializeAttachment(attachment);
 
+    connectSpan.setAttribute("opamp.is_pending", isPendingDo);
+    connectSpan.end();
     return new Response(null, { status: 101, webSocket: client });
   }
 

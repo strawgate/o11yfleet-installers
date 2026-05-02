@@ -9,9 +9,15 @@ import { ConfigDurableObject } from "./durable-objects/config-do.js";
 // oxlint-disable-next-line typescript/no-explicit-any
 const resolveConfig = (env: any, _trigger: any) => {
   const exporterUrl = env?.OTEL_EXPORTER_URL as string | undefined;
+  const exporterToken = env?.OTEL_EXPORTER_TOKEN as string | undefined;
+
+  const headers: Record<string, string> = {};
+  if (exporterToken) {
+    headers["Authorization"] = `Bearer ${exporterToken}`;
+  }
 
   return {
-    exporter: { url: exporterUrl ?? "https://localhost:4318", headers: {} },
+    exporter: { url: exporterUrl ?? "https://localhost:4318", headers },
     service: {
       name: "o11yfleet-worker",
       version: "0.0.1",

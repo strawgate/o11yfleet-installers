@@ -38,6 +38,26 @@ export function startWsLifecycleSpan(event: "close" | "error", instanceUid: stri
 }
 
 /**
+ * Create a span for WebSocket connect events.
+ */
+export function startWsConnectSpan(
+  instanceUid: string,
+  tenantId: string,
+  configId: string,
+  isEnrollment: boolean,
+): Span {
+  const tracer = trace.getTracer(WS_TRACER);
+  return tracer.startSpan("ws.connect", {
+    attributes: {
+      "opamp.instance_uid": instanceUid,
+      "opamp.tenant_id": tenantId,
+      "opamp.config_id": configId,
+      "opamp.is_enrollment": isEnrollment,
+    },
+  });
+}
+
+/**
  * Record an error on a span and set its status to ERROR.
  */
 export function recordSpanError(span: Span, error: unknown): void {
