@@ -75,6 +75,9 @@ jobs:
       }}
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
@@ -121,8 +124,88 @@ jobs:
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
       - name: Terraform plan
+        id: plan
         if: ${{ steps.remote-state.outputs.configured == 'true' }}
-        run: just tf-plan ${{ steps.target.outputs.env }}
+        run: |
+          # Tee the plan to a file for the PR-comment step. `set -o pipefail`
+          # is on (justfile uses bash -e) so the recipe's exit status flows
+          # through; we don't suppress it.
+          set -o pipefail
+          mkdir -p /tmp/tf-plan
+          just tf-plan ${{ steps.target.outputs.env }} 2>&1 | tee /tmp/tf-plan/output.txt
+
+      - name: Post Terraform plan comment on PR
+        if: >-
+          ${{
+            steps.remote-state.outputs.configured == 'true' &&
+            github.event_name == 'pull_request' &&
+            always()
+          }}
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PLAN_ENV: ${{ steps.target.outputs.env }}
+          PLAN_OUTCOME: ${{ steps.plan.outcome }}
+        with:
+          script: |
+            const fs = require('node:fs');
+            const env = process.env.PLAN_ENV || 'prod';
+            const outcome = process.env.PLAN_OUTCOME || 'unknown';
+            const marker = `<!-- terraform-plan-${env} -->`;
+
+            // GitHub comments cap at 65,536 characters. Reserve headroom for
+            // the marker, summary, fences, and details tags.
+            const MAX_BODY = 60000;
+            let plan = '';
+            try {
+              plan = fs.readFileSync('/tmp/tf-plan/output.txt', 'utf8');
+            } catch (err) {
+              plan = `(plan output not captured: ${err.message})`;
+            }
+            // Strip ANSI color codes terraform always emits even with --no-color
+            // when run under tee.
+            plan = plan.replace(/\x1b\[[0-9;]*m/g, '');
+            let truncated = false;
+            if (plan.length > MAX_BODY) {
+              plan = plan.slice(-MAX_BODY);
+              truncated = true;
+            }
+            const icon = outcome === 'success' ? '✅' : outcome === 'failure' ? '❌' : '⚠️';
+            const trunkNote = truncated ? '\n\n*Output truncated to last 60k chars; see job logs for full output.*' : '';
+            const body = [
+              marker,
+              `### ${icon} Terraform plan — \`${env}\` (${outcome})`,
+              '',
+              '<details><summary>Plan output</summary>',
+              '',
+              '```',
+              plan.trim(),
+              '```',
+              '',
+              '</details>' + trunkNote,
+            ].join('\n');
+
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const existing = comments.find(c => c.body && c.body.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
 
   apply:
     needs: [plan]
