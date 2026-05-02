@@ -328,6 +328,7 @@ jobs:
           O11YFLEET_SEED_ADMIN_PASSWORD: admin-password
           O11YFLEET_SEED_TENANT_USER_EMAIL: demo@o11yfleet.com
           O11YFLEET_SEED_TENANT_USER_PASSWORD: demo-password
+          ENVIRONMENT: dev
         run: |
           cd apps/worker
           npx wrangler dev --port 8787 &
