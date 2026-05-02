@@ -78,15 +78,14 @@ Environments `dev`, `staging`, and `production`:
 
 Repository-level Actions variables:
 
-| Variable                             | Purpose                                                  |
-| ------------------------------------ | -------------------------------------------------------- |
-| `TERRAFORM_STATE_R2_BUCKET`          | R2 bucket containing Terraform state                     |
-| `TERRAFORM_STATE_R2_ENDPOINT`        | R2 S3 endpoint URL                                       |
-| `TERRAFORM_STATE_R2_REGION`          | Optional; defaults to `auto`                             |
-| `TERRAFORM_REMOTE_STATE_ENABLED`     | Enables remote-state plans in PRs and pushes             |
-| `TERRAFORM_PROVIDER_V5_STATE_READY`  | Enables refresh/apply against migrated provider v5 state |
-| `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Enables production applies after imports are complete    |
-| `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Enables automatic staging deploys from `main` CI         |
+| Variable                             | Purpose                                               |
+| ------------------------------------ | ----------------------------------------------------- |
+| `TERRAFORM_STATE_R2_BUCKET`          | R2 bucket containing Terraform state                  |
+| `TERRAFORM_STATE_R2_ENDPOINT`        | R2 S3 endpoint URL                                    |
+| `TERRAFORM_STATE_R2_REGION`          | Optional; defaults to `auto`                          |
+| `TERRAFORM_REMOTE_STATE_ENABLED`     | Enables remote-state plans in PRs and pushes          |
+| `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Enables production applies after imports are complete |
+| `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Enables automatic staging deploys from `main` CI      |
 
 Environment-level application secrets, configured separately for the same
 GitHub Environments:
@@ -222,17 +221,11 @@ git pull --ff-only
 just ci-pr
 ```
 
-For Terraform-only validation:
+For Terraform validation, export the Cloudflare and R2 state credentials
+described in [`infra/terraform/README.md`](infra/terraform/README.md), then run:
 
 ```bash
 just tf-validate
-just tf-plan-empty-state prod
-```
-
-For remote-state plans, export the Cloudflare and R2 state credentials described
-in [`infra/terraform/README.md`](infra/terraform/README.md), then run:
-
-```bash
 just tf-plan dev
 just tf-plan staging
 just tf-plan prod
@@ -327,7 +320,6 @@ Production deployment paths:
 
 Production requires:
 
-- `TERRAFORM_PROVIDER_V5_STATE_READY=true`
 - `TERRAFORM_PRODUCTION_APPLY_ENABLED=true`
 - GitHub Environment `production` approval, when configured.
 - Worker runtime secrets already provisioned on the base `o11yfleet-worker`
