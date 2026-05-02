@@ -13,7 +13,7 @@ function stubFor(name: string) {
   return env.CONFIG_DO.get(env.CONFIG_DO.idFromName(name));
 }
 
-describe("DO self-identity (Phase 1)", () => {
+describe("DO self-identity", () => {
   it("/init persists identity from ctx.id.name with no body", async () => {
     const stub = stubFor("tenant-alpha:config-x");
     const resp = await stub.fetch(new Request("http://internal/init", { method: "POST" }));
@@ -246,8 +246,9 @@ describe("DO self-identity (Phase 1)", () => {
 
   it("/pending-devices works on a fresh __pending__ DO without prior /init", async () => {
     // Regression: isPendingDo must derive from ctx.id.name, not from
-    // persisted SQL identity. A brand-new __pending__ DO has no rows in
-    // do_config yet, so loadDoIdentity()-based routing would 404 here.
+    // persisted SQL identity. The persisted row is just a debug echo —
+    // a SQL-based gate would 404 the first /pending-devices request on
+    // a brand-new DO before any other route ran.
     const stub = stubFor("tenant-fresh:__pending__");
     const resp = await stub.fetch(
       new Request("http://internal/pending-devices", { method: "GET" }),

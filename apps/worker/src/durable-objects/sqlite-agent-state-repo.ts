@@ -1,9 +1,8 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
+import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 import type {
   AgentStateRepository,
   DesiredConfig,
-  DoIdentity,
   DoPolicy,
   ListAgentsPageParams,
   AgentPageResult,
@@ -22,7 +21,6 @@ import {
   getAgent,
   loadDesiredConfig,
   saveDesiredConfig,
-  loadDoIdentity,
   saveDoIdentity,
   loadDoPolicy,
   saveDoPolicy,
@@ -30,7 +28,6 @@ import {
   getStats,
   getCohortBreakdown,
   listAgentsPage,
-  loadAgentsForMetrics,
   computeMetricsSql,
   sweepStaleAgents,
   recordSweep,
@@ -85,10 +82,6 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
     saveDesiredConfig(this.sql, hash, content);
   }
 
-  loadDoIdentity(): DoIdentity {
-    return loadDoIdentity(this.sql);
-  }
-
   saveDoIdentity(tenantId: string, configId: string): void {
     saveDoIdentity(this.sql, tenantId, configId);
   }
@@ -119,10 +112,6 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   listAgentsPage(params: ListAgentsPageParams): AgentPageResult {
     return listAgentsPage(this.sql, params);
-  }
-
-  loadAgentsForMetrics(): Map<string, AgentMetricsInput> {
-    return loadAgentsForMetrics(this.sql);
   }
 
   computeMetrics(desiredConfigHash: string | null, staleThresholdMs: number): ConfigMetrics {

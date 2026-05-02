@@ -1,15 +1,10 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
+import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 
 export interface DesiredConfig {
   hash: string | null;
   content: string | null;
   bytes: Uint8Array | null;
-}
-
-export interface DoIdentity {
-  tenant_id: string;
-  config_id: string;
 }
 
 /** Per-tenant policy values cached in this DO. See agent-state-repo.ts. */
@@ -86,7 +81,6 @@ export interface AgentStateRepository {
   // Config state
   loadDesiredConfig(): DesiredConfig;
   saveDesiredConfig(hash: string, content: string | null): void;
-  loadDoIdentity(): DoIdentity;
   saveDoIdentity(tenantId: string, configId: string): void;
   loadDoPolicy(): DoPolicy;
   saveDoPolicy(policy: Partial<DoPolicy>): void;
@@ -102,8 +96,6 @@ export interface AgentStateRepository {
     current_hash_counts: Array<{ value: string; count: number }>;
   };
   listAgentsPage(params: ListAgentsPageParams): AgentPageResult;
-  /** @deprecated Use computeMetrics() for O(1) SQL aggregation instead. */
-  loadAgentsForMetrics(): Map<string, AgentMetricsInput>;
   /** Compute fleet metrics via SQL aggregation — O(1) memory, no JS materialization. */
   computeMetrics(desiredConfigHash: string | null, staleThresholdMs: number): ConfigMetrics;
 

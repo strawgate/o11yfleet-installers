@@ -13,6 +13,9 @@ import { STALE_AGENT_THRESHOLD_MS, SERVER_CAPABILITIES } from "./constants.js";
 
 export interface CommandContext {
   repo: AgentStateRepository;
+  /** DO identity, derived from `ctx.id.name` at the call site —
+   *  authoritative, no header trust. */
+  identity: { tenant_id: string; config_id: string };
   getWebSockets: () => WebSocket[];
   ensureAlarm: () => Promise<void>;
   analytics?: AnalyticsEngineDataset;
@@ -34,12 +37,6 @@ export async function handleSetDesiredConfig(
   ctx: CommandContext,
   request: Request,
 ): Promise<Response> {
-  const headerTenantId = request.headers.get("x-fp-tenant-id");
-  const headerConfigId = request.headers.get("x-fp-config-id");
-  if (headerTenantId && headerConfigId) {
-    ctx.repo.saveDoIdentity(headerTenantId, headerConfigId);
-  }
-
   const parsed = setDesiredConfigRequestSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "Invalid request body" }, { status: 400 });
@@ -138,7 +135,6 @@ export function handleRestartCommand(ctx: CommandContext): Response {
 
 export async function handleSweep(
   ctx: CommandContext,
-  request: Request,
   getActiveInstanceUids: () => Set<string>,
   emitMetrics: () => void,
 ): Promise<Response> {
@@ -152,13 +148,7 @@ export async function handleSweep(
     durationMs,
   });
 
-  const headerTenantId = request.headers.get("x-fp-tenant-id");
-  const headerConfigId = request.headers.get("x-fp-config-id");
-  const tenantId = headerTenantId || staleUids[0]?.tenant_id || "unknown";
-  const configId = headerConfigId || staleUids[0]?.config_id || "unknown";
-  if (headerTenantId && headerConfigId) {
-    ctx.repo.saveDoIdentity(tenantId, configId);
-  }
+  const { tenant_id: tenantId, config_id: configId } = ctx.identity;
 
   try {
     ctx.analytics?.writeDataPoint({

@@ -253,16 +253,7 @@ export default {
         const stub = env.CONFIG_DO.get(doId);
         const resp = await withTimeout(
           (signal) =>
-            stub.fetch(
-              new Request("http://do/command/sweep", {
-                method: "POST",
-                headers: {
-                  "x-fp-tenant-id": config.tenant_id,
-                  "x-fp-config-id": config.id,
-                },
-                signal,
-              }),
-            ),
+            stub.fetch(new Request("http://do/command/sweep", { method: "POST", signal })),
           CRON_SWEEP_TIMEOUT_MS,
           `[cron] sweep timed out for ${doName}`,
         );
@@ -511,12 +502,13 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
       const doId = env.CONFIG_DO.idFromName(doName);
       const stub = env.CONFIG_DO.get(doId);
 
-      // Set internal headers for DO. `x-fp-max-agents-per-config` is
-      // resolved from D1 here so the DO doesn't have to call back to
-      // the worker — the DO trusts this header because external x-fp-*
-      // headers are stripped above.
-      cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
-      cleanHeaders.set("x-fp-config-id", claim.config_id);
+      // Set internal headers for DO. The DO derives tenant/config
+      // identity from `ctx.id.name` (set via idFromName above) — no
+      // x-fp-tenant-id/x-fp-config-id needed. `x-fp-instance-uid` is
+      // the agent's identity (not the DO's) and `x-fp-max-agents-per-config`
+      // is resolved from D1 here so the DO doesn't have to call back.
+      // External x-fp-* headers were stripped above, so an attacker
+      // can't spoof these.
       cleanHeaders.set("x-fp-instance-uid", claim.instance_uid);
       const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
       if (tenantLimit !== null) {
@@ -587,8 +579,8 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     // Generate a temporary instance UID for the enrolling agent
     const instanceUid = crypto.randomUUID().replace(/-/g, "");
 
-    cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
-    cleanHeaders.set("x-fp-config-id", claim.config_id);
+    // Identity (tenant_id/config_id) flows via ctx.id.name on the DO;
+    // only the per-agent uid + enrollment flag travel as headers.
     cleanHeaders.set("x-fp-instance-uid", instanceUid);
     cleanHeaders.set("x-fp-enrollment", "true");
     const tenantLimit = await resolveTenantAgentLimit(env, claim.tenant_id);
@@ -720,8 +712,7 @@ async function handlePendingTokenRequest(
 
     const instanceUid = crypto.randomUUID().replace(/-/g, "");
 
-    cleanHeaders.set("x-fp-tenant-id", claim.tenant_id);
-    cleanHeaders.set("x-fp-config-id", PENDING_DO_CONFIG_ID);
+    // Identity (tenant + __pending__) flows via ctx.id.name on the DO.
     cleanHeaders.set("x-fp-instance-uid", instanceUid);
     cleanHeaders.set("x-fp-enrollment", "true");
 

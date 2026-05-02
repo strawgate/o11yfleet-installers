@@ -153,11 +153,7 @@ describe("Config Durable Object", () => {
     const response = await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
       body: JSON.stringify({ config_hash: "abc123" }),
-      headers: {
-        "Content-Type": "application/json",
-        "x-fp-tenant-id": "tenant-1",
-        "x-fp-config-id": "config-1",
-      },
+      headers: { "Content-Type": "application/json" },
     });
     expect(response.status).toBe(200);
     const body = await response.json<{ pushed: number; config_hash: string }>();
@@ -169,12 +165,14 @@ describe("Config Durable Object", () => {
     const stats = await statsRes.json<{ desired_config_hash: string }>();
     expect(stats.desired_config_hash).toBe("abc123");
 
+    // Identity comes from ctx.id.name, persisted by ensureInit on first
+    // wake — not from x-fp-* headers.
     await runInDurableObject(
       stub,
       async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
         const row = state.storage.sql.exec(`SELECT tenant_id, config_id FROM do_config`).one();
         expect(row["tenant_id"]).toBe("tenant-1");
-        expect(row["config_id"]).toBe("config-1");
+        expect(row["config_id"]).toBe("config-desired");
       },
     );
   });
@@ -240,10 +238,6 @@ describe("Config Durable Object", () => {
 
     const response = await stub.fetch("http://internal/command/sweep", {
       method: "POST",
-      headers: {
-        "x-fp-tenant-id": "tenant-1",
-        "x-fp-config-id": "config-sweep-stats",
-      },
     });
     expect(response.status).toBe(200);
     const body = await response.json<{ swept: number; active_websockets: number }>();

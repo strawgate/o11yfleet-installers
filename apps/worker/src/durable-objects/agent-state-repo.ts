@@ -6,11 +6,10 @@
 // in DO-local storage (~µs per query), so this is effectively free.
 
 import type { AgentState } from "@o11yfleet/core/state-machine";
-import type { AgentMetricsInput, ConfigMetrics } from "@o11yfleet/core/metrics";
+import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import type {
   DesiredConfig,
-  DoIdentity,
   DoPolicy,
   AgentPageCursor,
   ListAgentsPageParams,
@@ -22,7 +21,6 @@ import type {
 // Re-export types from the interface file for backward compatibility
 export type {
   DesiredConfig,
-  DoIdentity,
   DoPolicy,
   AgentSort,
   AgentPageCursor,
@@ -247,14 +245,12 @@ export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string
   );
 }
 
-export function loadDoIdentity(sql: SqlStorage): DoIdentity {
-  const row = sql.exec(`SELECT tenant_id, config_id FROM do_config WHERE id = 1`).one();
-  return {
-    tenant_id: (row["tenant_id"] as string) ?? "",
-    config_id: (row["config_id"] as string) ?? "",
-  };
-}
-
+// Identity is derived from `ctx.id.name` at the call site (see ConfigDO's
+// `getMyIdentity()`); this helper just persists the parsed identity to
+// the do_config row so the SQL surface stays self-describing for ad-hoc
+// debug queries. There is intentionally no `loadDoIdentity` — every
+// route reads `ctx.id.name` directly, and the repo isn't a source of
+// truth for identity any more.
 export function saveDoIdentity(sql: SqlStorage, tenantId: string, configId: string): void {
   if (!tenantId || !configId) return;
   sql.exec(`UPDATE do_config SET tenant_id = ?, config_id = ? WHERE id = 1`, tenantId, configId);
@@ -608,49 +604,6 @@ export function getCohortBreakdown(
  * Returns summary data — excludes large blobs (effective_config_body).
  */
 
-export function listAgents(sql: SqlStorage, limit = 1000): Record<string, unknown>[] {
-  const rows = sql
-    .exec(
-      `SELECT
-        a.instance_uid,
-        a.tenant_id,
-        a.config_id,
-        a.sequence_num,
-        a.generation,
-        a.healthy,
-        a.status,
-        a.last_error,
-        a.current_config_hash,
-        a.effective_config_hash,
-        a.last_seen_at,
-        a.connected_at,
-        a.agent_description,
-        a.capabilities,
-        a.component_health_map,
-        a.available_components
-       FROM agents a
-       ORDER BY a.last_seen_at DESC
-       LIMIT ?`,
-      limit,
-    )
-    .toArray();
-
-  // Normalize SQLite integers/JSON for API consumers
-  return rows.map((row) => ({
-    ...row,
-    healthy: row["healthy"] === 1,
-    agent_description: row["agent_description"]
-      ? (safeJsonParse(row["agent_description"]) as Record<string, unknown>)
-      : undefined,
-    component_health_map: row["component_health_map"]
-      ? (safeJsonParse(row["component_health_map"]) as Record<string, unknown>)
-      : undefined,
-    available_components: row["available_components"]
-      ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
-      : undefined,
-  }));
-}
-
 export function listAgentsPage(
   sql: SqlStorage,
   params: ListAgentsPageParams,
@@ -724,32 +677,10 @@ export function listAgentsPage(
   return { agents, hasMore, nextCursor };
 }
 
-export function loadAgentsForMetrics(sql: SqlStorage): Map<string, AgentMetricsInput> {
-  const rows = sql
-    .exec(
-      `SELECT instance_uid, status, healthy, capabilities, current_config_hash, last_error, last_seen_at FROM agents`,
-    )
-    .toArray();
-
-  const result = new Map<string, AgentMetricsInput>();
-  for (const row of rows) {
-    const instanceUid = (row["instance_uid"] as string | null) ?? "unknown";
-    result.set(instanceUid, {
-      status: (row["status"] as string | null) ?? "unknown",
-      healthy: (row["healthy"] as number | null) ?? 0,
-      capabilities: (row["capabilities"] as number | null) ?? 0,
-      current_config_hash: row["current_config_hash"] as string | null,
-      last_error: (row["last_error"] as string | null) ?? "",
-      last_seen_at: (row["last_seen_at"] as number | null) ?? 0,
-    });
-  }
-  return result;
-}
-
 /**
  * Compute fleet metrics via a single SQL aggregate query — O(1) memory.
- * Replaces the pattern of loadAgentsForMetrics() + computeConfigMetrics()
- * which materializes all rows into JS memory.
+ * Replaces an earlier `loadAgentsForMetrics()` + `computeConfigMetrics()`
+ * pattern that materialized every row into JS memory.
  */
 export function computeMetricsSql(
   sql: SqlStorage,

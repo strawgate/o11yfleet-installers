@@ -98,6 +98,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private ensureInit(): void {
     if (this.initialized) return;
     this.repo.initSchema();
+    // Persist identity from ctx.id.name on first wake-up. This keeps
+    // the do_config row self-describing for ad-hoc SQL/debug queries;
+    // production code reads identity straight from ctx.id.name via
+    // getMyIdentity(), so there is no trust boundary here either way.
+    const { tenant_id, config_id } = this.getMyIdentity();
+    this.repo.saveDoIdentity(tenant_id, config_id);
     this.initialized = true;
   }
 
@@ -162,6 +168,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private commandCtx(): CommandContext {
     return {
       repo: this.repo,
+      identity: this.getMyIdentity(),
       getWebSockets: () => this.ctx.getWebSockets(),
       ensureAlarm: () => this.ensureAlarm(),
       analytics: this.env.FP_ANALYTICS,
@@ -182,10 +189,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.ensureInit();
     const url = new URL(request.url);
 
-    // Derive isPendingDo from ctx.id.name, not persisted SQL — a fresh
-    // DO has no persisted identity until the first /init or hello, so
-    // routing on loadDoIdentity() would 404 on the first
-    // /pending-devices call to a brand-new __pending__ DO.
+    // Derive isPendingDo from ctx.id.name. The DO's identity is always
+    // authoritative there; the SQL row is just a debug echo of it.
     const isPendingDo = this.getMyIdentity().config_id === PENDING_DO_CONFIG_ID;
 
     if (request.headers.get("Upgrade") === "websocket") {
@@ -207,7 +212,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (url.pathname === "/command/sweep" && request.method === "POST")
       return handleSweep(
         this.commandCtx(),
-        request,
         () => this.getActiveInstanceUids(),
         () => this.emitMetrics(),
       );
@@ -323,11 +327,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         );
       }
     }
-    // Persist identity from ctx.id.name (idempotent — /init writes the
-    // same values). Not strictly needed once /init is wired everywhere,
-    // but keeps the do_config row populated for legacy queries.
-    this.repo.saveDoIdentity(tenantId, configId);
-
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
@@ -655,9 +654,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   // ─── Lifecycle handlers ──────────────────────────────────────────
 
   /**
-   * Persist this DO's identity to its own SQLite (so subsequent code
-   * paths can read it from `loadDoIdentity()`) and seed any policy
-   * values the caller wants cached. Idempotent: replays just refresh.
+   * Optional initialization hook for caller-supplied policy. Identity is
+   * already persisted by `ensureInit()` from `ctx.id.name`, so this
+   * route only carries the policy upsert. Idempotent: replays just
+   * refresh.
    *
    * Body shape (all fields optional):
    *   { max_agents_per_config?: number | null }
@@ -681,15 +681,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       );
     }
 
-    // Apply identity + policy as one atomic batch via DO storage's
-    // transactionSync. Either both writes land or neither does, so a
-    // partial-init state is impossible even if a write fails.
-    this.ctx.storage.transactionSync(() => {
-      this.repo.saveDoIdentity(identity.tenant_id, identity.config_id);
-      if (result.value.max_agents_per_config !== undefined) {
-        this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
-      }
-    });
+    // Identity is already persisted by ensureInit() at the top of every
+    // fetch — /init is just an optional policy upsert.
+    if (result.value.max_agents_per_config !== undefined) {
+      this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
+    }
 
     return Response.json({
       tenant_id: identity.tenant_id,
@@ -721,16 +717,14 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private emitMetrics(): void {
     if (!this.env.FP_ANALYTICS) return;
 
-    const identity = this.repo.loadDoIdentity();
-    if (!identity.tenant_id || !identity.config_id) return;
-
+    const { tenant_id, config_id } = this.getMyIdentity();
     const config = this.getDesiredConfig();
     const metrics = this.repo.computeMetrics(config.hash, STALE_AGENT_THRESHOLD_MS);
     metrics.websocket_count = this.ctx.getWebSockets().length;
 
     this.env.FP_ANALYTICS.writeDataPoint({
-      indexes: [identity.tenant_id],
-      blobs: [identity.tenant_id, identity.config_id, FLEET_CONFIG_SNAPSHOT_INTERVAL],
+      indexes: [tenant_id],
+      blobs: [tenant_id, config_id, FLEET_CONFIG_SNAPSHOT_INTERVAL],
       doubles: configMetricsToDoubles(metrics),
     });
   }
