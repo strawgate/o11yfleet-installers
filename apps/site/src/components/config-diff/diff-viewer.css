@@ -1,0 +1,26 @@
+/* Local styles for the lazy diff viewer. Loaded only when the chunk loads. */
+
+.cm-fb-diff-host {
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  overflow: hidden;
+  background: var(--mantine-color-body);
+}
+
+.cm-fb-diff-host .cm-mergeView {
+  height: 100%;
+}
+
+.cm-fb-diff-host .cm-mergeViewEditors {
+  height: 100%;
+}
+
+.cm-fb-diff-host .cm-editor {
+  height: 100%;
+}
+
+.cm-fb-comment-thread {
+  border-top: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--mantine-color-default-hover);
+}

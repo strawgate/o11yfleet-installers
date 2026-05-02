@@ -96,12 +96,21 @@ const AdminApiReferencePage = lazyPage(
   "Admin API Reference",
 );
 
-// Dev-only: chart-spine playground. Not registered in production builds.
+// Dev-only playgrounds. Not registered in production builds.
 const SpinePlayground = import.meta.env.DEV
   ? lazyPage(
       () =>
         import("@/pages/playground/SpinePlayground").then((m) => ({ default: m.SpinePlayground })),
       "Spine Playground",
+    )
+  : null;
+const DiffPlayground = import.meta.env.DEV
+  ? lazyPage(
+      () =>
+        import("@/pages/playground/DiffPlayground").then((m) => ({
+          default: m.DiffPlayground,
+        })),
+      "Diff Playground",
     )
   : null;
 
@@ -169,6 +178,7 @@ export function AppRoutes() {
         </Route>
 
         {SpinePlayground && <Route path="playground/spine" element={<SpinePlayground />} />}
+        {DiffPlayground && <Route path="playground/diff" element={<DiffPlayground />} />}
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
