@@ -405,20 +405,20 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_cloudflare"></a> [cloudflare](#requirement\_cloudflare) | 5.19.1 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | 5.19.1 |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [cloudflare_d1_database.fleet](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/d1_database) | resource |
 | [cloudflare_dns_record.api](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/dns_record) | resource |
 | [cloudflare_dns_record.site](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/dns_record) | resource |
@@ -436,7 +436,7 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_admin_domain"></a> [admin\_domain](#input\_admin\_domain) | Override admin custom domain. | `string` | `null` | no |
 | <a name="input_ai_guidance_base_url"></a> [ai\_guidance\_base\_url](#input\_ai\_guidance\_base\_url) | OpenAI-compatible AI guidance base URL exposed to the Worker. Empty for fixture mode. | `string` | `""` | no |
 | <a name="input_ai_guidance_model"></a> [ai\_guidance\_model](#input\_ai\_guidance\_model) | AI guidance model name exposed to the Worker. | `string` | `"o11yfleet-guidance-fixture"` | no |
@@ -470,6 +470,7 @@ not upload the built site assets unless `manage_site_deployment=true`.
 | <a name="input_worker_bundle_path"></a> [worker\_bundle\_path](#input\_worker\_bundle\_path) | Path to the Wrangler-built Worker module that Terraform uploads when manage\_worker\_deployment is true. | `string` | `null` | no |
 | <a name="input_worker_compatibility_date"></a> [worker\_compatibility\_date](#input\_worker\_compatibility\_date) | Compatibility date Terraform applies to Worker versions. | `string` | `"2026-04-29"` | no |
 | <a name="input_worker_compatibility_flags"></a> [worker\_compatibility\_flags](#input\_worker\_compatibility\_flags) | Compatibility flags Terraform applies to Worker versions. | `set(string)` | <pre>[<br/>  "nodejs_compat"<br/>]</pre> | no |
+| <a name="input_worker_crons"></a> [worker\_crons](#input\_worker\_crons) | Cron schedules for Terraform-managed Worker cron triggers. Must match `triggers.crons` in apps/worker/wrangler.jsonc — drift is checked by scripts/check-cron-drift.ts and the same script wired into CI's fast job. | `list(string)` | <pre>[<br/>  "0 0 * * *",<br/>  "17 3 * * *"<br/>]</pre> | no |
 | <a name="input_worker_durable_object_migration_tag"></a> [worker\_durable\_object\_migration\_tag](#input\_worker\_durable\_object\_migration\_tag) | Durable Object migration tag applied to Terraform-managed Worker versions. | `string` | `"v1"` | no |
 | <a name="input_worker_include_durable_object_binding"></a> [worker\_include\_durable\_object\_binding](#input\_worker\_include\_durable\_object\_binding) | Whether Terraform-managed Worker versions bind CONFIG\_DO. Disable only for the first-time Durable Object migration bootstrap. | `bool` | `true` | no |
 | <a name="input_worker_include_durable_object_migration"></a> [worker\_include\_durable\_object\_migration](#input\_worker\_include\_durable\_object\_migration) | Whether Terraform-managed Worker versions apply the ConfigDurableObject class migration. Enable only for the first-time Durable Object migration bootstrap. | `bool` | `false` | no |
@@ -482,7 +483,7 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_api_domain"></a> [api\_domain](#output\_api\_domain) | API hostname routed to the Worker. |
 | <a name="output_d1_database_id"></a> [d1\_database\_id](#output\_d1\_database\_id) | D1 database ID for Wrangler FP\_DB binding. |
 | <a name="output_d1_database_name"></a> [d1\_database\_name](#output\_d1\_database\_name) | D1 database name for Wrangler FP\_DB binding. |

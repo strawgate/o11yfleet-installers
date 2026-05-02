@@ -11,6 +11,7 @@ type CheckPlan = {
   runWorkerTypegenCheck: boolean;
   runWorkerRuntime: boolean;
   runCronDriftCheck: boolean;
+  runTerraformLocal: boolean;
 };
 
 type DevCheckOptions = {
@@ -172,6 +173,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
       runWorkerTypegenCheck: true,
       runWorkerRuntime: true,
       runCronDriftCheck: true,
+      runTerraformLocal: true,
     };
   }
 
@@ -203,6 +205,9 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
       file === "infra/terraform/variables.tf" ||
       file === "scripts/check-cron-drift.ts",
   );
+  const runTerraformLocal = files.some(
+    (file) => file.startsWith("infra/terraform/") || file === "scripts/check-terraform-local.ts",
+  );
 
   return {
     formatFiles,
@@ -212,6 +217,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
     runWorkerTypegenCheck,
     runWorkerRuntime,
     runCronDriftCheck,
+    runTerraformLocal,
   };
 }
 
@@ -269,6 +275,15 @@ export function buildSteps(plan: CheckPlan): CheckStep[] {
       command: "pnpm",
       args: ["tsx", "scripts/check-cron-drift.ts"],
       reason: "wrangler.jsonc or terraform variables.tf changed",
+    });
+  }
+
+  if (plan.runTerraformLocal) {
+    steps.push({
+      id: "terraform-local",
+      command: "pnpm",
+      args: ["tsx", "scripts/check-terraform-local.ts"],
+      reason: "infra/terraform/ changed",
     });
   }
 
