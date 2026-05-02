@@ -533,46 +533,32 @@ loadgen-stop:
 tf-init:
     cd infra/terraform && TF_DATA_DIR=.terraform/validate terraform init -backend=false
 
-# Terraform init against the shared remote state backend.
+# Terraform init against the o11yfleet-tfstate Worker backend (HTTP backend
+# with proper LOCK/UNLOCK + R2 storage). Worker source: infra/tfstate-worker/.
+# State paths follow `${TFSTATE_USERNAME}/<env>.tfstate` per the Worker's
+# routing — the .env-stored TFSTATE_USERNAME also acts as the R2 key prefix.
 tf-init-remote env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
-    : "${TERRAFORM_STATE_R2_BUCKET:?Set TERRAFORM_STATE_R2_BUCKET to the R2 state bucket name}"
-    : "${TERRAFORM_STATE_R2_ENDPOINT:?Set TERRAFORM_STATE_R2_ENDPOINT to the R2 S3 endpoint URL}"
-    : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID to the R2 access key ID}"
-    : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY to the R2 secret access key}"
+    : "${TFSTATE_WORKER_URL:?Set TFSTATE_WORKER_URL (e.g. https://o11yfleet-tfstate.o11yfleet.workers.dev)}"
+    : "${TFSTATE_USERNAME:?Set TFSTATE_USERNAME (basic-auth username on the Worker)}"
+    : "${TFSTATE_PASSWORD:?Set TFSTATE_PASSWORD (basic-auth password on the Worker)}"
+    # Strip a trailing slash so we never emit `//states/...`, and require https://
+    # so backend creds + state traffic can't accidentally go in the clear.
+    worker_url="${TFSTATE_WORKER_URL%/}"
+    case "$worker_url" in
+        https://*) ;;
+        *) echo "TFSTATE_WORKER_URL must use https:// (got: $worker_url)" >&2; exit 1 ;;
+    esac
     cd infra/terraform
-    shared_backend_args=(
-        -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}"
-        -backend-config="key=o11yfleet/{{env}}/terraform.tfstate"
-        -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}"
-        -backend-config="skip_credentials_validation=true"
-        -backend-config="skip_metadata_api_check=true"
-        -backend-config="skip_region_validation=true"
-    )
-    modern_backend_args=(
-        -backend-config="endpoints={s3=\"${TERRAFORM_STATE_R2_ENDPOINT}\"}"
-        -backend-config="skip_requesting_account_id=true"
-        -backend-config="skip_s3_checksum=true"
-        -backend-config="use_path_style=true"
-    )
-    legacy_backend_args=(
-        -backend-config="endpoint=${TERRAFORM_STATE_R2_ENDPOINT}"
-        -backend-config="force_path_style=true"
-    )
-    set +e
-    init_output=$(terraform init -reconfigure "${shared_backend_args[@]}" "${modern_backend_args[@]}" 2>&1)
-    init_status=$?
-    set -e
-    printf '%s\n' "$init_output"
-    if [ "$init_status" -eq 0 ]; then
-        exit 0
-    fi
-    if grep -q "not expected for the selected backend type" <<< "$init_output"; then
-        terraform init -reconfigure "${shared_backend_args[@]}" "${legacy_backend_args[@]}"
-        exit 0
-    fi
-    exit "$init_status"
+    terraform init -reconfigure \
+        -backend-config="address=${worker_url}/states/{{env}}" \
+        -backend-config="lock_address=${worker_url}/states/{{env}}/lock" \
+        -backend-config="unlock_address=${worker_url}/states/{{env}}/lock" \
+        -backend-config="lock_method=LOCK" \
+        -backend-config="unlock_method=UNLOCK" \
+        -backend-config="username=${TFSTATE_USERNAME}" \
+        -backend-config="password=${TFSTATE_PASSWORD}"
 
 # Terraform validate
 tf-validate: tf-init

@@ -38,15 +38,15 @@ permissions:
   contents: read
 
 # Workflow-level env holds only non-secret config. Cloud-provider
-# secrets (AWS_*, CLOUDFLARE_API_TOKEN) are scoped at job level on the
-# plan and apply jobs only — the validate job runs offline tf-validate
-# and never needs them.
+# secrets (TFSTATE_WORKER_PASSWORD, CLOUDFLARE_API_TOKEN) are scoped at
+# job level on the plan and apply jobs only — the validate job runs
+# offline tf-validate and never needs them.
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
-  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
-  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+  # tfstate-worker (Terraform HTTP backend with proper LOCK/UNLOCK on R2).
+  # See infra/tfstate-worker/ for the Worker source.
+  TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
 
 jobs:
   validate:
@@ -79,8 +79,8 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -106,10 +106,9 @@ jobs:
         id: remote-state
         run: |
           missing=()
-          [ -n "$TERRAFORM_STATE_R2_BUCKET" ] || missing+=(TERRAFORM_STATE_R2_BUCKET)
-          [ -n "$TERRAFORM_STATE_R2_ENDPOINT" ] || missing+=(TERRAFORM_STATE_R2_ENDPOINT)
-          [ -n "$AWS_ACCESS_KEY_ID" ] || missing+=(TERRAFORM_STATE_R2_ACCESS_KEY_ID)
-          [ -n "$AWS_SECRET_ACCESS_KEY" ] || missing+=(TERRAFORM_STATE_R2_SECRET_ACCESS_KEY)
+          [ -n "$TFSTATE_WORKER_URL" ] || missing+=(TFSTATE_WORKER_URL)
+          [ -n "$TFSTATE_USERNAME" ] || missing+=(TFSTATE_WORKER_USERNAME)
+          [ -n "$TFSTATE_PASSWORD" ] || missing+=(TFSTATE_WORKER_PASSWORD)
           [ -n "$CLOUDFLARE_API_TOKEN" ] || missing+=(CLOUDFLARE_DEPLOY_API_TOKEN)
           if [ "${#missing[@]}" -gt 0 ]; then
             names="$(IFS=', '; echo "${missing[*]}")"
@@ -226,8 +225,8 @@ jobs:
     timeout-minutes: 10
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment != 'prod' && inputs.environment || 'production' }}
     env:
-      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

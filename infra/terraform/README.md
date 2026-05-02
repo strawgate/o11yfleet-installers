@@ -81,28 +81,27 @@ just tf-validate
 
 ## Plan
 
-Planning and applying use shared remote state in R2. Export Cloudflare and R2
-credentials first:
+Planning and applying use shared remote state via the o11yfleet-tfstate Worker
+(HTTP backend, R2-backed storage, Durable Object lock). Export Cloudflare and
+Worker backend credentials first:
 
 ```bash
 export CLOUDFLARE_DEPLOY_API_TOKEN=...
 export CLOUDFLARE_DEPLOY_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
-export TERRAFORM_STATE_R2_BUCKET=o11yfleet-terraform-state
-export TERRAFORM_STATE_R2_ENDPOINT=https://417e8c0fd8f1a64e9f2c4845afa6dc56.r2.cloudflarestorage.com
-export TERRAFORM_STATE_R2_ACCESS_KEY_ID=...
-export TERRAFORM_STATE_R2_SECRET_ACCESS_KEY=...
+export TFSTATE_WORKER_URL=https://o11yfleet-tfstate.o11yfleet.workers.dev
+export TFSTATE_USERNAME=...
+export TFSTATE_PASSWORD=...
 
 # Tool-required conventional names.
 export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_DEPLOY_API_TOKEN"
 export CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_DEPLOY_ACCOUNT_ID"
-export AWS_ACCESS_KEY_ID="$TERRAFORM_STATE_R2_ACCESS_KEY_ID"
-export AWS_SECRET_ACCESS_KEY="$TERRAFORM_STATE_R2_SECRET_ACCESS_KEY"
 ```
 
-`CLOUDFLARE_DEPLOY_API_TOKEN`, `TERRAFORM_STATE_R2_ACCESS_KEY_ID`, and
-`TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` are credentials. Do not place them in
-`.tfvars` files or backend config files. Terraform's S3 backend still reads the
-R2 credentials from the conventional `AWS_*` environment variables above.
+`CLOUDFLARE_DEPLOY_API_TOKEN`, `TFSTATE_USERNAME`, and `TFSTATE_PASSWORD` are
+credentials. Do not place them in `.tfvars` files or backend config files. The
+state backend is the o11yfleet-tfstate Worker (HTTP backend with proper
+LOCK/UNLOCK on R2) — see `../tfstate-worker/README.md` for the worker source
+and the runbook to rotate creds.
 
 Create and rotate those credentials with the bootstrap script, not Terraform:
 
@@ -160,24 +159,22 @@ the manual full deploy is healthy.
 
 Repository secrets:
 
-| Secret                                 | Purpose                                                               |
-| -------------------------------------- | --------------------------------------------------------------------- |
-| `CLOUDFLARE_DEPLOY_API_TOKEN`          | Cloudflare Terraform provider and Wrangler deploy access              |
-| `CLOUDFLARE_DEPLOY_ACCOUNT_ID`         | Cloudflare account used by Wrangler deploy helpers                    |
-| `TERRAFORM_STATE_R2_ACCESS_KEY_ID`     | R2 S3 access key for Terraform state                                  |
-| `TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` | R2 S3 secret key for Terraform state                                  |
-| `O11YFLEET_API_BEARER_SECRET`          | Staging smoke-test bearer secret; prefer a staging environment secret |
+| Secret                          | Purpose                                                               |
+| ------------------------------- | --------------------------------------------------------------------- |
+| `CLOUDFLARE_DEPLOY_API_TOKEN`   | Cloudflare Terraform provider and Wrangler deploy access              |
+| `CLOUDFLARE_DEPLOY_ACCOUNT_ID`  | Cloudflare account used by Wrangler deploy helpers                    |
+| `TFSTATE_WORKER_USERNAME`       | basic-auth username on the o11yfleet-tfstate state Worker             |
+| `TFSTATE_WORKER_PASSWORD`       | basic-auth password on the o11yfleet-tfstate state Worker             |
+| `O11YFLEET_API_BEARER_SECRET`   | Staging smoke-test bearer secret; prefer a staging environment secret |
 
 Repository variables:
 
-| Variable                             | Purpose                                                                            |
-| ------------------------------------ | ---------------------------------------------------------------------------------- |
-| `TERRAFORM_STATE_R2_BUCKET`          | R2 bucket that stores Terraform state                                              |
-| `TERRAFORM_STATE_R2_ENDPOINT`        | R2 S3 endpoint URL for the Cloudflare account                                      |
-| `TERRAFORM_STATE_R2_REGION`          | Optional; defaults to `auto`                                                       |
-| `TERRAFORM_REMOTE_STATE_ENABLED`     | Set to `true` after the state bucket exists                                        |
-| `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Set to `true` only after production imports                                        |
-| `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Set to `true` only after staging state and Worker secrets are ready for CI deploys |
+| Variable                             | Purpose                                                                                  |
+| ------------------------------------ | ---------------------------------------------------------------------------------------- |
+| `TFSTATE_WORKER_URL`                 | Base URL of the o11yfleet-tfstate Worker (e.g. `https://o11yfleet-tfstate.<sub>.workers.dev`) |
+| `TERRAFORM_REMOTE_STATE_ENABLED`     | Set to `true` after the state Worker is deployed and reachable                           |
+| `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Set to `true` only after production imports                                              |
+| `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Set to `true` only after staging state and Worker secrets are ready for CI deploys       |
 
 The `production` GitHub environment should require reviewer approval when the
 GitHub plan supports it. If required reviewers are not available, restrict the

@@ -429,11 +429,9 @@ jobs:
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
-      TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
-      TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
-      TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+      TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
       TERRAFORM_STAGING_DEPLOY_ENABLED: ${{ vars.TERRAFORM_STAGING_DEPLOY_ENABLED }}
@@ -449,10 +447,9 @@ jobs:
 
       - name: Check staging deploy configuration
         run: |
-          test -n "$TERRAFORM_STATE_R2_BUCKET"
-          test -n "$TERRAFORM_STATE_R2_ENDPOINT"
-          test -n "$AWS_ACCESS_KEY_ID"
-          test -n "$AWS_SECRET_ACCESS_KEY"
+          test -n "$TFSTATE_WORKER_URL"
+          test -n "$TFSTATE_USERNAME"
+          test -n "$TFSTATE_PASSWORD"
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
           test -n "$O11YFLEET_API_BEARER_SECRET"
