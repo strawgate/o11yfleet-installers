@@ -7,7 +7,6 @@ import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/in
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 import {
   PIPELINE_EXAMPLES,
-  PIPELINE_SIGNALS,
   parseCollectorYamlToGraph,
   renderCollectorYaml,
   summarizePipelineGraph,
@@ -17,8 +16,14 @@ import type {
   CollectorYamlImportResult,
   PipelineComponentRole,
   PipelineGraph,
-  PipelineSignal,
 } from "@o11yfleet/core/pipeline";
+import {
+  Canvas,
+  layoutLR,
+  toFlow,
+  type BuilderEdge,
+  type BuilderNode,
+} from "@/components/pipeline-builder";
 import "../../styles/portal-pipeline.css";
 
 type BuilderMode = "visual" | "split" | "yaml";
@@ -44,12 +49,6 @@ function roleLabel(role: PipelineComponentRole): string {
   if (role === "receiver") return "Receivers";
   if (role === "processor") return "Processors";
   return "Exporters";
-}
-
-function signalLabel(signal: PipelineSignal): string {
-  if (signal === "logs") return "Logs";
-  if (signal === "metrics") return "Metrics";
-  return "Traces";
 }
 
 export default function BuilderPage() {
@@ -81,10 +80,6 @@ export default function BuilderPage() {
       setYamlPreview("");
     }
   }, [graph]);
-  const componentsById = useMemo(
-    () => new Map(graph.components.map((component) => [component.id, component])),
-    [graph],
-  );
   const componentsByRole = useMemo(() => {
     const byRole: Record<PipelineComponentRole, PipelineGraph["components"]> = {
       receiver: [],
@@ -96,6 +91,24 @@ export default function BuilderPage() {
     }
     return byRole;
   }, [graph]);
+
+  // Project the canonical PipelineGraph into xyflow nodes/edges, then run
+  // dagre LR auto-layout so the graph renders as a left-to-right flow on
+  // first paint. Read-only for now — the canvas's onChange is a no-op
+  // because draft persistence (#236) hasn't landed yet.
+  const flow = useMemo(() => {
+    const next = toFlow(graph);
+    return { nodes: layoutLR(next.nodes, next.edges), edges: next.edges };
+  }, [graph]);
+  const [canvasState, setCanvasState] = useState<{
+    nodes: BuilderNode[];
+    edges: BuilderEdge[];
+  }>(flow);
+  // When the underlying graph changes (example switch, YAML import), reset
+  // the canvas to the freshly laid out nodes.
+  useEffect(() => {
+    setCanvasState(flow);
+  }, [flow]);
 
   const guidanceRequest: AiGuidanceRequest = buildInsightRequest(
     insightSurface,
@@ -299,55 +312,22 @@ export default function BuilderPage() {
             </div>
             <p className="meta mt-2">{summarizePipelineGraph(graph)}</p>
 
-            <div className="pipe-canvas mt-4">
-              <div className="pipe-stage">
-                {ROLES.map((role) => (
-                  <div key={role} className="pipe-col">
-                    <div className="pipe-col-head">
-                      {roleLabel(role)}
-                      <span className="count">{componentsByRole[role].length}</span>
-                    </div>
-                    {componentsByRole[role].map((component) => (
-                      <article key={component.id} className="pipe-node">
-                        <div className="name">
-                          <span className="text">{component.name}</span>
-                        </div>
-                        <div className="sub">{component.type}</div>
-                        <div className="sig-row">
-                          {component.signals.map((signal) => (
-                            <span key={`${component.id}-${signal}`} className={`sig sig-${signal}`}>
-                              {signal}
-                            </span>
-                          ))}
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                ))}
-              </div>
+            <div className="mt-4">
+              <Canvas
+                nodes={canvasState.nodes}
+                edges={canvasState.edges}
+                onChange={setCanvasState}
+                readOnly
+                height={520}
+              />
             </div>
 
-            <div className="pipe-wire-list mt-4">
-              {PIPELINE_SIGNALS.map((signal) => {
-                const signalWires = graph.wires.filter((wire) => wire.signal === signal);
-                if (signalWires.length === 0) return null;
-                return (
-                  <div key={signal} className="banner info mt-2">
-                    <div>
-                      <div className="b-title">{signalLabel(signal)} flow</div>
-                      <div className="b-body">
-                        {signalWires
-                          .map((wire) => {
-                            const from = componentsById.get(wire.from)?.name ?? wire.from;
-                            const to = componentsById.get(wire.to)?.name ?? wire.to;
-                            return `${from} -> ${to}`;
-                          })
-                          .join(" / ")}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="pipe-role-summary mt-4" aria-label="Component counts by role">
+              {ROLES.map((role) => (
+                <span key={role} className="tag">
+                  {roleLabel(role)} ({componentsByRole[role].length})
+                </span>
+              ))}
             </div>
           </section>
         ) : null}
