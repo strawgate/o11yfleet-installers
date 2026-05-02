@@ -18,11 +18,6 @@ import {
 }
 
 import {
-  to = cloudflare_queue.events
-  id = "<cloudflare-account-id>/<queue-id>"
-}
-
-import {
   to = cloudflare_worker.fleet
   id = "<cloudflare-account-id>/<worker-script-name>"
 }
@@ -77,9 +72,4 @@ import {
 import {
   to = cloudflare_workers_route.site["admin"]
   id = "<cloudflare-zone-id>/<admin-worker-route-id>"
-}
-
-import {
-  to = cloudflare_queue_consumer.events
-  id = "<cloudflare-account-id>/<queue-id>/<queue-consumer-id>"
 }

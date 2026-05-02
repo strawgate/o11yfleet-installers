@@ -1,6 +1,6 @@
 variable "cloudflare_account_id" {
   type        = string
-  description = "Cloudflare account ID that owns Workers, D1, R2, Queues, and Zero Trust resources."
+  description = "Cloudflare account ID that owns Workers, D1, R2, and Zero Trust resources."
 
   validation {
     condition     = length(trimspace(var.cloudflare_account_id)) > 0

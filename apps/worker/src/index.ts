@@ -211,10 +211,6 @@ export default {
     }
   },
 
-  async queue(batch: MessageBatch<unknown>, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    console.warn("Received fleet event batch", { messages: batch.messages.length });
-  },
-
   /** Daily stale-agent audit. This is rare reconciliation for missed close/error events. */
   async scheduled(
     controller: ScheduledController,
