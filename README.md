@@ -7,18 +7,120 @@ fanout, and React/Vite for the marketing site, customer portal, and admin UI.
 
 ## Quick Start
 
-Prerequisites: Node.js 22+, pnpm 9+, `just`, and Wrangler.
+### Prerequisites
+
+| Tool | Version | Install |
+|------|---------|---------|
+| Node.js | 22+ | [nodejs.org](https://nodejs.org) |
+| pnpm | 9+ | `npm install -g pnpm` |
+| just | latest | See [below](#installing-just) |
+| Wrangler | latest | `npx wrangler login` |
+| GitHub Account | — | [github.com](https://github.com) |
+
+### Installing `just`
+
+`just` is a command runner (like `make` but better). Install it:
 
 ```bash
+# macOS/Linux via cargo
+cargo install just
+
+# Or via shell installer (Linux/macOS)
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
+
+# Verify it works
+just --version
+```
+
+### Setup (5 minutes)
+
+```bash
+# 1. Clone and enter the repo
+git clone https://github.com/your-org/o11yfleet.git
+cd o11yfleet
+
+# 2. Install dependencies
 just install
+
+# 3. Set up local environment variables
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-$EDITOR apps/worker/.dev.vars # replace dev-local placeholders
+
+# 4. Authenticate with Cloudflare (opens browser)
+npx wrangler login
+
+# 5. Verify your environment is ready
 just doctor
+
+# 6. Start everything!
 just dev-up
 ```
 
-`just dev-up` starts the Worker and site, waits for `/healthz`, applies local D1
-migrations, seeds local data, and keeps both dev servers attached.
+### What Just Dev-Up Does
+
+`just dev-up` starts:
+- **Worker API** at http://localhost:8787 (OpAMP + Management API)
+- **Site UI** at http://127.0.0.1:3000 (Portal + Admin)
+
+It also automatically:
+- Replaces placeholder secrets with secure random values
+- Applies D1 database migrations
+- Seeds local dev data (tenant, config, enrollment token)
+- Waits for services to be healthy
+
+### Running Tests
+
+```bash
+# Run all fast tests (no live server needed)
+just test
+
+# Run only core package tests (fastest)
+just test-core
+
+# Run worker tests with workerd runtime
+just test-runtime
+
+# UI tests require Playwright browsers (one-time setup)
+just playwright-install
+just test-ui
+
+# Full pre-PR gate
+just ci-fast
+```
+
+### Common Tasks
+
+| Task | Command |
+|------|---------|
+| Start fake collector | `just collector` |
+| View fleet status | `just fleet` |
+| Push config to agents | `just push-config` |
+| Reset local database | `just dev-reset` |
+| Lint all code | `just lint` |
+| Type check all | `just typecheck` |
+| Check code (changed files only) | `just check` |
+
+### Troubleshooting
+
+**`just: command not found`**
+```bash
+export PATH="$HOME/.local/bin:$PATH:$HOME/.cargo/bin:$PATH"
+# Add the above to your ~/.bashrc or ~/.zshrc to make it permanent
+```
+
+**`wrangler login` fails**
+Make sure you have permission to access the Cloudflare account. Contact a team member.
+
+**`just doctor` fails with missing secrets**
+The dev secrets script should auto-fill placeholders. If not, run:
+```bash
+just ensure-dev-secrets
+```
+
+**UI tests fail with "browser not found"**
+Install Playwright browsers:
+```bash
+just playwright-install
+```
 
 ## Hosted Environments
 

@@ -35,14 +35,63 @@ UI, per-user API keys, progressive rollout state, and billing-provider wiring.
 | `tests/load*/`         | Load and smoke-test harnesses                             |
 | `infra/terraform/`     | Cloudflare infrastructure                                 |
 
-## Local Loop
+## First-Time Setup
+
+### 1. Install `just`
+
+`just` is a command runner (like `make` but better). Install it first:
 
 ```bash
+# macOS/Linux via cargo
+cargo install just
+
+# Or via shell installer (Linux/macOS)
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
+
+# Verify
+just --version
+```
+
+### 2. Clone and Install
+
+```bash
+git clone https://github.com/your-org/o11yfleet.git
+cd o11yfleet
 just install
+```
+
+### 3. Set Up Environment
+
+```bash
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-just doctor
+npx wrangler login   # Opens browser to authenticate with Cloudflare
+just doctor          # Verify everything is set up correctly
+```
+
+### 4. Start Developing
+
+```bash
+just dev-up          # Starts Worker + Site with auto-migration and seeding
+```
+
+---
+
+## Local Loop
+
+### Start Everything
+
+```bash
 just dev-up
 ```
+
+This command:
+1. Starts the **Worker** at http://localhost:8787 (OpAMP + Management API)
+2. Starts the **Site** at http://127.0.0.1:3000 (Portal + Admin UI)
+3. Waits for both services to be healthy
+4. Applies D1 migrations automatically
+5. Seeds local data (tenant, config, enrollment token)
+
+### Dev Secrets
 
 `.dev.vars` ships with placeholder secret values. `just dev-up` runs
 `scripts/ensure-dev-secrets.ts` first and replaces any placeholder it
@@ -50,19 +99,56 @@ recognises (`dev-local-*`, `*-change-me-*`, `admin-password`,
 `demo-password`, `*-dev-only*`) with strong random values. Real values
 you set yourself are left alone.
 
-Useful variants:
+### Partial Start Commands
+
+Use these when you want to start just one service:
+
+| Command       | Starts                    | Port  |
+| ------------- | ------------------------- | ----- |
+| `just dev`    | Worker only               | 8787  |
+| `just ui`     | Site only                 | 3000  |
+
+### Reset & Re-seed
+
+```bash
+just dev-reset   # Re-runs migrations and seed data (keeps servers running)
+```
+
+### Troubleshooting
+
+**`just doctor` fails with "Cloudflare not authenticated"**
+```bash
+npx wrangler login
+```
+
+**`just doctor` fails with "O11YFLEET_API_BEARER_SECRET missing"**
+```bash
+just ensure-dev-secrets   # Auto-fills placeholder values
+```
+
+**Worker crashes on startup with "Missing required secrets"**
+These are optional for local dev:
+- `CLOUDFLARE_METRICS_ACCOUNT_ID`
+- `CLOUDFLARE_METRICS_API_TOKEN`
+
+You can safely ignore these warnings for local development.
+
+---
+
+### All Local Dev Commands
 
 | Command                   | Use when                                                                       |
 | ------------------------- | ------------------------------------------------------------------------------ |
 | `just dev`                | Start only the Worker                                                          |
 | `just ui`                 | Start only the site                                                            |
 | `just dev-reset`          | Servers are running and local D1 needs reseeding                               |
-| `just smoke-local`        | Verify API + OpAMP lifecycle against the local Worker                          |
+| `just smoke-local`        | Verify API + OpAMP lifecycle (requires: `eval "$(just admin-login)"` first)   |
 | `just check`              | Run only checks affected by changed, staged, and untracked files               |
 | `just ci-fast`            | Run the fast local gate before pushing                                         |
 | `just ci-pr`              | Reproduce required PR checks, including slow browser/runtime coverage          |
 | `just ensure-dev-secrets` | Re-randomize any placeholder values in `apps/worker/.dev.vars` (idempotent)    |
 | `just admin-login`        | Log in as the seeded admin and print `FP_ADMIN_COOKIE` for `eval` + curl usage |
+| `just playwright-install` | Install Playwright browsers for UI tests (one-time setup)                      |
 
 ### Local admin curl
 
@@ -80,7 +166,76 @@ you'd rather wire it into a script directly.
 
 GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/dev-loop.md).
 
-## Testing Rules
+## Testing
+
+### Test Commands
+
+```bash
+# Run all fast tests (no live server needed) — ~5 minutes
+just test
+
+# Core package only (fastest, ~30 seconds)
+just test-core
+
+# Worker unit tests (~1 second)
+just test-worker
+
+# Worker runtime tests in workerd (~30 seconds)
+just test-runtime
+
+# UI tests with Playwright (requires: just playwright-install first)
+just test-ui
+
+# Full pre-PR gate
+just ci-fast
+```
+
+### One-Time Playwright Setup
+
+UI tests require browser binaries. Install once:
+
+```bash
+just playwright-install
+```
+
+This downloads Chromium and dependencies (~300MB).
+
+### Running Tests While Developing
+
+| Scenario | Command |
+|----------|---------|
+| After every code change | `just test-core` or `just test-worker` |
+| Before pushing | `just ci-fast` |
+| Full regression | `just ci-pr` (includes browser tests) |
+| Single test file | `pnpm vitest run path/to/test.ts` |
+
+### Live Stack Testing
+
+Some tests require a running dev stack:
+
+```bash
+# Start the stack
+just dev-up
+
+# In another terminal, run OpAMP compliance tests
+just test-opamp
+
+# Run smoke tests (requires admin login first)
+eval "$(just admin-login)"
+just smoke-local
+```
+
+### Code Quality Checks
+
+```bash
+just lint          # Lint all packages
+just typecheck     # Type check all packages
+just check         # Changed files only (fast)
+just sql-audit     # Check SQL bindings after DO changes
+just docs-api-check # Check API docs after route changes
+```
+
+### Testing Rules
 
 - Prefer `just` commands over bare package-manager commands.
 - `packages/core` tests run in plain Vitest.
@@ -93,7 +248,7 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
   gap (13 placeholders, 12 bound params, no test coverage). The CI runs this in
   the `lint-typecheck` job.
 
-### Running Test Suites
+### Test Suites
 
 | Suite                             | Command                   | Notes                                         |
 | --------------------------------- | ------------------------- | --------------------------------------------- |
@@ -101,7 +256,7 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 | Worker (runtime + node)           | `just test-worker`        | Runs in workerd pool                          |
 | OpAMP compliance                  | `just test-opamp`         | Requires a **live** worker (`just dev` first) |
 | E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors      |
-| UI (Playwright)                   | `just test-ui`            | Browser tests against live stack              |
+| UI (Playwright)                   | `just test-ui`            | Browser tests (first run: `just playwright-install`) |
 | All fast tests                    | `just test`               | Core + worker (no live server needed)         |
 | Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/` |
 
