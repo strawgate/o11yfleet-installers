@@ -10,7 +10,7 @@
 // TypeScript codec is wire-compatible with the reference Go implementation.
 
 import { describe, it, expect, beforeAll } from "vitest";
-import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { execSync } from "node:child_process";
 import { decodeAgentToServerProto, isProtobufFrame } from "../src/codec/protobuf.js";
@@ -63,8 +63,14 @@ const KNOWN_UID = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
 
 describe("Oracle: opamp-go protobuf fixtures", () => {
   beforeAll(() => {
-    // Regenerate fixtures from Go source (ensures they're fresh)
+    // Regenerate fixtures from Go source. Clear the dir first so files
+    // written by a different branch's main.go (e.g., the
+    // `available-components` and `server-*` fixtures introduced in a
+    // sibling PR) don't linger and break consumers like differential.test.ts
+    // that load the whole directory. Without the clear, switching
+    // branches and re-running tests was producing confusing failures.
     if (existsSync(join(ORACLE_DIR, "go.mod"))) {
+      rmSync(FIXTURE_DIR, { recursive: true, force: true });
       execSync("go run .", { cwd: ORACLE_DIR, timeout: 60_000 });
     }
   }, 60_000);

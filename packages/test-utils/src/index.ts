@@ -34,3 +34,13 @@ export type {
   ReceiverFailureOptions,
   HealthRecoveredOptions,
 } from "./opamp-messages.js";
+export {
+  AGENT_SCENARIOS,
+  SERVER_SCENARIOS,
+  KNOWN_UID,
+  REASSIGNED_UID,
+  REPORTS_AVAILABLE_COMPONENTS,
+  agentScenario,
+  serverScenario,
+} from "./scenarios.js";
+export type { AgentScenario, ServerScenario } from "./scenarios.js";
