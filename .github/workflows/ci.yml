@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   changes:
-    runs-on: ubicloud-standard-2-arm
+    runs-on: ubuntu-slim
     timeout-minutes: 3
     outputs:
       node: ${{ steps.filter.outputs.node }}
@@ -106,12 +106,13 @@ jobs:
             set_output workflow false
           fi
 
-  lint-typecheck:
+  fast:
     needs: [changes]
     if: >-
       ${{
         (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
-        (needs.changes.outputs.node == 'true' || needs.changes.outputs.workflow == 'true')
+        (needs.changes.outputs.node == 'true' || needs.changes.outputs.workflow == 'true' ||
+         needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true')
       }}
     runs-on: ubicloud-standard-4-arm
     timeout-minutes: 10
@@ -125,16 +126,22 @@ jobs:
             xargs -0 go run github.com/rhysd/actionlint/cmd/actionlint@latest
 
       - uses: pnpm/action-setup@v6
-        if: needs.changes.outputs.node == 'true'
+        if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
 
       - uses: actions/setup-node@v6
-        if: needs.changes.outputs.node == 'true'
+        if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
         with:
           node-version: "22"
           cache: "pnpm"
 
+      - uses: actions/setup-go@v5
+        if: needs.changes.outputs.fast == 'true'
+        with:
+          go-version: "1.23"
+          cache-dependency-path: tests/oracle/go.sum
+
       - name: Install dependencies
-        if: needs.changes.outputs.node == 'true'
+        if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Restore Turbo cache
@@ -175,41 +182,62 @@ jobs:
         if: needs.changes.outputs.node == 'true'
         run: pnpm turbo typecheck
 
-  test-fast:
-    needs: [changes]
-    if: >-
-      ${{
-        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
-        needs.changes.outputs.fast == 'true'
-      }}
-    runs-on: ubicloud-standard-2-arm
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: actions/setup-go@v5
-        with:
-          go-version: "1.23"
-          cache-dependency-path: tests/oracle/go.sum
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
       - name: Core tests (codec, state machine, auth, oracle)
+        if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/core test
 
       - name: Oracle tests (TS ↔ Go protobuf verification)
+        if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/oracle-tests test
 
       - name: Site tests
+        if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/site test
+
+      - uses: taiki-e/install-action@just
+        if: needs.changes.outputs.deploy == 'true'
+
+      - name: Build worker bundle
+        if: needs.changes.outputs.deploy == 'true'
+        run: just worker-bundle
+
+      - name: "Check bundle size (Workers limit: 10MB compressed)"
+        if: needs.changes.outputs.deploy == 'true'
+        run: |
+          MAX_GZIP=0
+          MAX_BUNDLE=""
+          MAX_RAW=0
+          while IFS= read -r BUNDLE; do
+            RAW=$(wc -c < "$BUNDLE" | tr -d ' ')
+            GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
+            echo "Bundle: $BUNDLE  Raw: $((RAW / 1024)) KB  Gzip: $((GZ / 1024)) KB"
+            if [ "$GZ" -gt "$MAX_GZIP" ]; then
+              MAX_GZIP=$GZ
+              MAX_BUNDLE=$BUNDLE
+              MAX_RAW=$RAW
+            fi
+          done < <(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
+          if [ -z "$MAX_BUNDLE" ]; then
+            echo "No bundle found"
+            exit 1
+          fi
+          echo ""
+          echo "Largest bundle: $MAX_BUNDLE"
+          echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
+          if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
+            echo "Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
+            exit 1
+          fi
+          echo "Bundle size OK"
+
+      - name: Terraform validate
+        if: needs.changes.outputs.deploy == 'true'
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: "1.9"
+
+      - run: just tf-validate
+        if: needs.changes.outputs.deploy == 'true'
 
   test-slow:
     needs: [changes]
@@ -259,73 +287,11 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
-  deploy-validate:
-    needs: [changes]
-    if: >-
-      ${{
-        (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
-        needs.changes.outputs.deploy == 'true'
-      }}
-    runs-on: ubicloud-standard-2-arm
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: "22"
-          cache: "pnpm"
-
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --prefer-offline
-
-      - uses: taiki-e/install-action@just
-
-      - name: Build worker bundle
-        run: just worker-bundle
-
-      - name: "Check bundle size (Workers limit: 10MB compressed)"
-        run: |
-          MAX_GZIP=0
-          MAX_BUNDLE=""
-          MAX_RAW=0
-          while IFS= read -r BUNDLE; do
-            RAW=$(wc -c < "$BUNDLE" | tr -d ' ')
-            GZ=$(gzip -c "$BUNDLE" | wc -c | tr -d ' ')
-            echo "Bundle: $BUNDLE  Raw: $((RAW / 1024)) KB  Gzip: $((GZ / 1024)) KB"
-            if [ "$GZ" -gt "$MAX_GZIP" ]; then
-              MAX_GZIP=$GZ
-              MAX_BUNDLE=$BUNDLE
-              MAX_RAW=$RAW
-            fi
-          done < <(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
-          if [ -z "$MAX_BUNDLE" ]; then
-            echo "No bundle found"
-            exit 1
-          fi
-          echo ""
-          echo "Largest bundle: $MAX_BUNDLE"
-          echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
-          if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
-            echo "Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
-            exit 1
-          fi
-          echo "Bundle size OK"
-
-      - name: Terraform validate
-        uses: hashicorp/setup-terraform@v4
-        with:
-          terraform_version: "1.9"
-
-      - run: just tf-validate
-
   deploy-staging:
-    needs: [lint-typecheck, test-fast, test-slow, deploy-validate]
+    needs: [fast, test-slow]
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 20
-    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true' && needs.deploy-validate.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
+    if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true' && needs.fast.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     environment: staging
     env:
       TF_IN_AUTOMATION: "true"
