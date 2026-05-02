@@ -248,6 +248,77 @@ export function buildDisconnect(opts: DisconnectOptions = {}): AgentToServer {
   };
 }
 
+// ─── Shutdown Health Report ─────────────────────────────────────────
+
+export interface ShutdownOptions {
+  instanceUid?: Uint8Array;
+  sequenceNum?: number;
+  capabilities?: number;
+  pipelines?: PipelineConfig[];
+  startTimeNano?: bigint;
+}
+
+/**
+ * Build a health report with StatusStopping for all components.
+ *
+ * Real otelcol-contrib sends these frames during graceful shutdown — one per
+ * pipeline as each component stops. We send a single consolidated frame with
+ * all components in StatusStopping, which is a reasonable approximation.
+ */
+export function buildShutdown(opts: ShutdownOptions = {}): AgentToServer {
+  const nowNano = BigInt(Date.now()) * 1_000_000n;
+  const startNano = opts.startTimeNano ?? nowNano;
+  const pipelines = opts.pipelines ?? REAL_COLLECTOR_PIPELINES;
+
+  const stopping = (): ComponentHealth => ({
+    healthy: false,
+    start_time_unix_nano: 0n,
+    last_error: "",
+    status: "StatusStopping",
+    status_time_unix_nano: nowNano,
+    component_health_map: {},
+  });
+
+  const map: Record<string, ComponentHealth> = {};
+  for (const pipeline of pipelines) {
+    const components: Record<string, ComponentHealth> = {};
+    for (const r of pipeline.receivers) components[`receiver:${r}`] = stopping();
+    for (const proc of pipeline.processors) components[`processor:${proc}`] = stopping();
+    for (const exp of pipeline.exporters) components[`exporter:${exp}`] = stopping();
+    map[`pipeline:${pipeline.name}`] = {
+      healthy: false,
+      start_time_unix_nano: 0n,
+      last_error: "",
+      status: "StatusStopping",
+      status_time_unix_nano: nowNano,
+      component_health_map: components,
+    };
+  }
+  map["extensions"] = {
+    healthy: false,
+    start_time_unix_nano: 0n,
+    last_error: "",
+    status: "StatusStopping",
+    status_time_unix_nano: nowNano,
+    component_health_map: { "extension:opamp": stopping() },
+  };
+
+  return {
+    instance_uid: opts.instanceUid ?? new Uint8Array(16),
+    sequence_num: opts.sequenceNum ?? 99,
+    capabilities: opts.capabilities ?? DEFAULT_CAPABILITIES,
+    flags: 0,
+    health: {
+      healthy: false,
+      start_time_unix_nano: startNano,
+      last_error: "",
+      status: "StatusStopping",
+      status_time_unix_nano: nowNano,
+      component_health_map: map,
+    },
+  };
+}
+
 // ─── Health Scenario Builders ───────────────────────────────────────
 //
 // Status strings are Go constants from opamp-go ComponentHealth:

@@ -9,6 +9,7 @@ import {
   decodeServerToAgentProto,
   type AgentToServer,
   type ServerToAgent,
+  type ComponentHealth,
   AgentCapabilities,
   RemoteConfigStatuses,
 } from "@o11yfleet/core/codec";
@@ -18,6 +19,7 @@ import {
   buildHeartbeat as buildHeartbeatMsg,
   buildHealthReport as buildHealthMsg,
   buildConfigAck as buildConfigAckMsg,
+  buildShutdown as buildShutdownMsg,
   buildExporterFailure,
   buildHealthRecovered,
   buildReceiverFailure,
@@ -248,8 +250,9 @@ export class FakeOpampAgent {
 
         const msg = decodeServerToAgentProto(data as ArrayBuffer);
 
-        // config-rejecting mode: auto-respond to config pushes with FAILED
-        if (this.rejectConfigs && msg.remote_config) {
+        // config-rejecting mode: auto-respond to config pushes with FAILED.
+        // All other agents auto-ACK config pushes with APPLIED (matching real collector).
+        if (msg.remote_config) {
           const hash = msg.remote_config.config_hash ?? new Uint8Array(0);
           this.sequenceNum++;
           this.sendRaw({
@@ -258,9 +261,13 @@ export class FakeOpampAgent {
             capabilities: this.resolvedCapabilities,
             flags: 0,
             remote_config_status: {
-              last_remote_config_hash: hash ?? new Uint8Array(0),
-              status: RemoteConfigStatuses.FAILED,
-              error_message: "config rejected: validation failed (simulated)",
+              last_remote_config_hash: hash,
+              status: this.rejectConfigs
+                ? RemoteConfigStatuses.FAILED
+                : RemoteConfigStatuses.APPLIED,
+              error_message: this.rejectConfigs
+                ? "config rejected: validation failed (simulated)"
+                : "",
             },
           });
           // Still deliver to waiters so tests that watch for config pushes work
@@ -338,6 +345,11 @@ export class FakeOpampAgent {
       instance_uid: uint8ToHex(this.instanceUid),
     };
     this._enrollment = enrollment;
+
+    // Real otelcol-contrib sends a second health report ~1s after startup (seq=1),
+    // also all StatusOK. Send it now so the server sees a proper post-startup health frame.
+    await this.sendHealthReport();
+
     return enrollment;
   }
 
@@ -389,6 +401,62 @@ export class FakeOpampAgent {
         healthy,
         status: status || undefined,
         lastError: healthy ? "" : status,
+      }),
+    );
+  }
+
+  /**
+   * Send a full StatusOK health report (matching the real collector's seq=1 frame).
+   * This includes the full component_health_map, all StatusOK.
+   */
+  async sendHealthReport(): Promise<void> {
+    this.sequenceNum++;
+    const p = this.profile;
+    const nowNano = BigInt(Date.now()) * 1_000_000n;
+    const pipelines = p.pipelines ?? REAL_COLLECTOR_PIPELINES;
+    const extensions = p.extensions ?? ["opamp"];
+    // Build component health map inline (all StatusOK)
+    const leaf = (): ComponentHealth => ({
+      healthy: true,
+      start_time_unix_nano: 0n,
+      last_error: "",
+      status: "StatusOK",
+      status_time_unix_nano: nowNano,
+      component_health_map: {},
+    });
+    const componentHealthMap: Record<string, ComponentHealth> = {};
+    for (const pipeline of pipelines) {
+      const components: Record<string, ComponentHealth> = {};
+      for (const r of pipeline.receivers) components[`receiver:${r}`] = leaf();
+      for (const proc of pipeline.processors) components[`processor:${proc}`] = leaf();
+      for (const exp of pipeline.exporters) components[`exporter:${exp}`] = leaf();
+      componentHealthMap[`pipeline:${pipeline.name}`] = {
+        healthy: true,
+        start_time_unix_nano: 0n,
+        last_error: "",
+        status: "StatusOK",
+        status_time_unix_nano: nowNano,
+        component_health_map: components,
+      };
+    }
+    const extComponents: Record<string, ComponentHealth> = {};
+    for (const ext of extensions) extComponents[`extension:${ext}`] = leaf();
+    componentHealthMap["extensions"] = {
+      healthy: true,
+      start_time_unix_nano: 0n,
+      last_error: "",
+      status: "StatusOK",
+      status_time_unix_nano: nowNano,
+      component_health_map: extComponents,
+    };
+    this.send(
+      buildHealthMsg({
+        instanceUid: this.instanceUid,
+        sequenceNum: this.sequenceNum,
+        capabilities: this.resolvedCapabilities,
+        healthy: true,
+        status: "StatusOK",
+        componentHealthMap,
       }),
     );
   }
@@ -697,6 +765,23 @@ export class FakeOpampAgent {
       clearTimeout(this.heartbeatTimer);
       clearInterval(this.heartbeatTimer);
       this.heartbeatTimer = null;
+    }
+    // Send StatusStopping health report before closing (matches real otelcol shutdown)
+    if (this.connected) {
+      try {
+        this.sequenceNum++;
+        this.sendRaw(
+          buildShutdownMsg({
+            instanceUid: this.instanceUid,
+            sequenceNum: this.sequenceNum,
+            capabilities: this.resolvedCapabilities,
+            pipelines: this.profile.pipelines,
+            startTimeNano: this.processStartNano,
+          }),
+        );
+      } catch {
+        // Best-effort — WS may already be closing
+      }
     }
     // Reject any pending waiters so tests don't hang
     const pendingWaiters = this.waiters.splice(0);
