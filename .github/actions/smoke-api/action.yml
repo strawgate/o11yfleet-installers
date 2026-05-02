@@ -79,6 +79,8 @@ runs:
           echo "Admin login did not set a secure cross-site session cookie"
           exit 1
         fi
+        # Extract just the cookie value for later requests
+        SESSION_COOKIE_VALUE=$(echo "$SESSION_COOKIE" | sed 's/.*fp_session=\([^;]*\).*/fp_session=\1/')
         rm -f "$LOGIN_HEADERS" "$LOGIN_BODY"
         echo "✓ Auth cookie smoke passed"
 
@@ -119,5 +121,75 @@ runs:
         fi
         echo "Stats: $(cat /tmp/stats.json)"
         echo "✓ Stats endpoint responding"
+
+        echo "=== API smoke: list config versions (v1) ==="
+        HTTP_STATUS=$("${curl_json[@]}" -o /tmp/versions.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/versions" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID")
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "List versions failed: HTTP $HTTP_STATUS"
+          exit 1
+        fi
+        echo "Versions: $(cat /tmp/versions.json)"
+        echo "✓ List versions responding"
+
+        echo "=== API smoke: list enrollment tokens (v1) ==="
+        HTTP_STATUS=$("${curl_json[@]}" -o /tmp/tokens.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/enrollment-tokens" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID")
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "List tokens failed: HTTP $HTTP_STATUS"
+          exit 1
+        fi
+        echo "Tokens count: $(echo $(cat /tmp/tokens.json) | jq '.tokens | length')"
+        echo "✓ List enrollment tokens responding"
+
+        echo "=== API smoke: list agents (v1) ==="
+        HTTP_STATUS=$("${curl_json[@]}" -o /tmp/agents.json -w "%{http_code}" "$WORKER_URL/api/v1/configurations/$CONFIG_ID/agents" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID")
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "List agents failed: HTTP $HTTP_STATUS"
+          exit 1
+        fi
+        echo "Agents: $(cat /tmp/agents.json)"
+        echo "✓ List agents responding"
+
+        echo "=== API smoke: update config (v1) ==="
+        HTTP_STATUS=$("${curl_json[@]}" -o /tmp/update.json -w "%{http_code}" -X PUT "$WORKER_URL/api/v1/configurations/$CONFIG_ID" \
+          -H "Content-Type: application/json" \
+          -H "Authorization: Bearer $O11YFLEET_API_BEARER_SECRET" \
+          -H "X-Tenant-Id: $TENANT_ID" \
+          -d "$(jq -nc --arg desc "smoke test config" '{description:$desc}')")
+        if [ "$HTTP_STATUS" != "200" ]; then
+          echo "Update config failed: HTTP $HTTP_STATUS"
+          exit 1
+        fi
+        echo "Updated config: $(cat /tmp/update.json)"
+        echo "✓ Update config responding"
+
+        echo "=== API smoke: admin list tenants ==="
+        TENANTS_RESP=$("${curl_json[@]}" "$WORKER_URL/api/admin/tenants" \
+          -H "Cookie: $SESSION_COOKIE_VALUE" \
+          -H "Origin: ${{ inputs.origin }}")
+        TENANTS_COUNT=$(echo "$TENANTS_RESP" | jq '.tenants | length')
+        if [ "$TENANTS_COUNT" -lt 1 ]; then
+          echo "Expected at least 1 tenant, got $TENANTS_COUNT"
+          exit 1
+        fi
+        echo "Tenants: $TENANTS_COUNT"
+        echo "✓ Admin list tenants responding"
+
+        echo "=== API smoke: admin list tenant configs ==="
+        CONFIGS_RESP=$("${curl_json[@]}" "$WORKER_URL/api/admin/tenants/$TENANT_ID/configurations" \
+          -H "Cookie: $SESSION_COOKIE_VALUE" \
+          -H "Origin: ${{ inputs.origin }}")
+        CONFIGS_COUNT=$(echo "$CONFIGS_RESP" | jq '.configurations | length')
+        if [ "$CONFIGS_COUNT" -lt 1 ]; then
+          echo "Expected at least 1 config, got $CONFIGS_COUNT"
+          exit 1
+        fi
+        echo "Tenant configs: $CONFIGS_COUNT"
+        echo "✓ Admin list tenant configs responding"
 
         echo "✓ API smoke passed"

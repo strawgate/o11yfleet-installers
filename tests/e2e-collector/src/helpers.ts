@@ -17,9 +17,43 @@ export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 export const API_KEY =
   process.env.FP_API_KEY ?? process.env.O11YFLEET_API_KEY ?? "test-api-secret-for-dev-only-32chars";
+export const ADMIN_EMAIL = process.env.O11YFLEET_SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+export const ADMIN_PASSWORD = process.env.O11YFLEET_SEED_ADMIN_PASSWORD;
 
 // Track tenant→config mapping for API calls
 const configTenantIds = new Map<string, string>();
+
+// Cached session cookie for admin routes
+let adminSessionCookie: string | null = null;
+
+/** Ensure we have an admin session cookie for /api/admin/* routes */
+async function ensureAdminSession(): Promise<string> {
+  if (adminSessionCookie) return adminSessionCookie;
+  if (!ADMIN_PASSWORD) {
+    throw new Error("Set O11YFLEET_SEED_ADMIN_PASSWORD before running collector tests");
+  }
+
+  // Seed the admin user
+  const seedRes = await fetch(`${BASE_URL}/auth/seed`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!seedRes.ok) throw new Error(`/auth/seed failed: ${seedRes.status}`);
+
+  // Login to get session cookie
+  const loginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: BASE_URL },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+  });
+  if (!loginRes.ok) throw new Error(`/auth/login failed: ${loginRes.status}`);
+
+  const match = loginRes.headers.get("set-cookie")?.match(/fp_session=([^;]+)/);
+  if (!match) throw new Error(`/auth/login returned no fp_session cookie`);
+  adminSessionCookie = `fp_session=${match[1]}`;
+  return adminSessionCookie;
+}
 
 /** Call the o11yfleet HTTP API */
 export async function api<T = unknown>(
@@ -29,8 +63,16 @@ export async function api<T = unknown>(
   const url = `${BASE_URL}${path}`;
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
-    Authorization: `Bearer ${API_KEY}`,
   };
+
+  // Admin routes need session cookie auth
+  if (path.startsWith("/api/admin/")) {
+    headers.Cookie = await ensureAdminSession();
+    headers.Origin = BASE_URL;
+  } else {
+    headers.Authorization = `Bearer ${API_KEY}`;
+  }
+
   if (path.startsWith("/api/v1/")) {
     // Try to resolve tenant ID
     const configMatch = path.match(/\/configurations\/([^/]+)/);
@@ -74,7 +116,7 @@ export async function createConfig(
     "/api/v1/configurations",
     {
       method: "POST",
-      body: JSON.stringify({ tenant_id: tenantId, name }),
+      body: JSON.stringify({ name }),
       headers: { "X-Tenant-Id": tenantId },
     },
   );

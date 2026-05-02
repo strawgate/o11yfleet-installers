@@ -363,14 +363,6 @@ jobs:
         run: pnpm --filter @o11yfleet/opamp-tests test:opamp
         timeout-minutes: 10
 
-      - name: E2E collector tests (Docker with real OTel collectors)
-        env:
-          FP_URL: http://localhost:8787
-        run: |
-          cd tests/e2e-collector
-          pnpm vitest run
-        timeout-minutes: 10
-
       - name: Stop worker
         if: always()
         run: |
@@ -453,6 +445,25 @@ jobs:
         with:
           environment: staging
           origin: https://staging.o11yfleet.com
+        env:
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
+
+      - name: Smoke test collector enrollment
+        uses: ./.github/actions/smoke-collector
+        with:
+          worker-url: https://staging.o11yfleet.com
+          concurrent-agents: "5"
+        env:
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
+
+      - name: Smoke test token revocation
+        uses: ./.github/actions/smoke-token-revocation
+        with:
+          worker-url: https://staging.o11yfleet.com
         env:
           O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
           O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}

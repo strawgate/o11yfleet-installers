@@ -403,6 +403,18 @@ smoke-test:
 # Alias for local end-to-end smoke test
 smoke-local: smoke-test
 
+# Smoke test collector enrollment against wrangler dev (requires `just dev` running)
+smoke-collector:
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/smoke-collector/run.ts
+
+# Smoke test collector enrollment against a specific URL
+smoke-collector-url url="${FP_URL:-http://localhost:8787}":
+    WORKER_URL="{{url}}" CONCURRENT_AGENTS=3 pnpm tsx scripts/smoke-collector/run.ts
+
+# Smoke test token revocation against wrangler dev (requires `just dev` running)
+smoke-revocation:
+    pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/smoke-token-revocation/run.ts
+
 # OpAMP protocol compliance tests (requires `just dev` running)
 test-opamp:
     cd tests/opamp && pnpm vitest run

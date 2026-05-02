@@ -1,0 +1,46 @@
+name: Smoke collector enrollment
+description: |
+  Enroll a FakeOpampAgent against the worker and verify the full lifecycle:
+  enrollment, heartbeat, health report, config offer, and stats API.
+
+inputs:
+  worker-url:
+    description: "Base URL of the worker (e.g. https://staging.o11yfleet.com)"
+    required: true
+  config-name:
+    description: Name for the temporary smoke configuration.
+    default: ci-smoke-collector
+  concurrent-agents:
+    description: Number of concurrent agents to enroll for stress test.
+    default: "3"
+
+runs:
+  using: composite
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v6
+      with:
+        node-version: "22"
+        cache: pnpm
+
+    - name: Install dependencies
+      shell: bash
+      run: pnpm install --frozen-lockfile
+
+    - name: Smoke collector enrollment
+      shell: bash
+      env:
+        WORKER_URL: ${{ inputs.worker-url }}
+        CONFIG_NAME: ${{ inputs.config-name }}
+        CONCURRENT_AGENTS: ${{ inputs.concurrent-agents }}
+        O11YFLEET_API_BEARER_SECRET: ${{ env.O11YFLEET_API_BEARER_SECRET }}
+        O11YFLEET_SEED_ADMIN_EMAIL: ${{ env.O11YFLEET_SEED_ADMIN_EMAIL }}
+        O11YFLEET_SEED_ADMIN_PASSWORD: ${{ env.O11YFLEET_SEED_ADMIN_PASSWORD }}
+      run: |
+        set -euo pipefail
+
+        : "${O11YFLEET_API_BEARER_SECRET:?Set O11YFLEET_API_BEARER_SECRET}"
+        : "${O11YFLEET_SEED_ADMIN_EMAIL:?Set O11YFLEET_SEED_ADMIN_EMAIL}"
+        : "${O11YFLEET_SEED_ADMIN_PASSWORD:?Set O11YFLEET_SEED_ADMIN_PASSWORD}"
+
+        pnpm tsx scripts/smoke-collector/run.ts
