@@ -201,10 +201,10 @@ describe("GitHub social auth", () => {
       "installation",
       "installation_repositories",
     ]);
-    // Webhook handler ships in #510. Until then, declare the URL but keep it
-    // disabled so a freshly-bootstrapped app doesn't fire webhooks at a route
-    // that returns 404.
-    expect(manifest.hook_attributes.active).toBe(false);
+    // Webhook handler is live as of #510 — receives at POST /auth/github/webhook
+    // with HMAC verification. active: true means a freshly-bootstrapped app
+    // starts delivering events immediately.
+    expect(manifest.hook_attributes.active).toBe(true);
     expect(manifest.hook_attributes.url).toMatch(/\/auth\/github\/webhook$/);
   });
 

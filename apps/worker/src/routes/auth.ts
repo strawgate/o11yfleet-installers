@@ -11,6 +11,7 @@ import { validateJsonBody } from "../shared/validation.js";
 import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/origins.js";
 import { renderGitHubAppManifest } from "../github/manifest.js";
 import { isAutoApproveEnabled } from "../shared/email.js";
+import { handleGitHubWebhook } from "../github/webhook.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -341,6 +342,9 @@ export async function handleAuthRequest(request: Request, env: Env, url: URL): P
     }
     if (path === "/auth/github/app-manifest/callback" && method === "GET") {
       return await handleGitHubManifestCallback(request, env);
+    }
+    if (path === "/auth/github/webhook" && method === "POST") {
+      return await handleGitHubWebhook(request, env);
     }
     if (path === "/auth/seed" && method === "POST") {
       // Require Bearer O11YFLEET_API_BEARER_SECRET to prevent unauthorized account creation

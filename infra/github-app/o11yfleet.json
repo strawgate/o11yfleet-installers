@@ -17,7 +17,7 @@
   "default_events": ["push", "pull_request", "installation", "installation_repositories"],
   "hook_attributes": {
     "url": "${origin}/auth/github/webhook",
-    "active": false
+    "active": true
   },
   "redirect_url": "${origin}/auth/github/app-manifest/callback",
   "callback_urls": [
