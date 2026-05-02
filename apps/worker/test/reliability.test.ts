@@ -121,14 +121,15 @@ describe("WebSocket Error Handling", () => {
     ws.close();
   });
 
-  it("rate-limited agent receives error response with RetryInfo", async () => {
+  it("high message burst accepted without closure (rate limiter removed)", async () => {
     const { ws } = await connectWithEnrollment((await createEnrollmentToken(configId)).token);
 
     // Send hello (seq 0)
     await sendHello(ws);
 
-    // Blast 61 messages to exceed the 60/min rate limit
-    for (let i = 1; i <= 61; i++) {
+    // Send 100 heartbeats rapidly — with rate limiter removed, all should
+    // be accepted. The DO's single-threaded model is the natural throttle.
+    for (let i = 1; i <= 100; i++) {
       ws.send(
         encodeFrame(
           buildHeartbeat({ sequenceNum: i, capabilities: AgentCapabilities.ReportsStatus }),
@@ -136,9 +137,15 @@ describe("WebSocket Error Handling", () => {
       );
     }
 
-    // Wait for close — should be 4029
-    const closeEvent = await waitForClose(ws, 5000);
-    expect(closeEvent.code).toBe(4029);
+    // Assert no close event occurs within the observation window.
+    const outcome = await Promise.race<{ closed: true; code: number } | { closed: false }>([
+      waitForClose(ws).then((ev) => ({ closed: true as const, code: ev.code })),
+      new Promise<{ closed: false }>((resolve) => {
+        setTimeout(() => resolve({ closed: false }), 500);
+      }),
+    ]);
+    expect(outcome.closed).toBe(false);
+    ws.close();
   });
 });
 

@@ -346,9 +346,10 @@ describe("ServerToAgent Message (§4.4)", () => {
 // ─── §4.5 Error Handling ─────────────────────────────────────────────────────
 
 describe("Error Handling (§4.5)", () => {
+  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
+  // Re-enable when JSON/TEXT frame support is added: #463
+  // Server disconnects instead of sending error_response when it can't decode the message.
   it.skip("returns error_response for malformed protobuf instead of disconnecting", async () => {
-    // SKIPPED: This test requires the worker to respond with error_response
-    // for malformed protobuf. May not be implemented in current worker.
     // Spec §4.5.1: "If the Server receives a malformed AgentToServer message,
     // it SHOULD respond with a ServerToAgent that has the error_response field set"
     const { token } = await setupTenantAndConfig();
@@ -1197,7 +1198,7 @@ describe("Component Health Map (§5.2.1)", () => {
     // Find our agent and check component-level health is stored
     const found = data.agents?.find((a) => {
       const desc = a.agent_description as string | null;
-      return (typeof desc === "string" && desc.includes("comp-health-stored")) || a.instance_uid;
+      return typeof desc === "string" && desc.includes("comp-health-stored");
     });
     expect(found).toBeDefined();
 
@@ -1459,10 +1460,11 @@ describe("Error Recovery (§4.5.1)", () => {
 // ─── §6.1.1 Token Revocation ─────────────────────────────────────────────────
 
 describe("Token Revocation (§6.1.1)", () => {
+  // SKIPPED: Server does not reject revoked tokens immediately on new enrollment attempt.
+  // Re-enable when token revocation is implemented: #464
+  // The worker accepts the WS connection and waits for the first message rather than
+  // checking token validity before upgrade.
   it.skip("revoked token is rejected immediately on new enrollment attempt", async () => {
-    // SKIPPED: This test expects revoked tokens to be rejected at the
-    // WebSocket upgrade level. Current implementation may accept the WS
-    // connection and reject during enrollment instead.
     // Server MUST check token validity at enrollment time.
     // Revoked tokens should fail fast, not after WS upgrade.
     const { token, configId, tenantId } = await setupTenantAndConfig();
@@ -1754,13 +1756,14 @@ describe("Available Components (§5.2.2)", () => {
     expect(serviceName?.value?.string_value ?? serviceName?.value).toBe("otelcol-contrib");
   });
 
+  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
+  // Re-enable when JSON/TEXT frame support is added: #463
+  // available_components is sent via JSON frame which the worker rejects.
   it.skip("available_components field is stored when sent by agent", async () => {
-    // SKIPPED: This test sends a TEXT/JSON frame to test forward compatibility
-    // with extra protobuf fields. After PR #399, the worker is protobuf-only
-    // and rejects non-binary frames. The test would need to be rewritten to
-    // use a proper protobuf encoder with unknown fields (e.g., using the
-    // protobufjs Any type or raw binary manipulation).
-    // See: https://github.com/open-telemetry/opamp-spec/pull/580
+    // Spec: Agent MAY report available_components listing what receivers,
+    // processors, exporters, extensions it supports. This is SEPARATE from
+    // agent_description — it's a dedicated field for component inventory.
+    // Server should store this for fleet management / config validation.
     const { token, configId, tenantId } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "avail-comp-store");
     const claim = agent.enrollment!.assignment_claim;
@@ -1892,9 +1895,11 @@ describe("Connection Settings Request (§5.8)", () => {
 // ─── §5.9 Restart Command ────────────────────────────────────────────────────
 
 describe("Restart Command (§5.9)", () => {
+  // SKIPPED: Server does not send restart commands to agents.
+  // Re-enable when restart command is implemented: #465
+  // The /api/v1/configurations/:id/restart endpoint returns 404 or the server
+  // doesn't send the command message after the agent connects.
   it.skip("server can send restart command to agent", async () => {
-    // SKIPPED: This test expects the server to send a ServerToAgent message
-    // with command.restart field set. Worker may not implement this feature.
     // Spec: Server MAY send a Command message with type=Restart to ask
     // the agent to restart. Requires agent to advertise AcceptsRestartCommand.
     const { token, configId, tenantId } = await setupTenantAndConfig();
@@ -1923,12 +1928,13 @@ describe("Restart Command (§5.9)", () => {
 // ─── §5.10 Custom Messages / Capabilities ────────────────────────────────────
 
 describe("Custom Messages (§5.10)", () => {
+  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
+  // Re-enable when JSON/TEXT frame support is added: #463
+  // The worker disconnects when it receives a text frame with unknown fields.
   it.skip("server does not disconnect when message contains unknown JSON fields", async () => {
-    // SKIPPED: This test sends a TEXT/JSON frame to test that the server
-    // accepts unknown fields. After PR #399, the worker is protobuf-only
-    // and rejects non-binary frames. The test would need to be rewritten
-    // to use proper protobuf encoding with unknown fields. Protobuf-js
-    // typically drops unknown fields or errors on them depending on settings.
+    // Spec: Agent MAY send custom_capabilities and custom_message fields.
+    // Server MUST NOT reject messages containing unknown/extra fields.
+    // Our JSON framing means unknown fields survive JSON.parse natively.
     const { token } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "custom-unknown-fields");
     const claim = agent.enrollment!.assignment_claim;
@@ -1984,10 +1990,11 @@ describe("Custom Messages (§5.10)", () => {
     ws.close();
   });
 
+  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
+  // Re-enable when JSON/TEXT frame support is added: #463
   it.skip("server responds normally after receiving custom_capabilities in message", async () => {
-    // SKIPPED: Same as above — this test sends TEXT/JSON frames which the
-    // protobuf-only worker rejects. Would need protobuf encoding with unknown
-    // fields support to test properly.
+    // After receiving a message with custom fields, the server should continue
+    // operating normally — next valid message should still get a response.
     const { token } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "custom-cap-continues");
     const claim = agent.enrollment!.assignment_claim;

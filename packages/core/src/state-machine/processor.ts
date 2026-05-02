@@ -50,6 +50,7 @@ export async function processFrame(
   const context = ctx ?? defaultProcessContext();
   const events: AnyFleetEvent[] = [];
   let shouldPersist = false;
+  const dirtyFields = new Set<string>();
   const now = context.now;
   const instanceUid = uint8ToHex(state.instance_uid);
 
@@ -89,16 +90,19 @@ export async function processFrame(
     response.flags |= ServerToAgentFlags.ReportFullState;
     newState.sequence_num = msg.sequence_num;
     shouldPersist = true;
-    return { newState, response, events, shouldPersist };
+    dirtyFields.add("sequence_num");
+    return { newState, response, events, shouldPersist, dirtyFields };
   }
 
   newState.sequence_num = msg.sequence_num;
 
-  // Persist sequence_num so the next message sees the correct expected
-  // sequence. With 1-hour heartbeats this is ~1 write/hour/agent.
-  // Liveness fallback uses last_seen_at in SQLite; auto-response ping/pong
-  // keeps idle WebSockets alive without waking the Durable Object.
-  shouldPersist = true;
+  // sequence_num and last_seen_at are tracked in the WS attachment (zero
+  // cost) and only written to SQLite when a real state change also sets
+  // shouldPersist = true. On DO eviction the attachment is lost; the next
+  // reconnect falls back to SQLite's stale seq_num, any gap triggers
+  // ReportFullState, and the full state persist brings SQLite back in sync.
+  // This removes one SQLite UPSERT per no-op heartbeat — at 100K agents
+  // with 1-hour heartbeats that's $72/mo in write costs saved.
 
   // Handle disconnect
   if (msg.agent_disconnect) {
@@ -121,7 +125,9 @@ export async function processFrame(
       }),
     );
     shouldPersist = true;
-    return { newState, response: null, events, shouldPersist };
+    dirtyFields.add("status");
+    dirtyFields.add("connected_at");
+    return { newState, response: null, events, shouldPersist, dirtyFields };
   }
 
   // Is this a hello (first message or reconnection)?
@@ -133,6 +139,7 @@ export async function processFrame(
     response.flags |= ServerToAgentFlags.ReportFullState;
     newState.connected_at = now;
     shouldPersist = true;
+    dirtyFields.add("connected_at");
     events.push(
       makeFleetEvent({
         type: FleetEventType.AGENT_CONNECTED,
@@ -155,6 +162,7 @@ export async function processFrame(
   if (msg.capabilities !== newState.capabilities) {
     newState.capabilities = msg.capabilities;
     shouldPersist = true;
+    dirtyFields.add("capabilities");
   }
 
   // Process health
@@ -176,6 +184,9 @@ export async function processFrame(
       newState.status = status;
       newState.last_error = lastError;
       shouldPersist = true;
+      dirtyFields.add("healthy");
+      dirtyFields.add("status");
+      dirtyFields.add("last_error");
       events.push(
         makeFleetEvent({
           type: FleetEventType.AGENT_HEALTH_CHANGED,
@@ -200,6 +211,7 @@ export async function processFrame(
     if (msg.health.component_health_map !== undefined) {
       newState.component_health_map = msg.health.component_health_map as Record<string, unknown>;
       shouldPersist = true;
+      dirtyFields.add("component_health_map");
     }
   }
 
@@ -209,6 +221,7 @@ export async function processFrame(
     if (descJson !== state.agent_description) {
       newState.agent_description = descJson;
       shouldPersist = true;
+      dirtyFields.add("agent_description");
     }
   }
 
@@ -223,6 +236,7 @@ export async function processFrame(
   if (msg.available_components !== undefined) {
     newState.available_components = msg.available_components;
     shouldPersist = true;
+    dirtyFields.add("available_components");
   }
 
   // Process effective config — store the agent's actual running config for fleet visibility
@@ -241,6 +255,7 @@ export async function processFrame(
         newState.effective_config_hash = hashHex;
         newState.effective_config_body = new TextDecoder().decode(entry.body);
         shouldPersist = true;
+        dirtyFields.add("effective_config_hash");
         events.push(
           makeFleetEvent({
             type: FleetEventType.CONFIG_EFFECTIVE_REPORTED,
@@ -272,6 +287,7 @@ export async function processFrame(
       if (hash && hashChanged) {
         newState.current_config_hash = hash;
         shouldPersist = true;
+        dirtyFields.add("current_config_hash");
         events.push(
           makeFleetEvent({
             type: FleetEventType.CONFIG_APPLIED,
@@ -330,5 +346,5 @@ export async function processFrame(
     };
   }
 
-  return { newState, response, events, shouldPersist };
+  return { newState, response, events, shouldPersist, dirtyFields };
 }

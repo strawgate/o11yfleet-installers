@@ -72,10 +72,12 @@ export interface AgentStateRepository {
     desiredHash: string | null,
   ): AgentState;
   saveAgentState(state: AgentState): void;
+  /** Tier 1 targeted UPDATE: write only changed columns for an existing agent. */
+  updateAgentPartial(uid: string, state: AgentState, dirtyFields: ReadonlySet<string>): void;
   getAgentCount(): number;
   agentExists(uid: string): boolean;
   getAgentGeneration(uid: string): number;
-  markDisconnected(uid: string): void;
+  markDisconnected(uid: string, lastSeenAt?: number, sequenceNum?: number): void;
   getAgent(uid: string): Record<string, unknown> | null;
 
   // Config state
@@ -84,9 +86,6 @@ export interface AgentStateRepository {
   saveDoIdentity(tenantId: string, configId: string): void;
   loadDoPolicy(): DoPolicy;
   saveDoPolicy(policy: Partial<DoPolicy>): void;
-
-  // Rate limiting
-  checkRateLimit(uid: string, maxPerMinute: number): boolean;
 
   // Queries
   getStats(): { total: number; connected: number; healthy: number };

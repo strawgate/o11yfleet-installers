@@ -61,8 +61,6 @@ export function initSchema(sql: SqlStorage): void {
       connected_at INTEGER NOT NULL DEFAULT 0,
       agent_description TEXT,
       capabilities INTEGER NOT NULL DEFAULT 0,
-      rate_window_start INTEGER NOT NULL DEFAULT 0,
-      rate_window_count INTEGER NOT NULL DEFAULT 0,
       component_health_map TEXT,
       available_components TEXT
     )
@@ -96,14 +94,10 @@ export function initSchema(sql: SqlStorage): void {
   `);
   // Ensure singleton row exists
   sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
-  // Indexes for alarm sweep and stats queries
-  sql.exec(`CREATE INDEX IF NOT EXISTS idx_agents_status ON agents(status)`);
-  sql.exec(
-    `CREATE INDEX IF NOT EXISTS idx_agents_last_seen ON agents(last_seen_at) WHERE status != 'disconnected'`,
-  );
-  sql.exec(
-    `CREATE INDEX IF NOT EXISTS idx_agents_config_hash ON agents(current_config_hash) WHERE current_config_hash IS NOT NULL`,
-  );
+  // Intentionally NO indexes on `agents`. DO-local SQLite is in-process —
+  // full table scans of 30K rows take <1ms. Each index adds +1 billed row
+  // written per UPSERT ($1/M), dwarfing the read savings ($0.001/M).
+  // See AGENTS.md for the full cost analysis.
   // Pending devices table — for __pending__ DOs only
   sql.exec(`
     CREATE TABLE IF NOT EXISTS pending_devices (
@@ -117,9 +111,7 @@ export function initSchema(sql: SqlStorage): void {
       geo_lon REAL,
       agent_description TEXT,
       connected_at INTEGER NOT NULL DEFAULT 0,
-      last_seen_at INTEGER NOT NULL DEFAULT 0,
-      rate_window_start INTEGER NOT NULL DEFAULT 0,
-      rate_window_count INTEGER NOT NULL DEFAULT 0
+      last_seen_at INTEGER NOT NULL DEFAULT 0
     )
   `);
   sql.exec(`CREATE INDEX IF NOT EXISTS idx_pending_devices_tenant ON pending_devices(tenant_id)`);
@@ -191,6 +183,13 @@ function migrateSchema(sql: SqlStorage): void {
     `);
     // Leave the legacy column in place for rollback compatibility. New reads use config_snapshots.
   }
+  // Migration 4: drop agents indexes that were adding write cost.
+  // Each index adds +1 billed row written per UPSERT ($1/M). DO-local SQLite
+  // is in-process — full table scans of 30K rows take <1ms, so these indexes
+  // were pure write tax. See AGENTS.md.
+  sql.exec(`DROP INDEX IF EXISTS idx_agents_status`);
+  sql.exec(`DROP INDEX IF EXISTS idx_agents_last_seen`);
+  sql.exec(`DROP INDEX IF EXISTS idx_agents_config_hash`);
 }
 
 // ─── Config State ───────────────────────────────────────────────────
@@ -311,35 +310,7 @@ export function saveDoPolicy(sql: SqlStorage, policy: Partial<DoPolicy>): void {
   sql.exec(`UPDATE do_config SET max_agents_per_config = ? WHERE id = 1`, v);
 }
 
-// ─── Rate Limiting ──────────────────────────────────────────────────
-
-/**
- * Check rate limit for an agent. Returns true if the agent is rate-limited.
- * Atomic check-and-increment in a single SQL statement.
- * Resets the window if it has expired (sliding 60s window).
- */
-export function checkRateLimit(sql: SqlStorage, uid: string, maxPerMinute: number): boolean {
-  const now = Date.now();
-  const windowStart = now - 60_000;
-
-  // Atomic: reset expired window or increment count, return new count
-  const row = sql
-    .exec(
-      `UPDATE agents SET
-       rate_window_start = CASE WHEN rate_window_start < ? THEN ? ELSE rate_window_start END,
-       rate_window_count = CASE WHEN rate_window_start < ? THEN 1 ELSE rate_window_count + 1 END
-     WHERE instance_uid = ?
-     RETURNING rate_window_count`,
-      windowStart,
-      now,
-      windowStart,
-      uid,
-    )
-    .toArray()[0];
-
-  if (!row) return false; // Agent not in DB yet — allow
-  return (row["rate_window_count"] as number) > maxPerMinute;
-}
+// ─── Agent State ─────────────────────────────────────────────────────
 
 /**
  * Load agent state from DO SQLite, or return a default state for new agents.
@@ -434,8 +405,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     : null;
 
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, rate_window_start, rate_window_count, component_health_map, available_components)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, component_health_map, available_components)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
@@ -470,8 +441,77 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
 }
 
 /**
- * Get agent count for limit enforcement.
+ * Tier 1 targeted UPDATE: write only the changed columns for an existing agent.
+ *
+ * `sequence_num` and `last_seen_at` are always piggy-backed onto any Tier 1
+ * write — they're tracked in the WS attachment at zero cost and flushed
+ * opportunistically here. JSON serialization for component_health_map and
+ * available_components is skipped entirely when those fields didn't change.
+ *
+ * @see saveAgentState for the full Tier 2 UPSERT path.
  */
+export function updateAgentPartial(
+  sql: SqlStorage,
+  instanceUid: string,
+  state: AgentState,
+  dirtyFields: ReadonlySet<string>,
+): void {
+  // Always piggyback seq_num + last_seen_at (free flush from attachment)
+  const setClauses: string[] = ["sequence_num = ?", "last_seen_at = ?"];
+  const params: (string | number | null)[] = [state.sequence_num, state.last_seen_at];
+
+  if (dirtyFields.has("capabilities")) {
+    setClauses.push("capabilities = ?");
+    params.push(state.capabilities);
+  }
+  if (dirtyFields.has("healthy") || dirtyFields.has("status") || dirtyFields.has("last_error")) {
+    setClauses.push("healthy = ?", "status = ?", "last_error = ?");
+    params.push(state.healthy ? 1 : 0, state.status, state.last_error);
+  }
+  if (dirtyFields.has("component_health_map")) {
+    setClauses.push("component_health_map = ?");
+    params.push(
+      state.component_health_map
+        ? JSON.stringify(state.component_health_map, (_k, v) =>
+            typeof v === "bigint" ? v.toString() : v,
+          )
+        : null,
+    );
+  }
+  if (dirtyFields.has("agent_description")) {
+    setClauses.push("agent_description = ?");
+    params.push(state.agent_description);
+  }
+  if (dirtyFields.has("available_components")) {
+    setClauses.push("available_components = ?");
+    params.push(
+      state.available_components
+        ? JSON.stringify(state.available_components, (_k, v) =>
+            typeof v === "bigint" ? v.toString() : v,
+          )
+        : null,
+    );
+  }
+  if (dirtyFields.has("effective_config_hash")) {
+    setClauses.push("effective_config_hash = ?");
+    params.push(state.effective_config_hash);
+    // Deduplicate effective config body into config_snapshots table
+    if (state.effective_config_hash && state.effective_config_body) {
+      sql.exec(
+        `INSERT OR IGNORE INTO config_snapshots (hash, body) VALUES (?, ?)`,
+        state.effective_config_hash,
+        state.effective_config_body,
+      );
+    }
+  }
+  if (dirtyFields.has("current_config_hash")) {
+    setClauses.push("current_config_hash = ?");
+    params.push(state.current_config_hash ? uint8ToHex(state.current_config_hash) : null);
+  }
+
+  params.push(instanceUid);
+  sql.exec(`UPDATE agents SET ${setClauses.join(", ")} WHERE instance_uid = ?`, ...params);
+}
 export function getAgentCount(sql: SqlStorage): number {
   return sql.exec("SELECT COUNT(*) as count FROM agents").one()["count"] as number;
 }
@@ -496,14 +536,33 @@ export function getAgentGeneration(sql: SqlStorage, instanceUid: string): number
 }
 
 /**
- * Mark an agent as disconnected.
+ * Mark an agent as disconnected, flushing attachment-tracked fields to SQLite.
+ *
+ * @param lastSeenAt  From the WS attachment (accurate even during Tier 0).
+ *                    Falls back to Date.now() if not available.
+ * @param sequenceNum From the WS attachment. Flushes the latest seq_num
+ *                    that was tracked in-memory during no-op heartbeats.
  */
-export function markDisconnected(sql: SqlStorage, instanceUid: string): void {
-  sql.exec(
-    `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
-    Date.now(),
-    instanceUid,
-  );
+export function markDisconnected(
+  sql: SqlStorage,
+  instanceUid: string,
+  lastSeenAt?: number,
+  sequenceNum?: number,
+): void {
+  if (sequenceNum !== undefined) {
+    sql.exec(
+      `UPDATE agents SET status = 'disconnected', last_seen_at = ?, sequence_num = ? WHERE instance_uid = ?`,
+      lastSeenAt ?? Date.now(),
+      sequenceNum,
+      instanceUid,
+    );
+  } else {
+    sql.exec(
+      `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
+      lastSeenAt ?? Date.now(),
+      instanceUid,
+    );
+  }
 }
 
 /**
@@ -645,7 +704,7 @@ export function listAgentsPage(
   // on demand for that field.
   const rows = sql
     .exec(
-      `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.rate_window_start,a.rate_window_count,a.component_health_map,a.available_components FROM agents a ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
+      `SELECT a.instance_uid,a.tenant_id,a.config_id,a.sequence_num,a.generation,a.healthy,a.status,a.last_error,a.current_config_hash,a.effective_config_hash,a.last_seen_at,a.connected_at,a.agent_description,a.capabilities,a.component_health_map,a.available_components FROM agents a ${whereSql} ORDER BY ${orderSql} LIMIT ?`,
       ...bind,
       params.limit + 1,
     )
@@ -1050,30 +1109,4 @@ export function getPendingAssignment(
 
 export function deletePendingAssignment(sql: SqlStorage, instanceUid: string): void {
   sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
-}
-
-export function checkPendingDeviceRateLimit(
-  sql: SqlStorage,
-  uid: string,
-  maxPerMinute: number,
-): boolean {
-  const now = Date.now();
-  const windowStart = now - 60_000;
-
-  const row = sql
-    .exec(
-      `UPDATE pending_devices SET
-       rate_window_start = CASE WHEN rate_window_start < ? THEN ? ELSE rate_window_start END,
-       rate_window_count = CASE WHEN rate_window_start < ? THEN 1 ELSE rate_window_count + 1 END
-     WHERE instance_uid = ?
-     RETURNING rate_window_count`,
-      windowStart,
-      now,
-      windowStart,
-      uid,
-    )
-    .toArray()[0];
-
-  if (!row) return false;
-  return (row["rate_window_count"] as number) > maxPerMinute;
 }

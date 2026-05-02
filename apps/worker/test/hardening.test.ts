@@ -36,14 +36,14 @@ describe("Cost Guardrails", () => {
     agent_description: null,
   };
 
-  it("heartbeat always persists sequence_num + last_seen_at (DO SQLite is ~µs)", async () => {
+  it("no-op heartbeat skips persistence (seq tracked in WS attachment)", async () => {
     const result = await processFrame(baseState, {
       instance_uid: new Uint8Array(16),
       sequence_num: 2,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
     });
-    expect(result.shouldPersist).toBe(true);
+    expect(result.shouldPersist).toBe(false);
   });
 
   it("no-op heartbeat: zero transition events emitted", async () => {

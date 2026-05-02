@@ -374,7 +374,7 @@ describe("state-machine property tests", () => {
     );
   });
 
-  it("pure heartbeat (no changes) always persists (seq + last_seen_at)", async () => {
+  it("pure heartbeat (no changes) skips persistence (seq tracked in WS attachment)", async () => {
     await fc.assert(
       fc.asyncProperty(fc.integer({ min: 5, max: 50 }), async (currentSeq) => {
         const state = makeInitialState({
@@ -392,8 +392,9 @@ describe("state-machine property tests", () => {
           // No health, no config status, no description, no disconnect
         };
         const result = await processFrame(state, msg, undefined, undefined, makeDeterministicCtx());
-        // Always persists: sequence_num + last_seen_at saved on every message
-        expect(result.shouldPersist).toBe(true);
+        // No-op heartbeats skip persistence — the DO tracks seq_num and
+        // last_seen_at in the WS attachment at zero SQLite cost.
+        expect(result.shouldPersist).toBe(false);
         expect(result.events).toHaveLength(0);
       }),
       { numRuns: 200 },

@@ -1,6 +1,5 @@
 import { ServerCapabilities } from "@o11yfleet/core/codec";
 
-export const MAX_MESSAGES_PER_MINUTE = 60;
 // CF Durable Objects support max ~32K concurrent WebSocket connections.
 export const MAX_AGENTS_PER_CONFIG = 32_000;
 

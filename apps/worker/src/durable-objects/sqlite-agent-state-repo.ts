@@ -14,6 +14,7 @@ import {
   initSchema,
   loadAgentState,
   saveAgentState,
+  updateAgentPartial,
   getAgentCount,
   agentExists,
   getAgentGeneration,
@@ -24,7 +25,6 @@ import {
   saveDoIdentity,
   loadDoPolicy,
   saveDoPolicy,
-  checkRateLimit,
   getStats,
   getCohortBreakdown,
   listAgentsPage,
@@ -54,6 +54,10 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
     saveAgentState(this.sql, state);
   }
 
+  updateAgentPartial(uid: string, state: AgentState, dirtyFields: ReadonlySet<string>): void {
+    updateAgentPartial(this.sql, uid, state, dirtyFields);
+  }
+
   getAgentCount(): number {
     return getAgentCount(this.sql);
   }
@@ -66,8 +70,8 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
     return getAgentGeneration(this.sql, uid);
   }
 
-  markDisconnected(uid: string): void {
-    markDisconnected(this.sql, uid);
+  markDisconnected(uid: string, lastSeenAt?: number, sequenceNum?: number): void {
+    markDisconnected(this.sql, uid, lastSeenAt, sequenceNum);
   }
 
   getAgent(uid: string): Record<string, unknown> | null {
@@ -92,10 +96,6 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   saveDoPolicy(policy: Partial<DoPolicy>): void {
     saveDoPolicy(this.sql, policy);
-  }
-
-  checkRateLimit(uid: string, maxPerMinute: number): boolean {
-    return checkRateLimit(this.sql, uid, maxPerMinute);
   }
 
   getStats(): { total: number; connected: number; healthy: number } {

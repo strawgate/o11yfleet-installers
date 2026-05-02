@@ -29,6 +29,20 @@ export interface ProcessResult {
   response: ServerToAgent | null;
   events: AnyFleetEvent[];
   shouldPersist: boolean;
+  /**
+   * Which AgentState fields were mutated by this frame. Used by the DO to
+   * choose between a targeted UPDATE (Tier 1) and a full UPSERT (Tier 2).
+   *
+   * - Empty set + shouldPersist=true → event-only (e.g. config_rejected),
+   *   skip SQL entirely.
+   * - Contains 'connected_at' → Tier 2 full UPSERT (row may not exist).
+   * - Otherwise → Tier 1 targeted UPDATE (row exists, change only dirty cols).
+   *
+   * `sequence_num` and `last_seen_at` are always piggy-backed onto any
+   * Tier 1 UPDATE but are NOT listed here — they're tracked in the WS
+   * attachment at zero cost and only flushed opportunistically.
+   */
+  dirtyFields: ReadonlySet<string>;
 }
 
 /** Dependency injection for non-deterministic operations.

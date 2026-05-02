@@ -35,7 +35,6 @@ import type { SessionContext } from "./opamp-session.js";
 import { parseConfigDoName, safeForLog, type ConfigDoIdentity } from "./do-name.js";
 import { initBodySchema, parseAndValidateBody, syncPolicyBodySchema } from "./policy-schemas.js";
 import {
-  MAX_MESSAGES_PER_MINUTE,
   MAX_AGENTS_PER_CONFIG,
   ALARM_TICK_MS,
   DEFAULT_HEARTBEAT_INTERVAL_SECONDS,
@@ -44,7 +43,6 @@ import {
   STALE_AGENT_THRESHOLD_MS,
 } from "./constants.js";
 
-export const PENDING_MESSAGES_PER_MINUTE = 6;
 const PENDING_DO_CONFIG_ID = "__pending__";
 
 export interface ConfigDOEnv {
@@ -288,15 +286,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const connectSpan = startWsConnectSpan(instanceUid, tenantId, configId, isEnrollment);
 
     if (isPendingDo) {
-      const { upsertPendingDevice, checkPendingDeviceRateLimit } =
-        await import("./agent-state-repo.js");
-      if (
-        checkPendingDeviceRateLimit(this.ctx.storage.sql, instanceUid, PENDING_MESSAGES_PER_MINUTE)
-      ) {
-        connectSpan.setStatus({ code: SpanStatusCode.ERROR, message: "rate_limited" });
-        connectSpan.end();
-        return Response.json({ error: "Rate limit exceeded" }, { status: 429 });
-      }
+      const { upsertPendingDevice } = await import("./agent-state-repo.js");
       upsertPendingDevice(this.ctx.storage.sql, {
         instance_uid: instanceUid,
         tenant_id: tenantId,
@@ -375,29 +365,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     const isPendingDo = attachment.config_id === PENDING_DO_CONFIG_ID;
 
-    // Rate limit — atomic check-and-increment in SQLite
-    // Use lower rate limit (6 msg/min) for pending DOs
-    const rateLimit = isPendingDo ? PENDING_MESSAGES_PER_MINUTE : MAX_MESSAGES_PER_MINUTE;
-    if (this.repo.checkRateLimit(attachment.instance_uid, rateLimit)) {
-      try {
-        const retryDelayNs = BigInt(30_000_000_000); // 30 seconds
-        const errorResponse: ServerToAgent = {
-          instance_uid: hexToUint8Array(attachment.instance_uid),
-          flags: 0,
-          capabilities: SERVER_CAPABILITIES,
-          error_response: {
-            type: ServerErrorResponseType.Unavailable,
-            error_message: "Rate limit exceeded — retry after 30s",
-            retry_info: { retry_after_nanoseconds: retryDelayNs },
-          },
-        };
-        ws.send(encodeServerToAgent(errorResponse));
-      } catch {
-        // Best-effort — socket may already be broken
-      }
-      ws.close(4029, "Rate limit exceeded");
-      return;
-    }
+    // Rate limiting deliberately omitted inside the DO. By the time this
+    // code runs the DO is already awake and JS is executing — the cost is
+    // paid. The DO's single-threaded model (~500-1000 msg/sec) IS the
+    // natural throttle. Edge-level CF WAF Rate Limiting Rules handle
+    // connection-level abuse before the DO is woken. See AGENTS.md.
 
     const config = this.getDesiredConfig();
     const configBytes = config.bytes;
@@ -458,12 +430,27 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         config.hash,
       );
 
-      // Increment generation on new connection (first processFrame after connect/reconnect)
+      // Use attachment-tracked seq_num for gap detection. SQLite seq_num
+      // may be stale when previous no-op heartbeats skipped persistence.
+      // On reconnect (new WS), attachment.sequence_num is undefined so
+      // we fall back to SQLite — any gap triggers ReportFullState, which
+      // brings everything back in sync. See AGENTS.md.
+      if (attachment.sequence_num !== undefined) {
+        state.sequence_num = attachment.sequence_num;
+      }
+
+      // Increment generation on new connection (first processFrame after connect/reconnect).
+      // forceFullPersist ensures the full UPSERT (Tier 2) runs, because these
+      // mutations happen outside processFrame and won't appear in dirtyFields.
+      // An agent reconnecting with seq != 0 (maintaining counter across reconnect)
+      // would otherwise lose generation/connected_at/status updates.
+      let forceFullPersist = false;
       if (attachment.is_first_message) {
         state.generation += 1;
         state.connected_at = attachment.connected_at;
         state.status = "connected";
         attachment.is_first_message = false;
+        forceFullPersist = true;
 
         // For pending DOs, check for pending assignment on reconnection
         if (isPendingDo) {
@@ -520,15 +507,32 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         defaultProcessContext(),
       );
 
-      // Persist agent's advertised capabilities in attachment for command gating.
-      if (agentMsg.capabilities && attachment.capabilities !== agentMsg.capabilities) {
+      // Track session-scoped state in WS attachment (zero SQL cost).
+      // seq_num + last_seen_at live here so no-op heartbeats avoid a SQLite write.
+      // capabilities are already tracked for command gating.
+      if (result.newState.sequence_num !== attachment.sequence_num) {
+        attachment.sequence_num = result.newState.sequence_num;
+      }
+      if (attachment.capabilities !== agentMsg.capabilities) {
         attachment.capabilities = agentMsg.capabilities;
-        ws.serializeAttachment(attachment);
       }
+      // Always update last_seen_at so liveness is tracked even on Tier 0.
+      // Flushed to SQLite on webSocketClose → markDisconnected.
+      attachment.last_seen_at = Date.now();
+      ws.serializeAttachment(attachment);
 
-      if (result.shouldPersist) {
+      if (forceFullPersist || (result.shouldPersist && result.dirtyFields.has("connected_at"))) {
+        // Tier 2: first message, hello, reconnect, or disconnect — row may not exist,
+        // and config-do may have mutated fields (generation, connected_at, status) outside
+        // processFrame. Full UPSERT writes all 16 columns.
         this.repo.saveAgentState(result.newState);
+      } else if (result.shouldPersist && result.dirtyFields.size > 0) {
+        // Tier 1: existing agent, field change only — targeted UPDATE writes only dirty
+        // columns, skipping JSON.stringify for untouched component_health_map/available_components.
+        this.repo.updateAgentPartial(attachment.instance_uid, result.newState, result.dirtyFields);
       }
+      // When dirtyFields is empty but shouldPersist is true (e.g. config_rejected),
+      // only events need processing — no SQL write needed.
 
       if (result.events.length > 0) {
         span.setAttribute("opamp.events_emitted", result.events.length);
@@ -606,7 +610,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         attachment.config_id,
         config.hash,
       );
-      this.repo.markDisconnected(attachment.instance_uid);
+      // Flush attachment-tracked last_seen_at + sequence_num to SQLite so
+      // metrics and stale sweeps stay accurate even for Tier 0 connections.
+      this.repo.markDisconnected(
+        attachment.instance_uid,
+        attachment.last_seen_at,
+        attachment.sequence_num,
+      );
       if (state.status === "disconnected") {
         return;
       }
@@ -631,7 +641,11 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           attachment.config_id,
           config.hash,
         );
-        this.repo.markDisconnected(attachment.instance_uid);
+        this.repo.markDisconnected(
+          attachment.instance_uid,
+          attachment.last_seen_at,
+          attachment.sequence_num,
+        );
         if (state.status !== "disconnected") {
           await this.ensureAlarm();
         }

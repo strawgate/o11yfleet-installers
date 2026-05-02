@@ -60,7 +60,7 @@ describe("state-machine/processFrame", () => {
     expect(result.newState.connected_at).toBeGreaterThan(0);
   });
 
-  it("handles heartbeat with no changes — always persists (seq + last_seen_at)", async () => {
+  it("handles heartbeat with no changes — skips persistence (tracked in WS attachment)", async () => {
     const state = makeDefaultState({
       sequence_num: 5,
       connected_at: Date.now() - 10000,
@@ -76,9 +76,10 @@ describe("state-machine/processFrame", () => {
     };
 
     const result = await processFrame(state, msg);
-    // Always persists: sequence_num + last_seen_at must be saved to prevent
-    // false sequence gaps on the next heartbeat.
-    expect(result.shouldPersist).toBe(true);
+    // No-op heartbeats skip persistence. sequence_num and last_seen_at are
+    // tracked in the WS attachment at zero cost. On reconnect, any gap in
+    // SQLite's stale seq_num triggers ReportFullState — correct by spec.
+    expect(result.shouldPersist).toBe(false);
     expect(result.events).toHaveLength(0);
     expect(result.response).not.toBeNull();
   });
@@ -282,7 +283,9 @@ describe("state-machine/processFrame", () => {
 
     const result = await processFrame(state, msg);
     expect(result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED)).toBeUndefined();
-    expect(result.shouldPersist).toBe(true);
+    // Hash unchanged means no real state change — shouldPersist is false.
+    // The DO tracks sequence_num in the WS attachment.
+    expect(result.shouldPersist).toBe(false);
   });
 
   it("updates agent description — persists", async () => {
@@ -486,7 +489,8 @@ describe("Effective Config Processing", () => {
       },
     };
     const secondResult = await processFrame(secondState, secondMsg);
-    expect(secondResult.shouldPersist).toBe(true);
+    // Same effective config hash → no state change → no persistence needed
+    expect(secondResult.shouldPersist).toBe(false);
     expect(secondResult.events).toHaveLength(0);
   });
 });
@@ -530,5 +534,219 @@ describe("RequestInstanceUid", () => {
 
     const result = await processFrame(state, msg);
     expect(result.response!.agent_identification).toBeUndefined();
+  });
+});
+
+// ─── dirtyFields ────────────────────────────────────────────────────
+
+describe("dirtyFields tracking", () => {
+  it("no-op heartbeat produces empty dirtyFields", async () => {
+    const state = makeDefaultState({ sequence_num: 5, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: 0,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(false);
+    expect(result.dirtyFields.size).toBe(0);
+  });
+
+  it("hello marks connected_at dirty (Tier 2)", async () => {
+    const state = makeDefaultState({ connected_at: 0 });
+    const msg = makeHelloMsg();
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(true);
+  });
+
+  it("health change marks healthy/status/last_error dirty (Tier 1)", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      health: {
+        healthy: false,
+        status: "degraded",
+        last_error: "disk full",
+        start_time_unix_nano: 0n,
+        status_time_unix_nano: 0n,
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("healthy")).toBe(true);
+    expect(result.dirtyFields.has("status")).toBe(true);
+    expect(result.dirtyFields.has("last_error")).toBe(true);
+    // Should NOT contain connected_at (that's Tier 2)
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+
+  it("capabilities change marks capabilities dirty (Tier 1)", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000, capabilities: 0 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("capabilities")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+
+  it("config_rejected produces empty dirtyFields (event-only)", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      remote_config_status: {
+        status: RemoteConfigStatuses.FAILED,
+        last_remote_config_hash: new Uint8Array([1, 2, 3]),
+        error_message: "bad config",
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.size).toBe(0);
+    expect(result.events.length).toBeGreaterThan(0);
+  });
+
+  it("sequence gap marks sequence_num dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 5, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 10, // gap: expected 6
+      capabilities: 0,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("sequence_num")).toBe(true);
+  });
+
+  it("disconnect marks status and connected_at dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 5, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: 0,
+      flags: 0,
+      agent_disconnect: {},
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("status")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(true);
+  });
+
+  it("component_health_map marks only that field dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      health: {
+        healthy: true, // unchanged
+        status: "running", // unchanged
+        last_error: "", // unchanged
+        start_time_unix_nano: 0n,
+        status_time_unix_nano: 0n,
+        component_health_map: {
+          receiver_otlp: {
+            healthy: true,
+            start_time_unix_nano: 0n,
+            status: "OK",
+            status_time_unix_nano: 0n,
+            last_error: "",
+          },
+        },
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("component_health_map")).toBe(true);
+    // health fields unchanged → not dirty
+    expect(result.dirtyFields.has("healthy")).toBe(false);
+  });
+
+  it("agent_description change marks that field dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      agent_description: {
+        identifying_attributes: [{ key: "service.name", value: { stringValue: "otelcol" } }],
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("agent_description")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+
+  it("available_components change marks that field dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      available_components: { components: [] },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("available_components")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+
+  it("effective_config change marks effective_config_hash dirty", async () => {
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const configBody = new TextEncoder().encode("receivers:\n  otlp: {}\n");
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: 0,
+      flags: 0,
+      effective_config: {
+        config_map: {
+          config_map: {
+            "": { body: configBody, content_type: "text/yaml" },
+          },
+        },
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("effective_config_hash")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+
+  it("config APPLIED status marks current_config_hash dirty", async () => {
+    const hash = new Uint8Array(32).fill(0xab);
+    const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: AgentCapabilities.AcceptsRemoteConfig,
+      flags: 0,
+      remote_config_status: {
+        status: RemoteConfigStatuses.APPLIED,
+        last_remote_config_hash: hash,
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.shouldPersist).toBe(true);
+    expect(result.dirtyFields.has("current_config_hash")).toBe(true);
+    expect(result.dirtyFields.has("connected_at")).toBe(false);
   });
 });

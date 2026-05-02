@@ -343,13 +343,95 @@ describe("property: capability tracking (B2 fix)", () => {
 });
 
 describe("property: shouldPersist invariants", () => {
-  it("any non-disconnect frame results in shouldPersist=true (state is always advanced)", async () => {
+  it("shouldPersist is always a boolean for arbitrary frames", async () => {
+    // After the tiered persistence optimization, only frames with real
+    // state changes (hello, health, config, capabilities, description)
+    // produce shouldPersist=true. No-op heartbeats produce false — the
+    // DO tracks seq_num in the WS attachment at zero cost.
     await fc.assert(
       fc.asyncProperty(makeStateArb(), makeMsgArb(), async (state, msg) => {
         const result = await processFrame(state, msg, undefined, undefined, deterministicCtx(1));
-        return result.shouldPersist === true;
+        // shouldPersist must be boolean (structural invariant)
+        return typeof result.shouldPersist === "boolean";
       }),
       { numRuns: 25 },
+    );
+  });
+
+  it("contiguous no-op heartbeats produce shouldPersist=false", async () => {
+    // A heartbeat with only sequence_num incremented and no other state
+    // changes must not trigger persistence — the DO tracks seq_num in
+    // the WS attachment at zero cost.
+    await fc.assert(
+      fc.asyncProperty(fc.integer({ min: 1, max: 100_000 }), async (seqNum) => {
+        const state: AgentState = {
+          instance_uid: new Uint8Array(16),
+          sequence_num: seqNum - 1,
+          generation: 1,
+          status: "connected",
+          healthy: true,
+          last_error: "",
+          current_config_hash: null,
+          effective_config_hash: null,
+          capabilities: 0,
+          connected_at: Date.now(),
+          last_seen_at: Date.now(),
+          agent_description: null,
+          component_health_map: null,
+          available_components: null,
+        };
+        const msg = {
+          sequence_num: seqNum,
+          capabilities: 0,
+        };
+        const result = await processFrame(state, msg, undefined, undefined, deterministicCtx(1));
+        return result.shouldPersist === false;
+      }),
+      { numRuns: 50 },
+    );
+  });
+
+  it("shouldPersist=false always implies dirtyFields is empty", async () => {
+    // If nothing is worth persisting, no fields should be marked dirty.
+    // Violation here means the tier routing in config-do.ts would skip a
+    // write that should have happened (or dirtyFields is being set needlessly).
+    await fc.assert(
+      fc.asyncProperty(makeStateArb(), makeMsgArb(), async (state, msg) => {
+        const result = await processFrame(state, msg, undefined, undefined, deterministicCtx(1));
+        if (!result.shouldPersist) {
+          return result.dirtyFields.size === 0;
+        }
+        return true;
+      }),
+      { numRuns: 50 },
+    );
+  });
+
+  it("dirtyFields only contains valid AgentState field names", async () => {
+    // Catches typos in dirtyFields.add() calls — a misspelled field name
+    // would silently cause the targeted UPDATE to skip writing that column.
+    const validFields = new Set<string>([
+      "sequence_num",
+      "status",
+      "healthy",
+      "last_error",
+      "connected_at",
+      "capabilities",
+      "component_health_map",
+      "agent_description",
+      "available_components",
+      "effective_config_hash",
+      "current_config_hash",
+    ]);
+    await fc.assert(
+      fc.asyncProperty(makeStateArb(), makeMsgArb(), async (state, msg) => {
+        const result = await processFrame(state, msg, undefined, undefined, deterministicCtx(1));
+        for (const field of result.dirtyFields) {
+          if (!validFields.has(field)) return false;
+        }
+        return true;
+      }),
+      { numRuns: 50 },
     );
   });
 });

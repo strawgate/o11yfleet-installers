@@ -175,7 +175,7 @@ describe("Heartbeat hot-path benchmark", () => {
 
     const result = await processFrame(state, msg, null);
 
-    expect(result.shouldPersist).toBe(true);
+    expect(result.shouldPersist).toBe(false); // no-op → tracked in WS attachment
     expect(result.events).toHaveLength(0);
     expect(result.response?.heart_beat_interval).toBe(DEFAULT_HEARTBEAT_INTERVAL_NS);
     expect(result.newState.sequence_num).toBe(42);
