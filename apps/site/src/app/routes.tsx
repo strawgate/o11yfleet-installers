@@ -122,6 +122,15 @@ const BuilderPlayground = import.meta.env.DEV
       "Builder Playground",
     )
   : null;
+const DataTablePlayground = import.meta.env.DEV
+  ? lazyPage(
+      () =>
+        import("@/pages/playground/DataTablePlayground").then((m) => ({
+          default: m.DataTablePlayground,
+        })),
+      "DataTable Playground",
+    )
+  : null;
 
 function SuspenseFallback() {
   return <div className="flex justify-center p-16">Loading...</div>;
@@ -189,6 +198,9 @@ export function AppRoutes() {
         {SpinePlayground && <Route path="playground/spine" element={<SpinePlayground />} />}
         {DiffPlayground && <Route path="playground/diff" element={<DiffPlayground />} />}
         {BuilderPlayground && <Route path="playground/builder" element={<BuilderPlayground />} />}
+        {DataTablePlayground && (
+          <Route path="playground/data-table" element={<DataTablePlayground />} />
+        )}
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

@@ -1,0 +1,133 @@
+/* DataTable layout primitives. Uses display:grid/flex (NOT native table)
+ * because virtualization needs absolute-positioned rows. */
+
+.root {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--mantine-color-default-border);
+  border-radius: var(--mantine-radius-md);
+  background: var(--mantine-color-body);
+  overflow: hidden;
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--mantine-spacing-xs);
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.scrollArea {
+  position: relative;
+}
+
+.thead {
+  display: flex;
+  flex-direction: column;
+  position: sticky;
+  top: 0;
+  z-index: 3;
+  background: var(--mantine-color-body);
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.tbody {
+  display: flex;
+  flex-direction: column;
+}
+
+.tr {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border-bottom: 1px solid var(--mantine-color-default-border);
+}
+
+.tr[data-clickable] {
+  cursor: pointer;
+}
+
+.tr[data-clickable]:hover {
+  background: var(--mantine-color-default-hover);
+}
+
+.tr[data-selected],
+.tr[data-active] {
+  background: light-dark(var(--mantine-color-brand-0), var(--mantine-color-brand-9));
+}
+
+.th {
+  position: relative;
+  padding: 8px 12px;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--mantine-color-dimmed);
+  user-select: none;
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+}
+
+.th[data-sortable] {
+  cursor: pointer;
+}
+
+.th[data-sortable]:hover {
+  color: var(--mantine-color-text);
+}
+
+.td {
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  font-size: 13px;
+  color: var(--mantine-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  height: 100%;
+  width: 4px;
+  cursor: col-resize;
+  user-select: none;
+  touch-action: none;
+}
+
+.resizer:hover,
+.resizer[data-resizing] {
+  background: var(--mantine-color-brand-5);
+}
+
+.footer {
+  padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
+  border-top: 1px solid var(--mantine-color-default-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--mantine-spacing-xs);
+}
+
+.dim {
+  opacity: 0.6;
+  transition: opacity 200ms;
+}
+
+.fadeRefetch {
+  opacity: 1;
+  transition: opacity 200ms;
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+}
