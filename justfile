@@ -151,6 +151,7 @@ reproduce-check check:
         pnpm prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .
         pnpm --filter @o11yfleet/worker typegen:check
         pnpm turbo typecheck
+        pnpm tsx scripts/audit-sql-bindings.ts
         ;;
       test-fast)
         pnpm --filter @o11yfleet/core test
@@ -189,6 +190,13 @@ fmt-check:
 # Check API docs against current worker routes
 docs-api-check:
     pnpm tsx scripts/check-api-docs.ts
+
+# Audit DO SQL helper calls for placeholder/binding-count mismatches.
+# Catches the bug class behind PR #426's upsertPendingDevice gap (13
+# placeholders, 12 bound params). Static analysis only — skips
+# dynamically-built queries (`${...}` template subs, `...spread` args).
+sql-audit:
+    pnpm tsx scripts/audit-sql-bindings.ts
 
 # Dev mode — start worker locally
 # Note: --var ENVIRONMENT:dev enables local dev CORS (allows localhost origins)

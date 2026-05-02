@@ -67,6 +67,10 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 - Browser coverage lives under `tests/ui`.
 - Run `just docs-api-check` after changing API docs, public docs, route files, or
   route-heavy historical docs.
+- Run `just sql-audit` after changing DO SQL helpers. Catches placeholder/binding
+  count mismatches statically — the bug class behind PR #426's `upsertPendingDevice`
+  gap (13 placeholders, 12 bound params, no test coverage). The CI runs this in
+  the `lint-typecheck` job.
 
 ### Running Test Suites
 

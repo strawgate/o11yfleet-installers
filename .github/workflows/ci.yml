@@ -182,6 +182,10 @@ jobs:
         if: needs.changes.outputs.node == 'true'
         run: pnpm turbo typecheck
 
+      - name: SQL binding audit
+        if: needs.changes.outputs.node == 'true'
+        run: pnpm tsx scripts/audit-sql-bindings.ts
+
       - name: Core tests (codec, state machine, auth, oracle)
         if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/core test
@@ -320,7 +324,7 @@ jobs:
         run: |
           cd apps/worker
           npx wrangler dev --port 8787 &
-          echo $! > /tmp/worker.pid
+          echo "$!" > /tmp/worker.pid
           echo "Worker PID: $(cat /tmp/worker.pid)"
 
       - name: Wait for worker to be ready
