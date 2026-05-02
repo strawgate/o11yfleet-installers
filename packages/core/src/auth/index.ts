@@ -5,7 +5,9 @@ export {
   verifyEnrollmentToken,
   verifyEnrollmentTokenHash,
 } from "./enrollment.js";
+export { generateApiKey, verifyApiKey, isApiKey } from "./api-keys.js";
 export { base64urlEncode, base64urlDecode } from "./base64url.js";
 export { timingSafeEqual } from "./timing-safe-compare.js";
 export type { AssignmentClaim } from "./claims.js";
 export type { EnrollmentClaim } from "./enrollment.js";
+export type { ApiKeyClaim } from "./api-keys.js";

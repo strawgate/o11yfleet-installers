@@ -22,7 +22,7 @@ import {
   uploadConfigVersion,
   validateYaml,
 } from "../../config-store.js";
-import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/auth";
+import { generateEnrollmentToken, hashEnrollmentToken, generateApiKey } from "@o11yfleet/core/auth";
 import {
   AiApiError,
   handleTenantChatRequest,
@@ -210,6 +210,12 @@ async function routeV1Request(
   const restartMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/restart$/);
   if (restartMatch && method === "POST") {
     return handleRestart(env, tenantId, restartMatch[1]!);
+  }
+
+  // ─── API Keys ────────────────────────────────────────────
+
+  if (path === "/api/v1/api-keys" && method === "POST") {
+    return handleCreateApiKey(request, env, tenantId);
   }
 
   // ─── Pending Tokens ───────────────────────────────────────
@@ -658,9 +664,8 @@ async function handleListAgents(
   configId: string,
   url: URL,
 ): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
+  // DO name = tenantId:configId — wrong tenant gets an empty DO, no data leak.
+  // Skip D1 ownership check to avoid D1 failures under burst load.
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   const source = new URL("http://internal/agents");
@@ -673,27 +678,18 @@ async function handleListAgents(
 }
 
 async function handleGetStats(env: Env, tenantId: string, configId: string): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/stats"));
 }
 
 async function handleDisconnect(env: Env, tenantId: string, configId: string): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/command/disconnect", { method: "POST" }));
 }
 
 async function handleRestart(env: Env, tenantId: string, configId: string): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/command/restart", { method: "POST" }));
@@ -704,9 +700,6 @@ async function handleRolloutCohortSummary(
   tenantId: string,
   configId: string,
 ): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   let statsResponse: Response;
@@ -722,8 +715,7 @@ async function handleRolloutCohortSummary(
     return jsonError("Rollout cohort summary unavailable", 502);
   }
   const stats = (await statsResponse.json()) as Record<string, unknown>;
-  const desiredHash =
-    stringValue(stats["desired_config_hash"]) ?? stringValue(config["current_config_hash"]);
+  const desiredHash = stringValue(stats["desired_config_hash"]) ?? null;
   const statusCountsRaw = stats["status_counts"];
   const status_counts =
     statusCountsRaw && typeof statusCountsRaw === "object" && !Array.isArray(statusCountsRaw)
@@ -1078,9 +1070,6 @@ async function handleGetAgent(
   configId: string,
   agentUid: string,
 ): Promise<Response> {
-  const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
-
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   const agentResp = await stub.fetch(
@@ -1100,6 +1089,34 @@ async function handleListPendingTokens(env: Env, tenantId: string): Promise<Resp
     .bind(tenantId)
     .all();
   return Response.json({ tokens: result.results });
+}
+
+// ─── API Key Handlers ─────────────────────────────────────────────
+
+const createApiKeyRequestSchema = z.object({
+  label: z.string().max(128).optional(),
+  expires_in_seconds: z.number().int().nonnegative().optional(),
+});
+
+async function handleCreateApiKey(request: Request, env: Env, tenantId: string): Promise<Response> {
+  const body = await validateJsonBody(request, createApiKeyRequestSchema);
+
+  const result = await generateApiKey({
+    tenant_id: tenantId,
+    secret: env.O11YFLEET_CLAIM_HMAC_SECRET,
+    expires_in_seconds: body.expires_in_seconds,
+    label: body.label,
+  });
+
+  return Response.json(
+    {
+      token: result.token,
+      jti: result.jti,
+      expires_at: result.expires_at,
+      tenant_id: tenantId,
+    },
+    { status: 201 },
+  );
 }
 
 async function handleCreatePendingToken(

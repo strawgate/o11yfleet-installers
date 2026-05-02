@@ -249,3 +249,120 @@ describe("auth/enrollment", () => {
     await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing token ID (jti)");
   });
 });
+
+// ─── API Keys ────────────────────────────────────────────────
+
+describe("auth/api-keys", () => {
+  const secret = "test-secret-key-minimum-32-chars!!";
+
+  it("generate and verify round-trip", async () => {
+    const { generateApiKey, verifyApiKey } = await import("../src/auth/api-keys.js");
+
+    const { token, jti, expires_at } = await generateApiKey({
+      tenant_id: "tenant-1",
+      secret,
+      label: "CI deploy key",
+    });
+
+    expect(token).toMatch(/^fp_key_/);
+    expect(jti).toBeTruthy();
+    expect(expires_at).toBeNull(); // no expiry
+
+    const claim = await verifyApiKey(token, secret);
+    expect(claim.tenant_id).toBe("tenant-1");
+    expect(claim.v).toBe(1);
+    expect(claim.jti).toBe(jti);
+    expect(claim.label).toBe("CI deploy key");
+    expect(claim.exp).toBe(0);
+  });
+
+  it("rejects tampered token", async () => {
+    const { generateApiKey, verifyApiKey } = await import("../src/auth/api-keys.js");
+
+    const { token } = await generateApiKey({ tenant_id: "t1", secret });
+    // Flip a character in the payload
+    const tampered = token.slice(0, 10) + "X" + token.slice(11);
+
+    await expect(verifyApiKey(tampered, secret)).rejects.toThrow();
+  });
+
+  it("rejects wrong secret", async () => {
+    const { generateApiKey, verifyApiKey } = await import("../src/auth/api-keys.js");
+
+    const { token } = await generateApiKey({ tenant_id: "t1", secret });
+    await expect(verifyApiKey(token, "wrong-secret-key-minimum-32-chars!!")).rejects.toThrow(
+      "Invalid API key signature",
+    );
+  });
+
+  it("rejects expired token", async () => {
+    const { generateApiKey, verifyApiKey } = await import("../src/auth/api-keys.js");
+
+    // Generate with 1 second expiry, then fake time forward
+    const { token } = await generateApiKey({
+      tenant_id: "t1",
+      secret,
+      expires_in_seconds: 1,
+    });
+
+    // Advance time past expiry
+    vi.useFakeTimers();
+    vi.setSystemTime(Date.now() + 5000);
+    try {
+      await expect(verifyApiKey(token, secret)).rejects.toThrow("API key expired");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("generates unique jti per call", async () => {
+    const { generateApiKey } = await import("../src/auth/api-keys.js");
+
+    const r1 = await generateApiKey({ tenant_id: "t1", secret });
+    const r2 = await generateApiKey({ tenant_id: "t1", secret });
+    expect(r1.jti).not.toBe(r2.jti);
+    expect(r1.token).not.toBe(r2.token);
+  });
+
+  it("rejects non-api-key token", async () => {
+    const { verifyApiKey } = await import("../src/auth/api-keys.js");
+    await expect(verifyApiKey("not_an_api_key", secret)).rejects.toThrow("Not an API key");
+  });
+
+  it("rejects token with no dot separator", async () => {
+    const { verifyApiKey } = await import("../src/auth/api-keys.js");
+    await expect(verifyApiKey("fp_key_nodothere", secret)).rejects.toThrow(
+      "Invalid API key format",
+    );
+  });
+
+  it("isApiKey detects fp_key_ prefix", async () => {
+    const { isApiKey, generateApiKey } = await import("../src/auth/api-keys.js");
+    const { token } = await generateApiKey({ tenant_id: "t1", secret });
+    expect(isApiKey(token)).toBe(true);
+    expect(isApiKey("Bearer some-other-token")).toBe(false);
+    expect(isApiKey("fp_enroll_something")).toBe(false);
+  });
+
+  it("respects expires_in_seconds", async () => {
+    const { generateApiKey, verifyApiKey } = await import("../src/auth/api-keys.js");
+
+    const { token, expires_at } = await generateApiKey({
+      tenant_id: "t1",
+      secret,
+      expires_in_seconds: 86400,
+    });
+
+    expect(expires_at).toBeTruthy();
+    const claim = await verifyApiKey(token, secret);
+    expect(claim.exp).toBeGreaterThan(0);
+    expect(claim.exp - claim.iat).toBe(86400);
+  });
+
+  it("rejects negative expires_in_seconds", async () => {
+    const { generateApiKey } = await import("../src/auth/api-keys.js");
+    await expect(
+      generateApiKey({ tenant_id: "t1", secret, expires_in_seconds: -3600 }),
+    ).rejects.toThrow("Invalid expires_in_seconds");
+  });
+});

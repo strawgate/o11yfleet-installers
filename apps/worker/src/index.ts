@@ -6,7 +6,13 @@ import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
-import { hashEnrollmentToken, verifyClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
+import {
+  hashEnrollmentToken,
+  verifyClaim,
+  verifyEnrollmentToken,
+  isApiKey,
+  verifyApiKey,
+} from "@o11yfleet/core/auth";
 import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
 
 export interface Env {
@@ -352,6 +358,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
     let hasApiSecretBearer = false;
     let oidcClaims: GitHubOIDCClaims | null = null;
+    let apiKeyTenantId: string | null = null;
 
     const auth = request.headers.get("Authorization");
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -359,7 +366,25 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     let oidcError: string | null = null;
 
     if (token) {
-      if (
+      if (isApiKey(token)) {
+        // Tenant-scoped signed API key — tenant_id is embedded in the claim.
+        // Verified via HMAC-SHA256, no D1 lookup needed.
+        try {
+          const claim = await verifyApiKey(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
+          apiKeyTenantId = claim.tenant_id;
+        } catch (err) {
+          return addSecurityHeaders(
+            addCorsHeaders(
+              Response.json(
+                { error: err instanceof Error ? err.message : "Invalid API key" },
+                { status: 401 },
+              ),
+              request,
+              env,
+            ),
+          );
+        }
+      } else if (
         env.O11YFLEET_API_BEARER_SECRET &&
         timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)
       ) {
@@ -404,9 +429,11 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     }
     // Tenant-scoped routes — /api/v1/*
     else if (url.pathname.startsWith("/api/v1/")) {
-      // Resolve tenant: session cookie > X-Tenant-Id header (with Bearer auth only)
+      // Resolve tenant: API key claim > session cookie > X-Tenant-Id header (with Bearer auth only)
       let tenantId: string | null = null;
-      if (sessionAuth?.tenantId) {
+      if (apiKeyTenantId) {
+        tenantId = apiKeyTenantId;
+      } else if (sessionAuth?.tenantId) {
         tenantId = sessionAuth.tenantId;
       } else if (hasApiSecretBearer) {
         tenantId = request.headers.get("X-Tenant-Id");
