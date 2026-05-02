@@ -15,15 +15,8 @@ import { relTime } from "../../utils/format";
 import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import {
-  DataTable,
-  EmptyState,
-  MetricCard,
-  PageHeader,
-  PageShell,
-  StatusBadge,
-  type ColumnDef,
-} from "@/components/app";
+import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
@@ -42,10 +35,14 @@ function AgentSection({
   onToggle: () => void;
 }) {
   const [filter, setFilter] = useState("");
-  const [cursor, setCursor] = useState<string | undefined>(undefined);
+  // `null` = first page (the new DataTable's cursor convention).
+  // The old code used `undefined` for "no cursor"; keep the API hook's
+  // expected `string | undefined` shape internally so we don't have to
+  // touch the API client.
+  const [cursor, setCursor] = useState<string | null>(null);
   const setFilterAndResetCursor = (next: string) => {
     setFilter(next);
-    setCursor(undefined);
+    setCursor(null);
   };
   const {
     data: agentsPage,
@@ -53,7 +50,7 @@ function AgentSection({
     error,
   } = useConfigurationAgents(config.id, {
     limit: 50,
-    cursor,
+    cursor: cursor ?? undefined,
     q: filter || undefined,
     enabled: expanded,
   });
@@ -141,6 +138,19 @@ function AgentSection({
           ? `${visibleAgents.toLocaleString()} visible`
           : "Metrics unavailable";
 
+  // Cursor pagination shape for the new <DataTable>:
+  // - `cursor`: current page's cursor (null = first page)
+  // - `nextCursor`: cursor that fetches the next page; `undefined` when
+  //   there is no next page so the Next button stays disabled
+  // - `previousCursor`: `null` when we're not on the first page (meaning
+  //   "Prev jumps to first page"). Cursor APIs are forward-only by default;
+  //   we don't track a back-stack here, so Prev = First Page is the
+  //   honest semantics. A future improvement could maintain a stack.
+  const nextCursor = agentsPage?.pagination?.has_more
+    ? (agentsPage.pagination.next_cursor ?? null)
+    : undefined;
+  const previousCursor: string | null | undefined = cursor !== null ? null : undefined;
+
   return (
     <section className="mt-6 rounded-md border border-border bg-card">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -212,54 +222,40 @@ function AgentSection({
             error={guidance.error}
             onRefresh={() => void guidance.refetch()}
           />
-          {isLoading ? (
-            <LoadingSpinner />
-          ) : error ? (
-            <ErrorState error={error} />
-          ) : (
-            <>
-              <DataTable
-                columns={columns}
-                data={agents}
-                getRowId={(agent) => agentUid(agent)}
-                emptyState={
-                  <EmptyState
-                    icon="plug"
-                    title={filter ? "No agents match your filter" : "No agents connected"}
-                    description={
-                      filter
-                        ? "Clear the filter to see all collectors for this configuration."
-                        : "Enroll a collector from the configuration page to start reporting status."
-                    }
-                  >
-                    {!filter ? (
-                      <Button asChild size="sm">
-                        <Link to={`/portal/configurations/${config.id}`}>Enroll agent</Link>
-                      </Button>
-                    ) : null}
-                  </EmptyState>
+          <DataTable
+            columns={columns}
+            data={agents}
+            getRowId={(agent) => agentUid(agent)}
+            // Cursor mode — DataTable renders its own Prev/Next; the legacy
+            // First Page / Next Page buttons are gone.
+            cursor={cursor}
+            nextCursor={nextCursor}
+            previousCursor={previousCursor}
+            hasNextPage={Boolean(agentsPage?.pagination?.has_more)}
+            onCursorChange={(next) => setCursor(next)}
+            // Loading / error states are owned by the table chrome now —
+            // no separate LoadingSpinner / ErrorState wrappers.
+            loading={isLoading}
+            error={error ? { message: error.message } : null}
+            ariaLabel={`${config.name} agents`}
+            empty={
+              <EmptyState
+                icon="plug"
+                title={filter ? "No agents match your filter" : "No agents connected"}
+                description={
+                  filter
+                    ? "Clear the filter to see all collectors for this configuration."
+                    : "Enroll a collector from the configuration page to start reporting status."
                 }
-              />
-              <div className="flex flex-wrap items-center gap-2 border-t border-border px-4 py-3 text-sm text-muted-foreground">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={!cursor}
-                  onClick={() => setCursor(undefined)}
-                >
-                  First page
-                </Button>
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  disabled={!agentsPage?.pagination?.has_more}
-                  onClick={() => setCursor(agentsPage?.pagination?.next_cursor ?? undefined)}
-                >
-                  Next page
-                </Button>
-              </div>
-            </>
-          )}
+              >
+                {!filter ? (
+                  <Button asChild size="sm">
+                    <Link to={`/portal/configurations/${config.id}`}>Enroll agent</Link>
+                  </Button>
+                ) : null}
+              </EmptyState>
+            }
+          />
         </div>
       )}
     </section>
