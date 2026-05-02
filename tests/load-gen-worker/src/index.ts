@@ -2,6 +2,13 @@
 //
 // Coordinates thousands of outbound WebSocket connections to the target
 // o11yfleet worker. Fans out across LoadGenDO shards to avoid per-DO limits.
+//
+// NOTE: LoadGenDO is currently a stub. The old implementation used JSON-encoded
+// OpAMP frames, which are incompatible with the protobuf-only server (#399).
+// Before using this worker for cloud-scale load generation, LoadGenDO needs to
+// be rewritten to encode messages with encodeAgentToServerProto from @o11yfleet/core.
+// For local load testing up to ~30K agents, use `just load-test-30k` instead,
+// which runs FakeOpampAgent processes with full protobuf support.
 
 export { LoadGenDO } from "./load-gen-do.js";
 

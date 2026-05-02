@@ -439,6 +439,16 @@ load-test-5k:
 load-test-10k:
     ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=10000 --concurrency=200 --workers=4 --ramp=120 --steady=60 --heartbeat=30
 
+# 30K agent load test with realistic turmoil profile — multi-process
+# Simulates a production fleet with failing exporters, flapping, restarts, config rejects
+# Run against staging: FP_URL=https://worker.your-account.workers.dev just load-test-30k
+load-test-30k:
+    ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=30000 --concurrency=150 --workers=6 --ramp=180 --steady=120 --heartbeat=30 --profile=realistic-30k
+
+# 30K healthy-only load test — baseline throughput without turmoil
+load-test-30k-baseline:
+    ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=30000 --concurrency=150 --workers=6 --ramp=180 --steady=120 --heartbeat=30 --profile=healthy
+
 # 100K agent load test — multi-process fan-out
 load-test-100k:
     ulimit -n 65536 && pnpm --filter @o11yfleet/load-test load -- --agents=100000 --concurrency=200 --workers=10 --ramp=300 --steady=120 --heartbeat=60

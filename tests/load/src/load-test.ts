@@ -23,7 +23,7 @@
  */
 
 import { FakeOpampAgent, REAL_COLLECTOR_PIPELINES } from "@o11yfleet/test-utils";
-import type { AgentProfile } from "@o11yfleet/test-utils";
+import type { AgentProfile, BehaviorConfig } from "@o11yfleet/test-utils";
 import {
   createTracker,
   createCounters,
@@ -55,6 +55,90 @@ interface LoadTestConfig {
   isWorker: boolean;
   workerId: number;
   workerAgents: number;
+  /** Named population profile describing how to distribute agent behaviors */
+  profile: PopulationProfileName;
+}
+
+// ---------------------------------------------------------------------------
+// Population Profiles
+// ---------------------------------------------------------------------------
+//
+// A population profile describes what fraction of agents run each behavior mode.
+// This lets us simulate realistic fleet conditions (e.g., 15% failing exporters,
+// 5% flapping) without hard-coding behavior in the agent logic.
+//
+// Built-in profiles:
+//   healthy       — all agents healthy (baseline, no turmoil)
+//   realistic-30k — production-realistic 30K fleet with turmoil
+//   chaos         — high turmoil fleet for stress testing
+
+export type PopulationProfileName = "healthy" | "realistic-30k" | "chaos" | "custom";
+
+interface BehaviorBucket {
+  behavior: BehaviorConfig;
+  /** Fraction of agents to run this behavior (0–1, must sum to 1.0) */
+  fraction: number;
+}
+
+const POPULATION_PROFILES: Record<Exclude<PopulationProfileName, "custom">, BehaviorBucket[]> = {
+  /** All agents steady-state healthy. Use for baseline throughput measurement. */
+  healthy: [{ behavior: { mode: "healthy" }, fraction: 1.0 }],
+
+  /**
+   * Production-realistic 30K fleet:
+   * - 60% healthy (steady heartbeats)
+   * - 20% failing-exporter (synthetic health turmoil; real otelcol doesn't emit StatusRecoverableError
+   *   for export failures, but this exercises the server's health-state handling under load)
+   * - 10% flapping (network instability, 5 min interval)
+   * - 5% restarting (supervisor-managed restarts, 5 min interval)
+   * - 5% config-rejecting (misconfigured collectors)
+   */
+  "realistic-30k": [
+    { behavior: { mode: "healthy" }, fraction: 0.6 },
+    {
+      behavior: { mode: "failing-exporter", cycleSeconds: 120, exporter: "otlphttp" },
+      fraction: 0.2,
+    },
+    { behavior: { mode: "flapping", flapIntervalSeconds: 300, offlineSeconds: 30 }, fraction: 0.1 },
+    { behavior: { mode: "restarting", restartIntervalSeconds: 300 }, fraction: 0.05 },
+    { behavior: { mode: "config-rejecting" }, fraction: 0.05 },
+  ],
+
+  /**
+   * High-chaos fleet for stress testing:
+   * - 30% healthy
+   * - 25% failing-exporter (fast cycles)
+   * - 25% flapping (frequent, short offline)
+   * - 10% restarting (frequent)
+   * - 10% config-rejecting
+   */
+  chaos: [
+    { behavior: { mode: "healthy" }, fraction: 0.3 },
+    {
+      behavior: { mode: "failing-exporter", cycleSeconds: 60, exporter: "otlphttp" },
+      fraction: 0.25,
+    },
+    { behavior: { mode: "flapping", flapIntervalSeconds: 60, offlineSeconds: 10 }, fraction: 0.25 },
+    { behavior: { mode: "restarting", restartIntervalSeconds: 60 }, fraction: 0.1 },
+    { behavior: { mode: "config-rejecting" }, fraction: 0.1 },
+  ],
+};
+
+/** Resolve the behavior config for agent index `idx` given a population profile. */
+function behaviorForAgent(
+  idx: number,
+  total: number,
+  profile: PopulationProfileName,
+): BehaviorConfig {
+  if (profile === "custom") return { mode: "healthy" };
+  const buckets = POPULATION_PROFILES[profile];
+  const position = idx / total;
+  let cumulative = 0;
+  for (const bucket of buckets) {
+    cumulative += bucket.fraction;
+    if (position < cumulative) return bucket.behavior;
+  }
+  return buckets[buckets.length - 1]!.behavior;
 }
 
 function parseConfig(): LoadTestConfig {
@@ -93,6 +177,7 @@ function parseConfig(): LoadTestConfig {
   const workerId = parseInt(get("worker-id", "__FP_WORKER_ID", "0"), 10);
   const workerAgents = parseInt(get("worker-agents", "__FP_WORKER_AGENTS", String(agents)), 10);
   const noProbes = args.includes("--no-probes") || process.env["FP_NO_PROBES"] === "1";
+  const profileArg = get("profile", "FP_PROFILE", "healthy") as PopulationProfileName;
 
   return {
     baseUrl,
@@ -107,6 +192,7 @@ function parseConfig(): LoadTestConfig {
     isWorker,
     workerId,
     workerAgents,
+    profile: profileArg,
   };
 }
 
@@ -236,10 +322,13 @@ async function enrollAgent(
   wsUrl: string,
   enrollmentToken: string,
   idx: number,
+  total: number,
+  profile: PopulationProfileName,
   counters: CounterSet,
   connectTracker: LatencyTracker,
   enrollTracker: LatencyTracker,
 ): Promise<ManagedAgent | null> {
+  const behavior = behaviorForAgent(idx, total, profile);
   const agent = new FakeOpampAgent({
     endpoint: wsUrl,
     enrollmentToken,
@@ -265,6 +354,11 @@ async function enrollAgent(
     record(connectTracker, connectMs);
     record(enrollTracker, connectMs);
 
+    // Start behavior mode after enrollment
+    if (behavior.mode !== "healthy") {
+      agent.startBehavior(behavior);
+    }
+
     return {
       agent,
       assignmentClaim: enrollment.assignment_claim,
@@ -288,6 +382,7 @@ async function enrollBatched(
   token: string,
   total: number,
   concurrency: number,
+  profile: PopulationProfileName,
   counters: CounterSet,
   connectTracker: LatencyTracker,
   enrollTracker: LatencyTracker,
@@ -304,7 +399,9 @@ async function enrollBatched(
 
     for (let j = 0; j < batchSize; j++) {
       const idx = offset + j;
-      promises.push(enrollAgent(wsUrl, token, idx, counters, connectTracker, enrollTracker));
+      promises.push(
+        enrollAgent(wsUrl, token, idx, total, profile, counters, connectTracker, enrollTracker),
+      );
     }
 
     const results = await Promise.all(promises);
@@ -408,6 +505,7 @@ async function runMultiProcess(cfg: LoadTestConfig): Promise<void> {
             `--steady=${cfg.steadySeconds}`,
             `--heartbeat=${cfg.heartbeatSeconds}`,
             `--concurrency=${cfg.concurrency}`,
+            `--profile=${cfg.profile}`,
           ],
           {
             env: {
@@ -582,7 +680,7 @@ async function runSingleProcess(cfg: LoadTestConfig): Promise<void> {
 
   // Phase 1: Parallel batched ramp-up
   console.log(
-    `${prefix}🚀 Phase 1: Enrolling ${agentCount} agents (concurrency=${cfg.concurrency})...`,
+    `${prefix}🚀 Phase 1: Enrolling ${agentCount} agents (concurrency=${cfg.concurrency}, profile=${cfg.profile})...`,
   );
 
   let managed = await enrollBatched(
@@ -590,6 +688,7 @@ async function runSingleProcess(cfg: LoadTestConfig): Promise<void> {
     token,
     agentCount,
     cfg.concurrency,
+    cfg.profile,
     counters,
     connectTracker,
     enrollTracker,

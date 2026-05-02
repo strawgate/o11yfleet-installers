@@ -10,6 +10,7 @@ import {
   type AgentToServer,
   type ServerToAgent,
   AgentCapabilities,
+  RemoteConfigStatuses,
 } from "@o11yfleet/core/codec";
 import { uint8ToHex } from "@o11yfleet/core/hex";
 import {
@@ -17,6 +18,9 @@ import {
   buildHeartbeat as buildHeartbeatMsg,
   buildHealthReport as buildHealthMsg,
   buildConfigAck as buildConfigAckMsg,
+  buildExporterFailure,
+  buildHealthRecovered,
+  buildReceiverFailure,
   CONFIGURABLE_CAPABILITIES,
 } from "./opamp-messages.js";
 
@@ -86,6 +90,51 @@ export interface EnrollmentResult {
   instance_uid: string;
 }
 
+// ─── Behavior Modes ─────────────────────────────────────────────────
+//
+// Agent behavior modes simulate realistic fleet conditions observed from
+// real otelcol-contrib instances. Each mode runs an autonomous loop after
+// enrollment, mimicking what a real collector would do under that condition.
+
+/** Named behavior mode for a fake agent. */
+export type AgentBehaviorMode =
+  /** Steady heartbeats only — no health changes. This is the default. */
+  | "healthy"
+  /** Periodic exporter failure cycles: healthy → unhealthy → healthy → …
+   *  Sends StatusRecoverableError (retryable). Models OTLP backend going down. */
+  | "failing-exporter"
+  /** Permanent receiver failure. Sends StatusPermanentError once and stays unhealthy.
+   *  Models a port conflict that prevents the collector from starting a pipeline. */
+  | "failing-receiver"
+  /** Abrupt disconnect + reconnect on a timer. No agent_disconnect message.
+   *  Models network instability or container restart without graceful shutdown. */
+  | "flapping"
+  /** Clean restart: sends agent_disconnect, closes WS, reconnects with seq=0.
+   *  Models otelcol supervisor restart (e.g. after config reload or crash). */
+  | "restarting"
+  /** Always responds to config pushes with RemoteConfigStatuses.FAILED.
+   *  Models a misconfigured collector that rejects every config attempt. */
+  | "config-rejecting";
+
+/** Behavior configuration for an agent behavior mode. */
+export interface BehaviorConfig {
+  mode: AgentBehaviorMode;
+  /** For failing-exporter: total seconds of one failure+recovery cycle.
+   *  The agent fails for half the cycle, then recovers for the other half.
+   *  Default: 120 (fails 60s, recovers 60s). */
+  cycleSeconds?: number;
+  /** For flapping: seconds to stay offline before reconnecting. Default: 30. */
+  offlineSeconds?: number;
+  /** For flapping: seconds between flap events. Default: 300. */
+  flapIntervalSeconds?: number;
+  /** For restarting: seconds between clean restarts. Default: 300. */
+  restartIntervalSeconds?: number;
+  /** For failing-exporter: which exporter to fail. Default: "otlphttp". */
+  exporter?: string;
+  /** For failing-receiver: which receiver to fail. Default: "otlp". */
+  receiver?: string;
+}
+
 export class FakeOpampAgent {
   private ws: WebSocket | null = null;
   private sequenceNum = 0;
@@ -124,6 +173,12 @@ export class FakeOpampAgent {
 
   private profile: AgentProfile;
   private resolvedCapabilities: number;
+
+  // Behavior loop state
+  private behaviorTimers: ReturnType<typeof setTimeout>[] = [];
+  private rejectConfigs = false;
+  /** Collector process start time for health reports (set on first enrollment). */
+  private processStartNano = BigInt(Date.now()) * 1_000_000n;
 
   constructor(opts: FakeAgentOptions) {
     this.endpoint = opts.endpoint;
@@ -192,6 +247,24 @@ export class FakeOpampAgent {
         if (!data) return;
 
         const msg = decodeServerToAgentProto(data as ArrayBuffer);
+
+        // config-rejecting mode: auto-respond to config pushes with FAILED
+        if (this.rejectConfigs && msg.remote_config) {
+          const hash = msg.remote_config.config_hash ?? new Uint8Array(0);
+          this.sequenceNum++;
+          this.sendRaw({
+            instance_uid: this.instanceUid,
+            sequence_num: this.sequenceNum,
+            capabilities: this.resolvedCapabilities,
+            flags: 0,
+            remote_config_status: {
+              last_remote_config_hash: hash ?? new Uint8Array(0),
+              status: RemoteConfigStatuses.FAILED,
+              error_message: "config rejected: validation failed (simulated)",
+            },
+          });
+          // Still deliver to waiters so tests that watch for config pushes work
+        }
 
         // Process server-directed heartbeat interval
         this.processHeartbeatInterval(msg);
@@ -379,7 +452,242 @@ export class FakeOpampAgent {
     );
   }
 
+  /**
+   * Start an autonomous behavior loop after enrollment.
+   *
+   * Call this after `connectAndEnroll()` to simulate realistic fleet behavior.
+   * The loop runs until `stopBehavior()` or `close()` is called.
+   */
+  startBehavior(config: BehaviorConfig): void {
+    this.stopBehavior();
+
+    switch (config.mode) {
+      case "healthy":
+        // No-op — steady heartbeats come from the auto-heartbeat timer
+        break;
+
+      case "failing-exporter":
+        this.startFailingExporterLoop(config);
+        break;
+
+      case "failing-receiver":
+        this.startFailingReceiverOnce(config);
+        break;
+
+      case "flapping":
+        this.startFlappingLoop(config);
+        break;
+
+      case "restarting":
+        this.startRestartingLoop(config);
+        break;
+
+      case "config-rejecting":
+        this.rejectConfigs = true;
+        break;
+    }
+  }
+
+  /** Stop the behavior loop and clear any pending timers. */
+  stopBehavior(): void {
+    this.rejectConfigs = false;
+    for (const t of this.behaviorTimers) clearTimeout(t);
+    this.behaviorTimers = [];
+  }
+
+  private startFailingExporterLoop(config: BehaviorConfig): void {
+    const cycleMs = (config.cycleSeconds ?? 120) * 1000;
+    const failMs = cycleMs / 2;
+    const exporter = config.exporter ?? "otlphttp";
+    const pipelines = this.profile.pipelines;
+
+    const failCycle = () => {
+      if (!this.connected) return;
+      try {
+        this.sequenceNum++;
+        this.sendRaw(
+          buildExporterFailure({
+            instanceUid: this.instanceUid,
+            sequenceNum: this.sequenceNum,
+            capabilities: this.resolvedCapabilities,
+            exporter,
+            pipelines,
+            startTimeNano: this.processStartNano,
+          }),
+        );
+      } catch {
+        // WS may have closed
+      }
+
+      // Recover after failMs
+      const recoverTimer = setTimeout(() => {
+        if (!this.connected) return;
+        try {
+          this.sequenceNum++;
+          this.sendRaw(
+            buildHealthRecovered({
+              instanceUid: this.instanceUid,
+              sequenceNum: this.sequenceNum,
+              capabilities: this.resolvedCapabilities,
+              pipelines,
+              startTimeNano: this.processStartNano,
+            }),
+          );
+        } catch {
+          // WS may have closed
+        }
+      }, failMs);
+      this.behaviorTimers.push(recoverTimer);
+
+      // Schedule next failure cycle
+      const nextCycleTimer = setTimeout(failCycle, cycleMs);
+      this.behaviorTimers.push(nextCycleTimer);
+    };
+
+    // Jitter the first failure to avoid all agents failing simultaneously
+    const jitter = Math.floor(Math.random() * failMs);
+    const firstTimer = setTimeout(failCycle, jitter);
+    this.behaviorTimers.push(firstTimer);
+  }
+
+  private startFailingReceiverOnce(config: BehaviorConfig): void {
+    const receiver = config.receiver ?? "otlp";
+    const pipelines = this.profile.pipelines;
+
+    // Send the permanent failure right away (real collector sends this on startup)
+    const sendTimer = setTimeout(
+      () => {
+        if (!this.connected) return;
+        try {
+          this.sequenceNum++;
+          this.sendRaw(
+            buildReceiverFailure({
+              instanceUid: this.instanceUid,
+              sequenceNum: this.sequenceNum,
+              capabilities: this.resolvedCapabilities,
+              receiver,
+              pipelines,
+              startTimeNano: this.processStartNano,
+            }),
+          );
+        } catch {
+          // WS may have closed
+        }
+      },
+      500 + Math.floor(Math.random() * 2000),
+    );
+    this.behaviorTimers.push(sendTimer);
+  }
+
+  private startFlappingLoop(config: BehaviorConfig): void {
+    const flapIntervalMs = (config.flapIntervalSeconds ?? 300) * 1000;
+    const offlineMs = (config.offlineSeconds ?? 30) * 1000;
+
+    const doFlap = async () => {
+      if (!this.connected) return;
+      try {
+        // Abrupt close — no agent_disconnect, just drop the connection
+        this.ws?.close();
+        this.ws = null;
+      } catch {
+        // Already closed
+      }
+
+      // Wait offline period, then reconnect
+      const reconnectTimer = setTimeout(async () => {
+        if (!this._enrollment) return;
+        try {
+          // Reconnect resets seq to 0 (process restart simulation)
+          this.sequenceNum = 0;
+          this.processStartNano = BigInt(Date.now()) * 1_000_000n;
+          await this.connect();
+          await this.sendHello();
+          // Drain the enrollment ServerToAgent (config + assignment reuse)
+          const msg = await this.waitForMessage(10_000);
+          // Update assignment claim if server re-issued one
+          const auth = msg.connection_settings?.opamp?.headers?.find(
+            (h) => h.key.toLowerCase() === "authorization",
+          );
+          if (auth) {
+            const m = auth.value.match(/^Bearer\s+(.+)$/i);
+            if (m?.[1]) this.assignmentClaim = m[1];
+          }
+        } catch {
+          // Reconnect failed — will retry on next flap cycle
+        }
+
+        // Schedule next flap
+        const nextTimer = setTimeout(doFlap, flapIntervalMs);
+        this.behaviorTimers.push(nextTimer);
+      }, offlineMs);
+      this.behaviorTimers.push(reconnectTimer);
+    };
+
+    // Jitter first flap across the interval
+    const jitter = Math.floor(Math.random() * flapIntervalMs);
+    const firstTimer = setTimeout(doFlap, jitter);
+    this.behaviorTimers.push(firstTimer);
+  }
+
+  private startRestartingLoop(config: BehaviorConfig): void {
+    const intervalMs = (config.restartIntervalSeconds ?? 300) * 1000;
+
+    const doRestart = async () => {
+      if (!this._enrollment) return;
+      try {
+        // Graceful disconnect: send agent_disconnect then close
+        if (this.connected) {
+          this.sequenceNum++;
+          this.sendRaw({
+            instance_uid: this.instanceUid,
+            sequence_num: this.sequenceNum,
+            capabilities: this.resolvedCapabilities,
+            flags: 0,
+            agent_disconnect: {},
+          });
+          this.ws?.close();
+          this.ws = null;
+        }
+      } catch {
+        // Already closed
+      }
+
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 500);
+      });
+
+      try {
+        // Clean restart: seq resets to 0, new process start time
+        this.sequenceNum = 0;
+        this.processStartNano = BigInt(Date.now()) * 1_000_000n;
+        await this.connect();
+        await this.sendHello();
+        const msg = await this.waitForMessage(10_000);
+        const auth = msg.connection_settings?.opamp?.headers?.find(
+          (h) => h.key.toLowerCase() === "authorization",
+        );
+        if (auth) {
+          const m = auth.value.match(/^Bearer\s+(.+)$/i);
+          if (m?.[1]) this.assignmentClaim = m[1];
+        }
+      } catch {
+        // Reconnect failed
+      }
+
+      // Schedule next restart
+      const nextTimer = setTimeout(doRestart, intervalMs);
+      this.behaviorTimers.push(nextTimer);
+    };
+
+    // Jitter first restart
+    const jitter = Math.floor(Math.random() * intervalMs);
+    const firstTimer = setTimeout(doRestart, jitter);
+    this.behaviorTimers.push(firstTimer);
+  }
+
   close(): void {
+    // Stop behavior loops
+    this.stopBehavior();
     // Stop keepalive and auto-heartbeat timers
     if (this.keepaliveTimer) {
       clearInterval(this.keepaliveTimer);
@@ -529,6 +837,11 @@ export class FakeOpampAgent {
         // Connection may have closed
       }
     }, FakeOpampAgent.KEEPALIVE_INTERVAL_MS);
+  }
+
+  /** Send a raw AgentToServer message — used internally by behavior loops. */
+  private sendRaw(msg: AgentToServer): void {
+    this.send(msg);
   }
 
   private send(msg: AgentToServer): void {

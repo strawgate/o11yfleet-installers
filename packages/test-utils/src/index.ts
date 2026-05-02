@@ -5,6 +5,8 @@ export type {
   EnrollmentResult,
   AgentProfile,
   PipelineConfig,
+  AgentBehaviorMode,
+  BehaviorConfig,
 } from "./fake-agent.js";
 export {
   buildHello,
@@ -13,6 +15,9 @@ export {
   buildConfigAck,
   buildDescriptionReport,
   buildDisconnect,
+  buildExporterFailure,
+  buildReceiverFailure,
+  buildHealthRecovered,
   DEFAULT_CAPABILITIES,
   CONFIGURABLE_CAPABILITIES,
 } from "./opamp-messages.js";
@@ -23,4 +28,7 @@ export type {
   ConfigAckOptions,
   AgentDescriptionOptions,
   DisconnectOptions,
+  ExporterFailureOptions,
+  ReceiverFailureOptions,
+  HealthRecoveredOptions,
 } from "./opamp-messages.js";

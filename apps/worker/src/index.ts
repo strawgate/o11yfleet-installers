@@ -52,6 +52,8 @@ export interface Env {
   };
   /** Default email from address for outgoing emails. */
   O11YFLEET_EMAIL_FROM?: string;
+  /** Enable OpAMP frame debug logging. Set to "1" to log decoded AgentToServer frames. */
+  OPAMP_FRAME_DEBUG?: string;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

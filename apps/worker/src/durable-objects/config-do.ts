@@ -50,6 +50,8 @@ export interface ConfigDOEnv {
   FP_CONFIGS: R2Bucket;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   O11YFLEET_CLAIM_HMAC_SECRET: string;
+  /** Set to "1" in dev to log every decoded AgentToServer frame as JSON. */
+  OPAMP_FRAME_DEBUG?: string;
 }
 
 /**
@@ -383,6 +385,24 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       const agentMsg = decodeAgentToServer(message);
       span.setAttribute("opamp.sequence_num", agentMsg.sequence_num);
       span.setAttribute("opamp.codec", "protobuf");
+
+      // Debug frame logging — enabled by OPAMP_FRAME_DEBUG=1 env var.
+      // Prints decoded AgentToServer as JSON so real collector frame shapes
+      // can be captured and compared against test-utils message builders.
+      if (this.env.OPAMP_FRAME_DEBUG === "1") {
+        const debugPayload = JSON.stringify(agentMsg, (_, v) =>
+          v instanceof Uint8Array
+            ? `<bytes:${v.length}:${Array.from(v.slice(0, 8))
+                .map((b) => b.toString(16).padStart(2, "0"))
+                .join("")}${v.length > 8 ? "…" : ""}>`
+            : typeof v === "bigint"
+              ? v.toString()
+              : v,
+        );
+        console.log(
+          `[FRAME_DEBUG] seq=${agentMsg.sequence_num} uid=${attachment.instance_uid.slice(0, 8)} ${debugPayload}`,
+        );
+      }
 
       // Duplicate UID detection (OpAMP spec §3.2.1.2)
       if (agentMsg.sequence_num === 0) {

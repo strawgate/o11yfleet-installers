@@ -248,6 +248,196 @@ export function buildDisconnect(opts: DisconnectOptions = {}): AgentToServer {
   };
 }
 
+// ─── Health Scenario Builders ───────────────────────────────────────
+//
+// Status strings are Go constants from opamp-go ComponentHealth:
+//   StatusOK, StatusStarting, StatusRecoverableError, StatusPermanentError, StatusFatalError
+//
+// Real otelcol-contrib 0.123.0 wire behavior (empirically observed):
+//   - seq=0: full hello with health (all StatusOK) + agent_description + effective_config
+//   - seq=1: second health update sent ~1s after startup (also all StatusOK)
+//   - seq=2+: minimal heartbeats — no health field at all
+//   - Export failures (OTLP connection refused, retry exhaustion, data drops): NO health update
+//   - Prometheus scrape failures: NO health update (stays StatusOK)
+//   - memory_limiter above hard limit: NO health update (stays StatusOK)
+//   - Shutdown: StatusStopping frames for each pipeline/component
+//   - Component startup failure: collector crashes before OpAMP can send a health report
+//
+// Therefore buildExporterFailure / buildReceiverFailure produce spec-valid health frames
+// that exercise our server's handling of all ComponentHealth states, even though
+// real otelcol-contrib 0.123.0 does not emit StatusRecoverableError / StatusPermanentError
+// at runtime. The collectors used in CI are explicitly controlled fake agents.
+//
+// Structural rules confirmed from real collector frames:
+//   - Leaf components (receiver:X, etc.) live INSIDE pipeline.component_health_map
+//   - Leaf start_time_unix_nano is always 0n (components don't track their own start time)
+//   - Top-level health.start_time_unix_nano is the collector process start time
+//   - Only the affected pipeline and component are unhealthy — others remain StatusOK
+//   - Config ACK messages carry no health fields; health is a separate subsequent message
+
+export interface ExporterFailureOptions {
+  instanceUid?: Uint8Array;
+  sequenceNum?: number;
+  capabilities?: number;
+  /** Pipeline containing the failing exporter (default: "traces") */
+  pipeline?: string;
+  /** Exporter name, e.g. "otlphttp", "otlp", "prometheus" (default: "otlphttp") */
+  exporter?: string;
+  /** Full error string from Go (default: realistic OTLP connection refused) */
+  exporterError?: string;
+  /** All pipeline names in the fleet (for building the full health map) */
+  pipelines?: PipelineConfig[];
+  /** Collector process start time in ns (default: Date.now() * 1_000_000) */
+  startTimeNano?: bigint;
+}
+
+/**
+ * Build a health report with a failing exporter component.
+ *
+ * NOTE: Real otelcol-contrib 0.123.0 does NOT emit StatusRecoverableError for export
+ * failures — the exporterhelper handles retries internally and never calls
+ * ReportComponentStatus. Even after retry exhaustion and data drops, the exporter
+ * stays StatusOK via OpAMP. This builder exercises a spec-valid health state
+ * for server-side test coverage, not a pattern observed in production collectors.
+ *
+ * Shape of the message:
+ *   - health.healthy = false
+ *   - health.status = "StatusRecoverableError" (retryable — collector keeps running)
+ *   - Failing pipeline: healthy=false, StatusRecoverableError
+ *   - Failing exporter component: healthy=false, full Go error in last_error
+ *   - All other pipelines: healthy=true, StatusOK
+ */
+export function buildExporterFailure(opts: ExporterFailureOptions): AgentToServer {
+  const nowNano = BigInt(Date.now()) * 1_000_000n;
+  const startNano = opts.startTimeNano ?? nowNano;
+  const failPipeline = opts.pipeline ?? "traces";
+  const failExporter = opts.exporter ?? "otlphttp";
+  const exporterError =
+    opts.exporterError ??
+    `Permanent error: rpc error: code = Unavailable desc = connection refused to exporter:${failExporter}`;
+  const pipelines = opts.pipelines ?? REAL_COLLECTOR_PIPELINES;
+
+  const componentMap = buildComponentHealthMapWithFailure(pipelines, nowNano, {
+    pipeline: failPipeline,
+    componentKey: `exporter:${failExporter}`,
+    componentError: exporterError,
+    pipelineError: `exporter ${failExporter} unhealthy`,
+  });
+
+  return {
+    instance_uid: opts.instanceUid ?? new Uint8Array(16),
+    sequence_num: opts.sequenceNum ?? 1,
+    capabilities: opts.capabilities ?? DEFAULT_CAPABILITIES,
+    flags: 0,
+    health: {
+      healthy: false,
+      start_time_unix_nano: startNano,
+      last_error: `exporter:${failExporter} unhealthy`,
+      status: "StatusRecoverableError",
+      status_time_unix_nano: nowNano,
+      component_health_map: componentMap,
+    },
+  };
+}
+
+export interface ReceiverFailureOptions {
+  instanceUid?: Uint8Array;
+  sequenceNum?: number;
+  capabilities?: number;
+  /** Pipeline containing the failing receiver (default: "traces") */
+  pipeline?: string;
+  /** Receiver name (default: "otlp") */
+  receiver?: string;
+  /** Full error string (default: realistic port-in-use error) */
+  receiverError?: string;
+  pipelines?: PipelineConfig[];
+  startTimeNano?: bigint;
+}
+
+/**
+ * Build a health report with a failing receiver component.
+ *
+ * NOTE: Real otelcol-contrib 0.123.0 crashes when a receiver fails to start (e.g., port
+ * already in use). The OpAMP extension receives the StatusPermanentError event but
+ * discards it during shutdown ("discarding event received after shutdown"). The collector
+ * exits before sending this frame via OpAMP. This builder exercises a spec-valid health
+ * state for server-side test coverage, not a pattern observed in production collectors.
+ *
+ * Shape of the message:
+ *   - health.status = "StatusPermanentError" (non-retryable — collector cannot start pipeline)
+ *   - Failing component carries the exact Go bind error
+ */
+export function buildReceiverFailure(opts: ReceiverFailureOptions): AgentToServer {
+  const nowNano = BigInt(Date.now()) * 1_000_000n;
+  const startNano = opts.startTimeNano ?? nowNano;
+  const failPipeline = opts.pipeline ?? "traces";
+  const failReceiver = opts.receiver ?? "otlp";
+  const receiverError =
+    opts.receiverError ?? `listen tcp 0.0.0.0:4317: bind: address already in use`;
+  const pipelines = opts.pipelines ?? REAL_COLLECTOR_PIPELINES;
+
+  const componentMap = buildComponentHealthMapWithFailure(pipelines, nowNano, {
+    pipeline: failPipeline,
+    componentKey: `receiver:${failReceiver}`,
+    componentError: receiverError,
+    pipelineError: `receiver ${failReceiver}/${failPipeline} failed to start`,
+    pipelineStatus: "StatusPermanentError",
+    componentStatus: "StatusPermanentError",
+  });
+
+  return {
+    instance_uid: opts.instanceUid ?? new Uint8Array(16),
+    sequence_num: opts.sequenceNum ?? 1,
+    capabilities: opts.capabilities ?? DEFAULT_CAPABILITIES,
+    flags: 0,
+    health: {
+      healthy: false,
+      start_time_unix_nano: startNano,
+      last_error: `cannot start pipeline ${failPipeline}: receiver ${failReceiver} failed to start`,
+      status: "StatusPermanentError",
+      status_time_unix_nano: nowNano,
+      component_health_map: componentMap,
+    },
+  };
+}
+
+export interface HealthRecoveredOptions {
+  instanceUid?: Uint8Array;
+  sequenceNum?: number;
+  capabilities?: number;
+  pipelines?: PipelineConfig[];
+  startTimeNano?: bigint;
+}
+
+/**
+ * Build a health report indicating full recovery (all components StatusOK).
+ *
+ * NOTE: Real otelcol-contrib 0.123.0 only sends health at seq=0 and seq=1 after startup
+ * (both StatusOK), then sends minimal heartbeats with no health field. There is no
+ * "recovery" message because runtime failures don't change health status via OpAMP.
+ * This builder is valid for testing server-side handling of health state transitions.
+ */
+export function buildHealthRecovered(opts: HealthRecoveredOptions = {}): AgentToServer {
+  const nowNano = BigInt(Date.now()) * 1_000_000n;
+  const startNano = opts.startTimeNano ?? nowNano;
+  const pipelines = opts.pipelines ?? REAL_COLLECTOR_PIPELINES;
+
+  return {
+    instance_uid: opts.instanceUid ?? new Uint8Array(16),
+    sequence_num: opts.sequenceNum ?? 1,
+    capabilities: opts.capabilities ?? DEFAULT_CAPABILITIES,
+    flags: 0,
+    health: {
+      healthy: true,
+      start_time_unix_nano: startNano,
+      last_error: "",
+      status: "StatusOK",
+      status_time_unix_nano: nowNano,
+      component_health_map: buildComponentHealthMap(pipelines, ["opamp"], nowNano),
+    },
+  };
+}
+
 // ─── Internal helpers ───────────────────────────────────────────────
 
 /** Build an AgentDescription with standard OTel Collector attributes. */
@@ -310,6 +500,98 @@ function buildComponentHealthMap(
     status: "StatusOK",
     status_time_unix_nano: nowNano,
     component_health_map: extComponents,
+  };
+
+  return map;
+}
+
+interface ComponentFailure {
+  /** Pipeline key (e.g., "traces") — must exist in the pipeline list */
+  pipeline: string;
+  /** Component key within the pipeline (e.g., "exporter:otlphttp") */
+  componentKey: string;
+  componentError: string;
+  pipelineError: string;
+  pipelineStatus?: string;
+  componentStatus?: string;
+}
+
+/**
+ * Build a component_health_map with one failing component.
+ * All other pipelines and components remain healthy (StatusOK).
+ * Only the affected pipeline and its failing component are marked unhealthy.
+ */
+function buildComponentHealthMapWithFailure(
+  pipelines: PipelineConfig[],
+  nowNano: bigint,
+  failure: ComponentFailure,
+): Record<string, ComponentHealth> {
+  const leaf = (error = "", status = "StatusOK", healthy = true): ComponentHealth => ({
+    healthy,
+    start_time_unix_nano: 0n,
+    last_error: error,
+    status,
+    status_time_unix_nano: nowNano,
+    component_health_map: {},
+  });
+
+  const pipelineStatus = failure.pipelineStatus ?? "StatusRecoverableError";
+  const componentStatus = failure.componentStatus ?? "StatusRecoverableError";
+  const map: Record<string, ComponentHealth> = {};
+
+  for (const pipeline of pipelines) {
+    const isFailing = pipeline.name === failure.pipeline;
+    const components: Record<string, ComponentHealth> = {};
+
+    for (const r of pipeline.receivers) {
+      const key = `receiver:${r}`;
+      const isFailingComponent = isFailing && key === failure.componentKey;
+      components[key] = isFailingComponent
+        ? leaf(failure.componentError, componentStatus, false)
+        : leaf();
+    }
+    for (const proc of pipeline.processors) {
+      const key = `processor:${proc}`;
+      const isFailingComponent = isFailing && key === failure.componentKey;
+      components[key] = isFailingComponent
+        ? leaf(failure.componentError, componentStatus, false)
+        : leaf();
+    }
+    for (const exp of pipeline.exporters) {
+      const key = `exporter:${exp}`;
+      const isFailingComponent = isFailing && key === failure.componentKey;
+      components[key] = isFailingComponent
+        ? leaf(failure.componentError, componentStatus, false)
+        : leaf();
+    }
+
+    map[`pipeline:${pipeline.name}`] = isFailing
+      ? {
+          healthy: false,
+          start_time_unix_nano: 0n,
+          last_error: failure.pipelineError,
+          status: pipelineStatus,
+          status_time_unix_nano: nowNano,
+          component_health_map: components,
+        }
+      : {
+          healthy: true,
+          start_time_unix_nano: 0n,
+          last_error: "",
+          status: "StatusOK",
+          status_time_unix_nano: nowNano,
+          component_health_map: components,
+        };
+  }
+
+  // Extensions remain healthy during component failures
+  map["extensions"] = {
+    healthy: true,
+    start_time_unix_nano: 0n,
+    last_error: "",
+    status: "StatusOK",
+    status_time_unix_nano: nowNano,
+    component_health_map: { "extension:opamp": leaf() },
   };
 
   return map;
