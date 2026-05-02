@@ -31,6 +31,21 @@ const adminEndpoints: AdminEndpoint[] = [
     use: "Read, update, or delete one tenant",
   },
   {
+    method: "POST",
+    path: "/api/admin/tenants/:id/approve",
+    use: "Approve or reject a pending tenant signup",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/bulk-approve",
+    use: "Bulk-approve every currently-pending tenant in one call",
+  },
+  {
+    method: "GET/PUT",
+    path: "/api/admin/settings",
+    use: "Read or update platform-level admin settings (e.g. auto-approve toggle)",
+  },
+  {
     method: "GET",
     path: "/api/admin/tenants/:id/configurations",
     use: "List configurations for one tenant",

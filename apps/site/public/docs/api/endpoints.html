@@ -452,6 +452,37 @@
             </tbody>
           </table>
 
+          <h2 id="api-keys">API keys</h2>
+          <p>
+            Long-lived bearer tokens scoped to a tenant. Returned once on creation; the server
+            stores only the JTI for revocation. Use these for CI/CD integrations and any automation
+            that calls the v1 API outside the portal session cookie.
+          </p>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/api-keys</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Mint an API key for the current tenant. Body accepts an optional
+                  <code>label</code> and <code>expires_in_seconds</code>; raw token returned once.
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
           <h2 id="pending-tokens">Pending enrollment tokens</h2>
           <p>
             Pending tokens allow collectors to connect before being assigned to a configuration. The
