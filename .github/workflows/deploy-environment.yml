@@ -50,7 +50,7 @@ jobs:
       TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
       REQUIRE_TERRAFORM_STATE_READY: ${{ inputs.require_state_ready }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - uses: ./.github/actions/setup-deploy
 

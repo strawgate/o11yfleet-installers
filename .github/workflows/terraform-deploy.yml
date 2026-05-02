@@ -37,15 +37,16 @@ concurrency:
 permissions:
   contents: read
 
+# Workflow-level env holds only non-secret config. Cloud-provider
+# secrets (AWS_*, CLOUDFLARE_API_TOKEN) are scoped at job level on the
+# plan and apply jobs only — the validate job runs offline tf-validate
+# and never needs them.
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
   TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
   TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
   TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
-  AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
-  CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
   TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
 
 jobs:
@@ -53,13 +54,15 @@ jobs:
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: "1.9"
 
-      - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
+        with:
+          tool: just
 
       - name: Validate Terraform
         run: just tf-validate
@@ -78,14 +81,20 @@ jobs:
       }}
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: "1.9"
 
-      - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
+        with:
+          tool: just
 
       - name: Select environment
         id: target
@@ -168,14 +177,20 @@ jobs:
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
     environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment != 'prod' && inputs.environment || 'production' }}
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.TF_STATE_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TF_STATE_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@v4
+      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
         with:
           terraform_version: "1.9"
 
-      - uses: taiki-e/install-action@just
+      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
+        with:
+          tool: just
 
       - name: Select environment
         id: target
