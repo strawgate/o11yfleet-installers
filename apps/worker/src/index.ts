@@ -398,9 +398,13 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     // Admin routes — /api/admin/*
     if (url.pathname.startsWith("/api/admin/")) {
+      // Dev mode bypass: allow admin access when ENVIRONMENT=dev (local development)
+      if (env.ENVIRONMENT === "dev") {
+        resp = await handleAdminRequest(request, env, url);
+      }
       // OIDC "provision" scope: only allows POST /api/admin/tenants (tenant creation).
       // This enables CI workflows to provision test infrastructure without full admin access.
-      if (oidcClaims && request.method === "POST" && url.pathname === "/api/admin/tenants") {
+      else if (oidcClaims && request.method === "POST" && url.pathname === "/api/admin/tenants") {
         resp = await handleAdminRequest(request, env, url);
       } else if (sessionAuth?.role === "admin") {
         resp = await handleAdminRequest(request, env, url);

@@ -344,6 +344,13 @@ jobs:
             exit 1
           fi
 
+      - name: Seed local database
+        env:
+          O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
+          FP_URL: http://localhost:8787
+        run: |
+          pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/seed-local.ts --reset
+
       - name: E2E tests (full-stack with FakeOpampAgent)
         env:
           O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch

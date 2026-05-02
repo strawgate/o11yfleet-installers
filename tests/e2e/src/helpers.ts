@@ -4,6 +4,13 @@
  * These run against a live wrangler dev server (localhost:8787).
  */
 
+import { readFileSync, existsSync } from "node:fs";
+import { resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
+const REPO_ROOT = resolve(__dirname, "..", "..", "..");
+
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 export const API_KEY =
@@ -11,6 +18,44 @@ export const API_KEY =
   process.env.O11YFLEET_API_KEY ??
   process.env.O11YFLEET_API_BEARER_SECRET ??
   "test-api-secret-for-dev-only-32chars";
+
+interface SeededState {
+  tenant_id: string;
+  tenant_name: string;
+  config_id: string;
+  config_name: string;
+  enrollment_token: string;
+  current_config_hash: string;
+}
+
+/** Try to load seeded state from .local-state.json (created by seed-local.ts) */
+function loadSeededState(): SeededState | null {
+  const statePath = resolve(REPO_ROOT, ".local-state.json");
+  if (!existsSync(statePath)) return null;
+  try {
+    return JSON.parse(readFileSync(statePath, "utf-8")) as SeededState;
+  } catch {
+    return null;
+  }
+}
+
+/** Get the seeded tenant info if available (from .local-state.json) */
+export function getSeededTenant(): { id: string; name: string } | null {
+  const state = loadSeededState();
+  return state ? { id: state.tenant_id, name: state.tenant_name } : null;
+}
+
+/** Get the seeded config ID if available */
+export function getSeededConfigId(): string | null {
+  const state = loadSeededState();
+  return state?.config_id ?? null;
+}
+
+/** Get the seeded enrollment token if available */
+export function getSeededEnrollmentToken(): string | null {
+  const state = loadSeededState();
+  return state?.enrollment_token ?? null;
+}
 
 const configTenantIds = new Map<string, string>();
 
@@ -81,8 +126,15 @@ export async function api<T = unknown>(
   return { status: res.status, data };
 }
 
-/** Create a tenant. Returns { id, name }. */
+/** Create a tenant. Returns { id, name }. Uses seeded tenant if available in CI. */
 export async function createTenant(name: string): Promise<{ id: string; name: string }> {
+  // In CI, try to use seeded tenant first (admin API requires auth that wrangler dev doesn't provide)
+  const seeded = getSeededTenant();
+  if (seeded) {
+    console.log(`Using seeded tenant: ${seeded.name} (${seeded.id})`);
+    return seeded;
+  }
+
   const { status, data } = await api<{ id: string; name: string }>("/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
