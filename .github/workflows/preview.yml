@@ -1,0 +1,455 @@
+name: Preview
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: preview-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: write
+  deployments: write
+
+# Required secrets for preview deployments:
+# - CLOUDFLARE_DEPLOY_API_TOKEN: Full-access token for Workers, D1, R2, Queues (Terraform provisioning)
+# - CLOUDFLARE_PAGES_API_TOKEN: Token with Pages Write permission for frontend deployments
+# - CLOUDFLARE_ACCOUNT_ID: Cloudflare account ID
+# - TERRAFORM_STATE_R2_*: R2 bucket configuration for Terraform state storage
+# - O11YFLEET_*: Seed data configuration for preview database initialization
+env:
+  TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
+  TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
+  TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    if: |
+      github.event.pull_request.head.repo.full_name == github.repository
+    environment: preview
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: pnpm
+
+      - uses: taiki-e/install-action@just
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build worker bundle
+        run: just worker-bundle
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9"
+
+      - name: Deploy preview with Terraform
+        id: deploy
+        if: github.event.action != 'closed'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET || 'test-api-secret-for-dev-only-32chars' }}
+          O11YFLEET_CLAIM_HMAC_SECRET: ${{ secrets.O11YFLEET_CLAIM_HMAC_SECRET || 'test-claim-hmac-secret-for-ci-32ch' }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL || 'admin@o11yfleet.com' }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD || 'admin-password' }}
+          O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL || 'demo@o11yfleet.com' }}
+          O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD || 'demo-password' }}
+        run: |
+          set -euo pipefail
+
+          echo "Initializing Terraform for preview PR #${PR_NUMBER}..."
+          cd infra/terraform/preview
+
+          # Try modern args first, fall back to legacy if needed
+          set +e
+          terraform init -reconfigure \
+            -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}" \
+            -backend-config="key=o11yfleet/preview/pr-${PR_NUMBER}/terraform.tfstate" \
+            -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="endpoints={s3=\"${TERRAFORM_STATE_R2_ENDPOINT}\"}" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_s3_checksum=true" \
+            -backend-config="use_path_style=true" 2>&1
+          init_status=$?
+          set -e
+
+          if [ "$init_status" -ne 0 ]; then
+            echo "Retrying with legacy backend args..."
+            terraform init -reconfigure \
+              -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}" \
+              -backend-config="key=o11yfleet/preview/pr-${PR_NUMBER}/terraform.tfstate" \
+              -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}" \
+              -backend-config="skip_credentials_validation=true" \
+              -backend-config="skip_metadata_api_check=true" \
+              -backend-config="skip_region_validation=true" \
+              -backend-config="skip_requesting_account_id=true" \
+              -backend-config="endpoint=${TERRAFORM_STATE_R2_ENDPOINT}" \
+              -backend-config="force_path_style=true"
+          fi
+
+          echo "Applying Terraform for preview PR #${PR_NUMBER}..."
+          terraform apply \
+            -var="pr_number=${PR_NUMBER}" \
+            -var="cloudflare_account_id=${CLOUDFLARE_ACCOUNT_ID}" \
+            -var="worker_bundle_path=../../../apps/worker/dist/instrumented.js" \
+            -var="worker_bundle_module_name=instrumented.js" \
+            -var="worker_compatibility_date=2026-04-29" \
+            -var="o11yfleet_api_bearer_secret=${O11YFLEET_API_BEARER_SECRET}" \
+            -var="o11yfleet_claim_hmac_secret=${O11YFLEET_CLAIM_HMAC_SECRET}" \
+            -var="o11yfleet_seed_admin_email=${O11YFLEET_SEED_ADMIN_EMAIL}" \
+            -var="o11yfleet_seed_admin_password=${O11YFLEET_SEED_ADMIN_PASSWORD}" \
+            -var="o11yfleet_seed_tenant_user_email=${O11YFLEET_SEED_TENANT_USER_EMAIL}" \
+            -var="o11yfleet_seed_tenant_user_password=${O11YFLEET_SEED_TENANT_USER_PASSWORD}" \
+            -auto-approve
+
+          echo "Fetching outputs..."
+          WORKER_URL=$(terraform output -raw worker_url)
+          ENV_NAME=$(terraform output -raw env_name)
+          D1_DATABASE_UUID=$(terraform output -raw d1_database_uuid)
+
+          {
+            echo "worker_url=${WORKER_URL}"
+            echo "env_name=${ENV_NAME}"
+            echo "pr_number=${PR_NUMBER}"
+            echo "d1_database_uuid=${D1_DATABASE_UUID}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Run D1 migrations
+        if: github.event.action != 'closed'
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          ENV_NAME: ${{ steps.deploy.outputs.env_name }}
+          D1_DATABASE_UUID: ${{ steps.deploy.outputs.d1_database_uuid }}
+        run: |
+          set -euo pipefail
+
+          # Create a minimal wrangler config for D1 migrations
+          cat > apps/worker/wrangler-preview.jsonc << WRANGLER_EOF
+          {
+            "name": "o11yfleet-worker",
+            "compatibility_date": "2026-04-29",
+            "d1_databases": [
+              {
+                "binding": "FP_DB",
+                "database_name": "${ENV_NAME}",
+                "database_id": "${D1_DATABASE_UUID}",
+                "migrations_dir": "../../packages/db/migrations"
+              }
+            ]
+          }
+          WRANGLER_EOF
+
+          echo "Running D1 migrations..."
+          cd apps/worker
+          npx wrangler d1 migrations apply "${ENV_NAME}" --remote --config=wrangler-preview.jsonc
+          rm -f wrangler-preview.jsonc
+
+      - name: Seed preview database
+        if: github.event.action != 'closed'
+        env:
+          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET || 'test-api-secret-for-dev-only-32chars' }}
+        run: |
+          set -euo pipefail
+
+          echo "Seeding preview database..."
+          curl -s -X POST "${WORKER_URL}/auth/seed" \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer ${O11YFLEET_API_BEARER_SECRET}" \
+            -d '{}' | jq .
+
+      - name: Deploy preview site to Cloudflare Pages
+        id: site
+        if: success() && github.event.action != 'closed'
+        env:
+          # Use dedicated Pages token if available, fall back to deploy token
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          WORKER_URL: ${{ steps.deploy.outputs.worker_url }}
+          ENV_NAME: ${{ steps.deploy.outputs.env_name }}
+          PR_NUMBER: ${{ steps.deploy.outputs.pr_number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+        run: |
+          set -euo pipefail
+
+          echo "Building preview site..."
+          cd apps/site
+          VITE_API_TARGET="${WORKER_URL}" pnpm build
+
+          PROJECT_NAME="o11yfleet-preview-${PR_NUMBER}"
+
+          # Check if Pages project exists
+          echo "Checking if Pages project ${PROJECT_NAME} exists..."
+          set +e
+          PROJECT_CHECK=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT_NAME}" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" 2>&1)
+          PROJECT_EXISTS=$(echo "$PROJECT_CHECK" | jq -r '.success // false')
+          set -e
+
+          if [ "$PROJECT_EXISTS" = "false" ]; then
+            echo "Creating Pages project ${PROJECT_NAME} via wrangler..."
+            # Use wrangler pages project create instead of API
+            npx wrangler pages project create "${PROJECT_NAME}" --production-branch="${PR_BRANCH}" 2>&1 || true
+
+            # Verify creation
+            PROJECT_EXISTS=$(curl -s -X GET \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PROJECT_NAME}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json" | jq -r '.success // false')
+
+            if [ "$PROJECT_EXISTS" = "false" ]; then
+              echo "Failed to create Pages project, falling back to worker URL"
+              PAGES_URL="${WORKER_URL}"
+            fi
+          fi
+
+          echo "Deploying to Cloudflare Pages..."
+          set +e
+          PAGES_OUTPUT=$(npx wrangler pages deploy dist \
+            --project-name="${PROJECT_NAME}" \
+            --branch="${PR_BRANCH}" \
+            --commit-message="Preview deployment for PR #${PR_NUMBER}" \
+            2>&1)
+          PAGES_STATUS=$?
+          set -e
+
+          echo "$PAGES_OUTPUT"
+
+          # Extract URL from output - wrangler pages deploy outputs the URL.
+          # Don't silently fall back to WORKER_URL on extraction failure: the
+          # API-only worker is not the same surface as the Pages site, so a
+          # successful-looking deploy that secretly points app/admin links at
+          # the worker host produces broken links in the sticky comment.
+          PAGES_URL=$(echo "$PAGES_OUTPUT" | grep -o 'https://[^ ]*\.pages\.dev' | head -1)
+          if [ -z "$PAGES_URL" ]; then
+            echo "::error::Pages deploy did not produce a *.pages.dev URL (status=$PAGES_STATUS); refusing to publish preview links"
+            exit 1
+          fi
+
+          echo "Pages deployment status: $PAGES_STATUS"
+          echo "Pages URL: $PAGES_URL"
+
+          {
+            echo "pages_url=${PAGES_URL}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Deployment
+        id: deployment
+        if: success() && github.event.action != 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ steps.deploy.outputs.pr_number }}
+          REPO: ${{ github.repository }}
+          SHA: ${{ github.event.pull_request.head.sha }}
+          PREVIEW_URL: ${{ steps.site.outputs.pages_url || steps.deploy.outputs.worker_url }}
+        run: |
+          set -euo pipefail
+
+          REQUEST_BODY=$(jq -n \
+            --arg ref "$SHA" \
+            --arg env "preview-${PR_NUMBER}" \
+            --arg desc "Preview for PR #${PR_NUMBER}" \
+            '{ref: $ref, environment: $env, description: $desc, transient_environment: true, production_environment: false, auto_merge: false, required_contexts: []}')
+
+          echo "Creating deployment..."
+          DEPLOYMENT_RESPONSE=$(curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${REPO}/deployments" \
+            -d "$REQUEST_BODY")
+
+          echo "Response: $DEPLOYMENT_RESPONSE"
+          DEPLOYMENT_ID=$(echo "$DEPLOYMENT_RESPONSE" | jq -r '.id // empty')
+
+          if [ -z "$DEPLOYMENT_ID" ] || [ "$DEPLOYMENT_ID" = "null" ]; then
+            echo "Failed to create deployment: $DEPLOYMENT_RESPONSE"
+            exit 1
+          fi
+
+          {
+            echo "deployment_id=$DEPLOYMENT_ID"
+            echo "deployment_url=${PREVIEW_URL}/"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Activate GitHub Deployment
+        if: success() && github.event.action != 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          DEPLOYMENT_ID: ${{ steps.deployment.outputs.deployment_id }}
+          PREVIEW_URL: ${{ steps.site.outputs.pages_url || steps.deploy.outputs.worker_url }}
+        run: |
+          set -euo pipefail
+          STATUS_BODY=$(jq -n \
+            --arg state "success" \
+            --arg url "$PREVIEW_URL" \
+            '{state: $state, environment_url: $url}')
+          curl -s -X POST \
+            -H "Authorization: Bearer ${GH_TOKEN}" \
+            -H "Content-Type: application/json" \
+            "https://api.github.com/repos/${REPO}/deployments/${DEPLOYMENT_ID}/statuses" \
+            -d "$STATUS_BODY"
+
+      - name: Sticky PR comment with preview URLs
+        if: success() && github.event.action != 'closed'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9
+        env:
+          PR_NUMBER: ${{ steps.deploy.outputs.pr_number }}
+          PR_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PREVIEW_URL: ${{ steps.site.outputs.pages_url || steps.deploy.outputs.worker_url }}
+          API_URL: ${{ steps.deploy.outputs.worker_url }}
+        with:
+          script: |
+            // Sticky comment: edit one comment in place rather than the
+            // delete+post churn that fills the timeline on every push.
+            // Identification is via a hidden HTML marker in the body.
+            const marker = '<!-- o11yfleet-preview-deployment -->';
+            const { PR_NUMBER, PR_BRANCH, PREVIEW_URL, API_URL } = process.env;
+            const body = [
+              marker,
+              `🌐 **Preview deployment ready** for this PR: ${PREVIEW_URL}`,
+              '',
+              '<details><summary>Preview details (click to expand)</summary>',
+              '',
+              `**Branch:** \`${PR_BRANCH}\``,
+              '',
+              '| Surface | URL |',
+              '|---------|-----|',
+              `| Site | ${PREVIEW_URL}/ |`,
+              `| App | ${PREVIEW_URL}/portal/overview |`,
+              `| Admin | ${PREVIEW_URL}/admin/overview |`,
+              `| Health | ${API_URL}/healthz |`,
+              '',
+              `[View GitHub Deployment](https://github.com/${context.repo.owner}/${context.repo.repo}/deployments?environment=preview-${PR_NUMBER})`,
+              '',
+              '---',
+              '*Auto-deployed by GitHub Actions*',
+              '</details>',
+            ].join('\n');
+
+            const issueNumber = Number(PR_NUMBER);
+            const existing = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: issueNumber,
+              per_page: 100,
+            });
+            const sticky = existing.find((c) => c.body && c.body.includes(marker));
+
+            if (sticky) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: sticky.id,
+                body,
+              });
+              core.info(`Updated existing sticky comment ${sticky.id}`);
+            } else {
+              const { data } = await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: issueNumber,
+                body,
+              });
+              core.info(`Created sticky comment ${data.id}`);
+            }
+
+      - name: Destroy preview on PR close
+        if: github.event.action == 'closed'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET || 'test-api-secret-for-dev-only-32chars' }}
+          O11YFLEET_CLAIM_HMAC_SECRET: ${{ secrets.O11YFLEET_CLAIM_HMAC_SECRET || 'test-claim-hmac-secret-for-ci-32ch' }}
+          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL || 'admin@o11yfleet.com' }}
+          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD || 'admin-password' }}
+          O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL || 'demo@o11yfleet.com' }}
+          O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD || 'demo-password' }}
+        run: |
+          set -euo pipefail
+
+          echo "Destroying preview environment for PR #${PR_NUMBER}..."
+
+          cd infra/terraform/preview
+
+          # Try modern args first, fall back to legacy if needed
+          set +e
+          terraform init -reconfigure \
+            -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}" \
+            -backend-config="key=o11yfleet/preview/pr-${PR_NUMBER}/terraform.tfstate" \
+            -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}" \
+            -backend-config="skip_credentials_validation=true" \
+            -backend-config="skip_metadata_api_check=true" \
+            -backend-config="skip_region_validation=true" \
+            -backend-config="endpoints={s3=\"${TERRAFORM_STATE_R2_ENDPOINT}\"}" \
+            -backend-config="skip_requesting_account_id=true" \
+            -backend-config="skip_s3_checksum=true" \
+            -backend-config="use_path_style=true" 2>&1
+          init_status=$?
+          set -e
+
+          if [ "$init_status" -ne 0 ]; then
+            echo "Retrying with legacy backend args..."
+            terraform init -reconfigure \
+              -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}" \
+              -backend-config="key=o11yfleet/preview/pr-${PR_NUMBER}/terraform.tfstate" \
+              -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}" \
+              -backend-config="skip_credentials_validation=true" \
+              -backend-config="skip_metadata_api_check=true" \
+              -backend-config="skip_region_validation=true" \
+              -backend-config="skip_requesting_account_id=true" \
+              -backend-config="endpoint=${TERRAFORM_STATE_R2_ENDPOINT}" \
+              -backend-config="force_path_style=true"
+          fi
+
+          terraform destroy \
+            -var="pr_number=${PR_NUMBER}" \
+            -var="cloudflare_account_id=${CLOUDFLARE_ACCOUNT_ID}" \
+            -var="worker_bundle_path=../../../apps/worker/dist/instrumented.js" \
+            -var="o11yfleet_api_bearer_secret=${O11YFLEET_API_BEARER_SECRET}" \
+            -var="o11yfleet_claim_hmac_secret=${O11YFLEET_CLAIM_HMAC_SECRET}" \
+            -var="o11yfleet_seed_admin_email=${O11YFLEET_SEED_ADMIN_EMAIL}" \
+            -var="o11yfleet_seed_admin_password=${O11YFLEET_SEED_ADMIN_PASSWORD}" \
+            -var="o11yfleet_seed_tenant_user_email=${O11YFLEET_SEED_TENANT_USER_EMAIL}" \
+            -var="o11yfleet_seed_tenant_user_password=${O11YFLEET_SEED_TENANT_USER_PASSWORD}" \
+            -auto-approve || true
+
+          # Deactivate the GitHub deployments
+          for dep_id in $(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${REPO}/deployments" \
+            | jq -r '.[] | select(.environment == "preview-'"${PR_NUMBER}"'") | .id' 2>/dev/null || true); do
+            curl -s -X POST \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Content-Type: application/json" \
+              "https://api.github.com/repos/${REPO}/deployments/${dep_id}/statuses" \
+              -d '{"state": "inactive"}' 2>/dev/null || true
+          done
+
+          echo "Preview environment destroyed"

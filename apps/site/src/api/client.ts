@@ -91,6 +91,14 @@ export function detectApiBase(): string {
   if (host.endsWith(".o11yfleet.com") || host === "o11yfleet.com") {
     return "https://api.o11yfleet.com";
   }
+  // Handle Cloudflare Pages preview deployments - use the baked-in API target
+  if (
+    host.endsWith(".pages.dev") &&
+    typeof __VITE_API_TARGET__ === "string" &&
+    __VITE_API_TARGET__
+  ) {
+    return __VITE_API_TARGET__;
+  }
   if (host.endsWith(".workers.dev")) {
     if (host === "o11yfleet-site-worker-staging.o11yfleet.workers.dev") {
       return "https://staging-api.o11yfleet.com";

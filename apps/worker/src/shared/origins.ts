@@ -100,7 +100,32 @@ export function isAllowedCorsOrigin(origin: string, environment?: string | null)
   if (isStaticSiteWorkerOrigin(origin, normalizedEnvironment)) return true;
   if (publicSiteOriginsForEnvironment(normalizedEnvironment).includes(origin)) return true;
   if (normalizedEnvironment !== "production" && isLocalDevOrigin(origin)) return true;
+  // Allow preview deployments (pages.dev domains) when not in production
+  if (normalizedEnvironment !== "production" && isPreviewDomain(origin)) return true;
   return false;
+}
+
+/**
+ * Check if an origin is one of *our* per-PR Cloudflare Pages preview domains.
+ *
+ * Match shape: `<deployment-id>.o11yfleet-preview-<pr>.pages.dev`. This is the
+ * naming the preview workflow creates (Pages project = `o11yfleet-preview-${PR_NUMBER}`,
+ * deployment-id is a Cloudflare-assigned short hash). Restricting to this exact
+ * shape keeps the "retired previews are not allowed" behavior intact — a
+ * different project (e.g. `*.o11yfleet-staging-app.pages.dev`) does not match.
+ *
+ * NOT a general "any pages.dev origin" allow: that would let any third-party
+ * Pages project CORS-bypass our worker.
+ */
+const PREVIEW_PAGES_HOSTNAME = /^[a-z0-9-]+\.o11yfleet-preview-\d+\.pages\.dev$/;
+
+export function isPreviewDomain(origin: string): boolean {
+  try {
+    const url = new URL(origin);
+    return url.protocol === "https:" && PREVIEW_PAGES_HOSTNAME.test(url.hostname);
+  } catch {
+    return false;
+  }
 }
 
 export function isAllowedSiteOrigin(origin: string, environment?: string | null): boolean {

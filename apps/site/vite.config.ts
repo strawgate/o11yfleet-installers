@@ -17,6 +17,10 @@ export default defineConfig(({ mode }) => {
         "@": path.resolve(__dirname, "src"),
       },
     },
+    define: {
+      // Expose API target to client code for preview deployments
+      __VITE_API_TARGET__: JSON.stringify(apiTarget),
+    },
     server: {
       port: 4000,
       proxy: {

@@ -662,6 +662,62 @@ tf-apply env="prod": (tf-init-remote env)
     cd infra/terraform
     terraform apply "${targets[@]}" -var-file=envs/{{env}}.tfvars -auto-approve
 
+# ─── Preview Environments ─────────────────────────────────────────────
+
+# Terraform init for preview environment (per-PR state in R2)
+tf-preview-init pr="123":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    : "${TERRAFORM_STATE_R2_BUCKET:?Set TERRAFORM_STATE_R2_BUCKET}"
+    : "${TERRAFORM_STATE_R2_ENDPOINT:?Set TERRAFORM_STATE_R2_ENDPOINT}"
+    : "${AWS_ACCESS_KEY_ID:?Set AWS_ACCESS_KEY_ID}"
+    : "${AWS_SECRET_ACCESS_KEY:?Set AWS_SECRET_ACCESS_KEY}"
+    cd infra/terraform/preview
+    terraform init -reconfigure \
+        -backend-config="bucket=${TERRAFORM_STATE_R2_BUCKET}" \
+        -backend-config="key=o11yfleet/preview/pr-{{pr}}/terraform.tfstate" \
+        -backend-config="region=${TERRAFORM_STATE_R2_REGION:-auto}" \
+        -backend-config="endpoint=${TERRAFORM_STATE_R2_ENDPOINT}" \
+        -backend-config="skip_credentials_validation=true" \
+        -backend-config="skip_metadata_api_check=true" \
+        -backend-config="skip_region_check=true" \
+        -backend-config="force_path_style=true"
+
+# Terraform apply for preview environment
+tf-preview-apply pr="123" branch="feature-branch" worker_bundle="./dist/index.js":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just tf-preview-init {{pr}}
+    cd infra/terraform/preview
+    terraform apply \
+        -var="pr_number={{pr}}" \
+        -var="branch_name={{branch}}" \
+        -var="cloudflare_account_id=${CLOUDFLARE_ACCOUNT_ID}" \
+        -var="worker_bundle_path={{worker_bundle}}" \
+        -var="o11yfleet_api_bearer_secret=${O11YFLEET_API_BEARER_SECRET}" \
+        -var="o11yfleet_claim_hmac_secret=${O11YFLEET_CLAIM_HMAC_SECRET}" \
+        -var="o11yfleet_seed_admin_email=${O11YFLEET_SEED_ADMIN_EMAIL}" \
+        -var="o11yfleet_seed_admin_password=${O11YFLEET_SEED_ADMIN_PASSWORD}" \
+        -var="o11yfleet_seed_tenant_user_email=${O11YFLEET_SEED_TENANT_USER_EMAIL}" \
+        -var="o11yfleet_seed_tenant_user_password=${O11YFLEET_SEED_TENANT_USER_PASSWORD}" \
+        -auto-approve
+
+# Terraform destroy for preview environment
+tf-preview-destroy pr="123":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just tf-preview-init {{pr}}
+    cd infra/terraform/preview
+    terraform destroy -var="pr_number={{pr}}" -var="branch_name=deleted" -auto-approve
+
+# Terraform output for preview environment
+tf-preview-output pr="123" output="worker_url":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just tf-preview-init {{pr}}
+    cd infra/terraform/preview
+    terraform output -raw {{output}}
+
 # Print the API URL for a deployment environment.
 env-api-url env="prod":
     #!/usr/bin/env bash
@@ -1433,3 +1489,99 @@ cli-bench-enrollment config-id="CHANGE_ME" collectors="10":
 mixed-load agents="2000" duration="300" rollout_every="30" list_rps="2" stats_rps="2" reconnect_pct="5" concurrency="100" output="./artifacts/mixed-load.json":
     mkdir -p "$(dirname "{{output}}")"
     pnpm --filter @o11yfleet/load-test mixed -- --agents={{agents}} --duration={{duration}} --rollout-every={{rollout_every}} --list-rps={{list_rps}} --stats-rps={{stats_rps}} --reconnect-pct={{reconnect_pct}} --concurrency={{concurrency}} --output={{output}}
+
+# ─── Preview Deployments ─────────────────────────────────────────────
+
+# Create a preview environment for local testing
+preview-create name="test-preview":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    ENV_NAME="{{name}}"
+    echo "Creating preview environment: $ENV_NAME"
+    
+    echo "Creating D1 database..."
+    DATABASE_OUTPUT=$(npx wrangler d1 create "o11yfleet-${ENV_NAME}" --columnar --location=weur 2>&1 || echo "")
+    DATABASE_ID=$(echo "$DATABASE_OUTPUT" | grep -oP 'database_id = "\K[^"]+' || echo "")
+    
+    if [ -z "$DATABASE_ID" ]; then
+        echo "Failed to create D1 database"
+        exit 1
+    fi
+    
+    echo "Database created: $DATABASE_ID"
+    echo "export PREVIEW_DB_ID='$DATABASE_ID'" > .preview-${ENV_NAME}.env
+    echo "export PREVIEW_ENV_NAME='$ENV_NAME'" >> .preview-${ENV_NAME}.env
+    echo "Created .preview-${ENV_NAME}.env with database ID"
+
+# Deploy a preview environment
+preview-deploy name="test-preview":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    ENV_NAME="{{name}}"
+    
+    if [ ! -f ".preview-${ENV_NAME}.env" ]; then
+        echo "Preview environment not found. Run: just preview-create $ENV_NAME"
+        exit 1
+    fi
+    
+    source ".preview-${ENV_NAME}.env"
+    
+    echo "Applying migrations..."
+    cd apps/worker
+    cat > /tmp/wrangler-migrate.toml << TOML
+    name = "o11yfleet-preview"
+    main = "src/index.ts"
+    compatibility_date = "2026-04-29"
+    d1_databases = [
+      { binding = "FP_DB", database_name = "o11yfleet-${PREVIEW_ENV_NAME}", database_id = "${PREVIEW_DB_ID}", migrations_dir = "../../packages/db/migrations" }
+    ]
+    TOML
+    pnpm exec wrangler d1 migrations apply "o11yfleet-${PREVIEW_ENV_NAME}" --remote --config /tmp/wrangler-migrate.toml
+    
+    echo "Deploying worker..."
+    cat wrangler.jsonc | jq '
+      .env |= (. + {
+        "'"${PREVIEW_ENV_NAME}"'": {
+          "main": "src/instrumented.ts",
+          "routes": [],
+          "vars": { "ENVIRONMENT": "'"${PREVIEW_ENV_NAME}"'" },
+          "d1_databases": [
+            { binding = "FP_DB", database_name = "o11yfleet-'"${PREVIEW_ENV_NAME}"'", database_id = "'"${PREVIEW_DB_ID}"'", migrations_dir = "../../packages/db/migrations" }
+          ]
+        }
+      })
+    ' > wrangler-preview.jsonc
+    
+    pnpm exec wrangler deploy --env "${PREVIEW_ENV_NAME}" --config wrangler-preview.jsonc --secrets-file apps/worker/.dev.vars
+    rm -f wrangler-preview.jsonc
+    
+    echo ""
+    echo "Preview deployed!"
+    ACCOUNT_ID=$(npx wrangler whoami 2>/dev/null | grep "Account ID" | awk '{print $NF')
+    echo "URL: https://o11yfleet-worker.${PREVIEW_ENV_NAME}.${ACCOUNT_ID}.workers.dev"
+
+# Cleanup a preview environment
+preview-cleanup name="test-preview":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    ENV_NAME="{{name}}"
+    
+    echo "Cleaning up preview environment: $ENV_NAME"
+    cd apps/worker
+    pnpm exec wrangler delete --env "${ENV_NAME}" --force 2>/dev/null || echo "Worker already deleted or not found"
+    cd ..
+    npx wrangler d1 delete "o11yfleet-${ENV_NAME}" --force 2>/dev/null || echo "Database already deleted or not found"
+    rm -f ".preview-${ENV_NAME}.env"
+    echo "Preview environment cleaned up"
+
+# List active preview environments
+preview-list:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    
+    echo "Checking for preview D1 databases..."
+    npx wrangler d1 list 2>/dev/null | grep "o11yfleet-pr-" || echo "No preview databases found"
+
