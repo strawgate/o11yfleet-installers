@@ -147,7 +147,7 @@ export async function createConfig(
     name: string;
   }>("/api/v1/configurations", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenantId, name }),
+    body: JSON.stringify({ name }),
   });
   if (status !== 201) throw new Error(`Failed to create config: ${status}`);
   configTenantIds.set(data.id, tenantId);
