@@ -313,6 +313,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Apply D1 migrations to local SQLite
+        # The /auth/seed endpoint (and most admin/v1 routes) read/write
+        # the users + tenants tables. Without migrations, those tables
+        # don't exist and every admin call 500s.
+        run: cd apps/worker && CI=1 pnpm wrangler d1 migrations apply fp-db --local
+
       - name: Start worker (wrangler dev)
         env:
           O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
