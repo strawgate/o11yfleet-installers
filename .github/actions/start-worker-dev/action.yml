@@ -1,0 +1,48 @@
+name: Start worker (wrangler dev)
+description: Boot `wrangler dev` for the worker app in the background and wait for /healthz to respond.
+
+inputs:
+  port:
+    description: Port to bind wrangler dev to.
+    default: "8787"
+  timeout-seconds:
+    description: How long to wait for /healthz to respond before failing.
+    default: "60"
+  working-directory:
+    description: Worker app directory containing wrangler.jsonc.
+    default: apps/worker
+  pid-file:
+    description: Path to write the wrangler dev PID to. Use the same path in your cleanup step.
+    default: /tmp/worker.pid
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      working-directory: ${{ inputs.working-directory }}
+      env:
+        START_WORKER_PORT: ${{ inputs.port }}
+        START_WORKER_TIMEOUT: ${{ inputs.timeout-seconds }}
+        START_WORKER_PID_FILE: ${{ inputs.pid-file }}
+      run: |
+        set -euo pipefail
+
+        npx wrangler dev --port "$START_WORKER_PORT" &
+        echo "$!" > "$START_WORKER_PID_FILE"
+        echo "Worker PID: $(cat "$START_WORKER_PID_FILE")"
+
+        worker_ready=false
+        for i in $(seq 1 "$START_WORKER_TIMEOUT"); do
+          if curl -sf "http://localhost:${START_WORKER_PORT}/healthz" > /dev/null 2>&1; then
+            echo "Worker ready after ${i}s"
+            worker_ready=true
+            break
+          fi
+          sleep 1
+        done
+
+        if [ "$worker_ready" != "true" ]; then
+          echo "Worker failed to start within ${START_WORKER_TIMEOUT}s"
+          kill "$(cat "$START_WORKER_PID_FILE")" 2>/dev/null || true
+          exit 1
+        fi

@@ -42,26 +42,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Start worker (wrangler dev)
-        run: |
-          cd apps/worker
-          npx wrangler dev --port 8787 &
-          echo $! > /tmp/worker.pid
-          # Wait for worker to be ready
-          WORKER_READY=false
-          for i in $(seq 1 30); do
-            if curl -sf http://localhost:8787/healthz > /dev/null 2>&1; then
-              echo "Worker ready after ${i}s"
-              WORKER_READY=true
-              break
-            fi
-            sleep 1
-          done
-          if [ "$WORKER_READY" != "true" ]; then
-            echo "Worker failed to start within 30s"
-            kill "$(cat /tmp/worker.pid)" 2>/dev/null || true
-            exit 1
-          fi
+      - name: Start worker (wrangler dev) and wait for /healthz
+        uses: ./.github/actions/start-worker-dev
+        with:
+          timeout-seconds: "30"
 
       - name: Pull collector image
         run: docker pull ghcr.io/open-telemetry/opentelemetry-collector-releases/opentelemetry-collector-contrib:${{ matrix.collector_version }}

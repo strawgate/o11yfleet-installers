@@ -301,6 +301,19 @@ jobs:
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Hardcoded test fixtures (NOT real secrets). Set at job level so
+    # the wrangler process started by start-worker-dev reads them at
+    # startup, and downstream test steps inherit them without having to
+    # redeclare each one.
+    env:
+      O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
+      O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
+      O11YFLEET_SEED_ADMIN_EMAIL: admin@o11yfleet.com
+      O11YFLEET_SEED_ADMIN_PASSWORD: admin-password
+      O11YFLEET_SEED_TENANT_USER_EMAIL: demo@o11yfleet.com
+      O11YFLEET_SEED_TENANT_USER_PASSWORD: demo-password
+      ENVIRONMENT: dev
+      FP_URL: http://localhost:8787
     steps:
       - uses: actions/checkout@v6
 
@@ -320,62 +333,22 @@ jobs:
         # don't exist and every admin call 500s.
         run: cd apps/worker && CI=1 pnpm wrangler d1 migrations apply fp-db --local
 
-      - name: Start worker (wrangler dev)
-        env:
-          O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
-          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
-          O11YFLEET_SEED_ADMIN_EMAIL: admin@o11yfleet.com
-          O11YFLEET_SEED_ADMIN_PASSWORD: admin-password
-          O11YFLEET_SEED_TENANT_USER_EMAIL: demo@o11yfleet.com
-          O11YFLEET_SEED_TENANT_USER_PASSWORD: demo-password
-          ENVIRONMENT: dev
-        run: |
-          cd apps/worker
-          npx wrangler dev --port 8787 &
-          echo "$!" > /tmp/worker.pid
-          echo "Worker PID: $(cat /tmp/worker.pid)"
-
-      - name: Wait for worker to be ready
-        run: |
-          WORKER_READY=false
-          for i in $(seq 1 60); do
-            if curl -sf http://localhost:8787/healthz > /dev/null 2>&1; then
-              echo "Worker ready after ${i}s"
-              WORKER_READY=true
-              break
-            fi
-            sleep 1
-          done
-          if [ "$WORKER_READY" != "true" ]; then
-            echo "Worker failed to start within 60s"
-            kill "$(cat /tmp/worker.pid)" 2>/dev/null || true
-            exit 1
-          fi
+      - name: Start worker (wrangler dev) and wait for /healthz
+        uses: ./.github/actions/start-worker-dev
 
       - name: Seed local database
-        env:
-          O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
-          FP_URL: http://localhost:8787
         run: |
           pnpm tsx scripts/with-local-env.ts -- pnpm tsx scripts/seed-local.ts --reset
 
       - name: E2E tests (full-stack with FakeOpampAgent)
-        env:
-          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
-          FP_URL: http://localhost:8787
         run: pnpm --filter @o11yfleet/e2e-tests test:e2e
         timeout-minutes: 10
 
       - name: OpAMP compliance tests
-        env:
-          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
-          FP_URL: http://localhost:8787
         run: pnpm --filter @o11yfleet/opamp-tests test:opamp
         timeout-minutes: 10
 
       - name: E2E collector tests (Docker with real OTel collectors)
-        env:
-          FP_URL: http://localhost:8787
         run: |
           cd tests/e2e-collector
           pnpm vitest run
