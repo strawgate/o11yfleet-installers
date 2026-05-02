@@ -19,7 +19,7 @@ resource "cloudflare_workers_cron_trigger" "fleet" {
   script_name = cloudflare_worker.fleet.name
 
   schedules = [
-    for cron in local.worker_crons : {
+    for cron in var.worker_crons : {
       cron = cron
     }
   ]

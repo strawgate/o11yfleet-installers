@@ -179,6 +179,13 @@ jobs:
         if: needs.changes.outputs.node == 'true'
         run: pnpm --filter @o11yfleet/worker typegen:check
 
+      # Catches the bug class where wrangler.jsonc and Terraform's
+      # worker_crons drift apart silently. Cheap (<200ms); gate on `node`
+      # so any apps/worker, packages, or scripts change exercises it.
+      - name: Cron drift check (wrangler.jsonc ↔ terraform variables.tf)
+        if: needs.changes.outputs.node == 'true'
+        run: pnpm tsx scripts/check-cron-drift.ts
+
       - name: Type check
         if: needs.changes.outputs.node == 'true'
         run: pnpm turbo typecheck

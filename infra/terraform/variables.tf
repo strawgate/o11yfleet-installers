@@ -99,6 +99,17 @@ variable "worker_compatibility_flags" {
   default     = ["nodejs_compat"]
 }
 
+variable "worker_crons" {
+  type        = list(string)
+  description = "Cron schedules for Terraform-managed Worker cron triggers. Must match `triggers.crons` in apps/worker/wrangler.jsonc — drift is checked by scripts/check-cron-drift.ts and the same script wired into CI's fast job."
+  default     = ["0 0 * * *", "17 3 * * *"]
+
+  validation {
+    condition     = length(var.worker_crons) > 0
+    error_message = "worker_crons must declare at least one cron schedule."
+  }
+}
+
 variable "worker_analytics_engine_dataset" {
   type        = string
   description = "Analytics Engine dataset bound to FP_ANALYTICS in Terraform-managed Worker versions."

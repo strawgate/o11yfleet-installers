@@ -32,7 +32,6 @@ locals {
 
   worker_environment_name   = local.env_slug == "prod" ? "production" : local.env_slug
   worker_bundle_module_name = coalesce(var.worker_bundle_module_name, var.worker_bundle_path == null ? "index.js" : basename(var.worker_bundle_path))
-  worker_crons              = ["0 0 * * *", "17 3 * * *"]
   site_worker_name          = coalesce(var.site_worker_script_name, local.env_slug == "prod" ? "${var.resource_prefix}-site-worker" : "${var.resource_prefix}-site-worker-${local.env_slug}")
   site_worker_module_name   = coalesce(var.site_worker_module_name, var.site_worker_module_path == null ? "site-worker.js" : basename(var.site_worker_module_path))
 

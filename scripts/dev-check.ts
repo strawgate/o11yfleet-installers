@@ -10,6 +10,7 @@ type CheckPlan = {
   runScriptsLint: boolean;
   runWorkerTypegenCheck: boolean;
   runWorkerRuntime: boolean;
+  runCronDriftCheck: boolean;
 };
 
 type DevCheckOptions = {
@@ -170,6 +171,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
       runScriptsLint: true,
       runWorkerTypegenCheck: true,
       runWorkerRuntime: true,
+      runCronDriftCheck: true,
     };
   }
 
@@ -195,6 +197,12 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
   );
   const runWorkerTypegenCheck = files.some(affectsWorkerTypegen);
   const runWorkerRuntime = files.some(affectsWorkerRuntime);
+  const runCronDriftCheck = files.some(
+    (file) =>
+      file === "apps/worker/wrangler.jsonc" ||
+      file === "infra/terraform/variables.tf" ||
+      file === "scripts/check-cron-drift.ts",
+  );
 
   return {
     formatFiles,
@@ -203,6 +211,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
     runScriptsLint,
     runWorkerTypegenCheck,
     runWorkerRuntime,
+    runCronDriftCheck,
   };
 }
 
@@ -251,6 +260,15 @@ export function buildSteps(plan: CheckPlan): CheckStep[] {
       command: "pnpm",
       args: ["tsx", "scripts/check-api-docs.ts"],
       reason: "worker routes or API docs changed",
+    });
+  }
+
+  if (plan.runCronDriftCheck) {
+    steps.push({
+      id: "cron-drift",
+      command: "pnpm",
+      args: ["tsx", "scripts/check-cron-drift.ts"],
+      reason: "wrangler.jsonc or terraform variables.tf changed",
     });
   }
 
