@@ -84,7 +84,8 @@ jobs:
           if has_match \
             '^(apps/worker|packages/core|packages/db|packages/test-utils|tests/ui|tests/e2e|tests/e2e-collector|tests/opamp)/' \
             '^(package.json|pnpm-lock.yaml|pnpm-workspace.yaml|turbo.json|tsconfig[^/]*\.json|\.oxlintrc\.json|vitest[^/]*\.config\.)' \
-            '^justfile$'; then
+            '^justfile$' \
+            '^\.github/workflows/.*\.(yml|yaml)$'; then
             set_output slow true
           else
             set_output slow false
