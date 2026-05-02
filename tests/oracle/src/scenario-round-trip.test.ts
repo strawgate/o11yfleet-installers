@@ -21,18 +21,15 @@ import {
 } from "@o11yfleet/core/codec";
 import { AGENT_SCENARIOS, SERVER_SCENARIOS } from "@o11yfleet/test-utils";
 
-// Round-trip fields. Top-level scalars catch the most common regressions; we
-// also check the nested payload fields each scenario actually sets so a
-// decoder dropping a sub-tree (e.g. component_health_map leaves, agent
-// description attrs) is caught. Two known limitations skipped per-scenario:
+// Deep round-trip: top-level scalars catch the most common regressions, and
+// `toMatchObject` then asserts every nested payload field the scenario set
+// also survives encode → decode. Tolerates extra fields the decoder fills
+// with proto defaults (e.g. omitted optionals coming back as undefined or 0).
 //
-//   - `available_components`: codec gap — encoder/decoder do not yet handle
-//     ComponentDetails. Tracked separately; once closed, drop the skip.
-//   - `command.type === 0`: proto3 default-value elision — the enum's zero
-//     value is omitted on the wire, so the whole `command` object collapses
-//     to `undefined` on decode. This is correct proto3 behavior, not a bug.
-const AGENT_SKIP_DEEP: Record<string, true> = { "available-components": true };
-const SERVER_SKIP_DEEP: Record<string, true> = { "server-command-restart": true };
+// Both previously-skipped scenarios — `available-components` (encoder/decoder
+// gap for ComponentDetails) and `server-command-restart` (proto3 default-
+// value elision swallowing `command.type=0`) — are closed by #494 and now
+// round-trip cleanly. Removing the skip lists is the regression guard.
 
 describe("scenario round-trip (AgentToServer)", () => {
   for (const scenario of AGENT_SCENARIOS) {
@@ -44,11 +41,7 @@ describe("scenario round-trip (AgentToServer)", () => {
       expect(decoded.sequence_num).toBe(msg.sequence_num);
       expect(decoded.capabilities).toBe(msg.capabilities);
       expect(decoded.flags).toBe(msg.flags);
-      if (!AGENT_SKIP_DEEP[scenario.name]) {
-        // Deep-match every nested payload field the scenario set. tolerates
-        // extra fields filled in by the decoder (proto defaults).
-        expect(decoded).toMatchObject(msg);
-      }
+      expect(decoded).toMatchObject(msg);
     });
   }
 });
@@ -62,9 +55,7 @@ describe("scenario round-trip (ServerToAgent)", () => {
       expect(decoded.instance_uid).toEqual(msg.instance_uid);
       expect(decoded.flags).toBe(msg.flags);
       expect(decoded.capabilities).toBe(msg.capabilities);
-      if (!SERVER_SKIP_DEEP[scenario.name]) {
-        expect(decoded).toMatchObject(msg);
-      }
+      expect(decoded).toMatchObject(msg);
     });
   }
 });
