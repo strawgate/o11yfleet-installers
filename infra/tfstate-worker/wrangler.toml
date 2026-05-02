@@ -1,0 +1,29 @@
+name = "o11yfleet-tfstate"
+
+account_id = "417e8c0fd8f1a64e9f2c4845afa6dc56"
+compatibility_date = "2026-04-29"
+compatibility_flags = ["nodejs_compat"]
+
+main = "src/index.ts"
+
+# Use the workers.dev subdomain. Production access uses basic auth
+# (TFSTATE_USERNAME / TFSTATE_PASSWORD secrets, set via
+# `npx wrangler secret put` after first deploy). If we ever want a
+# custom domain, add a routes block here once DNS is set up.
+workers_dev = true
+
+r2_buckets = [
+    { binding = "TFSTATE_BUCKET", bucket_name = "o11yfleet-terraform-state" },
+]
+
+[durable_objects]
+bindings = [{ name = "TFSTATE_LOCK", class_name = "DurableLock" }]
+
+[[migrations]]
+tag = "v1"
+new_classes = ["DurableLock"]
+
+# USERNAME / PASSWORD must NOT be in [vars] — provision via:
+#   cd infra/tfstate-worker && npx wrangler secret put USERNAME
+#   cd infra/tfstate-worker && npx wrangler secret put PASSWORD
+# (See infra/tfstate-worker/README.md for the bootstrap procedure.)

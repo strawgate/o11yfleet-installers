@@ -16,3 +16,6 @@ tmp/
 .github/workflows/
 tests/ui/playwright-report/
 .codex/
+
+# Vendored upstream code; preserve upstream formatting for easy re-sync
+infra/tfstate-worker/
