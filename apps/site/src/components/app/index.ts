@@ -1,4 +1,3 @@
-export { DataTable, type ColumnDef } from "./DataTable";
 export { EmptyState } from "./EmptyState";
 export { MetricCard } from "./MetricCard";
 export { ObservationBadge } from "./ObservationBadge";
