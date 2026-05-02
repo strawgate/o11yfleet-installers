@@ -51,9 +51,7 @@ export default defineConfig({
       "test/policy-schemas.test.ts",
       "test/properties.test.ts",
     ],
-    // Workerd startup is memory-sensitive on small CI runners; serial files keep
-    // local and 2-core runner checks stable while test cases still run normally.
-    fileParallelism: false,
+    // Parallel file execution for faster CI runs on multi-core runners.
     testTimeout: 30_000,
     hookTimeout: 30_000,
   },
