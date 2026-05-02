@@ -11,6 +11,23 @@
       href="https://fonts.googleapis.com/css2?family=Geist:wght@300..900&family=Geist+Mono:wght@300..700&display=swap"
       rel="stylesheet"
     />
+    <script>
+      // Set Mantine color scheme before React boots so we don't flash light
+      // mode on dark-mode users. Mirrors Mantine's ColorSchemeScript for SSR
+      // apps; we're an SPA, so we inline it.
+      (function () {
+        try {
+          var stored = localStorage.getItem("mantine-color-scheme-value") || "dark";
+          var scheme = stored;
+          if (stored === "auto") {
+            scheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+          }
+          document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+        } catch (e) {
+          document.documentElement.setAttribute("data-mantine-color-scheme", "dark");
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

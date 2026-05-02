@@ -1,0 +1,4 @@
+/* Cascade layer ordering: app overrides Mantine; Mantine overrides vendor; vendor overrides reset.
+ * Declared at module top so Mantine's `@layer mantine { ... }` blocks slot into the right position
+ * regardless of import order. */
+@layer reset, vendor, mantine, app;

@@ -96,6 +96,15 @@ const AdminApiReferencePage = lazyPage(
   "Admin API Reference",
 );
 
+// Dev-only: chart-spine playground. Not registered in production builds.
+const SpinePlayground = import.meta.env.DEV
+  ? lazyPage(
+      () =>
+        import("@/pages/playground/SpinePlayground").then((m) => ({ default: m.SpinePlayground })),
+      "Spine Playground",
+    )
+  : null;
+
 function SuspenseFallback() {
   return <div className="flex justify-center p-16">Loading...</div>;
 }
@@ -158,6 +167,8 @@ export function AppRoutes() {
           <Route path="do-viewer" element={<DOViewerPage />} />
           <Route path="plans" element={<PlansPage />} />
         </Route>
+
+        {SpinePlayground && <Route path="playground/spine" element={<SpinePlayground />} />}
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>

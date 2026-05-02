@@ -204,12 +204,32 @@ Upload and rollout are intentionally separate:
 
 ## Frontend Conventions
 
-The site has Tailwind CSS v4 and shadcn-compatible local primitives, but many
-stable pages still use custom CSS under `apps/site/src/styles`.
+The site is migrating to a new stack (see issue #475 — UI rewrite epic):
+**Mantine v9 + uPlot + TanStack Table v8 + @xyflow/react + CodeMirror 6**.
+During the migration both stacks coexist; pages move one PR at a time.
 
-- Use `@/components/ui/*` for new state-heavy controls: dialogs, popovers, command
-  surfaces, AI panels, editor affordances, and tool-call displays.
-- Do not rewrite stable pages just to move them to Tailwind.
-- Keep generated primitive code reviewed and trimmed.
-- Keep new primitives mapped to existing O11yFleet CSS variables so dark/light
-  mode and current visual language stay consistent.
+### New work — use the Mantine stack
+
+- `@mantine/core`, `@mantine/form`, `@mantine/dates`, `@mantine/notifications`,
+  `@mantine/modals`, `@mantine/spotlight`, `@mantine/hooks`.
+- Theme lives at `apps/site/src/theme/theme.ts`. Brand palette is oklch hue 152°.
+- All charts go through `@/charts` — `<TimeSeriesChart>` (uPlot), `<ChartShell>`,
+  `<TimeRangePicker>`, `useMetricSeries`. See `apps/site/src/charts/types.ts`
+  for the data contract (`Series`, `TimeRange`, `Resolution`, `Observed<T>`).
+- New primitives consume `var(--mantine-*)` CSS variables.
+
+### Chart spine playground
+
+Dev-only route at `/playground/spine` exercises the chart density matrix
+(0/1/4/100/10k/100k/gappy points), multi-chart cursor sync, brush-to-zoom,
+and sparkline mode. Use it to validate any chart-spine change locally.
+The route is gated by `import.meta.env.DEV` and is tree-shaken from prod.
+
+### Existing pages — don't rewrite preemptively
+
+- Tailwind CSS v4 + Radix + custom CSS under `apps/site/src/styles` still
+  power stable pages. They keep working until their migration PR lands.
+- Use `@/components/ui/*` (legacy shadcn-shaped primitives) **only** when
+  modifying an existing page that already uses them. New work uses Mantine.
+- Custom CSS in `portal-shared.css` etc. will shrink as the cleanup PR lands
+  after the four migration PRs (#471, #472, #473, #474).
