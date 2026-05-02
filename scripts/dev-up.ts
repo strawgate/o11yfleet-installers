@@ -97,6 +97,17 @@ async function main(): Promise<void> {
   const args = new Set(process.argv.slice(2));
   const reset = args.has("--reset");
   const skipSeed = args.has("--no-seed");
+  // Populate .dev.vars with strong random values for any placeholder
+  // dev secrets. Idempotent — real values are preserved. Done before
+  // we read the env so the worker boots with the freshly-generated
+  // values. Safe to run on every dev-up.
+  const ensure = spawnSync("pnpm", ["tsx", "scripts/ensure-dev-secrets.ts"], {
+    stdio: "inherit",
+  });
+  if (ensure.status !== 0) {
+    console.error("[dev-up] ensure-dev-secrets failed");
+    process.exit(ensure.status ?? 1);
+  }
   const env = localCommandEnv();
   const workerUrl = env.FP_URL ?? "http://localhost:8787";
   const siteUrl = env.UI_URL ?? "http://127.0.0.1:3000";

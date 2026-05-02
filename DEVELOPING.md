@@ -40,22 +40,43 @@ UI, per-user API keys, progressive rollout state, and billing-provider wiring.
 ```bash
 just install
 cp apps/worker/.dev.vars.example apps/worker/.dev.vars
-$EDITOR apps/worker/.dev.vars
 just doctor
 just dev-up
 ```
 
+`.dev.vars` ships with placeholder secret values. `just dev-up` runs
+`scripts/ensure-dev-secrets.ts` first and replaces any placeholder it
+recognises (`dev-local-*`, `*-change-me-*`, `admin-password`,
+`demo-password`, `*-dev-only*`) with strong random values. Real values
+you set yourself are left alone.
+
 Useful variants:
 
-| Command            | Use when                                                              |
-| ------------------ | --------------------------------------------------------------------- |
-| `just dev`         | Start only the Worker                                                 |
-| `just ui`          | Start only the site                                                   |
-| `just dev-reset`   | Servers are running and local D1 needs reseeding                      |
-| `just smoke-local` | Verify API + OpAMP lifecycle against the local Worker                 |
-| `just check`       | Run only checks affected by changed, staged, and untracked files      |
-| `just ci-fast`     | Run the fast local gate before pushing                                |
-| `just ci-pr`       | Reproduce required PR checks, including slow browser/runtime coverage |
+| Command                   | Use when                                                                       |
+| ------------------------- | ------------------------------------------------------------------------------ |
+| `just dev`                | Start only the Worker                                                          |
+| `just ui`                 | Start only the site                                                            |
+| `just dev-reset`          | Servers are running and local D1 needs reseeding                               |
+| `just smoke-local`        | Verify API + OpAMP lifecycle against the local Worker                          |
+| `just check`              | Run only checks affected by changed, staged, and untracked files               |
+| `just ci-fast`            | Run the fast local gate before pushing                                         |
+| `just ci-pr`              | Reproduce required PR checks, including slow browser/runtime coverage          |
+| `just ensure-dev-secrets` | Re-randomize any placeholder values in `apps/worker/.dev.vars` (idempotent)    |
+| `just admin-login`        | Log in as the seeded admin and print `FP_ADMIN_COOKIE` for `eval` + curl usage |
+
+### Local admin curl
+
+Admin routes (`/api/admin/*`) require an admin session cookie or OIDC
+claims — never the bearer secret. To call admin routes from a shell:
+
+```bash
+eval "$(just admin-login)"
+curl -H "Cookie: $FP_ADMIN_COOKIE" -H "Origin: $FP_URL" \
+     "$FP_URL/api/admin/tenants"
+```
+
+`just admin-login --cookie` prints just the `fp_session=…` value if
+you'd rather wire it into a script directly.
 
 GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/dev-loop.md).
 

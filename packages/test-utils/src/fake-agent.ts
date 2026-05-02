@@ -11,11 +11,13 @@ import {
   type ServerToAgent,
   AgentCapabilities,
 } from "@o11yfleet/core/codec";
+import { uint8ToHex } from "@o11yfleet/core/hex";
 import {
   buildHello as buildHelloMsg,
   buildHeartbeat as buildHeartbeatMsg,
   buildHealthReport as buildHealthMsg,
   buildConfigAck as buildConfigAckMsg,
+  CONFIGURABLE_CAPABILITIES,
 } from "./opamp-messages.js";
 
 /** Pipeline configuration for realistic component_health_map. */
@@ -132,11 +134,12 @@ export class FakeOpampAgent {
     this.autoHeartbeatEnabled = opts.autoHeartbeat ?? false;
     this.onAutoHeartbeat = opts.onAutoHeartbeat;
     this.profile = opts.profile ?? {};
-    this.resolvedCapabilities =
-      this.profile.capabilities ??
-      AgentCapabilities.ReportsStatus |
-        AgentCapabilities.ReportsEffectiveConfig |
-        AgentCapabilities.ReportsHealth;
+    // Reuse the shared CONFIGURABLE_CAPABILITIES preset. Critical
+    // properties: it includes `AcceptsRemoteConfig`, without which
+    // the worker's rollout filter
+    // (`!(attachment.capabilities & AcceptsRemoteConfig)` → skip)
+    // drops this agent from every config push and tests see `pushed=0`.
+    this.resolvedCapabilities = this.profile.capabilities ?? CONFIGURABLE_CAPABILITIES;
   }
 
   /**
@@ -211,8 +214,12 @@ export class FakeOpampAgent {
 
   /**
    * Connect and complete enrollment in one call.
-   * Per OpAMP spec, client sends first — we connect, send hello,
-   * then receive the enrollment_complete text + initial binary response.
+   *
+   * Per OpAMP spec, client sends first — we connect, send hello, then
+   * wait for the first ServerToAgent. The worker is protobuf-only
+   * since #399, so the assignment claim arrives in the binary frame's
+   * `connection_settings.opamp.headers[Authorization]` instead of a
+   * separate `enrollment_complete` text message.
    */
   async connectAndEnroll(): Promise<EnrollmentResult> {
     await this.connect();
@@ -220,18 +227,44 @@ export class FakeOpampAgent {
     // Per OpAMP spec: client sends first to trigger enrollment
     await this.sendHello();
 
-    // Receive enrollment_complete text message (server responds to our hello)
-    const text = await this.waitForTextMessage(10_000);
-    const enrollment = JSON.parse(text) as EnrollmentResult;
-    if (enrollment.type !== "enrollment_complete") {
-      throw new Error(`Expected enrollment_complete, got ${enrollment.type}`);
+    // First ServerToAgent carries the assignment claim in
+    // ConnectionSettingsOffers.opamp.headers (`Authorization: Bearer …`).
+    const msg = await this.waitForMessage(10_000);
+    const authHeader = msg.connection_settings?.opamp?.headers?.find(
+      (h) => h.key.toLowerCase() === "authorization",
+    );
+    if (!authHeader) {
+      throw new Error(
+        "Expected ConnectionSettingsOffers with Authorization header on first ServerToAgent during enrollment",
+      );
+    }
+    const bearerMatch = authHeader.value.match(/^Bearer\s+(.+)$/i);
+    if (!bearerMatch?.[1]) {
+      throw new Error(
+        `Authorization header must be a non-empty Bearer token, got: ${authHeader.value.slice(0, 32)}…`,
+      );
+    }
+    const token = bearerMatch[1];
+    // Persist the freshly-issued claim so that any subsequent reconnect
+    // (`a.close()` → `a.connect()`) authenticates with the assignment
+    // claim instead of the now-consumed enrollment token.
+    this.assignmentClaim = token;
+
+    // Adopt the server-assigned instance_uid if it differs from ours.
+    // Per OpAMP spec §5.1, the server sets `agent_identification.new_instance_uid`
+    // when it detects a UID collision (or otherwise wants to rename the
+    // agent). Subsequent heartbeats/reconnects must use the new value.
+    const newUid = msg.agent_identification?.new_instance_uid;
+    if (newUid && newUid.length > 0) {
+      this.instanceUid = new Uint8Array(newUid);
     }
 
+    const enrollment: EnrollmentResult = {
+      type: "enrollment_complete",
+      assignment_claim: token,
+      instance_uid: uint8ToHex(this.instanceUid),
+    };
     this._enrollment = enrollment;
-
-    // Consume the initial OpAMP binary response
-    await this.waitForMessage(5000);
-
     return enrollment;
   }
 

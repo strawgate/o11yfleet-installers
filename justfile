@@ -207,6 +207,26 @@ docs-api-check:
 sql-audit:
     pnpm tsx scripts/audit-sql-bindings.ts
 
+# Generate strong random values for any placeholder secrets in
+# apps/worker/.dev.vars. Idempotent: real values are preserved. Run
+# automatically by `just dev-up`; can be invoked directly to refresh
+# placeholders without restarting the dev stack.
+ensure-dev-secrets:
+    pnpm tsx scripts/ensure-dev-secrets.ts
+
+# Log in as the seeded admin and print an `export` line for use with
+# curl. Pairs with the trust-boundary cleanup in PR #426 — admin routes
+# require a session cookie or OIDC, never a bearer token.
+#
+#   eval "$(just admin-login)"
+#   curl -H "Cookie: $FP_ADMIN_COOKIE" -H "Origin: $FP_URL" \
+#        $FP_URL/api/admin/tenants
+#
+# Pass `--cookie` to print just the `fp_session=…` value (handy for
+# scripts).
+admin-login *args:
+    @pnpm tsx scripts/admin-login.ts {{args}}
+
 # Dev mode — start worker locally
 # Note: --var ENVIRONMENT:dev enables local dev CORS (allows localhost origins)
 dev:

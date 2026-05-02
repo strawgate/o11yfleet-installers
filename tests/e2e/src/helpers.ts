@@ -4,13 +4,6 @@
  * These run against a live wrangler dev server (localhost:8787).
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-
-const __dirname = fileURLToPath(new URL(".", import.meta.url));
-const REPO_ROOT = resolve(__dirname, "..", "..", "..");
-
 export const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 export const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 export const API_KEY =
@@ -19,45 +12,75 @@ export const API_KEY =
   process.env.O11YFLEET_API_BEARER_SECRET ??
   "test-api-secret-for-dev-only-32chars";
 
-interface SeededState {
-  tenant_id: string;
-  tenant_name: string;
-  config_id: string;
-  config_name: string;
-  enrollment_token: string;
-  current_config_hash: string;
-}
-
-/** Try to load seeded state from .local-state.json (created by seed-local.ts) */
-function loadSeededState(): SeededState | null {
-  const statePath = resolve(REPO_ROOT, ".local-state.json");
-  if (!existsSync(statePath)) return null;
-  try {
-    return JSON.parse(readFileSync(statePath, "utf-8")) as SeededState;
-  } catch {
-    return null;
-  }
-}
-
-/** Get the seeded tenant info if available (from .local-state.json) */
-export function getSeededTenant(): { id: string; name: string } | null {
-  const state = loadSeededState();
-  return state ? { id: state.tenant_id, name: state.tenant_name } : null;
-}
-
-/** Get the seeded config ID if available */
-export function getSeededConfigId(): string | null {
-  const state = loadSeededState();
-  return state?.config_id ?? null;
-}
-
-/** Get the seeded enrollment token if available */
-export function getSeededEnrollmentToken(): string | null {
-  const state = loadSeededState();
-  return state?.enrollment_token ?? null;
-}
+const ADMIN_EMAIL = process.env.O11YFLEET_SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+// Intentionally no fallback: `just dev-up` randomizes the placeholder
+// in apps/worker/.dev.vars on first run, so a hard-coded
+// "admin-password" default no longer matches a normal local worker.
+// CI sets this env var explicitly. Local dev callers should source
+// .dev.vars (e.g. via `pnpm tsx scripts/with-local-env.ts -- …`) so
+// the value lines up with what the worker provisioned.
+const ADMIN_PASSWORD = process.env.O11YFLEET_SEED_ADMIN_PASSWORD;
 
 const configTenantIds = new Map<string, string>();
+
+// Cached `fp_session=<id>` cookie value for the seeded admin user. Admin
+// routes (`/api/admin/*`) accept either OIDC claims or a session cookie;
+// they never accept the bearer secret. Lazily populated on the first
+// admin call by `ensureAdminSession()`.
+let adminSessionCookie: string | null = null;
+
+/**
+ * Seed the admin user and log in. The seed endpoint is idempotent —
+ * replays just refresh credentials. The login endpoint sets a
+ * `fp_session=<id>` cookie which we cache for subsequent admin calls.
+ *
+ * Includes `Origin: ${BASE_URL}` because the worker's CSRF gate
+ * requires a trusted origin on state-changing cookie-authenticated
+ * requests. `localhost` is a trusted origin only when the worker is
+ * run with `ENVIRONMENT=dev` (or staging); see `apps/worker/src/shared/origins.ts`.
+ */
+async function ensureAdminSession(): Promise<string> {
+  if (adminSessionCookie) return adminSessionCookie;
+  if (!ADMIN_PASSWORD) {
+    throw new Error(
+      "Set O11YFLEET_SEED_ADMIN_PASSWORD before running e2e tests against a local worker. CI sets this; local runs should `pnpm tsx scripts/with-local-env.ts -- …` so the value matches `apps/worker/.dev.vars`.",
+    );
+  }
+
+  // Idempotent: ensures the admin user exists. Fails on missing seed
+  // env, but that's already enforced by the CI workflow.
+  const seedRes = await fetch(`${BASE_URL}/auth/seed`, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: "{}",
+  });
+  if (!seedRes.ok) {
+    throw new Error(`/auth/seed failed: ${seedRes.status} ${await seedRes.text()}`);
+  }
+
+  const loginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Origin: BASE_URL,
+    },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+  });
+  if (!loginRes.ok) {
+    throw new Error(`/auth/login failed: ${loginRes.status} ${await loginRes.text()}`);
+  }
+
+  const setCookie = loginRes.headers.get("set-cookie");
+  const match = setCookie?.match(/fp_session=([^;]+)/);
+  if (!match) {
+    throw new Error(`/auth/login returned no fp_session cookie (Set-Cookie: ${setCookie})`);
+  }
+  adminSessionCookie = `fp_session=${match[1]}`;
+  return adminSessionCookie;
+}
 
 function tenantIdForConfig(configId: string): string {
   const tenantId = configTenantIds.get(configId);
@@ -102,7 +125,16 @@ export async function api<T = unknown>(
 ): Promise<{ status: number; data: T }> {
   const url = `${BASE_URL}${path}`;
   const headers = new Headers(opts?.headers);
-  if (path.startsWith("/api/") && !headers.has("Authorization")) {
+  // Admin routes don't accept the bearer secret — they require an
+  // admin session cookie (or OIDC claims). Establish a session lazily
+  // on first admin call and inject the cookie + a trusted Origin so
+  // the worker's CSRF gate accepts the request. Origin is set
+  // independently of Cookie because callers can pass Cookie manually
+  // and CSRF still requires a trusted Origin on state-changing calls.
+  if (path.startsWith("/api/admin/")) {
+    if (!headers.has("Cookie")) headers.set("Cookie", await ensureAdminSession());
+    if (!headers.has("Origin")) headers.set("Origin", BASE_URL);
+  } else if (path.startsWith("/api/") && !headers.has("Authorization")) {
     headers.set("Authorization", `Bearer ${API_KEY}`);
   }
   if (path.startsWith("/api/v1/") && !headers.has("X-Tenant-Id")) {
@@ -148,6 +180,9 @@ export async function createConfig(
   }>("/api/v1/configurations", {
     method: "POST",
     body: JSON.stringify({ name }),
+    // Schema is `.strict()` — body only has `name` + optional
+    // `description`. tenant_id flows via the X-Tenant-Id header.
+    headers: { "X-Tenant-Id": tenantId },
   });
   if (status !== 201) throw new Error(`Failed to create config: ${status}`);
   configTenantIds.set(data.id, tenantId);
@@ -260,7 +295,10 @@ export async function updateTenant(
 export async function deleteTenant(tenantId: string): Promise<number> {
   const res = await fetch(`${BASE_URL}/api/admin/tenants/${tenantId}`, {
     method: "DELETE",
-    headers: { Authorization: `Bearer ${API_KEY}` },
+    headers: {
+      Cookie: await ensureAdminSession(),
+      Origin: BASE_URL,
+    },
   });
   return res.status;
 }

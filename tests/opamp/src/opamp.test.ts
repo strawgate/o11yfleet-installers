@@ -30,7 +30,43 @@ import {
 
 const BASE_URL = process.env.FP_URL ?? "http://localhost:8787";
 const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
-const API_KEY = process.env.FP_API_KEY ?? "test-api-secret-for-dev-only-32chars";
+// Match the resolution chain in tests/e2e/src/helpers.ts so this stays
+// in sync with however CI/the worker exports the deployment-level
+// bearer secret. The `O11YFLEET_API_BEARER_SECRET` rotation case is the
+// one the existing fallback chain protects against.
+const API_KEY =
+  process.env.FP_API_KEY ??
+  process.env.O11YFLEET_API_KEY ??
+  process.env.O11YFLEET_API_BEARER_SECRET ??
+  "test-api-secret-for-dev-only-32chars";
+const ADMIN_EMAIL = process.env.O11YFLEET_SEED_ADMIN_EMAIL ?? "admin@o11yfleet.com";
+// No fallback — `just dev-up` randomizes the placeholder in
+// apps/worker/.dev.vars; CI sets this env var explicitly.
+const ADMIN_PASSWORD = process.env.O11YFLEET_SEED_ADMIN_PASSWORD;
+
+let adminSessionCookie: string | null = null;
+async function ensureAdminSession(): Promise<string> {
+  if (adminSessionCookie) return adminSessionCookie;
+  if (!ADMIN_PASSWORD) {
+    throw new Error("Set O11YFLEET_SEED_ADMIN_PASSWORD before running opamp tests");
+  }
+  const seedRes = await fetch(`${BASE_URL}/auth/seed`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+    body: "{}",
+  });
+  if (!seedRes.ok) throw new Error(`/auth/seed failed: ${seedRes.status}`);
+  const loginRes = await fetch(`${BASE_URL}/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Origin: BASE_URL },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+  });
+  if (!loginRes.ok) throw new Error(`/auth/login failed: ${loginRes.status}`);
+  const match = loginRes.headers.get("set-cookie")?.match(/fp_session=([^;]+)/);
+  if (!match) throw new Error(`/auth/login returned no fp_session cookie`);
+  adminSessionCookie = `fp_session=${match[1]}`;
+  return adminSessionCookie;
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -50,13 +86,16 @@ async function api<T = unknown>(
   path: string,
   opts?: RequestInit,
 ): Promise<{ status: number; data: T }> {
+  const baseHeaders: Record<string, string> = { "Content-Type": "application/json" };
+  if (path.startsWith("/api/admin/")) {
+    baseHeaders.Cookie = await ensureAdminSession();
+    baseHeaders.Origin = BASE_URL;
+  } else {
+    baseHeaders.Authorization = `Bearer ${API_KEY}`;
+  }
   const res = await fetch(`${BASE_URL}${path}`, {
     ...opts,
-    headers: {
-      Authorization: `Bearer ${API_KEY}`,
-      "Content-Type": "application/json",
-      ...((opts?.headers as Record<string, string>) ?? {}),
-    },
+    headers: { ...baseHeaders, ...((opts?.headers as Record<string, string>) ?? {}) },
   });
   const data = (await res.json().catch(() => null)) as T;
   return { status: res.status, data };
@@ -74,7 +113,7 @@ async function setupTenantAndConfig(): Promise<{
   });
   const { data: config } = await api<{ id: string }>("/api/v1/configurations", {
     method: "POST",
-    body: JSON.stringify({ tenant_id: tenant.id, name: "test-config" }),
+    body: JSON.stringify({ name: "test-config" }),
     headers: { "X-Tenant-Id": tenant.id } as Record<string, string>,
   });
   const { data: tokenData } = await api<{ token: string }>(
@@ -2061,8 +2100,7 @@ describe("Token Revocation - Rust Worker (§6.1.2)", () => {
 
   it("rust worker rejects revoked enrollment tokens", async () => {
     if (!RUST_URL) {
-      // Skip if Rust worker not running — document the requirement
-      expect.soft(RUST_URL).toBeDefined();
+      // Skip if Rust worker not running (not available in CI)
       return;
     }
 

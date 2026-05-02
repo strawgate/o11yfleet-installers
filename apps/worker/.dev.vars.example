@@ -1,6 +1,12 @@
 # o11yFleet local development environment variables
 # Copy this file to .dev.vars and fill in your values:
 #   cp apps/worker/.dev.vars.example apps/worker/.dev.vars
+#
+# Placeholder values for the SECRET fields below (anything matching
+# `dev-local-*`, `*-change-me-*`, `admin-password`, `demo-password`,
+# `*-dev-only*`) are automatically replaced with strong random values
+# on first `just dev-up`, or on demand via `just ensure-dev-secrets`.
+# Real values you set yourself are preserved.
 
 # Required: deployment-level bearer secret for bootstrap and tenant-scoped automation
 O11YFLEET_API_BEARER_SECRET=dev-local-api-secret-1234567890x
@@ -9,7 +15,8 @@ O11YFLEET_API_BEARER_SECRET=dev-local-api-secret-1234567890x
 O11YFLEET_CLAIM_HMAC_SECRET=dev-local-claim-secret-12345678x
 
 # Required: local seed accounts used by /auth/seed
-# Dev-only placeholders; replace before using any shared or production environment.
+# Dev-only placeholders; replaced automatically before they're used —
+# see `scripts/ensure-dev-secrets.ts`.
 O11YFLEET_SEED_TENANT_USER_EMAIL=demo@o11yfleet.com
 O11YFLEET_SEED_TENANT_USER_PASSWORD=demo-change-me-dev-only
 O11YFLEET_SEED_ADMIN_EMAIL=admin@o11yfleet.com

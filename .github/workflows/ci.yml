@@ -11,9 +11,6 @@ concurrency:
   group: ci-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
-permissions:
-  contents: read
-
 jobs:
   changes:
     runs-on: ubuntu-slim
@@ -25,7 +22,7 @@ jobs:
       deploy: ${{ steps.filter.outputs.deploy }}
       workflow: ${{ steps.filter.outputs.workflow }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -121,7 +118,7 @@ jobs:
     runs-on: ubicloud-standard-4-arm
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
       - name: Lint workflows
         if: needs.changes.outputs.workflow == 'true'
@@ -129,16 +126,16 @@ jobs:
           find .github/workflows \( -name '*.yml' -o -name '*.yaml' \) ! -name '*.lock.yml' -print0 |
             xargs -0 go run github.com/rhysd/actionlint/cmd/actionlint@latest
 
-      - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
+      - uses: pnpm/action-setup@v6
         if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@v6
         if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
         with:
           node-version: "22"
           cache: "pnpm"
 
-      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+      - uses: actions/setup-go@v5
         if: needs.changes.outputs.fast == 'true'
         with:
           go-version: "1.23"
@@ -150,7 +147,7 @@ jobs:
 
       - name: Restore Turbo cache
         if: needs.changes.outputs.node == 'true'
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@v4
         with:
           path: .turbo/cache
           key: turbo-${{ runner.os }}-${{ runner.arch }}-${{ github.job }}-${{ github.sha }}
@@ -202,10 +199,8 @@ jobs:
         if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/site test
 
-      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
+      - uses: taiki-e/install-action@just
         if: needs.changes.outputs.deploy == 'true'
-        with:
-          tool: just
 
       - name: Build worker bundle
         if: needs.changes.outputs.deploy == 'true'
@@ -242,7 +237,7 @@ jobs:
 
       - name: Terraform validate
         if: needs.changes.outputs.deploy == 'true'
-        uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+        uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: "1.9"
 
@@ -259,11 +254,11 @@ jobs:
     runs-on: ubicloud-standard-4-arm
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+      - uses: actions/setup-node@v6
         with:
           node-version: "22"
           cache: "pnpm"
@@ -272,7 +267,7 @@ jobs:
         run: pnpm install --frozen-lockfile --prefer-offline
 
       - name: Cache Playwright browsers
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
@@ -288,7 +283,7 @@ jobs:
 
       - name: Upload Playwright artifacts
         if: failure()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-artifacts
           path: |
@@ -306,10 +301,19 @@ jobs:
       }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    permissions:
+      # Allows GitHub Actions to mint an OIDC token for the worker's
+      # OIDC provision path (`POST /api/admin/tenants` accepts a
+      # verified GitHub OIDC token as admin auth — see
+      # `apps/worker/src/index.ts`). Tests don't currently use this
+      # path; session login covers it. The permission is here so the
+      # OIDC fallback is usable without another workflow edit.
+      id-token: write
+      contents: read
     # Hardcoded test fixtures (NOT real secrets). Set at job level so
     # the wrangler process started by start-worker-dev reads them at
-    # startup, and downstream test steps inherit them without having to
-    # redeclare each one.
+    # startup, and downstream test steps inherit them without having
+    # to redeclare each one.
     env:
       O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
       O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
@@ -317,7 +321,13 @@ jobs:
       O11YFLEET_SEED_ADMIN_PASSWORD: admin-password
       O11YFLEET_SEED_TENANT_USER_EMAIL: demo@o11yfleet.com
       O11YFLEET_SEED_TENANT_USER_PASSWORD: demo-password
+      # Tells the worker we're running locally so the CSRF gate
+      # accepts http://localhost:8787 as a trusted origin (admin
+      # routes need cookie auth, which is gated on trusted Origin).
       ENVIRONMENT: dev
+      # Allow this repo's OIDC tokens through the provision path.
+      O11YFLEET_OIDC_ALLOWED_REPOS: ${{ github.repository }}
+      O11YFLEET_OIDC_AUDIENCE: o11yfleet
       FP_URL: http://localhost:8787
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -333,9 +343,9 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Apply D1 migrations to local SQLite
-        # The /auth/seed endpoint (and most admin/v1 routes) read/write
-        # the users + tenants tables. Without migrations, those tables
-        # don't exist and every admin call 500s.
+        # Both /auth/seed and the seed-local.ts step below read/write
+        # users + tenants. Without migrations, those tables don't exist
+        # and the seed step 500s.
         run: cd apps/worker && CI=1 pnpm wrangler d1 migrations apply fp-db --local
 
       - name: Start worker (wrangler dev) and wait for /healthz
@@ -354,6 +364,8 @@ jobs:
         timeout-minutes: 10
 
       - name: E2E collector tests (Docker with real OTel collectors)
+        env:
+          FP_URL: http://localhost:8787
         run: |
           cd tests/e2e-collector
           pnpm vitest run
@@ -368,7 +380,7 @@ jobs:
 
       - name: Upload collector logs
         if: failure()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@v4
         with:
           name: collector-logs
           path: tests/e2e-collector/docker/*.log
@@ -381,35 +393,28 @@ jobs:
     timeout-minutes: 20
     if: always() && github.ref == 'refs/heads/main' && github.event_name == 'push' && vars.TERRAFORM_STAGING_DEPLOY_ENABLED == 'true' && needs.fast.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled')
     environment: staging
-    # Cloud-provider and seed secrets (AWS_*, CLOUDFLARE_*, O11YFLEET_*)
-    # are intentionally NOT in this job-wide env block. Job env is
-    # inherited by every step including `pnpm install` inside
-    # setup-deploy, where a malicious lifecycle script in any transitive
-    # dependency could exfiltrate them. Secrets are scoped at step level
-    # on the steps that actually need them.
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
       TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
       TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
       TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
       TERRAFORM_STAGING_DEPLOY_ENABLED: ${{ vars.TERRAFORM_STAGING_DEPLOY_ENABLED }}
+      O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
+      O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
+      O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
+      O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL }}
+      O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD }}
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@v6
 
       - uses: ./.github/actions/setup-deploy
 
       - name: Check staging deploy configuration
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
-          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
-          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
-          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
-          O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL }}
-          O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD }}
         run: |
           test -n "$TERRAFORM_STATE_R2_BUCKET"
           test -n "$TERRAFORM_STATE_R2_ENDPOINT"
@@ -424,24 +429,9 @@ jobs:
           test -n "$O11YFLEET_SEED_TENANT_USER_PASSWORD"
 
       - name: Verify staging Terraform import/state readiness
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
         run: just tf-check-staging-readiness staging
 
       - name: Deploy staging infrastructure, static site, migrations, and Worker
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
-          O11YFLEET_API_BEARER_SECRET: ${{ secrets.O11YFLEET_API_BEARER_SECRET }}
-          O11YFLEET_SEED_ADMIN_EMAIL: ${{ secrets.O11YFLEET_SEED_ADMIN_EMAIL }}
-          O11YFLEET_SEED_ADMIN_PASSWORD: ${{ secrets.O11YFLEET_SEED_ADMIN_PASSWORD }}
-          O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL }}
-          O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD }}
         run: just deploy-staging
 
       - name: Resolve staging site smoke targets
