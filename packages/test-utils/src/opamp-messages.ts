@@ -531,7 +531,7 @@ function buildAgentDescription(
 }
 
 /** Build a component_health_map matching real otelcol-contrib structure. */
-function buildComponentHealthMap(
+export function buildComponentHealthMap(
   pipelines: PipelineConfig[],
   extensions: string[],
   nowNano: bigint,

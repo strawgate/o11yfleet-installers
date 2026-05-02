@@ -23,6 +23,7 @@ import {
   buildExporterFailure,
   buildHealthRecovered,
   buildReceiverFailure,
+  buildComponentHealthMap,
   CONFIGURABLE_CAPABILITIES,
 } from "./opamp-messages.js";
 
@@ -415,40 +416,7 @@ export class FakeOpampAgent {
     const nowNano = BigInt(Date.now()) * 1_000_000n;
     const pipelines = p.pipelines ?? REAL_COLLECTOR_PIPELINES;
     const extensions = p.extensions ?? ["opamp"];
-    // Build component health map inline (all StatusOK)
-    const leaf = (): ComponentHealth => ({
-      healthy: true,
-      start_time_unix_nano: 0n,
-      last_error: "",
-      status: "StatusOK",
-      status_time_unix_nano: nowNano,
-      component_health_map: {},
-    });
-    const componentHealthMap: Record<string, ComponentHealth> = {};
-    for (const pipeline of pipelines) {
-      const components: Record<string, ComponentHealth> = {};
-      for (const r of pipeline.receivers) components[`receiver:${r}`] = leaf();
-      for (const proc of pipeline.processors) components[`processor:${proc}`] = leaf();
-      for (const exp of pipeline.exporters) components[`exporter:${exp}`] = leaf();
-      componentHealthMap[`pipeline:${pipeline.name}`] = {
-        healthy: true,
-        start_time_unix_nano: 0n,
-        last_error: "",
-        status: "StatusOK",
-        status_time_unix_nano: nowNano,
-        component_health_map: components,
-      };
-    }
-    const extComponents: Record<string, ComponentHealth> = {};
-    for (const ext of extensions) extComponents[`extension:${ext}`] = leaf();
-    componentHealthMap["extensions"] = {
-      healthy: true,
-      start_time_unix_nano: 0n,
-      last_error: "",
-      status: "StatusOK",
-      status_time_unix_nano: nowNano,
-      component_health_map: extComponents,
-    };
+    const componentHealthMap = buildComponentHealthMap(pipelines, extensions, nowNano);
     this.send(
       buildHealthMsg({
         instanceUid: this.instanceUid,
