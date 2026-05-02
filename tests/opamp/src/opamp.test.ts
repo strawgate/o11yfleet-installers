@@ -385,7 +385,11 @@ describe("Error Handling (§4.5)", () => {
     agent.close();
     await settle(200);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "malformed-frame-agent" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "malformed-frame-agent",
+    });
     await reconnected.connect();
     await reconnected.sendHello();
     await reconnected.waitForMessage(); // consume hello response
@@ -995,7 +999,11 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-accept" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "comp-health-accept",
+    });
     await reconnected.connect();
     reconnected.sendMessage({
       instance_uid: reconnected.uid,
@@ -1054,7 +1062,11 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-stored" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "comp-health-stored",
+    });
     await reconnected.connect();
     reconnected.sendMessage({
       instance_uid: reconnected.uid,
@@ -1115,7 +1127,7 @@ describe("Component Health Map (§5.2.1)", () => {
     // forward-compat we also handle the legacy string-blob shape.
     const found = data.agents?.find((a) => {
       const desc = a.agent_description;
-      if (desc == null) return false;
+      if (desc === null || desc === undefined) return false;
       const text = typeof desc === "string" ? desc : JSON.stringify(desc);
       return text.includes("comp-health-stored");
     });
@@ -1142,7 +1154,11 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-separate" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "comp-health-separate",
+    });
     await reconnected.connect();
     reconnected.sendMessage({
       instance_uid: reconnected.uid,
@@ -1249,8 +1265,11 @@ describe("Config Applying Status (§5.3.2)", () => {
     // Report APPLYING (status=2) — the intermediate state.
     // Reconnect on a fresh socket so we control sequence numbers from 0
     // and don't tangle with the original agent's auto-ack of the config.
+    // Reuse `agent.uid` so this reconnect targets the same agent — a
+    // fresh random UID would test "new agent with old claim" instead.
     const reconnected = createAgent({
       assignmentClaim: agent.enrollment!.assignment_claim,
+      instanceUid: agent.uid,
       name: "applying-status-agent",
     });
     await reconnected.connect();
@@ -1299,7 +1318,11 @@ describe("Error Recovery (§4.5.1)", () => {
     const claim = agent.enrollment!.assignment_claim;
     agent.close();
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "error-recovery-agent" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "error-recovery-agent",
+    });
     await reconnected.connect();
     await reconnected.sendHello();
     await reconnected.waitForMessage(5000); // consume hello response
@@ -1642,11 +1665,10 @@ describe("Available Components (§5.2.2)", () => {
     // Build a real protobuf hello with available_components populated.
     // Structure follows opamp-spec: map<kind, ComponentDetails> where each
     // ComponentDetails has metadata (KeyValue list) + sub_component_map.
-    const ReportsAvailableComponents = 0x00004000;
     const helloMsg: AgentToServer = {
       instance_uid: agent.uid,
       sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus | ReportsAvailableComponents,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsAvailableComponents,
       flags: 0,
       available_components: {
         hash: crypto.getRandomValues(new Uint8Array(32)),
@@ -1827,7 +1849,11 @@ describe("Custom Messages (§5.10)", () => {
     agent.close();
     await settle(300);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "custom-unknown-fields" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "custom-unknown-fields",
+    });
     await reconnected.connect();
 
     const helloMsg: AgentToServer = {
@@ -1856,7 +1882,11 @@ describe("Custom Messages (§5.10)", () => {
     agent.close();
     await settle(300);
 
-    const reconnected = createAgent({ assignmentClaim: claim, name: "custom-cap-continues" });
+    const reconnected = createAgent({
+      assignmentClaim: claim,
+      instanceUid: agent.uid,
+      name: "custom-cap-continues",
+    });
     await reconnected.connect();
 
     // Hello with appended unknown fields (custom_capabilities + custom_message

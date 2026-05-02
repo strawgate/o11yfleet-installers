@@ -409,15 +409,23 @@ describe("property: ServerToAgent round-trip", () => {
   // dropped it; round-trip identity broke without any test catching it.
   // CommandType today only has Restart (=0); the property still pins the
   // contract that whatever the encoder writes, the decoder reads back.
-  it("command round-trips Restart type", () => {
+  it("command round-trips every known CommandType", () => {
+    // Auto-cover future enum values by deriving the arbitrary from the
+    // enum itself. When a new CommandType lands the encoder will need a
+    // mapping (it throws on unknown), but this property fires on the
+    // additional value without test edits.
+    const knownCommandTypes = Object.values(CommandType).filter(
+      (v): v is CommandType => typeof v === "number",
+    );
+    const commandTypeArb = fc.constantFrom(...knownCommandTypes);
     fc.assert(
-      fc.property(minimalServerToAgentArb, (base) => {
+      fc.property(minimalServerToAgentArb, commandTypeArb, (base, type) => {
         const msg: ServerToAgent = {
           ...base,
-          command: { type: CommandType.Restart },
+          command: { type },
         };
         const round = decodeServerToAgentProto(encodeServerToAgentProto(msg));
-        return round.command !== undefined && round.command.type === CommandType.Restart;
+        return round.command !== undefined && round.command.type === type;
       }),
     );
   });

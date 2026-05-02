@@ -132,12 +132,21 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
   return result;
 }
 
-function pbCommandTypeToInternal(pbType: PbCommandType): CommandType {
+/**
+ * Map a wire CommandType to our internal enum. Returns `null` for unknown
+ * values rather than throwing — proto3 enums are *open*: unknown numeric
+ * values are preserved on the wire and the spec requires implementations
+ * to keep parsing the surrounding message. Throwing here would fail the
+ * entire `ServerToAgent` decode just because a future server added a new
+ * command type. The caller drops the `command` field instead, leaving
+ * the rest of the message intact.
+ */
+function pbCommandTypeToInternal(pbType: PbCommandType): CommandType | null {
   switch (pbType) {
     case PbCommandType.CommandType_Restart:
       return CommandType.Restart;
     default:
-      throw new Error(`Unknown CommandType on wire: ${pbType}`);
+      return null;
   }
 }
 
@@ -509,10 +518,14 @@ export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
     // restart commands; without round-trip the agent receives the frame
     // but `msg.command` is silently dropped, so tests/fake-agent see
     // every restart as a generic ServerToAgent with no actionable field.
-    // Mirrors the encoder's contract: throw on unknown so a future
-    // CommandType added upstream surfaces explicitly instead of silently
-    // becoming Restart.
-    command: pb.command ? { type: pbCommandTypeToInternal(pb.command.type) } : undefined,
+    // For unknown CommandType values, `pbCommandTypeToInternal` returns
+    // null and we drop the field — preserving proto3's open-enum
+    // contract (unknown values must not fail the surrounding message).
+    command: (() => {
+      if (!pb.command) return undefined;
+      const type = pbCommandTypeToInternal(pb.command.type);
+      return type === null ? undefined : { type };
+    })(),
     // proto3 doesn't distinguish field-absent from default-value, so
     // 0 round-trips as 0 (not undefined). Consumers that previously
     // relied on `undefined` for "absent" should treat 0 as "no

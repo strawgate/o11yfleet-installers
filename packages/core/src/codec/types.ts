@@ -173,6 +173,8 @@ export enum AgentCapabilities {
   ReportsHealth = 0x00000800,
   ReportsRemoteConfig = 0x00001000,
   ReportsHeartbeat = 0x00002000,
+  /** OpAMP §5.2.2 (Development). Agent reports its compiled-in components. */
+  ReportsAvailableComponents = 0x00004000,
 }
 
 export enum ServerCapabilities {

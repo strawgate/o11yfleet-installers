@@ -9,13 +9,13 @@ fanout, and React/Vite for the marketing site, customer portal, and admin UI.
 
 ### Prerequisites
 
-| Tool | Version | Install |
-|------|---------|---------|
-| Node.js | 22+ | [nodejs.org](https://nodejs.org) |
-| pnpm | 9+ | `npm install -g pnpm` |
-| just | latest | See [below](#installing-just) |
-| Wrangler | latest | `npx wrangler login` |
-| GitHub Account | — | [github.com](https://github.com) |
+| Tool           | Version | Install                          |
+| -------------- | ------- | -------------------------------- |
+| Node.js        | 22+     | [nodejs.org](https://nodejs.org) |
+| pnpm           | 9+      | `npm install -g pnpm`            |
+| just           | latest  | See [below](#installing-just)    |
+| Wrangler       | latest  | `npx wrangler login`             |
+| GitHub Account | —       | [github.com](https://github.com) |
 
 ### Installing `just`
 
@@ -58,10 +58,12 @@ just dev-up
 ### What Just Dev-Up Does
 
 `just dev-up` starts:
+
 - **Worker API** at http://localhost:8787 (OpAMP + Management API)
 - **Site UI** at http://127.0.0.1:3000 (Portal + Admin)
 
 It also automatically:
+
 - Replaces placeholder secrets with secure random values
 - Applies D1 database migrations
 - Seeds local dev data (tenant, config, enrollment token)
@@ -89,19 +91,20 @@ just ci-fast
 
 ### Common Tasks
 
-| Task | Command |
-|------|---------|
-| Start fake collector | `just collector` |
-| View fleet status | `just fleet` |
-| Push config to agents | `just push-config` |
-| Reset local database | `just dev-reset` |
-| Lint all code | `just lint` |
-| Type check all | `just typecheck` |
-| Check code (changed files only) | `just check` |
+| Task                            | Command            |
+| ------------------------------- | ------------------ |
+| Start fake collector            | `just collector`   |
+| View fleet status               | `just fleet`       |
+| Push config to agents           | `just push-config` |
+| Reset local database            | `just dev-reset`   |
+| Lint all code                   | `just lint`        |
+| Type check all                  | `just typecheck`   |
+| Check code (changed files only) | `just check`       |
 
 ### Troubleshooting
 
 **`just: command not found`**
+
 ```bash
 export PATH="$HOME/.local/bin:$PATH:$HOME/.cargo/bin:$PATH"
 # Add the above to your ~/.bashrc or ~/.zshrc to make it permanent
@@ -112,12 +115,14 @@ Make sure you have permission to access the Cloudflare account. Contact a team m
 
 **`just doctor` fails with missing secrets**
 The dev secrets script should auto-fill placeholders. If not, run:
+
 ```bash
 just ensure-dev-secrets
 ```
 
 **UI tests fail with "browser not found"**
 Install Playwright browsers:
+
 ```bash
 just playwright-install
 ```

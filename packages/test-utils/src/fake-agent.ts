@@ -9,7 +9,6 @@ import {
   decodeServerToAgentProto,
   type AgentToServer,
   type ServerToAgent,
-  type ComponentHealth,
   AgentCapabilities,
   RemoteConfigStatuses,
 } from "@o11yfleet/core/codec";
@@ -925,12 +924,15 @@ export class FakeOpampAgent {
 
   /**
    * Send the canonical "garbage protobuf" payload used by §4.5
-   * malformed-frame tests. Bytes are deliberately invalid (field 0,
-   * which proto3 rejects). Centralised here so multiple tests can
-   * assert the same canonical malformed input.
+   * malformed-frame tests. The leading 0x00 byte is the opamp-go
+   * data-type header that real agent frames carry — including it makes
+   * this exercise the same parse path real frames take
+   * (`decodeAgentToServerProto` strips the 0x00, then `fromBinary`
+   * tries to parse the remainder and rejects field-tag 0 as invalid).
+   * Centralised here so multiple §4.5 tests share canonical input.
    */
   sendMalformedProtobuf(): void {
-    this.sendBytes(new Uint8Array([0x05, 0xde, 0xad, 0xbe, 0xef, 0x00]));
+    this.sendBytes(new Uint8Array([0x00, 0x05, 0xde, 0xad, 0xbe, 0xef, 0x00]));
   }
 
   /** Send a raw AgentToServer message — used internally by behavior loops. */

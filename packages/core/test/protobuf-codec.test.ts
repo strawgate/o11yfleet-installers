@@ -466,15 +466,13 @@ describe("encodeServerToAgentProto", () => {
     ).toThrow("Unknown CommandType: 999");
   });
 
-  // Decoder's `pbCommandTypeToInternal` switch has a `default: throw`
-  // branch for forward-compatibility with future CommandType values
-  // (proto3 enums are open). Stryker flagged this branch as
-  // [NoCoverage] because the existing tests only exercise Restart (=0).
-  // We forge a wire frame with an unknown CommandType (1) by bypassing
-  // our encoder and going straight to protobuf-es; the decoder must
-  // then throw so the unknown command surfaces explicitly rather than
-  // silently being mapped to Restart.
-  it("decoder throws on unknown CommandType in a wire frame", () => {
+  // Decoder's `pbCommandTypeToInternal` switch has a `default` branch for
+  // forward-compatibility with future CommandType values (proto3 enums
+  // are *open*: unknown numeric values are preserved on the wire and
+  // decoders must keep parsing the surrounding message). The decoder
+  // drops the unknown command but the rest of the ServerToAgent is
+  // still decoded — verifying that contract here.
+  it("decoder drops unknown CommandType but preserves the rest of the frame", () => {
     const pb = create(ServerToAgentSchema, {
       instanceUid: AGENT_UID,
       flags: 0n,
@@ -485,9 +483,12 @@ describe("encodeServerToAgentProto", () => {
     const withHeader = new Uint8Array(1 + wire.length);
     withHeader[0] = 0x00;
     withHeader.set(wire, 1);
-    expect(() => decodeServerToAgentProto(withHeader.buffer)).toThrow(
-      /Unknown CommandType on wire/,
-    );
+    const decoded = decodeServerToAgentProto(withHeader.buffer);
+    // Unknown command silently dropped (proto3 open-enum semantics).
+    expect(decoded.command).toBeUndefined();
+    // Surrounding message intact — no decode failure.
+    expect(decoded.instance_uid).toEqual(AGENT_UID);
+    expect(decoded.capabilities).toBe(ServerCapabilities.AcceptsStatus);
   });
 
   it("round-trips command through encodeServerToAgent → decodeServerToAgent", () => {

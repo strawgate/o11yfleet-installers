@@ -85,6 +85,7 @@ just dev-up
 ```
 
 This command:
+
 1. Starts the **Worker** at http://localhost:8787 (OpAMP + Management API)
 2. Starts the **Site** at http://127.0.0.1:3000 (Portal + Admin UI)
 3. Waits for both services to be healthy
@@ -103,10 +104,10 @@ you set yourself are left alone.
 
 Use these when you want to start just one service:
 
-| Command       | Starts                    | Port  |
-| ------------- | ------------------------- | ----- |
-| `just dev`    | Worker only               | 8787  |
-| `just ui`     | Site only                 | 3000  |
+| Command    | Starts      | Port |
+| ---------- | ----------- | ---- |
+| `just dev` | Worker only | 8787 |
+| `just ui`  | Site only   | 3000 |
 
 ### Reset & Re-seed
 
@@ -117,17 +118,20 @@ just dev-reset   # Re-runs migrations and seed data (keeps servers running)
 ### Troubleshooting
 
 **`just doctor` fails with "Cloudflare not authenticated"**
+
 ```bash
 npx wrangler login
 ```
 
 **`just doctor` fails with "O11YFLEET_API_BEARER_SECRET missing"**
+
 ```bash
 just ensure-dev-secrets   # Auto-fills placeholder values
 ```
 
 **Worker crashes on startup with "Missing required secrets"**
 These are optional for local dev:
+
 - `CLOUDFLARE_METRICS_ACCOUNT_ID`
 - `CLOUDFLARE_METRICS_API_TOKEN`
 
@@ -142,7 +146,7 @@ You can safely ignore these warnings for local development.
 | `just dev`                | Start only the Worker                                                          |
 | `just ui`                 | Start only the site                                                            |
 | `just dev-reset`          | Servers are running and local D1 needs reseeding                               |
-| `just smoke-local`        | Verify API + OpAMP lifecycle (requires: `eval "$(just admin-login)"` first)   |
+| `just smoke-local`        | Verify API + OpAMP lifecycle (requires: `eval "$(just admin-login)"` first)    |
 | `just check`              | Run only checks affected by changed, staged, and untracked files               |
 | `just ci-fast`            | Run the fast local gate before pushing                                         |
 | `just ci-pr`              | Reproduce required PR checks, including slow browser/runtime coverage          |
@@ -202,12 +206,12 @@ This downloads Chromium and dependencies (~300MB).
 
 ### Running Tests While Developing
 
-| Scenario | Command |
-|----------|---------|
+| Scenario                | Command                                |
+| ----------------------- | -------------------------------------- |
 | After every code change | `just test-core` or `just test-worker` |
-| Before pushing | `just ci-fast` |
-| Full regression | `just ci-pr` (includes browser tests) |
-| Single test file | `pnpm vitest run path/to/test.ts` |
+| Before pushing          | `just ci-fast`                         |
+| Full regression         | `just ci-pr` (includes browser tests)  |
+| Single test file        | `pnpm vitest run path/to/test.ts`      |
 
 ### Live Stack Testing
 
@@ -250,15 +254,15 @@ just docs-api-check # Check API docs after route changes
 
 ### Test Suites
 
-| Suite                             | Command                   | Notes                                         |
-| --------------------------------- | ------------------------- | --------------------------------------------- |
-| Core (codec, auth, state machine) | `just test-core`          | Fast, no CF runtime needed                    |
-| Worker (runtime + node)           | `just test-worker`        | Runs in workerd pool                          |
-| OpAMP compliance                  | `just test-opamp`         | Requires a **live** worker (`just dev` first) |
-| E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors      |
+| Suite                             | Command                   | Notes                                                |
+| --------------------------------- | ------------------------- | ---------------------------------------------------- |
+| Core (codec, auth, state machine) | `just test-core`          | Fast, no CF runtime needed                           |
+| Worker (runtime + node)           | `just test-worker`        | Runs in workerd pool                                 |
+| OpAMP compliance                  | `just test-opamp`         | Requires a **live** worker (`just dev` first)        |
+| E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors             |
 | UI (Playwright)                   | `just test-ui`            | Browser tests (first run: `just playwright-install`) |
-| All fast tests                    | `just test`               | Core + worker (no live server needed)         |
-| Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/` |
+| All fast tests                    | `just test`               | Core + worker (no live server needed)                |
+| Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/`        |
 
 ### Coverage
 
