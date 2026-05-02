@@ -158,7 +158,12 @@ function pbAgentDescToInternal(pb: PbAgentDescription): AgentDescription {
 }
 
 function pbComponentDetailsToInternal(pb: PbComponentDetails): Record<string, unknown> {
-  const subMap: Record<string, unknown> = {};
+  // Object.create(null) for user-controlled string-keyed maps: a component
+  // name like "__proto__" or "constructor" assigned into a plain {} mutates
+  // Object.prototype instead of becoming an own property, breaking the
+  // round-trip and creating a prototype-pollution surface. Null-prototype
+  // maps store any string as a regular own property.
+  const subMap: Record<string, unknown> = Object.create(null);
   for (const [key, val] of Object.entries(pb.subComponentMap)) {
     subMap[key] = pbComponentDetailsToInternal(val);
   }
@@ -169,7 +174,7 @@ function pbComponentDetailsToInternal(pb: PbComponentDetails): Record<string, un
 }
 
 function pbAvailableComponentsToInternal(pb: PbAvailableComponents): Record<string, unknown> {
-  const components: Record<string, unknown> = {};
+  const components: Record<string, unknown> = Object.create(null);
   for (const [key, val] of Object.entries(pb.components)) {
     components[key] = pbComponentDetailsToInternal(val);
   }
@@ -180,7 +185,7 @@ function pbAvailableComponentsToInternal(pb: PbAvailableComponents): Record<stri
 }
 
 function pbHealthToInternal(pb: PbComponentHealth): ComponentHealth {
-  const healthMap: Record<string, ComponentHealth> = {};
+  const healthMap: Record<string, ComponentHealth> = Object.create(null);
   for (const [key, val] of Object.entries(pb.componentHealthMap)) {
     healthMap[key] = pbHealthToInternal(val);
   }
@@ -302,7 +307,10 @@ function internalAnyValueToPb(val: AnyValue | undefined): PbAnyValue | undefined
 }
 
 function internalComponentDetailsToPb(detail: Record<string, unknown>): PbComponentDetails {
-  const subMap: Record<string, PbComponentDetails> = {};
+  // Null-prototype map for the same reason as the decode path: a key like
+  // "__proto__" must be stored as an own property, not as the object's
+  // [[Prototype]] slot.
+  const subMap: Record<string, PbComponentDetails> = Object.create(null);
   const subRaw = (detail["sub_component_map"] ?? {}) as Record<string, unknown>;
   for (const [key, val] of Object.entries(subRaw)) {
     subMap[key] = internalComponentDetailsToPb(val as Record<string, unknown>);
@@ -317,7 +325,7 @@ function internalComponentDetailsToPb(detail: Record<string, unknown>): PbCompon
 }
 
 function internalAvailableComponentsToPb(ac: Record<string, unknown>): PbAvailableComponents {
-  const components: Record<string, PbComponentDetails> = {};
+  const components: Record<string, PbComponentDetails> = Object.create(null);
   const raw = (ac["components"] ?? {}) as Record<string, unknown>;
   for (const [key, val] of Object.entries(raw)) {
     components[key] = internalComponentDetailsToPb(val as Record<string, unknown>);
