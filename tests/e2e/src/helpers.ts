@@ -126,15 +126,8 @@ export async function api<T = unknown>(
   return { status: res.status, data };
 }
 
-/** Create a tenant. Returns { id, name }. Uses seeded tenant if available in CI. */
+/** Create a tenant. Returns { id, name }. */
 export async function createTenant(name: string): Promise<{ id: string; name: string }> {
-  // In CI, try to use seeded tenant first (admin API requires auth that wrangler dev doesn't provide)
-  const seeded = getSeededTenant();
-  if (seeded) {
-    console.log(`Using seeded tenant: ${seeded.name} (${seeded.id})`);
-    return seeded;
-  }
-
   const { status, data } = await api<{ id: string; name: string }>("/api/admin/tenants", {
     method: "POST",
     body: JSON.stringify({ name }),
