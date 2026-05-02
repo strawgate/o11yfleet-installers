@@ -1,0 +1,28 @@
+.nodeCard {
+  transition: box-shadow 100ms;
+}
+
+.nodeCard[data-selected] {
+  outline: 2px solid var(--mantine-color-brand-5);
+  outline-offset: 2px;
+}
+
+.nodeCard[data-invalid] {
+  border-color: var(--mantine-color-err-5);
+}
+
+.handle {
+  width: 8px !important;
+  height: 8px !important;
+  background: var(--mantine-color-text) !important;
+  border: 2px solid var(--mantine-color-body) !important;
+}
+
+.handle.connectingfrom {
+  background: var(--mantine-color-brand-5) !important;
+}
+
+.handle.connectingto {
+  background: var(--mantine-color-brand-5) !important;
+  transform: scale(1.3);
+}

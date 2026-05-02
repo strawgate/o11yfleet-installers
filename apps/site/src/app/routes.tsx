@@ -113,6 +113,15 @@ const DiffPlayground = import.meta.env.DEV
       "Diff Playground",
     )
   : null;
+const BuilderPlayground = import.meta.env.DEV
+  ? lazyPage(
+      () =>
+        import("@/pages/playground/BuilderPlayground").then((m) => ({
+          default: m.BuilderPlayground,
+        })),
+      "Builder Playground",
+    )
+  : null;
 
 function SuspenseFallback() {
   return <div className="flex justify-center p-16">Loading...</div>;
@@ -179,6 +188,7 @@ export function AppRoutes() {
 
         {SpinePlayground && <Route path="playground/spine" element={<SpinePlayground />} />}
         {DiffPlayground && <Route path="playground/diff" element={<DiffPlayground />} />}
+        {BuilderPlayground && <Route path="playground/builder" element={<BuilderPlayground />} />}
 
         <Route path="*" element={<NotFoundPage />} />
       </Routes>
