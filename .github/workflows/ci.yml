@@ -242,14 +242,48 @@ jobs:
           fi
           echo "Bundle size OK"
 
+      # Terraform validation runs whenever HCL OR the workflow itself
+      # changes. Without the `workflow == 'true'` branch, an edit to
+      # ci.yml that affects how validation runs would skip its own
+      # validation (the deploy filter excludes .github/workflows/**).
       - name: Terraform validate
-        if: needs.changes.outputs.deploy == 'true'
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
         uses: hashicorp/setup-terraform@v4
         with:
-          terraform_version: "1.9"
+          terraform_version: "1.11"
 
       - run: just tf-validate
-        if: needs.changes.outputs.deploy == 'true'
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
+
+      - name: Setup tflint
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
+        uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
+        with:
+          # Pin to a specific TFLint version for reproducible CI. Bump
+          # intentionally; `latest` would resolve at run time and silently
+          # change behavior across runs.
+          tflint_version: v0.62.0
+
+      - name: tflint init + run
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
+        working-directory: infra/terraform
+        env:
+          # Avoid GitHub API rate limits when fetching plugins on `tflint --init`.
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          tflint --init
+          tflint --recursive --format compact
+
+      - name: Verify terraform-docs README is up to date
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
+        uses: terraform-docs/gh-actions@6de6da0cefcc6b4b7a5cbea4d79d97060733093c # v1.4.1
+        with:
+          working-dir: infra/terraform
+          config-file: .terraform-docs.yml
+          fail-on-diff: true
+          # The action auto-commits in PR mode by default; we want a check
+          # only — fail-on-diff above triggers a non-zero exit instead.
+          git-push: false
 
   test-slow:
     needs: [changes]
