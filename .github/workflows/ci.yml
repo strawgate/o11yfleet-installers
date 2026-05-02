@@ -309,13 +309,14 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: E2E tests environment
-        run: |
-          # Required for E2E and OpAMP tests
-          echo "O11YFLEET_CLAIM_HMAC_SECRET=test-claim-hmac-secret-for-ci-32ch" >> "$GITHUB_ENV"
-          echo "FP_URL=http://localhost:8787" >> "$GITHUB_ENV"
-
       - name: Start worker (wrangler dev)
+        env:
+          O11YFLEET_API_BEARER_SECRET: test-api-secret-for-dev-only-32chars
+          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
+          O11YFLEET_SEED_ADMIN_EMAIL: admin@o11yfleet.com
+          O11YFLEET_SEED_ADMIN_PASSWORD: admin-password
+          O11YFLEET_SEED_TENANT_USER_EMAIL: demo@o11yfleet.com
+          O11YFLEET_SEED_TENANT_USER_PASSWORD: demo-password
         run: |
           cd apps/worker
           npx wrangler dev --port 8787 &
@@ -340,14 +341,22 @@ jobs:
           fi
 
       - name: E2E tests (full-stack with FakeOpampAgent)
+        env:
+          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
+          FP_URL: http://localhost:8787
         run: pnpm --filter @o11yfleet/e2e-tests test:e2e
         timeout-minutes: 10
 
       - name: OpAMP compliance tests
+        env:
+          O11YFLEET_CLAIM_HMAC_SECRET: test-claim-hmac-secret-for-ci-32ch
+          FP_URL: http://localhost:8787
         run: pnpm --filter @o11yfleet/opamp-tests test:opamp
         timeout-minutes: 10
 
       - name: E2E collector tests (Docker with real OTel collectors)
+        env:
+          FP_URL: http://localhost:8787
         run: |
           cd tests/e2e-collector
           pnpm vitest run
