@@ -309,6 +309,12 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: E2E tests environment
+        run: |
+          # Required for E2E and OpAMP tests
+          echo "O11YFLEET_CLAIM_HMAC_SECRET=test-claim-hmac-secret-for-ci-32ch" >> $GITHUB_ENV
+          echo "FP_URL=http://localhost:8787" >> $GITHUB_ENV
+
       - name: Start worker (wrangler dev)
         run: |
           cd apps/worker
