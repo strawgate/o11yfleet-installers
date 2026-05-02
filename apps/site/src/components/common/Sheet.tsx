@@ -25,6 +25,7 @@ export function Sheet({ open, onClose, title, children }: SheetProps) {
       position="right"
       size="md"
       withCloseButton
+      closeButtonProps={{ "aria-label": "Close" }}
       closeOnEscape
       closeOnClickOutside
       trapFocus

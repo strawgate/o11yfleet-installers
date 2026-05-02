@@ -331,8 +331,10 @@ describe("Multi-Tenant Isolation", () => {
     const pushA = await agentA.waitForRemoteConfig(10_000);
     expect(pushA.remote_config).toBeDefined();
 
-    // Agent B should NOT get config (timeout expected)
-    await expect(agentB.waitForMessage(2000)).rejects.toThrow("Timeout");
+    // Agent B should NOT get a remote_config push. Other server-pushed
+    // messages (heartbeat acks, health-report acks) are fine and unrelated
+    // to tenant isolation, so we wait specifically for a remote_config.
+    await expect(agentB.waitForRemoteConfig(2000)).rejects.toThrow("Timeout");
   });
 
   it("stats are isolated between tenants", async () => {

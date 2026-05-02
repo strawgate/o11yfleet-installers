@@ -32,6 +32,7 @@ export function Modal({ open, onClose, title, children, footer }: ModalProps) {
       centered
       size="md"
       withCloseButton
+      closeButtonProps={{ "aria-label": "Close" }}
       closeOnEscape
       closeOnClickOutside
       trapFocus
