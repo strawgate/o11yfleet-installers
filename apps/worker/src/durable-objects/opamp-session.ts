@@ -1,10 +1,16 @@
-import { AgentCapabilities, decodeAgentToServer } from "@o11yfleet/core/codec";
+import {
+  AgentCapabilities,
+  decodeAgentToServer,
+  encodeServerToAgent,
+  ServerErrorResponseType,
+} from "@o11yfleet/core/codec";
+import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { uint8ToHex } from "@o11yfleet/core/hex";
+import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import type { AgentStateRepository } from "./agent-state-repo-interface.js";
 import type { WSAttachment } from "./ws-attachment.js";
-import { ASSIGNMENT_CLAIM_TTL_SECONDS } from "./constants.js";
+import { ASSIGNMENT_CLAIM_TTL_SECONDS, SERVER_CAPABILITIES } from "./constants.js";
 
 export interface SessionContext {
   repo: AgentStateRepository;
@@ -70,8 +76,25 @@ export async function handleFirstMessage(
         attachment.pending_connection_settings = freshToken;
       }
     } catch (err) {
+      // Spec §4.5: malformed messages SHOULD be answered with error_response,
+      // not by closing the WebSocket. We have a valid assignment claim here
+      // (it was verified at upgrade time), so the agent can keep the
+      // connection and resend a well-formed frame.
       console.error("[reconnect] malformed first frame:", err);
-      ws.close(4400, "Malformed first message");
+      const errorResponse: ServerToAgent = {
+        instance_uid: hexToUint8Array(attachment.instance_uid),
+        flags: 0,
+        capabilities: SERVER_CAPABILITIES,
+        error_response: {
+          type: ServerErrorResponseType.BadRequest,
+          error_message: err instanceof Error ? err.message : "Malformed message",
+        },
+      };
+      try {
+        ws.send(encodeServerToAgent(errorResponse));
+      } catch {
+        ws.close(4400, "Malformed first message");
+      }
       return { attachment, earlyReturn: true };
     }
     ws.serializeAttachment(attachment);

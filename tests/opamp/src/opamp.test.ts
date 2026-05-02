@@ -139,6 +139,30 @@ function settle(ms = 300): Promise<void> {
   });
 }
 
+/**
+ * Appends raw protobuf bytes for fields we don't decode (custom_capabilities=12,
+ * custom_message=13, plus a totally unknown field=999) so we can verify the
+ * server tolerates unknown fields per §5.10. The leading 0x00 data-type header
+ * (opamp-go convention) is preserved by appending after the entire payload —
+ * the worker strips the header byte before decoding, then fromBinary skips
+ * fields it doesn't recognise.
+ */
+function appendUnknownProtobufFields(buf: ArrayBuffer): ArrayBuffer {
+  const original = new Uint8Array(buf);
+  const extra = new Uint8Array([
+    // Field 12 (custom_capabilities), wire-type 2 length-delimited, length 0
+    0x62, 0x00,
+    // Field 13 (custom_message), wire-type 2, length 4, four arbitrary bytes
+    0x6a, 0x04, 0x01, 0x02, 0x03, 0x04,
+    // Field 999, wire-type 0 (varint). Tag = (999<<3)|0 = 7992 → varint 0xb8 0x3e
+    0xb8, 0x3e, 0x07,
+  ]);
+  const combined = new Uint8Array(original.length + extra.length);
+  combined.set(original, 0);
+  combined.set(extra, original.length);
+  return combined.buffer.slice(combined.byteOffset, combined.byteOffset + combined.byteLength);
+}
+
 async function waitForServer(maxWaitMs = 10_000): Promise<void> {
   const start = Date.now();
   while (Date.now() - start < maxWaitMs) {
@@ -346,102 +370,37 @@ describe("ServerToAgent Message (§4.4)", () => {
 // ─── §4.5 Error Handling ─────────────────────────────────────────────────────
 
 describe("Error Handling (§4.5)", () => {
-  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
-  // Re-enable when JSON/TEXT frame support is added: #463
-  // Server disconnects instead of sending error_response when it can't decode the message.
-  it.skip("returns error_response for malformed protobuf instead of disconnecting", async () => {
-    // Spec §4.5.1: "If the Server receives a malformed AgentToServer message,
-    // it SHOULD respond with a ServerToAgent that has the error_response field set"
+  it("returns error_response for malformed protobuf instead of disconnecting", async () => {
+    // Spec §4.5.1: "If the Server receives a malformed AgentToServer
+    // message, it SHOULD respond with a ServerToAgent that has the
+    // error_response field set". The agent stays connected and the next
+    // valid frame is processed normally.
     const { token } = await setupTenantAndConfig();
-    const url = `${WS_URL}?token=${encodeURIComponent(token)}`;
-    const ws = new WebSocket(url);
-    rawSockets.push(ws);
-    ws.binaryType = "arraybuffer";
 
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
-
-    // First send a valid hello to authenticate
-    const agent = createAgent({ enrollmentToken: token });
-    await agent.connect();
-    await agent.sendHello();
-    const enrollResponse = await agent.waitForMessage();
-    expect(enrollResponse).toBeDefined();
-
-    // Now send garbage binary that isn't valid protobuf
-    const _garbage = new Uint8Array([0x08, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff]);
-
-    // Use the raw websocket to send garbage after enrollment
-    // Re-connect with the assignment claim
-    const claim = enrollResponse.connection_settings?.opamp?.headers
-      ?.find((h) => h.key === "Authorization")
-      ?.value?.replace("Bearer ", "");
+    // Enroll, then reconnect with the assignment claim so the second
+    // socket reaches the worker's reconnect (non-enrollment) handler —
+    // that's the path the historical bug lived on.
+    const agent = await enrollAgent(token, "malformed-frame-agent");
+    const claim = agent.enrollment!.assignment_claim;
     agent.close();
+    await settle(200);
 
-    if (!claim) {
-      throw new Error(
-        "Enrollment did not return an assignment claim in connection_settings — cannot test malformed frame handling",
-      );
-    }
+    const reconnected = createAgent({ assignmentClaim: claim, name: "malformed-frame-agent" });
+    await reconnected.connect();
+    await reconnected.sendHello();
+    await reconnected.waitForMessage(); // consume hello response
 
-    const agent2 = createAgent({ assignmentClaim: claim });
-    await agent2.connect();
-    await agent2.sendHello();
-    await agent2.waitForMessage();
+    // Send the canonical malformed payload via the FakeAgent primitive
+    // (kept centrally so multiple §4.5 tests can share the same input).
+    reconnected.sendMalformedProtobuf();
 
-    // Send malformed binary frame (varint header + garbage)
-    const malformed = new Uint8Array([0x05, 0xde, 0xad, 0xbe, 0xef, 0x00]);
-    // We need raw WS access — use a fresh connection
-    const ws2 = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    rawSockets.push(ws2);
-    ws2.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws2.onopen = () => resolve();
-      ws2.onerror = (e) => reject(e);
-    });
+    // Server must answer with error_response and keep the WS open.
+    const reply = await reconnected.waitForMessage(5000);
+    expect(reply.error_response).toBeDefined();
+    expect(reply.error_response!.type).toBe(ServerErrorResponseType.BadRequest);
+    expect(reconnected.lastCloseCode).toBeNull();
 
-    // Send a valid hello first
-    const helloMsg: AgentToServer = {
-      instance_uid: crypto.getRandomValues(new Uint8Array(16)),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    };
-    ws2.send(encodeFrame(helloMsg));
-
-    // Wait for response to hello
-    await new Promise<void>((resolve) => {
-      ws2.onmessage = () => resolve();
-    });
-
-    // Now send garbage
-    ws2.send(malformed);
-
-    // Spec says: respond with error_response, NOT disconnect
-    const result = await new Promise<
-      { type: "message"; data: ArrayBuffer } | { type: "close"; code: number }
-    >((resolve) => {
-      ws2.onmessage = (e) => resolve({ type: "message", data: e.data as ArrayBuffer });
-      ws2.onclose = (e) => resolve({ type: "close", code: e.code });
-      setTimeout(() => resolve({ type: "close", code: -1 }), 5000);
-    });
-
-    if (result.type === "message") {
-      // Got an error_response back — correct behavior per spec
-      const { decodeFrame } = await import("@o11yfleet/core/codec");
-      const msg = decodeFrame<ServerToAgent>(result.data);
-      expect(msg.error_response).toBeDefined();
-      expect(msg.error_response!.type).toBe(ServerErrorResponseType.BadRequest);
-    } else {
-      // Server disconnected instead of sending error — this is the gap
-      // Test fails to document the compliance issue
-      expect(result.type).toBe("message");
-    }
-
-    ws.close();
-    ws2.close();
+    reconnected.close();
   });
 });
 
@@ -909,42 +868,22 @@ describe("Multi-Agent Scale", () => {
 
 // ─── §4.4.1 Server Capabilities ──────────────────────────────────────────────
 
+// §4.4.1 bit-by-bit capability assertions (AcceptsStatus,
+// OffersRemoteConfig, OffersConnectionSettings, AcceptsEffectiveConfig)
+// have been moved to the state-machine tier
+// (`packages/core/test/state-machine.test.ts` →
+// "ServerToAgent capability advertisement"). They run in µs per case
+// against `processFrame` directly instead of paying the WS round-trip
+// cost. One wire-tier smoke test stays here as an end-to-end anchor —
+// it proves the capability bits actually reach the agent over the
+// real socket, not just that `processFrame` constructs them.
 describe("Server Capabilities (§4.4.1)", () => {
-  it("advertises OffersConnectionSettings capability (0x20)", async () => {
-    // Spec: If server offers connection_settings, it MUST advertise the
-    // corresponding capability bit. OpAMP proto: ServerCapabilities value 0x20
-    // is ServerCapabilities_OffersConnectionSettings.
+  it("smoke: agent receives a response with non-zero server capabilities over the wire", async () => {
     const { token } = await setupTenantAndConfig();
-    const agent = await enrollAgent(token, "cap-check-agent");
-
+    const agent = await enrollAgent(token, "cap-smoke-agent");
     await agent.sendHeartbeat();
     const response = await agent.waitForMessage();
-
-    // 0x20 = ServerCapabilities_OffersConnectionSettings
-    const OffersConnectionSettings = 0x20;
-    expect(response.capabilities & OffersConnectionSettings).toBe(OffersConnectionSettings);
-  });
-
-  it("advertises AcceptsStatus capability", async () => {
-    const { token } = await setupTenantAndConfig();
-    const agent = await enrollAgent(token, "cap-status-agent");
-
-    await agent.sendHeartbeat();
-    const response = await agent.waitForMessage();
-
-    // 0x01 = AcceptsStatus
-    expect(response.capabilities & 0x01).toBe(0x01);
-  });
-
-  it("advertises OffersRemoteConfig capability", async () => {
-    const { token } = await setupTenantAndConfig();
-    const agent = await enrollAgent(token, "cap-config-agent");
-
-    await agent.sendHeartbeat();
-    const response = await agent.waitForMessage();
-
-    // 0x02 = OffersRemoteConfig
-    expect(response.capabilities & 0x02).toBe(0x02);
+    expect(response.capabilities).toBeGreaterThan(0);
   });
 });
 
@@ -1056,76 +995,57 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    // Connect raw WS to send component_health_map
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
-
-    // Hello
-    const helloMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-accept" });
+    await reconnected.connect();
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
-    };
-    ws.send(encodeFrame(helloMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
     });
+    await reconnected.waitForMessage(5000); // hello response
 
-    // Send health WITH component_health_map
-    const healthMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    const nowNano = BigInt(Date.now()) * 1_000_000n;
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 1,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
       health: {
         healthy: true,
-        start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        start_time_unix_nano: nowNano,
         last_error: "",
         status: "running",
-        status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        status_time_unix_nano: nowNano,
         component_health_map: {
           "pipeline:traces": {
             healthy: true,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "",
             status: "running",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
           "exporter:otlp": {
             healthy: false,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "connection refused",
             status: "error",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
         },
       },
-    };
-    ws.send(encodeFrame(healthMsg));
-
-    const result = await new Promise<
-      { type: "message"; data: ArrayBuffer } | { type: "close"; code: number }
-    >((resolve) => {
-      ws.onmessage = (e) => resolve({ type: "message", data: e.data as ArrayBuffer });
-      ws.onclose = (e) => resolve({ type: "close", code: e.code });
-      setTimeout(() => resolve({ type: "close", code: -1 }), 5000);
     });
-
-    // Server must accept the message (not disconnect)
-    expect(result.type).toBe("message");
-    ws.close();
+    const reply = await reconnected.waitForMessage(5000);
+    expect(reply).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
+    reconnected.close();
   });
 
   // SKIPPED: Test expects agent name in agent_description but API stores differently.
   // Tracked separately; needs API change to surface component_health_map per-agent.
-  it.skip("component_health_map is stored and queryable per-component via API", async () => {
+  it("component_health_map is stored and queryable per-component via API", async () => {
     // Spec: Server SHOULD store per-component health for fleet visibility.
     // API should expose individual component status (not just overall healthy bool).
     const { token, configId, tenantId } = await setupTenantAndConfig();
@@ -1134,61 +1054,54 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
-
-    const helloMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-stored" });
+    await reconnected.connect();
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
-    };
-    ws.send(encodeFrame(helloMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
     });
+    await reconnected.waitForMessage(5000);
 
-    // Send health with one healthy and one unhealthy component
-    const healthMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    const nowNano = BigInt(Date.now()) * 1_000_000n;
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 1,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
       health: {
         healthy: false,
-        start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        start_time_unix_nano: nowNano,
         last_error: "exporter:otlp unhealthy",
         status: "degraded",
-        status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        status_time_unix_nano: nowNano,
         component_health_map: {
           "receiver:otlp": {
             healthy: true,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "",
             status: "running",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
           "exporter:otlp": {
             healthy: false,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "connection refused to backend",
             status: "error",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
         },
       },
-    };
-    ws.send(encodeFrame(healthMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
     });
-    ws.close();
+    await reconnected.waitForMessage(5000);
+    // Don't call `reconnected.close()` before the API query. FakeAgent's
+    // graceful close sends a `StatusStopping` health frame with a
+    // pipeline-keyed component_health_map that would overwrite the
+    // receiver:otlp/exporter:otlp entries we just stored. `afterEach`
+    // tears the agent down — the API query observes the state we want.
     await settle(500);
 
     // Query API for this agent's component health
@@ -1197,10 +1110,14 @@ describe("Component Health Map (§5.2.1)", () => {
       { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
     );
 
-    // Find our agent and check component-level health is stored
+    // Find our agent and check component-level health is stored.
+    // The API normalizes `agent_description` to a parsed object, but for
+    // forward-compat we also handle the legacy string-blob shape.
     const found = data.agents?.find((a) => {
-      const desc = a.agent_description as string | null;
-      return typeof desc === "string" && desc.includes("comp-health-stored");
+      const desc = a.agent_description;
+      if (desc == null) return false;
+      const text = typeof desc === "string" ? desc : JSON.stringify(desc);
+      return text.includes("comp-health-stored");
     });
     expect(found).toBeDefined();
 
@@ -1225,61 +1142,54 @@ describe("Component Health Map (§5.2.1)", () => {
     agent.close();
     await settle(300);
 
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
-
-    const helloMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    const reconnected = createAgent({ assignmentClaim: claim, name: "comp-health-separate" });
+    await reconnected.connect();
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
-    };
-    ws.send(encodeFrame(helloMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
     });
+    await reconnected.waitForMessage(5000);
 
     // Agent is overall healthy, but one component has an error
+    const nowNano = BigInt(Date.now()) * 1_000_000n;
     const healthMsg: AgentToServer = {
-      instance_uid: agent.uid,
+      instance_uid: reconnected.uid,
       sequence_num: 1,
       capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
       flags: 0,
       health: {
         healthy: true,
-        start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        start_time_unix_nano: nowNano,
         last_error: "",
         status: "running",
-        status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+        status_time_unix_nano: nowNano,
         component_health_map: {
           "processor:batch": {
             healthy: true,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "",
             status: "running",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
           "exporter:kafka": {
             healthy: false,
-            start_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            start_time_unix_nano: nowNano,
             last_error: "broker unreachable",
             status: "error",
-            status_time_unix_nano: BigInt(Date.now()) * 1000000n,
+            status_time_unix_nano: nowNano,
             component_health_map: {},
           },
         },
       },
     };
-    ws.send(encodeFrame(healthMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
-    });
-    ws.close();
+    reconnected.sendMessage(healthMsg);
+    await reconnected.waitForMessage(5000);
+    // See the comment on the sibling test about why we don't call
+    // `reconnected.close()` here — the StatusStopping frame would
+    // overwrite the test's processor:batch/exporter:kafka components.
     await settle(500);
 
     const { data } = await api<{ agents: Array<Record<string, unknown>> }>(
@@ -1336,35 +1246,27 @@ describe("Config Applying Status (§5.3.2)", () => {
     const configMsg = await agent.waitForRemoteConfig(10_000);
     const hash = configMsg.remote_config!.config_hash;
 
-    // Report APPLYING (status=2) — the intermediate state
-    // Need to use encodeFrame directly since FakeAgent doesn't expose this
-    const ws = new WebSocket(
-      `${WS_URL}?token=${encodeURIComponent(agent.enrollment!.assignment_claim)}`,
-    );
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
+    // Report APPLYING (status=2) — the intermediate state.
+    // Reconnect on a fresh socket so we control sequence numbers from 0
+    // and don't tangle with the original agent's auto-ack of the config.
+    const reconnected = createAgent({
+      assignmentClaim: agent.enrollment!.assignment_claim,
+      name: "applying-status-agent",
     });
-
-    // Send hello
-    const helloMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    await reconnected.connect();
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities:
         AgentCapabilities.ReportsStatus |
         AgentCapabilities.AcceptsRemoteConfig |
         AgentCapabilities.ReportsRemoteConfig,
       flags: 0,
-    };
-    ws.send(encodeFrame(helloMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
     });
+    await reconnected.waitForMessage(5000);
 
-    // Send APPLYING status
-    const applyingMsg: AgentToServer = {
-      instance_uid: agent.uid,
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 1,
       capabilities:
         AgentCapabilities.ReportsStatus |
@@ -1376,20 +1278,12 @@ describe("Config Applying Status (§5.3.2)", () => {
         status: RemoteConfigStatuses.APPLYING,
         error_message: "",
       },
-    };
-    ws.send(encodeFrame(applyingMsg));
-
-    // Server should respond without error and keep connection open
-    const result = await new Promise<
-      { type: "message"; data: ArrayBuffer } | { type: "close"; code: number }
-    >((resolve) => {
-      ws.onmessage = (e) => resolve({ type: "message", data: e.data as ArrayBuffer });
-      ws.onclose = (e) => resolve({ type: "close", code: e.code });
-      setTimeout(() => resolve({ type: "close", code: -1 }), 5000);
     });
 
-    expect(result.type).toBe("message");
-    ws.close();
+    const reply = await reconnected.waitForMessage(5000);
+    expect(reply).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
+    reconnected.close();
     agent.close();
   });
 });
@@ -1398,64 +1292,31 @@ describe("Config Applying Status (§5.3.2)", () => {
 
 describe("Error Recovery (§4.5.1)", () => {
   it("connection stays alive after receiving a bad message", async () => {
-    // Spec §4.5: After an error, the connection SHOULD remain open.
-    // We send garbage, then verify the connection still works for valid messages.
+    // Spec §4.5: After an error, the connection SHOULD remain open and the
+    // next valid frame must be processed normally.
     const { token } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "error-recovery-agent");
     const claim = agent.enrollment!.assignment_claim;
     agent.close();
 
-    // Open raw WS to control messages precisely
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
+    const reconnected = createAgent({ assignmentClaim: claim, name: "error-recovery-agent" });
+    await reconnected.connect();
+    await reconnected.sendHello();
+    await reconnected.waitForMessage(5000); // consume hello response
 
-    // Send valid hello
-    const helloMsg: AgentToServer = {
-      instance_uid: crypto.getRandomValues(new Uint8Array(16)),
-      sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus,
-      flags: 0,
-    };
-    ws.send(encodeFrame(helloMsg));
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
-    });
+    // Garbage frame → server must respond with error_response and stay open.
+    reconnected.sendMalformedProtobuf();
+    const errorReply = await reconnected.waitForMessage(5000);
+    expect(errorReply.error_response).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
 
-    // Send garbage binary
-    ws.send(new Uint8Array([0x05, 0xde, 0xad, 0xbe, 0xef, 0x00]));
+    // Next valid frame must be processed normally.
+    await reconnected.sendHeartbeat();
+    const heartbeatReply = await reconnected.waitForMessage(5000);
+    expect(heartbeatReply).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
 
-    // Wait briefly for error processing
-    await settle(500);
-
-    // If connection is still open, send another valid message
-    if (ws.readyState === WebSocket.OPEN) {
-      const heartbeatMsg: AgentToServer = {
-        instance_uid: helloMsg.instance_uid,
-        sequence_num: 1,
-        capabilities: AgentCapabilities.ReportsStatus,
-        flags: 0,
-      };
-      ws.send(encodeFrame(heartbeatMsg));
-
-      const result = await new Promise<"message" | "close">((resolve) => {
-        ws.onmessage = () => resolve("message");
-        ws.onclose = () => resolve("close");
-        setTimeout(() => resolve("close"), 3000);
-      });
-
-      // If server kept connection alive and responded, that's compliant
-      expect(result).toBe("message");
-    } else {
-      // Connection was closed by the garbage — this is the gap
-      // (server should have sent error_response and kept alive)
-      expect(ws.readyState).toBe(WebSocket.OPEN);
-    }
-
-    ws.close();
+    reconnected.close();
   });
 });
 
@@ -1466,7 +1327,7 @@ describe("Token Revocation (§6.1.1)", () => {
   // Re-enable when token revocation is implemented: #464
   // The worker accepts the WS connection and waits for the first message rather than
   // checking token validity before upgrade.
-  it.skip("revoked token is rejected immediately on new enrollment attempt", async () => {
+  it("revoked token is rejected immediately on new enrollment attempt", async () => {
     // Server MUST check token validity at enrollment time.
     // Revoked tokens should fail fast, not after WS upgrade.
     const { token, configId, tenantId } = await setupTenantAndConfig();
@@ -1758,14 +1619,13 @@ describe("Available Components (§5.2.2)", () => {
     expect(serviceName?.value?.string_value ?? serviceName?.value).toBe("otelcol-contrib");
   });
 
-  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
-  // Re-enable when JSON/TEXT frame support is added: #463
-  // available_components is sent via JSON frame which the worker rejects.
-  it.skip("available_components field is stored when sent by agent", async () => {
-    // Spec: Agent MAY report available_components listing what receivers,
-    // processors, exporters, extensions it supports. This is SEPARATE from
-    // agent_description — it's a dedicated field for component inventory.
-    // Server should store this for fleet management / config validation.
+  it("available_components field is stored when sent by agent", async () => {
+    // Spec §5.2.2: Agent MAY report `available_components` listing what
+    // receivers / processors / exporters / extensions / connectors it has
+    // compiled in. This is SEPARATE from `agent_description` — it's a
+    // dedicated field for component inventory, used by the server to
+    // validate that a config push only references components the agent
+    // actually supports.
     const { token, configId, tenantId } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "avail-comp-store");
     const claim = agent.enrollment!.assignment_claim;
@@ -1779,44 +1639,47 @@ describe("Available Components (§5.2.2)", () => {
       ws.onerror = (e) => reject(e);
     });
 
-    // Send hello — note: available_components is NOT in our type defs yet
-    // (it's a newer OpAMP field). We test forward compatibility by sending
-    // it as an extra field in the JSON frame.
-    const uid = agent.uid;
-    const msgPayload = {
-      instance_uid: { __type: "bytes", data: Array.from(uid) },
+    // Build a real protobuf hello with available_components populated.
+    // Structure follows opamp-spec: map<kind, ComponentDetails> where each
+    // ComponentDetails has metadata (KeyValue list) + sub_component_map.
+    const ReportsAvailableComponents = 0x00004000;
+    const helloMsg: AgentToServer = {
+      instance_uid: agent.uid,
       sequence_num: 0,
-      capabilities: AgentCapabilities.ReportsStatus | 0x00004000, // 0x4000 = ReportsAvailableComponents
+      capabilities: AgentCapabilities.ReportsStatus | ReportsAvailableComponents,
       flags: 0,
       available_components: {
-        hash: { __type: "bytes", data: Array.from(crypto.getRandomValues(new Uint8Array(32))) },
+        hash: crypto.getRandomValues(new Uint8Array(32)),
         components: {
-          receiver: [
-            { name: "otlp", version: "0.98.0" },
-            { name: "hostmetrics", version: "0.98.0" },
-            { name: "filelog", version: "0.98.0" },
-          ],
-          processor: [
-            { name: "batch", version: "0.98.0" },
-            { name: "filter", version: "0.98.0" },
-          ],
-          exporter: [
-            { name: "otlp", version: "0.98.0" },
-            { name: "debug", version: "0.98.0" },
-          ],
+          receiver: {
+            metadata: [],
+            sub_component_map: {
+              otlp: {
+                metadata: [{ key: "version", value: { string_value: "0.98.0" } }],
+                sub_component_map: {},
+              },
+              hostmetrics: { metadata: [], sub_component_map: {} },
+              filelog: { metadata: [], sub_component_map: {} },
+            },
+          },
+          processor: {
+            metadata: [],
+            sub_component_map: {
+              batch: { metadata: [], sub_component_map: {} },
+              filter: { metadata: [], sub_component_map: {} },
+            },
+          },
+          exporter: {
+            metadata: [],
+            sub_component_map: {
+              otlp: { metadata: [], sub_component_map: {} },
+              debug: { metadata: [], sub_component_map: {} },
+            },
+          },
         },
       },
     };
-
-    // Manually encode JSON frame (since our encodeFrame doesn't know about available_components)
-    const TEXT_ENCODER = new TextEncoder();
-    const json = JSON.stringify(msgPayload);
-    const payload = TEXT_ENCODER.encode(json);
-    const buf = new ArrayBuffer(4 + payload.byteLength);
-    const view = new DataView(buf);
-    view.setUint32(0, payload.byteLength, false);
-    new Uint8Array(buf, 4).set(payload);
-    ws.send(buf);
+    ws.send(encodeFrame(helloMsg));
 
     const result = await new Promise<
       { type: "message"; data: ArrayBuffer } | { type: "close"; code: number }
@@ -1897,164 +1760,128 @@ describe("Connection Settings Request (§5.8)", () => {
 // ─── §5.9 Restart Command ────────────────────────────────────────────────────
 
 describe("Restart Command (§5.9)", () => {
-  // SKIPPED: Server does not send restart commands to agents.
-  // Re-enable when restart command is implemented: #465
-  // The /api/v1/configurations/:id/restart endpoint returns 404 or the server
-  // doesn't send the command message after the agent connects.
-  it.skip("server can send restart command to agent", async () => {
-    // Spec: Server MAY send a Command message with type=Restart to ask
-    // the agent to restart. Requires agent to advertise AcceptsRestartCommand.
+  it("server can send restart command to agent", async () => {
+    // Spec: Server MAY send a Command message with type=Restart to ask the
+    // agent to restart. The worker only sends Restart to agents that
+    // advertise `AcceptsRestartCommand` in their capabilities, so we must
+    // enroll with that bit set explicitly.
     const { token, configId, tenantId } = await setupTenantAndConfig();
-    const agent = await enrollAgent(token, "restart-cmd-agent");
+    const agent = createAgent({
+      enrollmentToken: token,
+      name: "restart-cmd-agent",
+      profile: {
+        capabilities:
+          AgentCapabilities.ReportsStatus |
+          AgentCapabilities.AcceptsRemoteConfig |
+          AgentCapabilities.ReportsEffectiveConfig |
+          AgentCapabilities.ReportsHealth |
+          AgentCapabilities.ReportsRemoteConfig |
+          AgentCapabilities.AcceptsRestartCommand,
+      },
+    });
+    await agent.connectAndEnroll();
+    await settle(200);
 
-    // Try the restart API (if it exists)
     const { status } = await api(`/api/v1/configurations/${configId}/restart`, {
       method: "POST",
       headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
     });
 
     if (status === 200) {
-      // Wait for command message
-      const msg = await agent.waitForMessage(5000);
-      expect(msg).toBeDefined();
-      // Assert the server actually sent a Restart command, not just any message
-      expect(msg.command).toBeDefined();
-      expect(msg.command!.type).toBe(0); // CommandType.Restart = 0
+      // Wait for the Restart command. The agent may have any number of
+      // unrelated server-initiated messages buffered (e.g. heartbeat tick
+      // responses, alarm-driven pushes), so iterate until we see one that
+      // carries `command.type === Restart` or the timeout fires.
+      const deadline = Date.now() + 5000;
+      let cmdMsg: ServerToAgent | null = null;
+      while (Date.now() < deadline) {
+        const remaining = Math.max(deadline - Date.now(), 100);
+        const msg = await agent.waitForMessage(remaining);
+        if (msg?.command?.type === 0) {
+          cmdMsg = msg;
+          break;
+        }
+      }
+      expect(cmdMsg).not.toBeNull();
+      expect(cmdMsg!.command!.type).toBe(0); // CommandType.Restart = 0
     } else {
-      // API doesn't exist — gap
       expect(status).toBe(200);
     }
+    agent.close();
   });
 });
 
 // ─── §5.10 Custom Messages / Capabilities ────────────────────────────────────
 
 describe("Custom Messages (§5.10)", () => {
-  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
-  // Re-enable when JSON/TEXT frame support is added: #463
-  // The worker disconnects when it receives a text frame with unknown fields.
-  it.skip("server does not disconnect when message contains unknown JSON fields", async () => {
-    // Spec: Agent MAY send custom_capabilities and custom_message fields.
-    // Server MUST NOT reject messages containing unknown/extra fields.
-    // Our JSON framing means unknown fields survive JSON.parse natively.
+  it("server does not disconnect when message contains unknown protobuf fields", async () => {
+    // Spec §5.10: Agent MAY send `custom_capabilities` (field 12) and
+    // `custom_message` (field 13). Our proto subset doesn't define those
+    // fields, so a real otelcol-contrib that writes them will result in
+    // wire bytes our decoder doesn't recognise. Per protobuf semantics
+    // unknown fields are skipped — the server MUST keep the connection
+    // open and respond normally.
     const { token } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "custom-unknown-fields");
     const claim = agent.enrollment!.assignment_claim;
     agent.close();
     await settle(300);
 
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
+    const reconnected = createAgent({ assignmentClaim: claim, name: "custom-unknown-fields" });
+    await reconnected.connect();
 
-    // Send a message with extra unknown fields that a future OpAMP version might add
-    const uid = agent.uid;
-    const msgPayload = {
-      instance_uid: { __type: "bytes", data: Array.from(uid) },
+    const helloMsg: AgentToServer = {
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
-      // These are hypothetical future fields — server must ignore them gracefully
-      custom_capabilities: {
-        capabilities: ["com.example.feature1", "com.example.feature2"],
-      },
-      custom_message: {
-        capability: "com.example.feature1",
-        type: "request",
-        data: { __type: "bytes", data: [0x01, 0x02, 0x03, 0x04] },
-      },
-      // Completely unknown field
-      future_field_42: { some: "data", version: 99 },
     };
+    reconnected.sendBytes(appendUnknownProtobufFields(encodeFrame(helloMsg)));
 
-    const TEXT_ENCODER = new TextEncoder();
-    const json = JSON.stringify(msgPayload);
-    const payload = TEXT_ENCODER.encode(json);
-    const buf = new ArrayBuffer(4 + payload.byteLength);
-    const view = new DataView(buf);
-    view.setUint32(0, payload.byteLength, false);
-    new Uint8Array(buf, 4).set(payload);
-    ws.send(buf);
+    const reply = await reconnected.waitForMessage(5000);
+    expect(reply).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
 
-    const result = await new Promise<
-      { type: "message"; data: ArrayBuffer } | { type: "close"; code: number }
-    >((resolve) => {
-      ws.onmessage = (e) => resolve({ type: "message", data: e.data as ArrayBuffer });
-      ws.onclose = (e) => resolve({ type: "close", code: e.code });
-      setTimeout(() => resolve({ type: "close", code: -1 }), 5000);
-    });
-
-    // Server MUST respond normally — not crash or disconnect
-    expect(result.type).toBe("message");
-    ws.close();
+    reconnected.close();
   });
 
-  // SKIPPED: Worker is protobuf-only after #399 — TEXT/JSON frames are not supported.
-  // Re-enable when JSON/TEXT frame support is added: #463
-  it.skip("server responds normally after receiving custom_capabilities in message", async () => {
-    // After receiving a message with custom fields, the server should continue
-    // operating normally — next valid message should still get a response.
+  it("server responds normally after receiving custom_capabilities in message", async () => {
+    // §5.10 follow-up: after receiving a hello carrying unknown fields
+    // (proto field 12 `custom_capabilities`, etc.), the server should
+    // continue operating normally — a subsequent valid heartbeat must
+    // still get a response.
     const { token } = await setupTenantAndConfig();
     const agent = await enrollAgent(token, "custom-cap-continues");
     const claim = agent.enrollment!.assignment_claim;
     agent.close();
     await settle(300);
 
-    const ws = new WebSocket(`${WS_URL}?token=${encodeURIComponent(claim)}`);
-    ws.binaryType = "arraybuffer";
-    await new Promise<void>((resolve, reject) => {
-      ws.onopen = () => resolve();
-      ws.onerror = (e) => reject(e);
-    });
+    const reconnected = createAgent({ assignmentClaim: claim, name: "custom-cap-continues" });
+    await reconnected.connect();
 
-    const uid = agent.uid;
-
-    // First: send hello with custom_capabilities
-    const helloWithCustom = {
-      instance_uid: { __type: "bytes", data: Array.from(uid) },
+    // Hello with appended unknown fields (custom_capabilities + custom_message
+    // simulated via raw protobuf field tags 12 and 13 plus an unknown field 999).
+    const hello: AgentToServer = {
+      instance_uid: reconnected.uid,
       sequence_num: 0,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
-      custom_capabilities: {
-        capabilities: ["com.vendor.remote_debug", "com.vendor.profiling"],
-      },
     };
-    const TEXT_ENCODER = new TextEncoder();
-    const json = JSON.stringify(helloWithCustom);
-    const payloadBytes = TEXT_ENCODER.encode(json);
-    const frameBuf = new ArrayBuffer(4 + payloadBytes.byteLength);
-    new DataView(frameBuf).setUint32(0, payloadBytes.byteLength, false);
-    new Uint8Array(frameBuf, 4).set(payloadBytes);
-    ws.send(frameBuf);
+    reconnected.sendBytes(appendUnknownProtobufFields(encodeFrame(hello)));
+    await reconnected.waitForMessage(5000);
 
-    // Wait for hello response
-    await new Promise<void>((resolve) => {
-      ws.onmessage = () => resolve();
-    });
-
-    // Second: send a normal heartbeat (no custom fields)
-    const heartbeat: AgentToServer = {
-      instance_uid: uid,
+    // Normal heartbeat (no extras) — must still be processed.
+    reconnected.sendMessage({
+      instance_uid: reconnected.uid,
       sequence_num: 1,
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
-    };
-    ws.send(encodeFrame(heartbeat));
+    });
 
-    const result = await new Promise<{ type: "message" } | { type: "close"; code: number }>(
-      (resolve) => {
-        ws.onmessage = () => resolve({ type: "message" });
-        ws.onclose = (e) => resolve({ type: "close", code: e.code });
-        setTimeout(() => resolve({ type: "close", code: -1 }), 5000);
-      },
-    );
-
-    // Normal heartbeat after custom message should still work
-    expect(result.type).toBe("message");
-    ws.close();
+    const heartbeatReply = await reconnected.waitForMessage(5000);
+    expect(heartbeatReply).toBeDefined();
+    expect(reconnected.lastCloseCode).toBeNull();
+    reconnected.close();
   });
 
   it("large custom_message payload does not crash server", async () => {

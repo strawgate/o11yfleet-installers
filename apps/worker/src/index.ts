@@ -541,19 +541,37 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
     return Response.json({ error: msg }, { status: 401 });
   }
 
-  // Step 2: Route to DO — zero D1 queries on the enrollment path.
+  // Step 2: Revocation check (OpAMP §6.1.1). Single PK lookup on
+  // enrollment_tokens.id (the claim's jti). Enrollment is the cold path —
+  // it runs at most once per agent, so the extra D1 round-trip is
+  // acceptable. Heartbeats use signed assignment claims that bypass D1
+  // entirely, so this stays out of the per-message critical path.
   //
-  // Plan enforcement (hobby/pro → must use pending flow) is handled at
-  // token generation time: the admin API refuses to issue fp_enroll_
-  // tokens for plans that don't support direct enrollment.
-  //
-  // Token revocation is a future DO-push concern — when an admin revokes
-  // a token, the revocation will be pushed to the DO's SQLite so the
-  // check stays local. Until then, revoked tokens are short-lived (they
-  // carry an exp claim) and HMAC verification is the primary gate.
-  //
-  // Agent limits are enforced by the DO from its own SQLite policy
-  // (seeded via /init or /sync-policy from PR #426).
+  // A push-based denylist (admin-revoke fan-out → DO SQLite check) would
+  // scale better under enrollment storms, but adds invalidation
+  // complexity (which DOs to push to, ordering vs revoke completion,
+  // crash recovery). Keeping this pull-based until enrollment QPS
+  // actually requires the optimization.
+  try {
+    const row = await env.FP_DB.prepare(`SELECT revoked_at FROM enrollment_tokens WHERE id = ?`)
+      .bind(claim.jti)
+      .first<{ revoked_at: string | null }>();
+    if (!row) {
+      return Response.json({ error: "Enrollment token not found" }, { status: 401 });
+    }
+    if (row.revoked_at) {
+      return Response.json({ error: "Enrollment token revoked" }, { status: 401 });
+    }
+  } catch (err) {
+    console.error("Enrollment revocation check failed:", err);
+    return Response.json({ error: "Internal server error" }, { status: 500 });
+  }
+
+  // Step 3: Route to DO. Agent limits are enforced by the DO from its own
+  // SQLite policy (seeded via /init or /sync-policy from PR #426). Plan
+  // enforcement (hobby/pro → must use pending flow) is handled at token
+  // generation time: the admin API refuses to issue fp_enroll_ tokens for
+  // plans that don't support direct enrollment.
   try {
     const doName = `${claim.tenant_id}:${claim.config_id}`;
     const doId = env.CONFIG_DO.idFromName(doName);

@@ -231,13 +231,12 @@ export async function processFrame(
   }
 
   // Process available_components (OpAMP spec field 14, "Development").
-  // *Currently unreachable from wire traffic*: our generated protobuf at
-  // `packages/core/src/codec/gen/opamp_pb.ts` predates this field, so
-  // `decodeAgentToServerProto` never populates `msg.available_components`.
-  // The branch survives for the benefit of in-process callers (benchmarks,
-  // fake-agent fixtures, future codec re-gen) that construct AgentToServer
-  // directly. When we regenerate the proto from a newer .proto, this
-  // activates automatically — no further state-machine change needed.
+  // Wire path: `decodeAgentToServerProto` populates this field when an
+  // agent sends `AvailableComponents`; the in-memory shape is the
+  // dictionary we got from the codec mapper. We persist the JSON blob
+  // verbatim — fleet inventory queries don't need a typed schema yet,
+  // and the spec status (Development) means upstream may still reshape
+  // the message.
   if (msg.available_components !== undefined) {
     newState.available_components = msg.available_components;
     shouldPersist = true;

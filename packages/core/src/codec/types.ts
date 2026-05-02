@@ -13,13 +13,11 @@ export interface AgentToServer {
   connection_settings_status?: ConnectionSettingsStatus;
   /**
    * Agent-reported available components (OpAMP spec field 14, "Development").
-   *
-   * **Wire-format limitation**: our generated protobuf at `gen/opamp_pb.ts`
-   * predates this field. The codec currently cannot encode or decode it
-   * — values set here are silently lost on the wire. The TS declaration
-   * is kept so internal pass-through code paths (e.g., benchmarks,
-   * fake-agent fixtures) can populate it before regen catches up.
-   * Tracked: regenerate proto from newer .proto and add codec hooks.
+   * Wire-compatible with otelcol-contrib's opamp-go-encoded representation
+   * (`AvailableComponents` / `ComponentDetails` proto messages). The internal
+   * type stays loose (`Record<string, unknown>`) because the OpAMP spec
+   * marks this field as Development and we don't want consumers depending
+   * on a typed shape that may shift before reaching Beta.
    */
   available_components?: Record<string, unknown>;
 }

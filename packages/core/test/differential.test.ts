@@ -26,24 +26,33 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import {
   decodeAgentToServerProto,
+  decodeServerToAgentProto,
   encodeAgentToServerProto,
+  encodeServerToAgentProto,
   isProtobufFrame,
 } from "../src/codec/protobuf.js";
-import type { AgentToServer } from "../src/codec/types.js";
+import type { AgentToServer, ServerToAgent } from "../src/codec/types.js";
 
 const FIXTURE_DIR = resolve(__dirname, "../../../tests/oracle/fixtures");
 
 function loadBinaryFixtures(): Array<{ name: string; bytes: ArrayBuffer }> {
   if (!existsSync(FIXTURE_DIR)) return [];
-  return readdirSync(FIXTURE_DIR)
-    .filter((f) => f.endsWith(".bin"))
-    .map((f) => {
-      const buf = readFileSync(join(FIXTURE_DIR, f));
-      return {
-        name: f.replace(/\.bin$/, ""),
-        bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
-      };
-    });
+  return (
+    readdirSync(FIXTURE_DIR)
+      .filter((f) => f.endsWith(".bin"))
+      // Differential test exercises the AgentToServer round-trip only.
+      // ServerToAgent fixtures (prefix `server-`) live in the same directory
+      // but use a different schema; they're round-tripped by their own
+      // oracle assertions, not here.
+      .filter((f) => !f.startsWith("server-"))
+      .map((f) => {
+        const buf = readFileSync(join(FIXTURE_DIR, f));
+        return {
+          name: f.replace(/\.bin$/, ""),
+          bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+        };
+      })
+  );
 }
 
 describe("Differential: opamp-go fixtures round-trip through our codec", () => {
@@ -69,8 +78,22 @@ describe("Differential: opamp-go fixtures round-trip through our codec", () => {
   it("decode → re-encode → decode preserves the internal representation", () => {
     for (const fx of fixtures) {
       const a = decodeAgentToServerProto(fx.bytes);
-      const reEncoded = encodeAgentToServerProto(a);
-      const c = decodeAgentToServerProto(reEncoded);
+      let reEncoded: ArrayBuffer;
+      try {
+        reEncoded = encodeAgentToServerProto(a);
+      } catch (e) {
+        throw new Error(
+          `fixture ${fx.name}: re-encode threw: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      let c: AgentToServer;
+      try {
+        c = decodeAgentToServerProto(reEncoded);
+      } catch (e) {
+        throw new Error(
+          `fixture ${fx.name}: re-decode threw: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
       // semanticEqual handles Uint8Array fields (which deep-equal can be picky about).
       expect(semanticEqual(a, c), `fixture ${fx.name}: round-trip diverged`).toBe(true);
     }
@@ -109,9 +132,64 @@ describe("Differential: opamp-go fixtures round-trip through our codec", () => {
 //   - Map / Set  → not used by AgentToServer, but explicitly rejected so
 //                  silent corruption can't slip in if the type evolves.
 
-function semanticEqual(a: AgentToServer, b: AgentToServer): boolean {
+function semanticEqual(
+  a: AgentToServer | ServerToAgent,
+  b: AgentToServer | ServerToAgent,
+): boolean {
   return JSON.stringify(canonicalize(a)) === JSON.stringify(canonicalize(b));
 }
+
+function loadServerBinaryFixtures(): Array<{ name: string; bytes: ArrayBuffer }> {
+  if (!existsSync(FIXTURE_DIR)) return [];
+  return readdirSync(FIXTURE_DIR)
+    .filter((f) => f.endsWith(".bin") && f.startsWith("server-"))
+    .map((f) => {
+      const buf = readFileSync(join(FIXTURE_DIR, f));
+      return {
+        name: f.replace(/\.bin$/, ""),
+        bytes: buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.byteLength),
+      };
+    });
+}
+
+describe("Differential: opamp-go ServerToAgent fixtures round-trip", () => {
+  // Mirror of the AgentToServer suite for the server→agent direction.
+  // Catches the same bug class — including the §5.9 `command` decoder
+  // drop, which surfaced as a `command !== undefined` on input but
+  // `command === undefined` on the round-tripped repr.
+  const fixtures = loadServerBinaryFixtures();
+
+  if (fixtures.length === 0) {
+    it.skip("no server-* fixtures present — skipping", () => {});
+    return;
+  }
+
+  it("decode → re-encode → decode preserves the internal representation", () => {
+    // Mirror the try/catch wrapping in the AgentToServer suite above so a
+    // codec regression points at the offending fixture by name instead of
+    // bubbling up an opaque BinaryReader stack.
+    for (const fx of fixtures) {
+      const a = decodeServerToAgentProto(fx.bytes);
+      let reEncoded: ArrayBuffer;
+      try {
+        reEncoded = encodeServerToAgentProto(a);
+      } catch (e) {
+        throw new Error(
+          `fixture ${fx.name}: re-encode threw: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      let c: ServerToAgent;
+      try {
+        c = decodeServerToAgentProto(reEncoded);
+      } catch (e) {
+        throw new Error(
+          `fixture ${fx.name}: re-decode threw: ${e instanceof Error ? e.message : String(e)}`,
+        );
+      }
+      expect(semanticEqual(a, c), `fixture ${fx.name}: round-trip diverged`).toBe(true);
+    }
+  });
+});
 
 function canonicalize(value: unknown): unknown {
   if (value === undefined) return { __undefined: true };

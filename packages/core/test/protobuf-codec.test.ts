@@ -6,6 +6,7 @@ import { create, toBinary, fromBinary } from "@bufbuild/protobuf";
 import {
   AgentToServerSchema,
   ServerToAgentSchema,
+  ServerToAgentCommandSchema,
   AgentDescriptionSchema,
   ComponentHealthSchema,
   EffectiveConfigSchema,
@@ -18,6 +19,7 @@ import {
 import { KeyValueSchema, AnyValueSchema } from "../src/codec/gen/anyvalue_pb.js";
 import {
   decodeAgentToServerProto,
+  decodeServerToAgentProto,
   encodeServerToAgentProto,
   isProtobufFrame,
 } from "../src/codec/protobuf.js";
@@ -462,6 +464,47 @@ describe("encodeServerToAgentProto", () => {
         command: { type: 999 as CommandType },
       }),
     ).toThrow("Unknown CommandType: 999");
+  });
+
+  // Decoder's `pbCommandTypeToInternal` switch has a `default: throw`
+  // branch for forward-compatibility with future CommandType values
+  // (proto3 enums are open). Stryker flagged this branch as
+  // [NoCoverage] because the existing tests only exercise Restart (=0).
+  // We forge a wire frame with an unknown CommandType (1) by bypassing
+  // our encoder and going straight to protobuf-es; the decoder must
+  // then throw so the unknown command surfaces explicitly rather than
+  // silently being mapped to Restart.
+  it("decoder throws on unknown CommandType in a wire frame", () => {
+    const pb = create(ServerToAgentSchema, {
+      instanceUid: AGENT_UID,
+      flags: 0n,
+      capabilities: BigInt(ServerCapabilities.AcceptsStatus),
+      command: create(ServerToAgentCommandSchema, { type: 999 }),
+    });
+    const wire = toBinary(ServerToAgentSchema, pb);
+    const withHeader = new Uint8Array(1 + wire.length);
+    withHeader[0] = 0x00;
+    withHeader.set(wire, 1);
+    expect(() => decodeServerToAgentProto(withHeader.buffer)).toThrow(
+      /Unknown CommandType on wire/,
+    );
+  });
+
+  it("round-trips command through encodeServerToAgent → decodeServerToAgent", () => {
+    // Regression: decodeServerToAgentProto previously dropped the `command`
+    // field even though the encoder wrote it. Tests using fromBinary
+    // directly didn't catch this — the bug was in our internal-types
+    // mapper, not the protobuf schema. This test specifically exercises
+    // the codec wrapper agents call.
+    const encoded = encodeServerToAgentProto({
+      instance_uid: AGENT_UID,
+      flags: 0,
+      capabilities: ServerCapabilities.AcceptsStatus,
+      command: { type: CommandType.Restart },
+    });
+    const decoded = decodeServerToAgentProto(encoded);
+    expect(decoded.command).toBeDefined();
+    expect(decoded.command!.type).toBe(CommandType.Restart);
   });
 });
 

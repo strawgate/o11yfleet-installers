@@ -924,6 +924,47 @@ export class FakeOpampAgent {
     }, FakeOpampAgent.KEEPALIVE_INTERVAL_MS);
   }
 
+  /**
+   * Send a fully-formed AgentToServer message. Public so tests can drive
+   * specific protocol scenarios without going through the named helpers
+   * (sendHello/sendHeartbeat/...).
+   *
+   * Side-effect: keeps the internal `sequenceNum` counter in sync with
+   * `msg.sequence_num`. Tests that mix `sendMessage` with `sendHeartbeat`
+   * (which does `++sequenceNum`) or `sendHealth*` would otherwise see
+   * mismatched sequence numbers — `sendHeartbeat` would re-use a number
+   * the worker has already advanced past, triggering ReportFullState.
+   */
+  sendMessage(msg: AgentToServer): void {
+    this.sequenceNum = msg.sequence_num;
+    this.send(msg);
+  }
+
+  /**
+   * Send raw bytes over the WebSocket, bypassing the codec entirely.
+   * Used for tests that need to feed the worker malformed frames,
+   * unknown protobuf fields, or a hand-crafted byte sequence.
+   *
+   * Caller is responsible for the wire format. The 0x00 opamp-go data-type
+   * header byte is NOT prepended — pass exactly the bytes you want sent.
+   */
+  sendBytes(bytes: ArrayBuffer | Uint8Array): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      throw new Error("WebSocket not connected");
+    }
+    this.ws.send(bytes);
+  }
+
+  /**
+   * Send the canonical "garbage protobuf" payload used by §4.5
+   * malformed-frame tests. Bytes are deliberately invalid (field 0,
+   * which proto3 rejects). Centralised here so multiple tests can
+   * assert the same canonical malformed input.
+   */
+  sendMalformedProtobuf(): void {
+    this.sendBytes(new Uint8Array([0x05, 0xde, 0xad, 0xbe, 0xef, 0x00]));
+  }
+
   /** Send a raw AgentToServer message — used internally by behavior loops. */
   private sendRaw(msg: AgentToServer): void {
     this.send(msg);

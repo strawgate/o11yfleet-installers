@@ -429,6 +429,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           };
           const token = await signClaim(claim, this.env.O11YFLEET_CLAIM_HMAC_SECRET);
           attachment.pending_connection_settings = token;
+          // Leave `is_first_message=true` so the next frame on this socket
+          // still runs the bootstrap block below (gen bump, status flip,
+          // forceFullPersist). If we cleared the flag here we'd skip the
+          // mandatory full UPSERT for the renamed agent's first persisted
+          // frame — Tier-1 partial updates would silently miss because no
+          // row exists for the new instance_uid yet. Malformed second
+          // frames are handled gracefully because `handleFirstMessage`'s
+          // else-branch catch sends `error_response` (per §4.5) instead
+          // of closing the socket.
 
           ws.serializeAttachment(attachment);
           const dupResponse: ServerToAgent = {

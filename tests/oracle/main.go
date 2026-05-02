@@ -44,6 +44,15 @@ type fixture struct {
 	Expected map[string]interface{} // JSON-serializable expected values
 }
 
+// Server→agent fixtures use a separate type so the writer can serialize
+// `*protobufs.ServerToAgent` instead of the agent-direction message. Same
+// `.bin` + `.json` shape on disk.
+type serverFixture struct {
+	Name     string
+	Message  *protobufs.ServerToAgent
+	Expected map[string]interface{}
+}
+
 func main() {
 	if len(os.Args) > 1 && os.Args[1] == "verify" {
 		// Verify mode: read .bin files from a directory and check fields
@@ -74,6 +83,7 @@ func main() {
 		configAckFixture(),
 		descriptionReportFixture(),
 		disconnectFixture(),
+		availableComponentsFixture(),
 	}
 
 	for _, f := range fixtures {
@@ -83,6 +93,45 @@ func main() {
 		}
 		fmt.Printf("wrote %s\n", f.Name)
 	}
+
+	// Server→agent fixtures. Note: `heart_beat_interval` (field 12 on
+	// ServerToAgent) is intentionally NOT covered here — opamp-go v0.23.0
+	// (pinned in tests/oracle/go.mod) doesn't model that field as a Go
+	// struct member, so we can't construct a fixture for it via the
+	// reference library. This is itself a wire-format drift signal: when
+	// opamp-go bumps to a version exposing this field, add the fixture.
+	serverFixtures := []serverFixture{
+		serverCommandRestartFixture(),
+		serverErrorResponseFixture(),
+		serverConnectionSettingsFixture(),
+		serverAgentIdentificationFixture(),
+		serverRemoteConfigPushFixture(),
+	}
+	for _, f := range serverFixtures {
+		if err := writeServerFixture(outDir, f); err != nil {
+			fmt.Fprintf(os.Stderr, "server fixture %s: %v\n", f.Name, err)
+			os.Exit(1)
+		}
+		fmt.Printf("wrote %s\n", f.Name)
+	}
+}
+
+func writeServerFixture(dir string, f serverFixture) error {
+	data, err := proto.Marshal(f.Message)
+	if err != nil {
+		return fmt.Errorf("marshal: %w", err)
+	}
+	wire := append([]byte{0x00}, data...)
+	binPath := filepath.Join(dir, f.Name+".bin")
+	if err := os.WriteFile(binPath, wire, 0o644); err != nil {
+		return fmt.Errorf("write bin: %w", err)
+	}
+	jsonData, err := json.MarshalIndent(f.Expected, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal json: %w", err)
+	}
+	jsonPath := filepath.Join(dir, f.Name+".json")
+	return os.WriteFile(jsonPath, jsonData, 0o644)
 }
 
 func writeFixture(dir string, f fixture) error {
@@ -341,6 +390,205 @@ func disconnectFixture() fixture {
 			"capabilities":      defaultCapabilities,
 			"flags":             0,
 			"has_disconnect":    true,
+		},
+	}
+}
+
+func availableComponentsFixture() fixture {
+	// Spec §5.2.2: agent reports compiled-in components so the server can
+	// validate config pushes. Field numbers (`components` = 1, `hash` = 2)
+	// must match upstream — opamp-go is the reference.
+	hash := []byte{0xfe, 0xed, 0xfa, 0xce, 0xde, 0xad, 0xbe, 0xef}
+	msg := &protobufs.AgentToServer{
+		InstanceUid:  knownUID,
+		SequenceNum:  0,
+		Capabilities: configurableCapabilities | uint64(protobufs.AgentCapabilities_AgentCapabilities_ReportsAvailableComponents),
+		Flags:        0,
+		AvailableComponents: &protobufs.AvailableComponents{
+			Hash: hash,
+			Components: map[string]*protobufs.ComponentDetails{
+				"receiver": {
+					Metadata: []*protobufs.KeyValue{},
+					SubComponentMap: map[string]*protobufs.ComponentDetails{
+						"otlp": {
+							Metadata: []*protobufs.KeyValue{
+								kv("version", "0.123.0"),
+							},
+							SubComponentMap: map[string]*protobufs.ComponentDetails{},
+						},
+						"hostmetrics": {
+							Metadata:        []*protobufs.KeyValue{},
+							SubComponentMap: map[string]*protobufs.ComponentDetails{},
+						},
+					},
+				},
+				"exporter": {
+					Metadata: []*protobufs.KeyValue{},
+					SubComponentMap: map[string]*protobufs.ComponentDetails{
+						"otlp": {
+							Metadata:        []*protobufs.KeyValue{},
+							SubComponentMap: map[string]*protobufs.ComponentDetails{},
+						},
+					},
+				},
+			},
+		},
+	}
+	return fixture{
+		Name:    "available-components",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"sequence_num": 0,
+			"capabilities": uint64(msg.Capabilities),
+			"flags":        0,
+			"has_available_components": true,
+			"available_components_kinds": []interface{}{"exporter", "receiver"},
+			"available_components_hash_first_byte": 0xfe,
+			"receiver_subcomponents":               []interface{}{"hostmetrics", "otlp"},
+		},
+	}
+}
+
+// ─── Server→Agent Fixtures ──────────────────────────────────────────
+
+func serverCommandRestartFixture() serverFixture {
+	msg := &protobufs.ServerToAgent{
+		InstanceUid:  knownUID,
+		Flags:        0,
+		Capabilities: uint64(protobufs.ServerCapabilities_ServerCapabilities_AcceptsStatus),
+		Command: &protobufs.ServerToAgentCommand{
+			Type: protobufs.CommandType_CommandType_Restart,
+		},
+	}
+	return serverFixture{
+		Name:    "server-command-restart",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"flags":            0,
+			"capabilities":     uint64(msg.Capabilities),
+			"has_command":      true,
+			"command_type":     0, // CommandType.Restart
+			"has_error":        false,
+			"has_remote_config": false,
+		},
+	}
+}
+
+func serverErrorResponseFixture() serverFixture {
+	msg := &protobufs.ServerToAgent{
+		InstanceUid:  knownUID,
+		Flags:        0,
+		Capabilities: uint64(protobufs.ServerCapabilities_ServerCapabilities_AcceptsStatus),
+		ErrorResponse: &protobufs.ServerErrorResponse{
+			Type:         protobufs.ServerErrorResponseType_ServerErrorResponseType_BadRequest,
+			ErrorMessage: "malformed AgentToServer",
+			Details: &protobufs.ServerErrorResponse_RetryInfo{
+				RetryInfo: &protobufs.RetryInfo{
+					RetryAfterNanoseconds: 5_000_000_000,
+				},
+			},
+		},
+	}
+	return serverFixture{
+		Name:    "server-error-response",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"flags":                       0,
+			"capabilities":                uint64(msg.Capabilities),
+			"has_error":                   true,
+			"error_type":                  1, // BadRequest
+			"error_message":               "malformed AgentToServer",
+			"has_retry_info":              true,
+			"retry_after_nanoseconds":     5_000_000_000,
+		},
+	}
+}
+
+func serverConnectionSettingsFixture() serverFixture {
+	hash := []byte{0xc0, 0xff, 0xee, 0x00, 0xc0, 0xff, 0xee, 0x00}
+	msg := &protobufs.ServerToAgent{
+		InstanceUid:  knownUID,
+		Flags:        0,
+		Capabilities: uint64(protobufs.ServerCapabilities_ServerCapabilities_OffersConnectionSettings),
+		ConnectionSettings: &protobufs.ConnectionSettingsOffers{
+			Hash: hash,
+			Opamp: &protobufs.OpAMPConnectionSettings{
+				DestinationEndpoint: "wss://opamp.example.com/v1/opamp",
+				Headers: &protobufs.Headers{
+					Headers: []*protobufs.Header{
+						{Key: "Authorization", Value: "Bearer test-claim-xyz"},
+					},
+				},
+				HeartbeatIntervalSeconds: 30,
+			},
+		},
+	}
+	return serverFixture{
+		Name:    "server-connection-settings",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"flags":                            0,
+			"capabilities":                     uint64(msg.Capabilities),
+			"has_connection_settings":          true,
+			"connection_settings_endpoint":     "wss://opamp.example.com/v1/opamp",
+			"connection_settings_heartbeat_s":  30,
+			"connection_settings_auth_header":  "Bearer test-claim-xyz",
+			"has_command":                      false,
+		},
+	}
+}
+
+func serverAgentIdentificationFixture() serverFixture {
+	newUID := []byte{0xaa, 0xbb, 0xcc, 0xdd, 0xee, 0xff, 0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99}
+	msg := &protobufs.ServerToAgent{
+		InstanceUid:  knownUID,
+		Flags:        0,
+		Capabilities: uint64(protobufs.ServerCapabilities_ServerCapabilities_AcceptsStatus),
+		AgentIdentification: &protobufs.AgentIdentification{
+			NewInstanceUid: newUID,
+		},
+	}
+	return serverFixture{
+		Name:    "server-agent-identification",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"flags":                       0,
+			"capabilities":                uint64(msg.Capabilities),
+			"has_agent_identification":    true,
+			"new_instance_uid_first_byte": 0xaa,
+			"new_instance_uid_length":     16,
+		},
+	}
+}
+
+func serverRemoteConfigPushFixture() serverFixture {
+	configHash := []byte{0xde, 0xad, 0xbe, 0xef, 0xfe, 0xed, 0xfa, 0xce}
+	msg := &protobufs.ServerToAgent{
+		InstanceUid:  knownUID,
+		Flags:        0,
+		Capabilities: uint64(protobufs.ServerCapabilities_ServerCapabilities_OffersRemoteConfig),
+		RemoteConfig: &protobufs.AgentRemoteConfig{
+			Config: &protobufs.AgentConfigMap{
+				ConfigMap: map[string]*protobufs.AgentConfigFile{
+					"": {
+						Body:        []byte("processors:\n  batch:\n    timeout: 5s\n"),
+						ContentType: "text/yaml",
+					},
+				},
+			},
+			ConfigHash: configHash,
+		},
+	}
+	return serverFixture{
+		Name:    "server-remote-config-push",
+		Message: msg,
+		Expected: map[string]interface{}{
+			"flags":                              0,
+			"capabilities":                       uint64(msg.Capabilities),
+			"has_remote_config":                  true,
+			"remote_config_hash_first_byte":      0xde,
+			"remote_config_default_key_present":  true,
+			"remote_config_default_content_type": "text/yaml",
 		},
 	}
 }

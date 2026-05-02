@@ -25,6 +25,9 @@ import {
   EffectiveConfigSchema,
   AgentDisconnectSchema,
   RemoteConfigStatusSchema,
+  AvailableComponentsSchema,
+  ComponentDetailsSchema,
+  ConnectionSettingsStatusSchema,
 } from "./gen/opamp_pb.js";
 import {
   KeyValueSchema,
@@ -40,6 +43,8 @@ import type {
   RemoteConfigStatus as PbRemoteConfigStatus,
   EffectiveConfig as PbEffectiveConfig,
   AgentDisconnect as PbAgentDisconnect,
+  AvailableComponents as PbAvailableComponents,
+  ComponentDetails as PbComponentDetails,
 } from "./gen/opamp_pb.js";
 import type { KeyValue as PbKeyValue, AnyValue as PbAnyValue } from "./gen/anyvalue_pb.js";
 import type {
@@ -100,6 +105,9 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
   if (pb.agentDisconnect) {
     result.agent_disconnect = {};
   }
+  if (pb.availableComponents) {
+    result.available_components = pbAvailableComponentsToInternal(pb.availableComponents);
+  }
   if (pb.connectionSettingsStatus) {
     const statusMap: Record<number, ConnectionSettingsStatuses> = {
       [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET]:
@@ -124,10 +132,41 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
   return result;
 }
 
+function pbCommandTypeToInternal(pbType: PbCommandType): CommandType {
+  switch (pbType) {
+    case PbCommandType.CommandType_Restart:
+      return CommandType.Restart;
+    default:
+      throw new Error(`Unknown CommandType on wire: ${pbType}`);
+  }
+}
+
 function pbAgentDescToInternal(pb: PbAgentDescription): AgentDescription {
   return {
     identifying_attributes: pb.identifyingAttributes.map(pbKvToInternal),
     non_identifying_attributes: pb.nonIdentifyingAttributes.map(pbKvToInternal),
+  };
+}
+
+function pbComponentDetailsToInternal(pb: PbComponentDetails): Record<string, unknown> {
+  const subMap: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(pb.subComponentMap)) {
+    subMap[key] = pbComponentDetailsToInternal(val);
+  }
+  return {
+    metadata: pb.metadata.map(pbKvToInternal),
+    sub_component_map: subMap,
+  };
+}
+
+function pbAvailableComponentsToInternal(pb: PbAvailableComponents): Record<string, unknown> {
+  const components: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(pb.components)) {
+    components[key] = pbComponentDetailsToInternal(val);
+  }
+  return {
+    hash: pb.hash,
+    components,
   };
 }
 
@@ -251,6 +290,33 @@ function internalAnyValueToPb(val: AnyValue | undefined): PbAnyValue | undefined
     });
   }
   return undefined;
+}
+
+function internalComponentDetailsToPb(detail: Record<string, unknown>): PbComponentDetails {
+  const subMap: Record<string, PbComponentDetails> = {};
+  const subRaw = (detail["sub_component_map"] ?? {}) as Record<string, unknown>;
+  for (const [key, val] of Object.entries(subRaw)) {
+    subMap[key] = internalComponentDetailsToPb(val as Record<string, unknown>);
+  }
+  const metaRaw = (detail["metadata"] ?? []) as KeyValue[];
+  return create(ComponentDetailsSchema, {
+    metadata: metaRaw.map((kv) =>
+      create(KeyValueSchema, { key: kv.key, value: internalAnyValueToPb(kv.value) }),
+    ),
+    subComponentMap: subMap,
+  });
+}
+
+function internalAvailableComponentsToPb(ac: Record<string, unknown>): PbAvailableComponents {
+  const components: Record<string, PbComponentDetails> = {};
+  const raw = (ac["components"] ?? {}) as Record<string, unknown>;
+  for (const [key, val] of Object.entries(raw)) {
+    components[key] = internalComponentDetailsToPb(val as Record<string, unknown>);
+  }
+  return create(AvailableComponentsSchema, {
+    hash: (ac["hash"] as Uint8Array | undefined) ?? new Uint8Array(0),
+    components,
+  });
 }
 
 function internalComponentHealthToPb(health: ComponentHealth): PbComponentHealth {
@@ -439,6 +505,14 @@ export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
     agent_identification: pb.agentIdentification
       ? { new_instance_uid: pb.agentIdentification.newInstanceUid }
       : undefined,
+    // Decode server-driven Command (§5.9). Encoder writes this field for
+    // restart commands; without round-trip the agent receives the frame
+    // but `msg.command` is silently dropped, so tests/fake-agent see
+    // every restart as a generic ServerToAgent with no actionable field.
+    // Mirrors the encoder's contract: throw on unknown so a future
+    // CommandType added upstream surfaces explicitly instead of silently
+    // becoming Restart.
+    command: pb.command ? { type: pbCommandTypeToInternal(pb.command.type) } : undefined,
     // proto3 doesn't distinguish field-absent from default-value, so
     // 0 round-trips as 0 (not undefined). Consumers that previously
     // relied on `undefined` for "absent" should treat 0 as "no
@@ -526,6 +600,34 @@ export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
   if (msg.agent_disconnect) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pb.agentDisconnect = create(AgentDisconnectSchema as any, {}) as unknown as PbAgentDisconnect;
+  }
+  if (msg.available_components) {
+    pb.availableComponents = internalAvailableComponentsToPb(msg.available_components);
+  }
+  if (msg.connection_settings_status) {
+    // Encoder counterpart for the agent's acknowledgement of a server
+    // ConnectionSettingsOffers (proto3 field 15). The decoder has read
+    // this field for a long time; the encoder previously skipped it,
+    // so any test or in-process caller round-tripping a message with
+    // this field set silently lost it. Property-test
+    // `codec.properties.test.ts` regression-guards the round-trip.
+    const statusMap: Record<number, PbConnectionSettingsStatuses> = {
+      [ConnectionSettingsStatuses.UNSET]:
+        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET,
+      [ConnectionSettingsStatuses.APPLIED]:
+        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED,
+      [ConnectionSettingsStatuses.APPLYING]:
+        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING,
+      [ConnectionSettingsStatuses.FAILED]:
+        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED,
+    };
+    pb.connectionSettingsStatus = create(ConnectionSettingsStatusSchema, {
+      lastConnectionSettingsHash: msg.connection_settings_status.last_connection_settings_hash,
+      status:
+        statusMap[msg.connection_settings_status.status] ??
+        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET,
+      errorMessage: msg.connection_settings_status.error_message ?? "",
+    });
   }
   const payload = toBinary(AgentToServerSchema, pb);
   const result = new Uint8Array(1 + payload.length);

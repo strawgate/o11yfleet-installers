@@ -36,10 +36,7 @@ message AgentToServer {
   // field 11: ConnectionSettingsRequest (not implemented)
   // field 12: CustomCapabilities (not implemented)
   // field 13: CustomMessage (not implemented)
-  // field 14: AvailableComponents — spec extension (Development status).
-  // Not defined in our proto subset; decoded only via the JSON codec.
-  // Protobuf-framed agents will not populate this field until we add the
-  // proto message definition and codec mapping.
+  AvailableComponents available_components = 14;
   // ConnectionSettingsStatus is decoded by the codec but not yet processed by
   // the worker — the server currently ignores the agent's acknowledgement of
   // connection settings offers. See apps/worker TODO for tracking.
@@ -127,6 +124,24 @@ message AgentIdentification {
 }
 
 message AgentDisconnect {}
+
+// ─── Available Components (spec §5.2.2) ─────────────────────────────────────
+
+// Inventory of components an agent has compiled in (receivers/processors/
+// exporters/extensions/connectors). Used by the server to validate that
+// a config push only references components the agent supports. Spec status
+// is "Development" — wire-compatible with otelcol-contrib's OpAMP impl.
+message AvailableComponents {
+  // Field numbers match upstream opamp-spec for wire compatibility with
+  // otelcol-contrib: `components` is field 1, `hash` is field 2.
+  map<string, ComponentDetails> components = 1;
+  bytes hash = 2;
+}
+
+message ComponentDetails {
+  repeated KeyValue metadata = 1;
+  map<string, ComponentDetails> sub_component_map = 2;
+}
 
 // ─── Connection Settings ─────────────────────────────────────────────────────
 

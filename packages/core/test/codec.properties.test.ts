@@ -20,6 +20,7 @@ import {
   isProtobufFrame,
 } from "../src/codec/protobuf.js";
 import type { AgentToServer, ServerToAgent, ServerErrorResponseType } from "../src/codec/types.js";
+import { CommandType, ConnectionSettingsStatuses } from "../src/codec/types.js";
 
 const uidArb = fc.uint8Array({ minLength: 16, maxLength: 16 });
 const u32Arb = fc.integer({ min: 0, max: 0x7fff_ffff });
@@ -126,6 +127,112 @@ describe("property: AgentToServer round-trip", () => {
   it("isProtobufFrame returns true for any encoded AgentToServer frame", () => {
     fc.assert(
       fc.property(minimalAgentToServerArb, (msg) => isProtobufFrame(encodeAgentToServerProto(msg))),
+    );
+  });
+
+  // Field 15 (agent → server) was decoded but never encoded. Bug found
+  // during a codec audit on PR #497's follow-up; the encoder branch was
+  // missing entirely. Without this property, in-process callers
+  // (FakeAgent, future state-machine tests) that round-trip a
+  // connection_settings_status acknowledgement would silently lose it.
+  it("connection_settings_status round-trips hash + status + error_message", () => {
+    fc.assert(
+      fc.property(
+        minimalAgentToServerArb,
+        fc.uint8Array({ minLength: 32, maxLength: 32 }),
+        fc.constantFrom(
+          ConnectionSettingsStatuses.UNSET,
+          ConnectionSettingsStatuses.APPLIED,
+          ConnectionSettingsStatuses.APPLYING,
+          ConnectionSettingsStatuses.FAILED,
+        ),
+        // `?? ""` fallback in the encoder is exercised by including
+        // undefined as a possible error_message value. Stryker flagged
+        // this branch as surviving when the property used only fc.string.
+        fc.option(fc.string({ minLength: 0, maxLength: 64 }), { nil: undefined }),
+        (base, hash, status, errMsg) => {
+          const msg: AgentToServer = {
+            ...base,
+            connection_settings_status: {
+              last_connection_settings_hash: hash,
+              status,
+              error_message: errMsg,
+            },
+          };
+          const round = decodeAgentToServerProto(encodeAgentToServerProto(msg));
+          const css = round.connection_settings_status;
+          if (!css) return false;
+          if (!uidEq(css.last_connection_settings_hash, hash)) return false;
+          if (css.status !== status) return false;
+          // proto3 strings default to "", so an undefined input round-trips
+          // through the `?? ""` encoder fallback to "" on the wire.
+          const expected = errMsg ?? "";
+          if (css.error_message !== expected) return false;
+          return true;
+        },
+      ),
+    );
+  });
+
+  // available_components (proto3 field 14) decoder branch was previously
+  // unreached by core's own test suite (only oracle/scenarios round-trip
+  // it). Stryker flagged the if-branch in `pbAgentToServerToInternal` as
+  // [NoCoverage]. Cover with an explicit property: any non-empty
+  // components map round-trips through encode → decode.
+  it("available_components round-trips hash + components + nested metadata", () => {
+    // Restrict to ASCII identifiers/values: fc.string can yield strings
+    // containing lone surrogate halves which aren't valid UTF-8 and don't
+    // round-trip through proto3 string fields. The property under test is
+    // "the codec preserves the shape", not "every Unicode codepoint
+    // round-trips" — the latter is a TextEncoder concern, not a codec one.
+    const safeStringArb = fc.stringMatching(/^[a-zA-Z0-9._-]{1,16}$/);
+    const safeValueArb = fc.stringMatching(/^[a-zA-Z0-9._: -]{0,32}$/);
+    const hashArb = fc.uint8Array({ minLength: 8, maxLength: 32 });
+    fc.assert(
+      fc.property(
+        minimalAgentToServerArb,
+        hashArb,
+        safeStringArb, // component kind name
+        safeStringArb, // sub-component name
+        safeStringArb, // metadata key
+        safeValueArb, // metadata value
+        (base, hash, kind, name, metaKey, metaVal) => {
+          const msg: AgentToServer = {
+            ...base,
+            available_components: {
+              hash,
+              components: {
+                [kind]: {
+                  metadata: [],
+                  sub_component_map: {
+                    [name]: {
+                      metadata: [{ key: metaKey, value: { string_value: metaVal } }],
+                      sub_component_map: {},
+                    },
+                  },
+                },
+              },
+            },
+          };
+          const round = decodeAgentToServerProto(encodeAgentToServerProto(msg));
+          const ac = round.available_components as
+            | { hash: Uint8Array; components: Record<string, unknown> }
+            | undefined;
+          if (!ac) return false;
+          if (!uidEq(ac.hash, hash)) return false;
+          const kindEntry = ac.components[kind] as
+            | { sub_component_map: Record<string, unknown> }
+            | undefined;
+          if (!kindEntry) return false;
+          const subEntry = kindEntry.sub_component_map[name] as
+            | { metadata?: Array<{ key: string; value: { string_value?: string } }> }
+            | undefined;
+          if (!subEntry || !subEntry.metadata) return false;
+          const meta = subEntry.metadata.find((m) => m.key === metaKey);
+          if (!meta) return false;
+          return meta.value.string_value === metaVal;
+        },
+      ),
     );
   });
 
@@ -293,6 +400,39 @@ describe("property: ServerToAgent round-trip", () => {
         };
         const round = decodeServerToAgentProto(encodeServerToAgentProto(msg));
         return uidEq(round.agent_identification?.new_instance_uid ?? new Uint8Array(), newUid);
+      }),
+    );
+  });
+
+  // The §5.9 `command` field decoder bug shipped because this property
+  // was missing. The encoder wrote `command` but the decoder silently
+  // dropped it; round-trip identity broke without any test catching it.
+  // CommandType today only has Restart (=0); the property still pins the
+  // contract that whatever the encoder writes, the decoder reads back.
+  it("command round-trips Restart type", () => {
+    fc.assert(
+      fc.property(minimalServerToAgentArb, (base) => {
+        const msg: ServerToAgent = {
+          ...base,
+          command: { type: CommandType.Restart },
+        };
+        const round = decodeServerToAgentProto(encodeServerToAgentProto(msg));
+        return round.command !== undefined && round.command.type === CommandType.Restart;
+      }),
+    );
+  });
+
+  // Top-level `heart_beat_interval` (ServerToAgent field 12) is distinct
+  // from `connection_settings.opamp.heartbeat_interval_seconds`. The
+  // worker uses both: the connection-settings one is offered at enrollment,
+  // the top-level one is the per-frame current recommendation. Both
+  // need round-trip coverage; the connection-settings one is covered above.
+  it("top-level heart_beat_interval round-trips", () => {
+    fc.assert(
+      fc.property(minimalServerToAgentArb, fc.integer({ min: 0, max: 86_400_000 }), (base, hb) => {
+        const msg: ServerToAgent = { ...base, heart_beat_interval: hb };
+        const round = decodeServerToAgentProto(encodeServerToAgentProto(msg));
+        return round.heart_beat_interval === hb;
       }),
     );
   });

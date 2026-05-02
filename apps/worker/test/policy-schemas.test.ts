@@ -1,6 +1,7 @@
 // Pure tests for /init and /sync-policy body parsing + validation.
 
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   initBodySchema,
   parseAndValidateBody,
@@ -125,6 +126,30 @@ describe("parseAndValidateBody — init body", () => {
     );
     expect(missing.ok && missing.value.max_agents_per_config).toBe(undefined);
     expect(explicit.ok && explicit.value.max_agents_per_config).toBe(null);
+  });
+});
+
+describe("parseAndValidateBody — nested-field error reporting", () => {
+  // Stryker found that `path.join(".")` could be mutated to `path.join("")`
+  // and all existing tests passed — they used flat schemas where issue.path
+  // had at most one segment, so the separator didn't matter. A nested
+  // schema produces a 2-segment path and pins the `.` separator.
+  const nestedSchema = z.object({
+    outer: z.object({
+      inner: z.number().int().positive(),
+    }),
+  });
+
+  it("joins nested issue paths with '.' (not '' or other separator)", () => {
+    const result = parseAndValidateBody(JSON.stringify({ outer: { inner: -5 } }), nestedSchema);
+    expect(result.ok).toBe(false);
+    if (!result.ok) {
+      expect(result.error.field).toBe("outer.inner");
+      // Negative assertions — pin that the separator is specifically "."
+      // (mutations to "" or "/" or ":" would break these).
+      expect(result.error.field).not.toBe("outerinner");
+      expect(result.error.field).not.toBe("outer/inner");
+    }
   });
 });
 

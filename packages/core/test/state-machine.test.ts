@@ -2,7 +2,12 @@ import { describe, it, expect } from "vitest";
 import { processFrame, MAX_CONFIG_FAIL_RETRIES } from "../src/state-machine/processor.js";
 import type { AgentState } from "../src/state-machine/types.js";
 import type { AgentToServer } from "../src/codec/types.js";
-import { AgentCapabilities, ServerToAgentFlags, RemoteConfigStatuses } from "../src/codec/types.js";
+import {
+  AgentCapabilities,
+  ServerCapabilities,
+  ServerToAgentFlags,
+  RemoteConfigStatuses,
+} from "../src/codec/types.js";
 import { FleetEventType } from "../src/events.js";
 
 function makeDefaultState(overrides: Partial<AgentState> = {}): AgentState {
@@ -62,6 +67,23 @@ describe("state-machine/processFrame", () => {
     expect(result.events).toHaveLength(1); // connected
     expect(result.events[0].type).toBe(FleetEventType.AGENT_CONNECTED);
     expect(result.newState.connected_at).toBeGreaterThan(0);
+  });
+
+  // Pins the OR semantics of the `isHello` check (`seq===0 || connected_at===0`):
+  // an agent that previously connected and now sends seq=0 is still a hello,
+  // even though connected_at is set. Caught by Stryker as a surviving
+  // LogicalOperator mutation (|| → &&) — the prior test only covered the
+  // default state (both conditions true), so && passed.
+  it("seq=0 on a previously-connected agent is a hello (OR semantics)", async () => {
+    const priorConnect = Date.now() - 60_000;
+    const state = makeDefaultState({ connected_at: priorConnect, sequence_num: 5 });
+    const msg = makeHelloMsg();
+    const result = await processFrame(state, msg);
+    // Hello must be detected → ReportFullState flag set, AGENT_CONNECTED emitted.
+    expect(result.response!.flags & ServerToAgentFlags.ReportFullState).toBeTruthy();
+    expect(result.events.some((e) => e.type === FleetEventType.AGENT_CONNECTED)).toBe(true);
+    // connected_at refreshed to "now", not the prior value.
+    expect(result.newState.connected_at).toBeGreaterThan(priorConnect);
   });
 
   it("handles heartbeat with no changes — skips persistence (tracked in WS attachment)", async () => {
@@ -310,6 +332,240 @@ describe("state-machine/processFrame", () => {
     const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
     expect(result.newState.agent_description).toContain("otel-collector");
+  });
+});
+
+// ========================
+// Dedupe key shape (event de-duplication contract)
+// ========================
+//
+// The analytics pipeline relies on `dedupe_key` to drop replays of the
+// same event. Stryker found these template literals could be mutated to
+// empty strings with all existing tests passing — meaning a future
+// refactor that broke the keys would silently break dedup in prod.
+// These tests pin the load-bearing components of each key.
+
+import { uint8ToHex } from "../src/hex.js";
+
+describe("event dedupe_key shape", () => {
+  function findEvent<T extends { type: string; dedupe_key: string }>(
+    events: ReadonlyArray<T | unknown>,
+    type: string,
+  ): T {
+    const found = events.find(
+      (e): e is T => typeof e === "object" && e !== null && (e as T).type === type,
+    );
+    if (!found) throw new Error(`expected event of type ${type}`);
+    return found;
+  }
+
+  it("AGENT_CONNECTED dedupe_key contains tenant + config + uid + seq", async () => {
+    const uid = new Uint8Array(16).fill(0xaa);
+    const state = makeDefaultState({ instance_uid: uid });
+    const msg = makeHelloMsg(uid);
+    const result = await processFrame(state, msg);
+    const event = findEvent(result.events, FleetEventType.AGENT_CONNECTED);
+    expect(event.dedupe_key.startsWith("connected:")).toBe(true);
+    expect(event.dedupe_key).toContain(state.tenant_id);
+    expect(event.dedupe_key).toContain(state.config_id);
+    expect(event.dedupe_key).toContain(uint8ToHex(uid));
+  });
+
+  it("AGENT_DISCONNECTED dedupe_key carries the session generation (replay-safe)", async () => {
+    const uid = new Uint8Array(16).fill(0xbb);
+    const sessionConnectedAt = 1_700_000_000_000;
+    const state = makeDefaultState({
+      instance_uid: uid,
+      sequence_num: 5,
+      connected_at: sessionConnectedAt,
+    });
+    const msg: AgentToServer = {
+      instance_uid: uid,
+      sequence_num: 6,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+      agent_disconnect: {},
+    };
+    const result = await processFrame(state, msg);
+    const event = findEvent(result.events, FleetEventType.AGENT_DISCONNECTED);
+    expect(event.dedupe_key.startsWith("disconnected:")).toBe(true);
+    expect(event.dedupe_key).toContain(state.tenant_id);
+    expect(event.dedupe_key).toContain(uint8ToHex(uid));
+    // Including the session generation prevents a replayed disconnect
+    // from a previous session from sharing a key with the live session's
+    // disconnect.
+    expect(event.dedupe_key).toContain(String(sessionConnectedAt));
+    expect(event.dedupe_key).toContain("agent_disconnect_message");
+  });
+
+  it("AGENT_HEALTH_CHANGED dedupe_key includes healthy + status + lastError", async () => {
+    const uid = new Uint8Array(16).fill(0xcc);
+    const state = makeDefaultState({
+      instance_uid: uid,
+      sequence_num: 1,
+      connected_at: Date.now(),
+      healthy: true,
+      status: "running",
+    });
+    const msg: AgentToServer = {
+      instance_uid: uid,
+      sequence_num: 2,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsHealth,
+      flags: 0,
+      health: {
+        healthy: false,
+        start_time_unix_nano: 0n,
+        last_error: "OOM-killed-by-host",
+        status: "degraded",
+        status_time_unix_nano: 0n,
+        component_health_map: {},
+      },
+    };
+    const result = await processFrame(state, msg);
+    const event = findEvent(result.events, FleetEventType.AGENT_HEALTH_CHANGED);
+    expect(event.dedupe_key.startsWith("health:")).toBe(true);
+    expect(event.dedupe_key).toContain("false"); // healthy
+    expect(event.dedupe_key).toContain("degraded");
+    expect(event.dedupe_key).toContain("OOM-killed-by-host");
+  });
+
+  it("CONFIG_APPLIED dedupe_key includes the config hash", async () => {
+    const uid = new Uint8Array(16).fill(0xdd);
+    const hash = new Uint8Array([0x12, 0x34, 0x56, 0x78]);
+    const state = makeDefaultState({
+      instance_uid: uid,
+      sequence_num: 2,
+      connected_at: Date.now(),
+      desired_config_hash: hash,
+    });
+    const msg: AgentToServer = {
+      instance_uid: uid,
+      sequence_num: 3,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsRemoteConfig,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: hash,
+        status: RemoteConfigStatuses.APPLIED,
+        error_message: "",
+      },
+    };
+    const result = await processFrame(state, msg);
+    const event = findEvent(result.events, FleetEventType.CONFIG_APPLIED);
+    expect(event.dedupe_key.startsWith("applied:")).toBe(true);
+    expect(event.dedupe_key).toContain("12345678"); // hex of hash
+    expect(event.dedupe_key).toContain(uint8ToHex(uid));
+  });
+
+  it("CONFIG_REJECTED dedupe_key includes hash + error_message", async () => {
+    const uid = new Uint8Array(16).fill(0xee);
+    const hash = new Uint8Array([0x9a, 0xbc, 0xde, 0xf0]);
+    const state = makeDefaultState({
+      instance_uid: uid,
+      sequence_num: 3,
+      connected_at: Date.now(),
+    });
+    const msg: AgentToServer = {
+      instance_uid: uid,
+      sequence_num: 4,
+      capabilities: AgentCapabilities.ReportsStatus | AgentCapabilities.ReportsRemoteConfig,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: hash,
+        status: RemoteConfigStatuses.FAILED,
+        error_message: "schema mismatch on receivers",
+      },
+    };
+    const result = await processFrame(state, msg);
+    const event = findEvent(result.events, FleetEventType.CONFIG_REJECTED);
+    expect(event.dedupe_key.startsWith("rejected:")).toBe(true);
+    expect(event.dedupe_key).toContain("9abcdef0");
+    expect(event.dedupe_key).toContain("schema mismatch on receivers");
+  });
+});
+
+// ========================
+// Server Capability Advertisement (§4.4.1)
+// ========================
+//
+// Spec §4.4.1: every ServerToAgent must advertise the capabilities the
+// server supports as a bitmask. These tests previously lived in
+// `tests/opamp/src/opamp.test.ts` and required wrangler dev to send a
+// real WebSocket message; the assertion is purely about what
+// `processFrame` writes into `response.capabilities`, so they belong at
+// the state-machine tier where each test runs in microseconds instead
+// of hundreds of milliseconds.
+describe("ServerToAgent capability advertisement (§4.4.1)", () => {
+  it("response advertises AcceptsStatus on every heartbeat", async () => {
+    const state = makeDefaultState({
+      sequence_num: 5,
+      connected_at: Date.now() - 10000,
+      capabilities: AgentCapabilities.ReportsStatus,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.response).not.toBeNull();
+    expect(result.response!.capabilities & ServerCapabilities.AcceptsStatus).toBe(
+      ServerCapabilities.AcceptsStatus,
+    );
+  });
+
+  it("response advertises OffersRemoteConfig", async () => {
+    const state = makeDefaultState({
+      sequence_num: 5,
+      connected_at: Date.now() - 10000,
+      capabilities: AgentCapabilities.ReportsStatus,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.response!.capabilities & ServerCapabilities.OffersRemoteConfig).toBe(
+      ServerCapabilities.OffersRemoteConfig,
+    );
+  });
+
+  it("response advertises OffersConnectionSettings (0x20)", async () => {
+    const state = makeDefaultState({
+      sequence_num: 5,
+      connected_at: Date.now() - 10000,
+      capabilities: AgentCapabilities.ReportsStatus,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.response!.capabilities & ServerCapabilities.OffersConnectionSettings).toBe(
+      ServerCapabilities.OffersConnectionSettings,
+    );
+  });
+
+  it("response advertises AcceptsEffectiveConfig", async () => {
+    const state = makeDefaultState({
+      sequence_num: 5,
+      connected_at: Date.now() - 10000,
+      capabilities: AgentCapabilities.ReportsStatus,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 6,
+      capabilities: AgentCapabilities.ReportsStatus,
+      flags: 0,
+    };
+    const result = await processFrame(state, msg);
+    expect(result.response!.capabilities & ServerCapabilities.AcceptsEffectiveConfig).toBe(
+      ServerCapabilities.AcceptsEffectiveConfig,
+    );
   });
 });
 
