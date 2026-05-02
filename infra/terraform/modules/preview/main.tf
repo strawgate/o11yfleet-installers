@@ -18,8 +18,7 @@ resource "cloudflare_d1_database" "preview" {
   name       = local.env_name
 
   read_replication = {
-    mode    = "disabled"
-    enabled = false
+    mode = "disabled"
   }
 
   # Allow destruction for cleanup
