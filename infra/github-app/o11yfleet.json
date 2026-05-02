@@ -1,0 +1,31 @@
+{
+  "$schema": "./manifest.schema.json",
+  "name": "O11yFleet",
+  "url": "https://o11yfleet.com",
+  "description": "Sign in to O11yFleet and connect collector fleet GitOps. Validates collector configs in pull requests, rolls them out on push, and reports per-commit deployment status.",
+  "public": true,
+  "request_oauth_on_install": false,
+  "default_permissions": {
+    "email_addresses": "read",
+    "metadata": "read",
+    "contents": "read",
+    "commit_statuses": "write",
+    "deployments": "write",
+    "pull_requests": "write",
+    "checks": "write"
+  },
+  "default_events": ["push", "pull_request", "installation", "installation_repositories"],
+  "hook_attributes": {
+    "url": "${origin}/auth/github/webhook",
+    "active": false
+  },
+  "redirect_url": "${origin}/auth/github/app-manifest/callback",
+  "callback_urls": [
+    "${origin}/auth/github/callback",
+    "http://localhost:8787/auth/github/callback",
+    "https://api.o11yfleet.com/auth/github/callback",
+    "https://dev-api.o11yfleet.com/auth/github/callback",
+    "https://staging-api.o11yfleet.com/auth/github/callback"
+  ],
+  "setup_url": "${siteOrigin}/signup"
+}

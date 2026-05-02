@@ -9,6 +9,7 @@ import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
 import { clearSessionCookie, sessionCookie } from "../shared/cookies.js";
 import { validateJsonBody } from "../shared/validation.js";
 import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/origins.js";
+import { renderGitHubAppManifest } from "../github/manifest.js";
 import { isAutoApproveEnabled } from "../shared/email.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -713,33 +714,9 @@ async function handleGitHubManifestStart(request: Request, env: Env): Promise<Re
     exp: Date.now() + OAUTH_STATE_TTL_MS,
   };
   const signedState = await signState(state, env.O11YFLEET_CLAIM_HMAC_SECRET);
-  const callbackUrls = Array.from(
-    new Set([
-      `${origin}/auth/github/callback`,
-      "http://localhost:8787/auth/github/callback",
-      "https://api.o11yfleet.com/auth/github/callback",
-      "https://dev-api.o11yfleet.com/auth/github/callback",
-      "https://staging-api.o11yfleet.com/auth/github/callback",
-    ]),
-  );
-  const manifest = {
-    name: "O11yFleet",
-    url: "https://o11yfleet.com",
-    description: "Sign in to O11yFleet and connect collector fleet GitOps when enabled.",
-    hook_attributes: {
-      url: `${origin}/auth/github/webhook`,
-      active: false,
-    },
-    redirect_url: `${origin}/auth/github/app-manifest/callback`,
-    callback_urls: callbackUrls,
-    setup_url: `${siteOrigin}/signup`,
-    public: true,
-    default_permissions: {
-      email_addresses: "read",
-    },
-    default_events: [],
-    request_oauth_on_install: false,
-  };
+  // Canonical manifest lives in infra/github-app/o11yfleet.json so the
+  // permission set is diff-reviewable. See that file's README for why.
+  const manifest = renderGitHubAppManifest({ origin, siteOrigin });
   return htmlResponse(
     `<!doctype html>
 <html lang="en">

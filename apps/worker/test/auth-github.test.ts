@@ -159,6 +159,55 @@ describe("GitHub social auth", () => {
     expect(body).toContain("read");
   });
 
+  it("includes the GitOps + check-run permission set in the served manifest", async () => {
+    // Regression-guards the perm set declared in infra/github-app/o11yfleet.json.
+    // Adding a permission here forces re-approval on every install, so we want
+    // a test that fails loudly if the manifest drifts unintentionally.
+    const response = await exports.default.fetch(
+      "http://localhost/auth/github/app-manifest?site_origin=http%3A%2F%2Flocalhost%3A4000",
+    );
+
+    const body = await response.text();
+    // Extract the manifest JSON from the hidden form field.
+    const m = body.match(/name="manifest" value="([^"]*)"/);
+    expect(m, "expected hidden manifest input in form").toBeTruthy();
+    const manifestJson = m![1]!
+      .replace(/&quot;/g, '"')
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">");
+    const manifest = JSON.parse(manifestJson) as {
+      default_permissions: Record<string, string>;
+      default_events: string[];
+      hook_attributes: { url: string; active: boolean };
+    };
+
+    // Exact equality, not toMatchObject — a silently-added permission would
+    // otherwise slip through, which defeats the whole point of pinning the
+    // scope here. Adding a perm forces re-approval on every install, so it
+    // must be an explicit code change to this assertion too.
+    expect(manifest.default_permissions).toEqual({
+      email_addresses: "read",
+      metadata: "read",
+      contents: "read",
+      commit_statuses: "write",
+      deployments: "write",
+      pull_requests: "write",
+      checks: "write",
+    });
+    expect(manifest.default_events).toEqual([
+      "push",
+      "pull_request",
+      "installation",
+      "installation_repositories",
+    ]);
+    // Webhook handler ships in #510. Until then, declare the URL but keep it
+    // disabled so a freshly-bootstrapped app doesn't fire webhooks at a route
+    // that returns 404.
+    expect(manifest.hook_attributes.active).toBe(false);
+    expect(manifest.hook_attributes.url).toMatch(/\/auth\/github\/webhook$/);
+  });
+
   it("rejects malformed GitHub callbacks before exchanging tokens", async () => {
     const response = await exports.default.fetch("http://localhost/auth/github/callback");
 
