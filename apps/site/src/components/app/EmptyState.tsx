@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Activity, Box, FileText, KeyRound, Plug, Search, Users } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Box, Center, Group, Stack, Text, ThemeIcon } from "@mantine/core";
+import { Activity, Box as BoxIcon, FileText, KeyRound, Plug, Search, Users } from "lucide-react";
 
 type EmptyStateIcon = "box" | "plug" | "key" | "users" | "file" | "activity" | "search";
 
@@ -13,7 +13,7 @@ interface EmptyStateProps {
 }
 
 const icons = {
-  box: Box,
+  box: BoxIcon,
   plug: Plug,
   key: KeyRound,
   users: Users,
@@ -22,6 +22,10 @@ const icons = {
   search: Search,
 };
 
+/**
+ * Inline empty state for cards / table viewports. Centres a small icon +
+ * title + optional description, with a slot for actions.
+ */
 export function EmptyState({
   icon = "box",
   title,
@@ -32,17 +36,29 @@ export function EmptyState({
   const Icon = icons[icon];
 
   return (
-    <div className={cn("grid justify-items-center gap-3 px-6 py-10 text-center", className)}>
-      <span className="grid size-10 place-items-center rounded-full border border-border bg-muted text-muted-foreground">
-        <Icon className="size-4" />
-      </span>
-      <div className="grid gap-1">
-        <div className="text-sm font-medium text-foreground">{title}</div>
-        {description ? (
-          <p className="mx-auto max-w-md text-sm text-muted-foreground">{description}</p>
+    <Center className={className} py="xl" px="md">
+      <Stack gap="xs" align="center" maw="32rem" style={{ textAlign: "center" }}>
+        <ThemeIcon variant="default" radius="xl" size="lg" c="dimmed">
+          <Icon size={16} />
+        </ThemeIcon>
+        <Stack gap={2}>
+          <Text size="sm" fw={500}>
+            {title}
+          </Text>
+          {description ? (
+            <Text size="sm" c="dimmed">
+              {description}
+            </Text>
+          ) : null}
+        </Stack>
+        {children ? (
+          <Box>
+            <Group gap="xs" justify="center" wrap="wrap">
+              {children}
+            </Group>
+          </Box>
         ) : null}
-      </div>
-      {children ? <div className="flex flex-wrap justify-center gap-2">{children}</div> : null}
-    </div>
+      </Stack>
+    </Center>
   );
 }

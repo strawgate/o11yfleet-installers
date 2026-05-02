@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { Box } from "@mantine/core";
 
 interface PageShellProps {
   children: ReactNode;
@@ -7,12 +7,20 @@ interface PageShellProps {
   width?: "normal" | "wide" | "narrow";
 }
 
-const widthClasses = {
-  normal: "max-w-6xl",
-  wide: "max-w-[1320px]",
-  narrow: "max-w-4xl",
+const widthValues: Record<NonNullable<PageShellProps["width"]>, string> = {
+  narrow: "56rem",
+  normal: "72rem",
+  wide: "82.5rem",
 };
 
+/**
+ * Page-level container. Constrains content width and centres horizontally
+ * so portal/admin pages share a consistent reading column.
+ */
 export function PageShell({ children, className, width = "wide" }: PageShellProps) {
-  return <main className={cn("mx-auto w-full", widthClasses[width], className)}>{children}</main>;
+  return (
+    <Box component="main" className={className} mx="auto" w="100%" maw={widthValues[width]}>
+      {children}
+    </Box>
+  );
 }

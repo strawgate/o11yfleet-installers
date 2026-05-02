@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
+import { Badge } from "@mantine/core";
 
 export type StatusTone = "neutral" | "ok" | "warn" | "error" | "info";
 
@@ -10,17 +9,25 @@ interface StatusBadgeProps {
   className?: string;
 }
 
-const toneClasses: Record<StatusTone, string> = {
-  neutral: "border-border bg-transparent text-muted-foreground",
-  ok: "border-transparent bg-primary/12 text-primary",
-  warn: "border-transparent bg-[color:var(--warn)]/15 text-[color:var(--warn)]",
-  error: "border-transparent bg-destructive/15 text-destructive",
-  info: "border-transparent bg-[color:var(--info)]/15 text-[color:var(--info)]",
+const toneToColor: Record<StatusTone, string> = {
+  neutral: "gray",
+  ok: "brand",
+  warn: "warn",
+  error: "err",
+  info: "info",
 };
 
+/**
+ * Small inline status pill. `tone` maps to a semantic color from the theme.
+ *
+ * Note: this is the visual primitive. For the full 9-state fleet enum
+ * (Connected/Configuring/Disconnected/Error/Pending/Upgrading/Incompatible/
+ * NeverConnected/Unhealthy) callers compose this with a status→tone mapper
+ * — see `agent-view-model` for the agent state variant.
+ */
 export function StatusBadge({ children, tone = "neutral", className }: StatusBadgeProps) {
   return (
-    <Badge variant="outline" className={cn(toneClasses[tone], className)}>
+    <Badge variant="light" color={toneToColor[tone]} className={className}>
       {children}
     </Badge>
   );

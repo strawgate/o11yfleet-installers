@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
+import { Box, Group, Stack, Text, Title } from "@mantine/core";
 
 interface PageHeaderProps {
   title: string;
@@ -8,18 +8,39 @@ interface PageHeaderProps {
   className?: string;
 }
 
+/**
+ * Header row at the top of every portal/admin page. Title + optional
+ * description on the left; actions slot on the right that wraps to a
+ * second row on narrow viewports.
+ */
 export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
   return (
-    <header className={cn("mb-6 flex flex-wrap items-start justify-between gap-4", className)}>
-      <div className="min-w-0 flex-1 basis-80">
-        <h1 className="text-[26px] leading-tight font-medium tracking-normal text-foreground">
+    <Group
+      component="header"
+      className={className}
+      mb="lg"
+      gap="md"
+      justify="space-between"
+      align="flex-start"
+      wrap="wrap"
+    >
+      <Stack gap={6} miw={0} style={{ flex: "1 1 20rem" }}>
+        <Title order={1} fw={500} style={{ fontSize: "26px", lineHeight: 1.15 }}>
           {title}
-        </h1>
+        </Title>
         {description ? (
-          <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{description}</p>
+          <Text size="sm" c="dimmed" maw="48rem">
+            {description}
+          </Text>
         ) : null}
-      </div>
-      {actions ? <div className="flex shrink-0 flex-wrap items-center gap-2">{actions}</div> : null}
-    </header>
+      </Stack>
+      {actions ? (
+        <Box style={{ flexShrink: 0 }}>
+          <Group gap="xs" wrap="wrap">
+            {actions}
+          </Group>
+        </Box>
+      ) : null}
+    </Group>
   );
 }

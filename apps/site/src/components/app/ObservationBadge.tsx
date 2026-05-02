@@ -1,6 +1,5 @@
+import { Badge, Group } from "@mantine/core";
 import { AlertTriangle, CheckCircle2, Clock3, HelpCircle, XCircle } from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { cn } from "@/lib/utils";
 import type { Observation, ObservationStatus } from "@/api/models/observed";
 
 interface ObservationBadgeProps {
@@ -16,12 +15,12 @@ const labels: Record<ObservationStatus, string> = {
   error: "Error",
 };
 
-const classNames: Record<ObservationStatus, string> = {
-  ok: "border-transparent bg-primary/12 text-primary",
-  partial: "border-transparent bg-[color:var(--warn)]/15 text-[color:var(--warn)]",
-  missing: "border-border bg-transparent text-muted-foreground",
-  unavailable: "border-border bg-transparent text-muted-foreground",
-  error: "border-transparent bg-destructive/15 text-destructive",
+const colors: Record<ObservationStatus, string> = {
+  ok: "brand",
+  partial: "warn",
+  missing: "gray",
+  unavailable: "gray",
+  error: "err",
 };
 
 const icons = {
@@ -32,13 +31,27 @@ const icons = {
   error: XCircle,
 };
 
+/**
+ * Renders the data-quality status of a metric value: ok / partial / missing
+ * / unavailable / error. Pairs with `MetricCard` so users can distinguish
+ * "value is 0" from "we don't have data."
+ */
 export function ObservationBadge({ observation, className }: ObservationBadgeProps) {
   const Icon = icons[observation.status];
   const age = observation.observed_at ? formatAge(observation.observed_at) : null;
+  const isMuted = observation.status === "missing" || observation.status === "unavailable";
 
   return (
-    <Badge variant="outline" className={cn(classNames[observation.status], className)}>
-      <Icon className="size-3" />
+    <Badge
+      variant={isMuted ? "default" : "light"}
+      color={colors[observation.status]}
+      className={className}
+      leftSection={
+        <Group gap={0} align="center" h="100%">
+          <Icon size={11} />
+        </Group>
+      }
+    >
       {age ? `${labels[observation.status]} ${age}` : labels[observation.status]}
     </Badge>
   );
