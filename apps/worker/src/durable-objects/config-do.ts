@@ -399,7 +399,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
               ? v.toString()
               : v,
         );
-        console.log(
+        console.warn(
           `[FRAME_DEBUG] seq=${agentMsg.sequence_num} uid=${attachment.instance_uid.slice(0, 8)} ${debugPayload}`,
         );
       }
