@@ -295,9 +295,7 @@ variable "api_domain" {
   default     = null
 }
 
-check "worker_deployment_has_bundle" {
-  assert {
-    condition     = !var.manage_worker_deployment || try(length(trimspace(var.worker_bundle_path)) > 0, false)
-    error_message = "manage_worker_deployment requires worker_bundle_path."
-  }
-}
+# Note: `manage_worker_deployment requires worker_bundle_path` is enforced
+# by a `precondition` on cloudflare_worker_version.fleet (workers.tf), which
+# is a hard gate at plan time. The site_worker_version uses the same pattern.
+# A `check {}` block at this level would only emit a warning, not a failure.
