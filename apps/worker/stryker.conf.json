@@ -1,0 +1,25 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Stryker mutation testing for the worker's pure modules. Mutates only the targets below and runs the node-runner Vitest config (which includes only pure tests). Workerd-pool tests are excluded so Stryker doesn't try to spawn miniflare per mutant — too slow and not the test surface that exercises these modules anyway.",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts",
+    "related": false
+  },
+  "mutate": ["src/durable-objects/do-name.ts", "src/durable-objects/policy-schemas.ts"],
+  "_mutate_scope_note": "agent-state-repo.ts deliberately NOT mutated here despite containing pure validators like isValidMaxAgents. Stryker's vitest-runner uses the pure-Node config (vitest.stryker.config.ts), and most of agent-state-repo.ts is workerd-only SQL — including it produces ~430 NoCoverage mutants that drown the signal. The pure validator IS covered by `apps/worker/test/properties.test.ts` (run via the same node-runner config). Future: extract pure validators into their own module to make this targetable.",
+  "thresholds": {
+    "high": 90,
+    "low": 75,
+    "break": null
+  },
+  "concurrency": 4,
+  "reporters": ["clear-text", "html", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true
+}

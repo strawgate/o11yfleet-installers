@@ -887,19 +887,29 @@ export async function buildCloudflareUsage(
 ): Promise<CloudflareUsageResponse> {
   const usageEnv = env as UsageEnv;
   const window = currentWindow(now);
-  const services = await Promise.all([
-    workersUsage(usageEnv, window),
-    durableObjectUsage(usageEnv, window),
-    d1Usage(usageEnv, window),
-    r2Usage(usageEnv, window),
-  ]);
+  // Short-circuit when required env is missing — calling the GraphQL
+  // helpers without credentials throws, which downstream maps to
+  // status:"error". The accurate label is "not_configured".
+  const requiredEnv = cloudflareUsageRequiredEnv(usageEnv);
+  const services = requiredEnv.length
+    ? [
+        emptyService("workers", "Workers", "not_configured", "n/a", []),
+        emptyService("durable_objects", "Durable Objects", "not_configured", "n/a", []),
+        emptyService("d1", "D1", "not_configured", "n/a", []),
+        emptyService("r2", "R2", "not_configured", "n/a", []),
+      ]
+    : await Promise.all([
+        workersUsage(usageEnv, window),
+        durableObjectUsage(usageEnv, window),
+        d1Usage(usageEnv, window),
+        r2Usage(usageEnv, window),
+      ]);
   const monthToDate = roundMoney(
     services.reduce((sum, service) => sum + service.month_to_date_estimated_spend_usd, 0),
   );
   const projectedMonth = roundMoney(
     services.reduce((sum, service) => sum + service.projected_month_estimated_spend_usd, 0),
   );
-  const requiredEnv = cloudflareUsageRequiredEnv(usageEnv);
 
   return {
     configured: requiredEnv.length === 0,

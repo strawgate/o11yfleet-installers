@@ -12,6 +12,11 @@ export interface DoIdentity {
   config_id: string;
 }
 
+/** Per-tenant policy values cached in this DO. See agent-state-repo.ts. */
+export interface DoPolicy {
+  max_agents_per_config: number | null;
+}
+
 export type AgentSort = "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
 
 export interface AgentPageCursor {
@@ -83,6 +88,8 @@ export interface AgentStateRepository {
   saveDesiredConfig(hash: string, content: string | null): void;
   loadDoIdentity(): DoIdentity;
   saveDoIdentity(tenantId: string, configId: string): void;
+  loadDoPolicy(): DoPolicy;
+  saveDoPolicy(policy: Partial<DoPolicy>): void;
 
   // Rate limiting
   checkRateLimit(uid: string, maxPerMinute: number): boolean;

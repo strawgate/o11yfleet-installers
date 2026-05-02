@@ -31,6 +31,8 @@ import type { CommandContext } from "./command-handler.js";
 import { handleGetStats, handleGetAgents, handleGetAgent } from "./query-handler.js";
 import { handleFirstMessage } from "./opamp-session.js";
 import type { SessionContext } from "./opamp-session.js";
+import { parseConfigDoName, safeForLog, type ConfigDoIdentity } from "./do-name.js";
+import { initBodySchema, parseAndValidateBody, syncPolicyBodySchema } from "./policy-schemas.js";
 import {
   MAX_MESSAGES_PER_MINUTE,
   MAX_AGENTS_PER_CONFIG,
@@ -100,6 +102,28 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   }
 
   /**
+   * Read this DO's identity from `ctx.id.name`. The runtime guarantees a
+   * DO can only be reached via `idFromName(name)`, so this is
+   * authoritative — no header from the worker is required.
+   *
+   * Parsing is delegated to `parseConfigDoName` (pure, tested in
+   * isolation). This method just orchestrates: read `ctx.id.name`, run
+   * the parser, throw a sanitized error on the structured failure modes
+   * (DO addressed via `idFromString`/`newUniqueId`, malformed name, etc.).
+   */
+  private getMyIdentity(): ConfigDoIdentity {
+    const result = parseConfigDoName(this.ctx.id.name);
+    if (!result.ok) {
+      // Truncate the name before echoing it so an adversarial caller
+      // can't inflate log lines arbitrarily.
+      throw new Error(
+        `[ConfigDO] invalid identity (${result.error}): ${safeForLog(this.ctx.id.name)}`,
+      );
+    }
+    return result.identity;
+  }
+
+  /**
    * Get desired config from SQLite (~µs). The returned shape includes the
    * pre-encoded `bytes`, so callers don't need to run `TextEncoder.encode`
    * per WS message — that work happens exactly once on `set-desired-config`.
@@ -158,13 +182,24 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.ensureInit();
     const url = new URL(request.url);
 
-    // Determine if this is a pending DO from the stored identity
-    const identity = this.repo.loadDoIdentity();
-    const isPendingDo = identity.config_id === PENDING_DO_CONFIG_ID;
+    // Derive isPendingDo from ctx.id.name, not persisted SQL — a fresh
+    // DO has no persisted identity until the first /init or hello, so
+    // routing on loadDoIdentity() would 404 on the first
+    // /pending-devices call to a brand-new __pending__ DO.
+    const isPendingDo = this.getMyIdentity().config_id === PENDING_DO_CONFIG_ID;
 
     if (request.headers.get("Upgrade") === "websocket") {
       return this.handleWebSocket(request);
     }
+
+    // Lifecycle routes — invoked by the worker when the underlying
+    // resource (tenant or configuration) is created or updated. Both are
+    // POSTs so they can carry an optional policy body. Identity is
+    // *always* derived from `ctx.id.name`; any tenant_id/config_id in
+    // the body is ignored.
+    if (url.pathname === "/init" && request.method === "POST") return this.handleInit(request);
+    if (url.pathname === "/sync-policy" && request.method === "POST")
+      return this.handleSyncPolicy(request);
 
     // Command routes
     if (url.pathname === "/command/set-desired-config" && request.method === "POST")
@@ -208,10 +243,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     // Pending device routes (only for __pending__ DOs)
     if (isPendingDo) {
       if (url.pathname === "/pending-devices" && request.method === "GET")
-        return handleListPendingDevices(this.ctx.storage.sql, request);
+        return handleListPendingDevices(this.ctx.storage.sql, this.getMyIdentity().tenant_id);
       const pendingAssignMatch = url.pathname.match(/^\/pending-devices\/([^/]+)\/assign$/);
       if (pendingAssignMatch && request.method === "POST")
-        return handleAssignPendingDevice(this.ctx.storage.sql, request, pendingAssignMatch[1]!);
+        return handleAssignPendingDevice(
+          this.ctx.storage.sql,
+          request,
+          pendingAssignMatch[1]!,
+          this.getMyIdentity().tenant_id,
+        );
     }
 
     return new Response("Not found", { status: 404 });
@@ -220,8 +260,17 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   // ─── WebSocket Lifecycle ──────────────────────────────────────────
 
   private async handleWebSocket(request: Request): Promise<Response> {
-    const tenantId = request.headers.get("x-fp-tenant-id") ?? "unknown";
-    const configId = request.headers.get("x-fp-config-id") ?? "unknown";
+    // Identity is derived from `ctx.id.name`, not from request headers.
+    // The runtime guarantees this DO can only be reached via
+    // `idFromName(name)`, so the answer is authoritative — no header
+    // contract has to be remembered or stripped at the worker boundary
+    // for security.
+    const { tenant_id: tenantId, config_id: configId } = this.getMyIdentity();
+
+    // The instance UID still comes from the worker's claim verification
+    // (it's the agent's identity, not the DO's). Same for the
+    // is_enrollment flag, which is a routing signal for the agent's
+    // first frame, not a security boundary.
     const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
     const isPendingDo = configId === PENDING_DO_CONFIG_ID;
@@ -257,7 +306,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         connected_at: Date.now(),
       });
     } else {
-      const tenantLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
+      // Cap on agents per config — read from DO-cached policy first
+      // (set by /init or /sync-policy from the worker), fall back to
+      // the header for callers that haven't yet been migrated to
+      // /init, and finally to the global default.
+      const cachedPolicy = this.repo.loadDoPolicy();
+      const headerLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
+      const tenantLimit = cachedPolicy.max_agents_per_config ?? headerLimit;
       const limit =
         tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
       const count = this.repo.getAgentCount();
@@ -268,6 +323,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         );
       }
     }
+    // Persist identity from ctx.id.name (idempotent — /init writes the
+    // same values). Not strictly needed once /init is wired everywhere,
+    // but keeps the do_config row populated for legacy queries.
     this.repo.saveDoIdentity(tenantId, configId);
 
     const pair = new WebSocketPair();
@@ -404,7 +462,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
         // For pending DOs, check for pending assignment on reconnection
         if (isPendingDo) {
-          const { getPendingAssignment, deletePendingDevice } =
+          const { getPendingAssignment, deletePendingDevice, deletePendingAssignment } =
             await import("./agent-state-repo.js");
           const assignment = getPendingAssignment(this.ctx.storage.sql, attachment.instance_uid);
           if (assignment) {
@@ -421,8 +479,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             const token = await signClaim(claim, this.env.O11YFLEET_CLAIM_HMAC_SECRET);
             attachment.pending_connection_settings = token;
             attachment.config_id = assignment.target_config_id;
-            // Clean up pending state
+            // Both rows are fully consumed at this point: device row was
+            // already gone (assign deletes it), but be defensive in case
+            // an operator re-enrolled into the same uid; assignment row
+            // is consumed by issuing the claim above.
             deletePendingDevice(this.ctx.storage.sql, attachment.instance_uid);
+            deletePendingAssignment(this.ctx.storage.sql, attachment.instance_uid);
           }
         }
 
@@ -590,6 +652,72 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
+  // ─── Lifecycle handlers ──────────────────────────────────────────
+
+  /**
+   * Persist this DO's identity to its own SQLite (so subsequent code
+   * paths can read it from `loadDoIdentity()`) and seed any policy
+   * values the caller wants cached. Idempotent: replays just refresh.
+   *
+   * Body shape (all fields optional):
+   *   { max_agents_per_config?: number | null }
+   *
+   * The body is *not* trusted to assert identity. Identity always comes
+   * from `ctx.id.name`. Any tenant_id/config_id keys in the body are
+   * silently dropped; this is the property that lets us delete the
+   * worker→DO identity-header trust boundary in later phases.
+   */
+  private async handleInit(request: Request): Promise<Response> {
+    const identity = this.getMyIdentity();
+
+    // Validate body BEFORE writing identity. If the body is malformed,
+    // we'd rather refuse the whole /init than commit identity-only and
+    // leave the caller thinking the resource was created.
+    const result = parseAndValidateBody(await request.text(), initBodySchema);
+    if (!result.ok) {
+      return Response.json(
+        { error: "Invalid body", field: result.error.field, reason: result.error.reason },
+        { status: 400 },
+      );
+    }
+
+    // Apply identity + policy as one atomic batch via DO storage's
+    // transactionSync. Either both writes land or neither does, so a
+    // partial-init state is impossible even if a write fails.
+    this.ctx.storage.transactionSync(() => {
+      this.repo.saveDoIdentity(identity.tenant_id, identity.config_id);
+      if (result.value.max_agents_per_config !== undefined) {
+        this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
+      }
+    });
+
+    return Response.json({
+      tenant_id: identity.tenant_id,
+      config_id: identity.config_id,
+      policy: this.repo.loadDoPolicy(),
+      initialized: true,
+    });
+  }
+
+  /**
+   * Refresh cached policy values without touching identity. Called when
+   * the worker observes a tenant settings change and fans out to all
+   * affected DOs.
+   */
+  private async handleSyncPolicy(request: Request): Promise<Response> {
+    const result = parseAndValidateBody(await request.text(), syncPolicyBodySchema);
+    if (!result.ok) {
+      return Response.json(
+        { error: "Invalid body", field: result.error.field, reason: result.error.reason },
+        { status: 400 },
+      );
+    }
+    if (result.value.max_agents_per_config !== undefined) {
+      this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
+    }
+    return Response.json({ policy: this.repo.loadDoPolicy() });
+  }
+
   private emitMetrics(): void {
     if (!this.env.FP_ANALYTICS) return;
 
@@ -610,12 +738,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
 // ─── Pending Device HTTP Handlers ─────────────────────────────────────
 
-async function handleListPendingDevices(sql: SqlStorage, request: Request): Promise<Response> {
+async function handleListPendingDevices(sql: SqlStorage, tenantId: string): Promise<Response> {
   const { listPendingDevices } = await import("./agent-state-repo.js");
-  // Use the x-fp-tenant-id header passed by the worker (authoritative).
-  // For a fresh pending DO with no prior connections, loadDoIdentity() returns
-  // empty strings — the header is the reliable source of tenant context.
-  const tenantId = request.headers.get("x-fp-tenant-id") ?? "";
+  // Tenant identity is now derived from `ctx.id.name` and passed in by
+  // the caller — no header dependency, no silent-empty fallback.
+  if (!tenantId) {
+    return Response.json({ error: "Missing tenant" }, { status: 400 });
+  }
   const rows = listPendingDevices(sql, tenantId, 1000);
   return Response.json({ devices: rows });
 }
@@ -624,10 +753,30 @@ async function handleAssignPendingDevice(
   sql: SqlStorage,
   request: Request,
   deviceUid: string,
+  tenantId: string,
 ): Promise<Response> {
-  const body = await request.json<{ config_id: string; assigned_by?: string }>();
-  if (!body.config_id) {
-    return Response.json({ error: "config_id is required" }, { status: 400 });
+  // request.json() throws on malformed JSON, which would surface as a 500
+  // here — out of step with the lifecycle endpoints' 400-with-reason
+  // contract. Read raw text and parse explicitly so bad input is a 400.
+  let body: { config_id?: unknown; assigned_by?: unknown; tenant_id?: unknown };
+  try {
+    const text = await request.text();
+    if (!text) {
+      return Response.json({ error: "Empty body", reason: "empty" }, { status: 400 });
+    }
+    const parsed: unknown = JSON.parse(text);
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) {
+      return Response.json(
+        { error: "Body must be a JSON object", reason: "expected_object" },
+        { status: 400 },
+      );
+    }
+    body = parsed as typeof body;
+  } catch {
+    return Response.json({ error: "Invalid JSON body", reason: "invalid_json" }, { status: 400 });
+  }
+  if (typeof body.config_id !== "string" || body.config_id.length === 0) {
+    return Response.json({ error: "config_id is required", reason: "required" }, { status: 400 });
   }
 
   const { upsertPendingAssignment, getPendingDevice, deletePendingDevice } =
@@ -638,11 +787,31 @@ async function handleAssignPendingDevice(
     return Response.json({ error: "Pending device not found" }, { status: 404 });
   }
 
+  // Defense-in-depth: this DO is reached at name `${tenant}:__pending__`,
+  // so its `ctx.id.name`-derived tenant is authoritative. If the device
+  // row was somehow created under a different tenant — a routing bug
+  // upstream — surface that immediately rather than silently completing
+  // a cross-tenant assignment. We *also* sanity-check any tenant_id the
+  // caller put in the body, but never read it from a header (which would
+  // reintroduce the trust boundary this PR is removing).
+  if (tenantId !== device.tenant_id) {
+    return Response.json(
+      { error: "Tenant mismatch", device_tenant: device.tenant_id },
+      { status: 403 },
+    );
+  }
+  if (typeof body.tenant_id === "string" && body.tenant_id !== device.tenant_id) {
+    return Response.json(
+      { error: "Tenant mismatch", device_tenant: device.tenant_id },
+      { status: 403 },
+    );
+  }
+
   upsertPendingAssignment(sql, {
     instance_uid: deviceUid,
     tenant_id: device.tenant_id,
     target_config_id: body.config_id,
-    assigned_by: body.assigned_by ?? null,
+    assigned_by: typeof body.assigned_by === "string" ? body.assigned_by : null,
   });
 
   deletePendingDevice(sql, deviceUid);

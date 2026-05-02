@@ -322,7 +322,8 @@ describe("AI guidance routes", () => {
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({
-      error: "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY is required when O11YFLEET_AI_GUIDANCE_PROVIDER uses the SDK",
+      error:
+        "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY is required when O11YFLEET_AI_GUIDANCE_PROVIDER uses the SDK",
     });
   });
 
@@ -550,7 +551,8 @@ describe("AI guidance routes", () => {
       }),
     ).rejects.toMatchObject({
       name: "AiProviderError",
-      message: "O11YFLEET_AI_GUIDANCE_BASE_URL is required when O11YFLEET_AI_GUIDANCE_PROVIDER is openai-compatible",
+      message:
+        "O11YFLEET_AI_GUIDANCE_BASE_URL is required when O11YFLEET_AI_GUIDANCE_PROVIDER is openai-compatible",
     });
   });
 

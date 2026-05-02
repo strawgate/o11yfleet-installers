@@ -25,11 +25,14 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "bench": "vitest bench"
+    "bench": "vitest bench",
+    "mutate": "stryker run"
   },
   "devDependencies": {
     "@bufbuild/buf": "^1.50.0",
     "@bufbuild/protoc-gen-es": "^2.5.0",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "fast-check": "^4.7.0",
     "typescript": "^5.8.0",
     "vitest": "^4.1.0"

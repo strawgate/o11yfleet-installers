@@ -116,6 +116,14 @@ typecheck:
 test:
     pnpm turbo test
 
+# Run mutation testing across packages that have a `mutate` script.
+# Slow (multi-minute); not part of the regular CI gate. Run before
+# major refactors or when expanding property tests to verify the
+# new tests actually catch bugs.
+mutate:
+    pnpm --filter @o11yfleet/core mutate
+    pnpm --filter @o11yfleet/worker mutate
+
 # Run all fast CI checks
 ci: typegen-check check-all lint-scripts test-dev-check docs-api-check fmt-check
 

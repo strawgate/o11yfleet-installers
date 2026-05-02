@@ -11,6 +11,7 @@ import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import type {
   DesiredConfig,
   DoIdentity,
+  DoPolicy,
   AgentPageCursor,
   ListAgentsPageParams,
   StaleAgent,
@@ -22,6 +23,7 @@ import type {
 export type {
   DesiredConfig,
   DoIdentity,
+  DoPolicy,
   AgentSort,
   AgentPageCursor,
   ListAgentsPageParams,
@@ -90,7 +92,8 @@ export function initSchema(sql: SqlStorage): void {
       last_stale_sweep_at INTEGER NOT NULL DEFAULT 0,
       total_sweeps INTEGER NOT NULL DEFAULT 0,
       total_stale_swept INTEGER NOT NULL DEFAULT 0,
-      sweeps_with_stale INTEGER NOT NULL DEFAULT 0
+      sweeps_with_stale INTEGER NOT NULL DEFAULT 0,
+      max_agents_per_config INTEGER
     )
   `);
   // Ensure singleton row exists
@@ -155,6 +158,10 @@ function migrateSchema(sql: SqlStorage): void {
   };
   addDoConfigColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
   addDoConfigColumn("config_id", "config_id TEXT NOT NULL DEFAULT ''");
+  // Cached tenant policy. Seeded at /init when the resource is created and
+  // refreshed via /sync-policy when tenant settings change. Lets the DO
+  // enforce per-tenant limits without a header from the worker.
+  addDoConfigColumn("max_agents_per_config", "max_agents_per_config INTEGER");
   // Migration: pre-encoded YAML bytes for the WS hot path. New rows get
   // this column populated by `saveDesiredConfig`. Existing rows fall
   // back to encoding-on-read in `loadDesiredConfig` until the next
@@ -251,6 +258,61 @@ export function loadDoIdentity(sql: SqlStorage): DoIdentity {
 export function saveDoIdentity(sql: SqlStorage, tenantId: string, configId: string): void {
   if (!tenantId || !configId) return;
   sql.exec(`UPDATE do_config SET tenant_id = ?, config_id = ? WHERE id = 1`, tenantId, configId);
+}
+
+// `DoPolicy` lives in `./agent-state-repo-interface.ts` as the canonical
+// type. The previous duplicate declaration here would have allowed the
+// two copies to drift; importing instead keeps them in sync.
+
+/** Pure validator for a single policy value. Exported for unit tests. */
+export function isValidMaxAgents(value: unknown): value is number {
+  return (
+    typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value > 0
+  );
+}
+
+export function loadDoPolicy(sql: SqlStorage): DoPolicy {
+  const row = sql.exec(`SELECT max_agents_per_config FROM do_config WHERE id = 1`).one();
+  const raw = row["max_agents_per_config"];
+  if (raw === null || raw === undefined) {
+    return { max_agents_per_config: null };
+  }
+  if (!isValidMaxAgents(raw)) {
+    // Silent drift would mask data-corruption bugs; surface it loudly.
+    // We still fall back to `null` so callers see a sane default.
+    console.warn(
+      `[do-policy] discarding invalid max_agents_per_config: ${typeof raw}=${String(raw).slice(0, 32)}`,
+    );
+    return { max_agents_per_config: null };
+  }
+  return { max_agents_per_config: raw };
+}
+
+/**
+ * Defense-in-depth: SQL boundary rejects values that don't pass the
+ * pure validator. Even if a future caller skips the schema layer (or a
+ * bug lets a bad value through), the column never holds garbage.
+ *
+ * `undefined` ⇒ field absent, no-op.
+ * `null` ⇒ explicit "clear cap" — column set to NULL.
+ * positive integer ⇒ stored.
+ * anything else ⇒ silent no-op (defensive); structured errors are the
+ * caller's job before they reach here.
+ */
+export function saveDoPolicy(sql: SqlStorage, policy: Partial<DoPolicy>): void {
+  if (policy.max_agents_per_config === undefined) return;
+  const v = policy.max_agents_per_config;
+  if (v === null) {
+    sql.exec(`UPDATE do_config SET max_agents_per_config = NULL WHERE id = 1`);
+    return;
+  }
+  if (!isValidMaxAgents(v)) {
+    console.warn(
+      `[do-policy] saveDoPolicy rejected invalid max_agents_per_config: ${typeof v}=${String(v).slice(0, 32)}`,
+    );
+    return;
+  }
+  sql.exec(`UPDATE do_config SET max_agents_per_config = ? WHERE id = 1`, v);
 }
 
 // ─── Rate Limiting ──────────────────────────────────────────────────
@@ -953,6 +1015,7 @@ export function upsertPendingDevice(
     info.agent_description ?? null,
     info.connected_at ?? 0,
     now,
+    now,
     info.instance_uid,
   );
 }
@@ -1004,9 +1067,12 @@ export function listPendingDevices(
   }));
 }
 
+// Deletes only the pending_devices row. pending_assignments has its own
+// lifecycle — it's written by /assign and consumed by reconnect, and must
+// outlive deletePendingDevice on the assign path. Use deletePendingAssignment
+// (below) when you also need to drop the assignment row.
 export function deletePendingDevice(sql: SqlStorage, instanceUid: string): void {
   sql.exec(`DELETE FROM pending_devices WHERE instance_uid = ?`, instanceUid);
-  sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
 }
 
 export function upsertPendingAssignment(

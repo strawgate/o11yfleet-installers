@@ -39,7 +39,18 @@ export default defineConfig({
   ],
   test: {
     include: ["test/**/*.test.ts"],
-    exclude: ["test/data-source-policy.test.ts"],
+    // Tests that import only pure modules run in plain Node via
+    // `vitest.node.config.ts` — exclude them here so they don't double-run.
+    exclude: [
+      "test/data-source-policy.test.ts",
+      "test/hardening.test.ts",
+      "test/yaml-validation.test.ts",
+      "test/errors.test.ts",
+      "test/text-diff.test.ts",
+      "test/do-name.test.ts",
+      "test/policy-schemas.test.ts",
+      "test/properties.test.ts",
+    ],
     // Workerd startup is memory-sensitive on small CI runners; serial files keep
     // local and 2-core runner checks stable while test cases still run normally.
     fileParallelism: false,

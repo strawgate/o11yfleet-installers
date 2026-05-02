@@ -114,7 +114,10 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
     result.connection_settings_status = {
       last_connection_settings_hash: pb.connectionSettingsStatus.lastConnectionSettingsHash,
       status: statusMap[pb.connectionSettingsStatus.status] ?? ConnectionSettingsStatuses.UNSET,
-      error_message: pb.connectionSettingsStatus.errorMessage || undefined,
+      // Don't coerce empty string to undefined. Same pattern as the
+      // destination_endpoint / heartbeat_interval_seconds fixes —
+      // an explicitly-empty string is valid and must round-trip.
+      error_message: pb.connectionSettingsStatus.errorMessage,
     };
   }
 
@@ -197,7 +200,13 @@ function pbAnyValueToInternal(pb: PbAnyValue | undefined): AnyValue {
 }
 
 function internalAnyValueToPb(val: AnyValue | undefined): PbAnyValue | undefined {
-  if (!val) return undefined;
+  // Use explicit `=== undefined` rather than truthy `!val` so future
+  // value types where `0` / `false` are valid don't collapse to absent.
+  // Note that proto3 has no "present-but-empty" concept for oneof
+  // fields, so an `{}` AnyValue (no case set) correctly maps to
+  // undefined — this round-trips because decode returns `{}` for
+  // absent. The fix is hygiene, not a semantic change.
+  if (val === undefined) return undefined;
   if (val.string_value !== undefined) {
     return create(AnyValueSchema, {
       value: { case: "stringValue" as const, value: val.string_value },
@@ -279,11 +288,10 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
     capabilities: BigInt(msg.capabilities),
   });
 
-  if (
-    msg.heart_beat_interval !== null &&
-    msg.heart_beat_interval !== undefined &&
-    msg.heart_beat_interval > 0
-  ) {
+  // Don't drop 0 — a server can legitimately signal "stop heartbeating"
+  // by sending heart_beat_interval = 0. The previous `> 0` guard
+  // conflated "field absent" with "explicitly zero".
+  if (msg.heart_beat_interval !== null && msg.heart_beat_interval !== undefined) {
     pb.heartBeatInterval = BigInt(msg.heart_beat_interval);
   }
 
@@ -338,10 +346,12 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
     });
     if (msg.connection_settings.opamp) {
       const opamp = create(OpAMPConnectionSettingsSchema, {});
-      if (msg.connection_settings.opamp.destination_endpoint) {
+      // Use explicit `!== undefined` so legitimate "" and 0 values
+      // round-trip. Truthy guards conflate omission with default.
+      if (msg.connection_settings.opamp.destination_endpoint !== undefined) {
         opamp.destinationEndpoint = msg.connection_settings.opamp.destination_endpoint;
       }
-      if (msg.connection_settings.opamp.heartbeat_interval_seconds) {
+      if (msg.connection_settings.opamp.heartbeat_interval_seconds !== undefined) {
         opamp.heartbeatIntervalSeconds = BigInt(
           msg.connection_settings.opamp.heartbeat_interval_seconds,
         );
@@ -399,6 +409,15 @@ export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
                 ? ServerErrorResponseType.Unavailable
                 : ServerErrorResponseType.Unknown,
           error_message: pb.errorResponse.errorMessage ?? "",
+          // Bug fix: retry_info was previously dropped on decode despite
+          // being written by the encoder. Same shape as the
+          // connection_settings bug — silent loss of the server's
+          // backoff hint to the agent.
+          retry_info: pb.errorResponse.retryInfo
+            ? {
+                retry_after_nanoseconds: pb.errorResponse.retryInfo.retryAfterNanoseconds,
+              }
+            : undefined,
         }
       : undefined,
     remote_config: pb.remoteConfig
@@ -420,7 +439,38 @@ export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
     agent_identification: pb.agentIdentification
       ? { new_instance_uid: pb.agentIdentification.newInstanceUid }
       : undefined,
-    heart_beat_interval: pb.heartBeatInterval > 0n ? Number(pb.heartBeatInterval) : undefined,
+    // proto3 doesn't distinguish field-absent from default-value, so
+    // 0 round-trips as 0 (not undefined). Consumers that previously
+    // relied on `undefined` for "absent" should treat 0 as "no
+    // heartbeat" (the spec-defined meaning).
+    heart_beat_interval: Number(pb.heartBeatInterval),
+    // Bug fix: connection_settings was previously dropped on decode.
+    // The encoder writes the field; the decoder must read it back, or
+    // any code path that decodes a server frame (tests, fake-agent,
+    // future routing logic) sees `undefined` even when a claim was
+    // delivered. Property-test discovered: round-trip identity failed.
+    connection_settings: pb.connectionSettings
+      ? {
+          hash: pb.connectionSettings.hash,
+          opamp: pb.connectionSettings.opamp
+            ? {
+                // Round-trip "" and 0 faithfully. proto3 doesn't
+                // distinguish field-absent from default-value, so we
+                // can't tell "explicitly empty" from "not sent" on the
+                // wire — but at least we don't *additionally* coerce
+                // received-as-default to undefined here.
+                destination_endpoint: pb.connectionSettings.opamp.destinationEndpoint,
+                heartbeat_interval_seconds: Number(
+                  pb.connectionSettings.opamp.heartbeatIntervalSeconds,
+                ),
+                headers: pb.connectionSettings.opamp.headers?.headers?.map((h) => ({
+                  key: h.key,
+                  value: h.value,
+                })),
+              }
+            : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -487,38 +537,57 @@ export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
 // ─── Format detection ─────────────────────────────────────────────
 
 /**
- * Detect whether a binary WebSocket message is protobuf or our custom JSON format.
+ * Detect whether a binary WebSocket message is protobuf or our legacy JSON
+ * framing. Production paths only emit protobuf today (JSON framing was
+ * removed in commit c315fc1); this function exists for codec consumers
+ * that still need to discriminate, and as a safety check on the wire.
  *
- * Three wire formats exist:
- *   1. Our JSON framing: [4-byte BE length][JSON starting with '{']
- *   2. opamp-go protobuf: [0x00 varint header][protobuf] — used by real OTel Collectors
+ * Three wire formats:
+ *   1. JSON framing: [4-byte BE length N][N bytes of JSON starting with '{']
+ *   2. opamp-go protobuf: [0x00 header][protobuf payload]
  *   3. Raw protobuf (no header): first byte is a field tag (≥ 0x08)
  *
- * Detection: if the first byte is NOT 0x00, it's raw protobuf (case 3).
- * If the first byte IS 0x00, we disambiguate cases 1 vs 2 by looking at
- * the byte after the header:
- *   - opamp-go: byte[1] is a protobuf field tag (0x08–0x7A range)
- *   - JSON framing: bytes[0..3] are a 32-bit BE length, bytes[4] is '{' (0x7B)
+ * Discriminator (cheapest first):
+ *   - byte[0] ≠ 0x00 → raw protobuf. proto3 field tags start at 0x08.
+ *   - byte[0] = 0x00, length < 5 → too short to be JSON-framed (header + '{}'
+ *     minimum is 6 bytes), so opamp-go.
+ *   - byte[0] = 0x00, length ≥ 5: parse bytes[0..3] as a 32-bit BE length.
+ *     If `length + 4 == buf.byteLength` AND byte[4] == '{', it's JSON.
+ *     Otherwise it's opamp-go protobuf — the alternative would require
+ *     a coincidental match between an arbitrary 32-bit BE value derived
+ *     from protobuf field tags + payload bytes and the actual buffer
+ *     length, with byte[4] = '{' on top. Astronomically unlikely.
+ *
+ * History:
+ *   - v1 used `byte[4] == '{'` as the JSON discriminator. False negative
+ *     when byte[4] of a valid protobuf frame happened to be 0x7b (e.g.,
+ *     `instance_uid[1] = 123`). Found by fast-check.
+ *   - v2 used `byte[1] >= 0x08` as the JSON-vs-protobuf discriminator.
+ *     False positive when JSON length ≥ 524288 (byte[1] of the BE length
+ *     becomes ≥ 0x08). Caught by CodeRabbit review on PR #426.
+ *   - v3 (this) uses the length-prefix-matches-buffer-size invariant.
+ *     Both prior failure modes become impossible.
  */
 export function isProtobufFrame(buf: ArrayBuffer): boolean {
   if (buf.byteLength === 0) return false;
   const bytes = new Uint8Array(buf);
-  const first = bytes[0];
 
-  // Raw protobuf: first byte is a field tag (never 0x00 in valid proto3)
-  if (first !== 0x00) return true;
+  // Raw protobuf: first byte is a field tag, never 0x00 in valid proto3.
+  if (bytes[0] !== 0x00) return true;
 
-  // First byte is 0x00 — could be opamp-go header or JSON framing length prefix.
-  // opamp-go header: single 0x00 varint, then protobuf (byte[1] is a field tag, 0x08+)
-  // JSON framing: 4-byte BE length, then JSON payload starting with '{'
-  if (buf.byteLength >= 5) {
-    // JSON framing: byte[4] should be '{' (0x7B) for any valid JSON object
-    if (bytes[4] === 0x7b) return false;
+  // byte[0] == 0x00. Below 5 bytes, JSON framing is impossible (it needs
+  // at least 4 length-prefix bytes plus an opening brace), so anything
+  // that fits the opamp-go shape is protobuf.
+  if (buf.byteLength < 5) return true;
+
+  // Parse bytes[0..3] as a 4-byte BE length. If the length matches the
+  // buffer (length + 4 = byteLength) AND byte[4] is '{' (the only valid
+  // first character for a JSON object), classify as JSON. Otherwise
+  // protobuf.
+  const claimedJsonLength =
+    ((bytes[0]! << 24) >>> 0) | (bytes[1]! << 16) | (bytes[2]! << 8) | bytes[3]!;
+  if (claimedJsonLength + 4 === buf.byteLength && bytes[4] === 0x7b) {
+    return false;
   }
-
-  // If byte[1] looks like a protobuf field tag, treat as opamp-go format
-  if (buf.byteLength >= 2 && bytes[1]! >= 0x08) return true;
-
-  // Default: assume JSON framing
-  return false;
+  return true;
 }

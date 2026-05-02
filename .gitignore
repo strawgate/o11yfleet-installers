@@ -40,3 +40,7 @@ O11yFleet-update.zip
 tests/load-gen-worker/worker-configuration.d.ts
 target/
 tests/oracle/oracle
+
+# Stryker mutation-testing artifacts (run with `pnpm --filter @o11yfleet/worker mutate`)
+.stryker-tmp/
+reports/mutation/

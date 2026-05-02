@@ -4,6 +4,7 @@ import type {
   AgentStateRepository,
   DesiredConfig,
   DoIdentity,
+  DoPolicy,
   ListAgentsPageParams,
   AgentPageResult,
   StaleAgent,
@@ -23,6 +24,8 @@ import {
   saveDesiredConfig,
   loadDoIdentity,
   saveDoIdentity,
+  loadDoPolicy,
+  saveDoPolicy,
   checkRateLimit,
   getStats,
   getCohortBreakdown,
@@ -88,6 +91,14 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   saveDoIdentity(tenantId: string, configId: string): void {
     saveDoIdentity(this.sql, tenantId, configId);
+  }
+
+  loadDoPolicy(): DoPolicy {
+    return loadDoPolicy(this.sql);
+  }
+
+  saveDoPolicy(policy: Partial<DoPolicy>): void {
+    saveDoPolicy(this.sql, policy);
   }
 
   checkRateLimit(uid: string, maxPerMinute: number): boolean {

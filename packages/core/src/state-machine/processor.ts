@@ -68,7 +68,21 @@ export async function processFrame(
     heart_beat_interval: heartbeatIntervalNs ?? DEFAULT_HEARTBEAT_INTERVAL_NS,
   };
 
-  // Check for sequence gap
+  // Sequence-gap detection runs *before* the disconnect handler below.
+  // This is intentional and load-bearing for the protocol's threat model:
+  //
+  //   - A replayed or forged `agent_disconnect` frame would arrive with a
+  //     stale sequence number. Honoring it would let an attacker (or a
+  //     buggy intermediary) tear down a real agent's session.
+  //   - An out-of-sync legitimate agent that wants to disconnect will be
+  //     handled by the stale-agent sweep cron when its WebSocket times
+  //     out. The cost is delayed cleanup, not lost state.
+  //
+  // The trade-off is documented here because it surprised us once
+  // (fast-check counterexample: state.seq=0, msg.seq=2, agent_disconnect
+  // set — hit the gap path before reaching the disconnect handler).
+  // See `packages/core/test/state-machine.properties.test.ts` for the
+  // property test that pins the documented behavior.
   const expectedSeq = state.sequence_num + 1;
   if (msg.sequence_num !== 0 && msg.sequence_num !== expectedSeq) {
     // Sequence gap detected — request full state report
@@ -132,12 +146,15 @@ export async function processFrame(
     );
   }
 
-  // C3 fix: Store capabilities from message when present
-  if (msg.capabilities !== undefined && msg.capabilities !== 0) {
-    if (msg.capabilities !== newState.capabilities) {
-      newState.capabilities = msg.capabilities;
-      shouldPersist = true;
-    }
+  // Store capabilities from message. `capabilities` is a required
+  // field on AgentToServer, so any change (including a drop to 0,
+  // i.e. the agent relinquishing capabilities) must be tracked.
+  // The previous `!= 0` guard caused the DO to keep stale capability
+  // bits and continue offering remote config to an agent that had
+  // dropped `AcceptsRemoteConfig`.
+  if (msg.capabilities !== newState.capabilities) {
+    newState.capabilities = msg.capabilities;
+    shouldPersist = true;
   }
 
   // Process health
@@ -195,9 +212,14 @@ export async function processFrame(
     }
   }
 
-  // Process available_components (spec field 14, Development). Only populated
-  // by the JSON codec — protobuf-framed agents won't set this until we add the
-  // proto message definition and codec mapping (see opamp.proto field 14 comment).
+  // Process available_components (OpAMP spec field 14, "Development").
+  // *Currently unreachable from wire traffic*: our generated protobuf at
+  // `packages/core/src/codec/gen/opamp_pb.ts` predates this field, so
+  // `decodeAgentToServerProto` never populates `msg.available_components`.
+  // The branch survives for the benefit of in-process callers (benchmarks,
+  // fake-agent fixtures, future codec re-gen) that construct AgentToServer
+  // directly. When we regenerate the proto from a newer .proto, this
+  // activates automatically — no further state-machine change needed.
   if (msg.available_components !== undefined) {
     newState.available_components = msg.available_components;
     shouldPersist = true;
@@ -264,6 +286,13 @@ export async function processFrame(
         );
       }
     } else if (msg.remote_config_status.status === RemoteConfigStatuses.FAILED) {
+      // CONFIG_REJECTED intentionally emits without a `hashChanged`
+      // guard (unlike CONFIG_APPLIED above). The dedupe_key omits
+      // `sequence_num` so replays of the same (hash, error_message)
+      // produce identical keys — consumer-side dedup collapses them.
+      // Tracking failed hashes in `AgentState` to dedupe at emission
+      // would require a new column and add no observable benefit;
+      // the current shape relies on the dedupe_key contract.
       shouldPersist = true;
       events.push(
         makeFleetEvent({

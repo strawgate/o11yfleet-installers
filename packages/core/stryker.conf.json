@@ -1,0 +1,32 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "_comment": "Stryker mutation testing for the @o11yfleet/core package's pure modules. Each mutation target is small and isolated; the test surface is plain Vitest (no workerd). Add new targets to `mutate` as their property tests come online.",
+  "packageManager": "pnpm",
+  "testRunner": "vitest",
+  "plugins": ["@stryker-mutator/vitest-runner"],
+  "vitest": {
+    "configFile": "vitest.stryker.config.ts",
+    "related": false
+  },
+  "mutate": [
+    "src/hex.ts",
+    "src/auth/base64url.ts",
+    "src/auth/timing-safe-compare.ts",
+    "src/auth/claims.ts",
+    "src/auth/enrollment.ts",
+    "src/codec/protobuf.ts",
+    "src/state-machine/processor.ts"
+  ],
+  "thresholds": {
+    "high": 95,
+    "low": 80,
+    "break": null
+  },
+  "concurrency": 4,
+  "reporters": ["clear-text", "html", "progress"],
+  "htmlReporter": {
+    "fileName": "reports/mutation/index.html"
+  },
+  "tempDirName": ".stryker-tmp",
+  "cleanTempDir": true
+}

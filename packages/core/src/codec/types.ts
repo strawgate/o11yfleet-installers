@@ -11,7 +11,16 @@ export interface AgentToServer {
   agent_disconnect?: AgentDisconnect;
   flags: number;
   connection_settings_status?: ConnectionSettingsStatus;
-  /** Agent-reported available components (spec field 14, Development). */
+  /**
+   * Agent-reported available components (OpAMP spec field 14, "Development").
+   *
+   * **Wire-format limitation**: our generated protobuf at `gen/opamp_pb.ts`
+   * predates this field. The codec currently cannot encode or decode it
+   * — values set here are silently lost on the wire. The TS declaration
+   * is kept so internal pass-through code paths (e.g., benchmarks,
+   * fake-agent fixtures) can populate it before regen catches up.
+   * Tracked: regenerate proto from newer .proto and add codec hooks.
+   */
   available_components?: Record<string, unknown>;
 }
 
