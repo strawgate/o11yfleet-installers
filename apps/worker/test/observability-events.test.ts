@@ -2,9 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { FleetEventType } from "@o11yfleet/core/events";
 import { logTransitionEvents } from "../src/observability-events.js";
 
+function makeLogger() {
+  return { warn: vi.fn(), error: vi.fn() };
+}
+
 describe("transition event observability", () => {
   it("logs config rejections with the rejection message", () => {
-    const warn = vi.fn();
+    const logger = makeLogger();
 
     logTransitionEvents(
       [
@@ -20,10 +24,10 @@ describe("transition event observability", () => {
           error_message: "invalid receiver",
         },
       ],
-      { warn },
+      logger,
     );
 
-    expect(warn).toHaveBeenCalledWith({
+    expect(logger.warn).toHaveBeenCalledWith({
       event: "config_rejected",
       tenant_id: "tenant-1",
       config_id: "config-1",
@@ -31,11 +35,46 @@ describe("transition event observability", () => {
       config_hash: "bad-hash",
       error_message: "invalid receiver",
     });
-    expect(warn).toHaveBeenCalledTimes(1);
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    expect(logger.error).not.toHaveBeenCalled();
+  });
+
+  it("logs CONFIG_STUCK at error level with the fail count", () => {
+    const logger = makeLogger();
+
+    logTransitionEvents(
+      [
+        {
+          type: FleetEventType.CONFIG_STUCK,
+          tenant_id: "tenant-1",
+          config_id: "config-1",
+          instance_uid: "agent-1",
+          event_id: "event-1",
+          dedupe_key: "dedupe-1",
+          timestamp: 123,
+          config_hash: "bad-hash",
+          fail_count: 3,
+          error_message: "still failing",
+        },
+      ],
+      logger,
+    );
+
+    expect(logger.error).toHaveBeenCalledWith({
+      event: "config_stuck",
+      tenant_id: "tenant-1",
+      config_id: "config-1",
+      instance_uid: "agent-1",
+      config_hash: "bad-hash",
+      fail_count: 3,
+      error_message: "still failing",
+    });
+    expect(logger.error).toHaveBeenCalledTimes(1);
+    expect(logger.warn).not.toHaveBeenCalled();
   });
 
   it("sanitizes and bounds rejection messages before logging", () => {
-    const warn = vi.fn();
+    const logger = makeLogger();
     const longSuffix = "x".repeat(900);
 
     logTransitionEvents(
@@ -56,11 +95,11 @@ describe("transition event observability", () => {
             longSuffix,
         },
       ],
-      { warn },
+      logger,
     );
 
-    expect(warn).toHaveBeenCalledTimes(1);
-    const logged = warn.mock.calls[0]?.[0] as { error_message?: string } | undefined;
+    expect(logger.warn).toHaveBeenCalledTimes(1);
+    const logged = logger.warn.mock.calls[0]?.[0] as { error_message?: string } | undefined;
     expect(logged?.error_message).toContain("[redacted-path]");
     expect(logged?.error_message).toContain("[redacted-ip]");
     expect(logged?.error_message).toContain("token=[redacted]");
@@ -74,7 +113,7 @@ describe("transition event observability", () => {
   });
 
   it("does not log high-volume non-rejection transitions", () => {
-    const warn = vi.fn();
+    const logger = makeLogger();
 
     logTransitionEvents(
       [
@@ -90,9 +129,10 @@ describe("transition event observability", () => {
           status: "degraded",
         },
       ],
-      { warn },
+      logger,
     );
 
-    expect(warn).not.toHaveBeenCalled();
+    expect(logger.warn).not.toHaveBeenCalled();
+    expect(logger.error).not.toHaveBeenCalled();
   });
 });

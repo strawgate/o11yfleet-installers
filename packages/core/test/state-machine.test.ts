@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { processFrame } from "../src/state-machine/processor.js";
+import { processFrame, MAX_CONFIG_FAIL_RETRIES } from "../src/state-machine/processor.js";
 import type { AgentState } from "../src/state-machine/types.js";
 import type { AgentToServer } from "../src/codec/types.js";
 import { AgentCapabilities, ServerToAgentFlags, RemoteConfigStatuses } from "../src/codec/types.js";
@@ -23,6 +23,10 @@ function makeDefaultState(overrides: Partial<AgentState> = {}): AgentState {
     connected_at: 0,
     agent_description: null,
     capabilities: 0,
+    component_health_map: null,
+    available_components: null,
+    config_fail_count: 0,
+    config_last_failed_hash: null,
     ...overrides,
   };
 }
@@ -599,7 +603,7 @@ describe("dirtyFields tracking", () => {
     expect(result.dirtyFields.has("connected_at")).toBe(false);
   });
 
-  it("config_rejected produces empty dirtyFields (event-only)", async () => {
+  it("config_rejected marks config_fail_count + config_last_failed_hash dirty", async () => {
     const state = makeDefaultState({ sequence_num: 1, connected_at: 1000 });
     const msg: AgentToServer = {
       instance_uid: new Uint8Array(16),
@@ -614,7 +618,8 @@ describe("dirtyFields tracking", () => {
     };
     const result = await processFrame(state, msg);
     expect(result.shouldPersist).toBe(true);
-    expect(result.dirtyFields.size).toBe(0);
+    expect(result.dirtyFields.has("config_fail_count")).toBe(true);
+    expect(result.dirtyFields.has("config_last_failed_hash")).toBe(true);
     expect(result.events.length).toBeGreaterThan(0);
   });
 
@@ -748,5 +753,163 @@ describe("dirtyFields tracking", () => {
     expect(result.shouldPersist).toBe(true);
     expect(result.dirtyFields.has("current_config_hash")).toBe(true);
     expect(result.dirtyFields.has("connected_at")).toBe(false);
+  });
+});
+
+// ========================
+// Config Fail Retry Limit
+// ========================
+describe("Config fail retry limit", () => {
+  const failedHash = new Uint8Array([0xde, 0xad]);
+  const configCaps = AgentCapabilities.ReportsStatus | AgentCapabilities.AcceptsRemoteConfig;
+
+  function makeFailed(seqNum: number, hash = failedHash): AgentToServer {
+    return {
+      instance_uid: new Uint8Array(16),
+      sequence_num: seqNum,
+      capabilities: configCaps,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: hash,
+        status: RemoteConfigStatuses.FAILED,
+        error_message: "bad yaml",
+      },
+    };
+  }
+
+  it("increments config_fail_count on FAILED status", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+    });
+    const result = await processFrame(state, makeFailed(2));
+    expect(result.newState.config_fail_count).toBe(1);
+    expect(result.newState.config_last_failed_hash).toEqual(failedHash);
+    expect(result.dirtyFields.has("config_fail_count")).toBe(true);
+    expect(result.dirtyFields.has("config_last_failed_hash")).toBe(true);
+  });
+
+  it("accumulates fail count for the same hash", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: 1,
+      config_last_failed_hash: failedHash,
+    });
+    const result = await processFrame(state, makeFailed(2));
+    expect(result.newState.config_fail_count).toBe(2);
+  });
+
+  it("resets fail count when a different hash fails", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: 2,
+      config_last_failed_hash: failedHash,
+    });
+    const differentHash = new Uint8Array([0xbe, 0xef]);
+    const result = await processFrame(state, makeFailed(2, differentHash));
+    expect(result.newState.config_fail_count).toBe(1);
+    expect(result.newState.config_last_failed_hash).toEqual(differentHash);
+  });
+
+  it("emits CONFIG_STUCK when retry budget exhausted", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: MAX_CONFIG_FAIL_RETRIES - 1,
+      config_last_failed_hash: failedHash,
+    });
+    const result = await processFrame(state, makeFailed(2));
+    expect(result.newState.config_fail_count).toBe(MAX_CONFIG_FAIL_RETRIES);
+    const stuckEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_STUCK);
+    expect(stuckEvent).toBeDefined();
+    const rejectedEvent = result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED);
+    expect(rejectedEvent).toBeDefined();
+  });
+
+  it("suppresses config re-offer when agent is stuck", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      desired_config_hash: failedHash,
+      current_config_hash: null,
+      config_fail_count: MAX_CONFIG_FAIL_RETRIES,
+      config_last_failed_hash: failedHash,
+    });
+    const heartbeat: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+    };
+    const result = await processFrame(state, heartbeat);
+    expect(result.response!.remote_config).toBeUndefined();
+  });
+
+  it("offers config again when desired hash changes (new rollout)", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      desired_config_hash: new Uint8Array([0xca, 0xfe]),
+      current_config_hash: null,
+      config_fail_count: MAX_CONFIG_FAIL_RETRIES,
+      config_last_failed_hash: failedHash,
+    });
+    const heartbeat: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+    };
+    const result = await processFrame(state, heartbeat);
+    expect(result.response!.remote_config).toBeDefined();
+    expect(result.response!.remote_config!.config_hash).toEqual(new Uint8Array([0xca, 0xfe]));
+  });
+
+  it("clears stuck state when agent successfully applies config", async () => {
+    const appliedHash = new Uint8Array([0xca, 0xfe]);
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      desired_config_hash: appliedHash,
+      config_fail_count: MAX_CONFIG_FAIL_RETRIES,
+      config_last_failed_hash: failedHash,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+      remote_config_status: {
+        last_remote_config_hash: appliedHash,
+        status: RemoteConfigStatuses.APPLIED,
+        error_message: "",
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.newState.config_fail_count).toBe(0);
+    expect(result.newState.config_last_failed_hash).toBeNull();
+  });
+
+  it("does not emit CONFIG_STUCK below retry threshold", async () => {
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: 0,
+      config_last_failed_hash: null,
+    });
+    const result = await processFrame(state, makeFailed(2));
+    expect(result.newState.config_fail_count).toBe(1);
+    expect(result.events.find((e) => e.type === FleetEventType.CONFIG_STUCK)).toBeUndefined();
+    expect(result.events.find((e) => e.type === FleetEventType.CONFIG_REJECTED)).toBeDefined();
   });
 });

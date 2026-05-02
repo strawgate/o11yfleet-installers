@@ -69,6 +69,10 @@ function makeAgentState(seq: number): AgentState {
       AgentCapabilities.ReportsStatus |
       AgentCapabilities.AcceptsRemoteConfig |
       AgentCapabilities.ReportsHealth,
+    component_health_map: null,
+    available_components: null,
+    config_fail_count: 0,
+    config_last_failed_hash: null,
   };
 }
 

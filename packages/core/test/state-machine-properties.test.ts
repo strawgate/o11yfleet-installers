@@ -84,6 +84,8 @@ function makeInitialState(overrides: Partial<AgentState> = {}): AgentState {
     capabilities: 0,
     component_health_map: null,
     available_components: null,
+    config_fail_count: 0,
+    config_last_failed_hash: null,
     ...overrides,
   };
 }

@@ -190,6 +190,17 @@ function migrateSchema(sql: SqlStorage): void {
   sql.exec(`DROP INDEX IF EXISTS idx_agents_status`);
   sql.exec(`DROP INDEX IF EXISTS idx_agents_last_seen`);
   sql.exec(`DROP INDEX IF EXISTS idx_agents_config_hash`);
+
+  // Migration 5: config-fail retry limit columns on agents.
+  // Tracks consecutive FAILED responses for the same config hash so the
+  // server can stop re-offering bad configs after MAX_CONFIG_FAIL_RETRIES.
+  const agentColNames = new Set(agentCols.map((c) => c["name"] as string));
+  if (!agentColNames.has("config_fail_count")) {
+    sql.exec(`ALTER TABLE agents ADD COLUMN config_fail_count INTEGER NOT NULL DEFAULT 0`);
+  }
+  if (!agentColNames.has("config_last_failed_hash")) {
+    sql.exec(`ALTER TABLE agents ADD COLUMN config_last_failed_hash TEXT`);
+  }
 }
 
 // ─── Config State ───────────────────────────────────────────────────
@@ -351,6 +362,10 @@ export function loadAgentState(
       available_components: row["available_components"]
         ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
         : null,
+      config_fail_count: (row["config_fail_count"] as number) ?? 0,
+      config_last_failed_hash: row["config_last_failed_hash"]
+        ? hexToUint8Array(row["config_last_failed_hash"] as string)
+        : null,
     };
   }
 
@@ -374,6 +389,8 @@ export function loadAgentState(
     capabilities: 0,
     component_health_map: null,
     available_components: null,
+    config_fail_count: 0,
+    config_last_failed_hash: null,
   };
 }
 
@@ -405,8 +422,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     : null;
 
   sql.exec(
-    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, component_health_map, available_components)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, component_health_map, available_components, config_fail_count, config_last_failed_hash)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(instance_uid) DO UPDATE SET
        sequence_num = excluded.sequence_num,
        generation = excluded.generation,
@@ -420,7 +437,9 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
        capabilities = excluded.capabilities,
        component_health_map = COALESCE(excluded.component_health_map, agents.component_health_map),
-       available_components = COALESCE(excluded.available_components, agents.available_components)`,
+       available_components = COALESCE(excluded.available_components, agents.available_components),
+       config_fail_count = excluded.config_fail_count,
+       config_last_failed_hash = excluded.config_last_failed_hash`,
     uid,
     state.tenant_id,
     state.config_id,
@@ -437,6 +456,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     state.capabilities,
     componentHealthMap,
     availableComponents,
+    state.config_fail_count,
+    state.config_last_failed_hash ? uint8ToHex(state.config_last_failed_hash) : null,
   );
 }
 
@@ -507,6 +528,14 @@ export function updateAgentPartial(
   if (dirtyFields.has("current_config_hash")) {
     setClauses.push("current_config_hash = ?");
     params.push(state.current_config_hash ? uint8ToHex(state.current_config_hash) : null);
+  }
+  if (dirtyFields.has("config_fail_count")) {
+    setClauses.push("config_fail_count = ?");
+    params.push(state.config_fail_count);
+  }
+  if (dirtyFields.has("config_last_failed_hash")) {
+    setClauses.push("config_last_failed_hash = ?");
+    params.push(state.config_last_failed_hash ? uint8ToHex(state.config_last_failed_hash) : null);
   }
 
   params.push(instanceUid);

@@ -69,6 +69,7 @@ export enum FleetEventType {
   AGENT_HEALTH_CHANGED = "agent_health_changed",
   CONFIG_APPLIED = "config_applied",
   CONFIG_REJECTED = "config_rejected",
+  CONFIG_STUCK = "config_stuck",
   AGENT_ENROLLED = "agent_enrolled",
   CONFIG_EFFECTIVE_REPORTED = "config_effective_reported",
 }
@@ -100,6 +101,13 @@ export interface ConfigRejectedEvent extends FleetEvent {
   error_message: string;
 }
 
+export interface ConfigStuckEvent extends FleetEvent {
+  type: FleetEventType.CONFIG_STUCK;
+  config_hash: string;
+  fail_count: number;
+  error_message: string;
+}
+
 export interface AgentEnrolledEvent extends FleetEvent {
   type: FleetEventType.AGENT_ENROLLED;
   generation: number;
@@ -116,5 +124,6 @@ export type AnyFleetEvent =
   | AgentHealthChangedEvent
   | ConfigAppliedEvent
   | ConfigRejectedEvent
+  | ConfigStuckEvent
   | AgentEnrolledEvent
   | ConfigEffectiveReportedEvent;

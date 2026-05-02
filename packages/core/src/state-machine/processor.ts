@@ -40,6 +40,11 @@ function arraysEqual(a: Uint8Array | null, b: Uint8Array | null): boolean {
  *  Heartbeats exist only for periodic state reconciliation — not keepalive. */
 export const DEFAULT_HEARTBEAT_INTERVAL_NS = 3_600_000_000_000; // 1 hour in ns
 
+/** Maximum consecutive FAILED responses for the same config hash before
+ *  the server stops re-offering it. The OpAMP spec has no retry guidance —
+ *  without a cap a bad config causes an infinite retry storm. */
+export const MAX_CONFIG_FAIL_RETRIES = 3;
+
 export async function processFrame(
   state: AgentState,
   msg: AgentToServer,
@@ -286,6 +291,13 @@ export async function processFrame(
       const hashChanged = !arraysEqual(state.current_config_hash, hash ?? null);
       if (hash && hashChanged) {
         newState.current_config_hash = hash;
+        // Successful application clears any stuck state for this agent.
+        if (state.config_fail_count > 0) {
+          newState.config_fail_count = 0;
+          newState.config_last_failed_hash = null;
+          dirtyFields.add("config_fail_count");
+          dirtyFields.add("config_last_failed_hash");
+        }
         shouldPersist = true;
         dirtyFields.add("current_config_hash");
         events.push(
@@ -302,14 +314,16 @@ export async function processFrame(
         );
       }
     } else if (msg.remote_config_status.status === RemoteConfigStatuses.FAILED) {
-      // CONFIG_REJECTED intentionally emits without a `hashChanged`
-      // guard (unlike CONFIG_APPLIED above). The dedupe_key omits
-      // `sequence_num` so replays of the same (hash, error_message)
-      // produce identical keys — consumer-side dedup collapses them.
-      // Tracking failed hashes in `AgentState` to dedupe at emission
-      // would require a new column and add no observable benefit;
-      // the current shape relies on the dedupe_key contract.
+      // Track per-hash fail count. If the same hash keeps failing, suppress
+      // re-delivery after MAX_CONFIG_FAIL_RETRIES to prevent infinite retry storms.
+      const sameHash = arraysEqual(state.config_last_failed_hash ?? null, hash ?? null);
+      const newFailCount = sameHash ? state.config_fail_count + 1 : 1;
+      newState.config_fail_count = newFailCount;
+      newState.config_last_failed_hash = hash ?? null;
       shouldPersist = true;
+      dirtyFields.add("config_fail_count");
+      dirtyFields.add("config_last_failed_hash");
+
       events.push(
         makeFleetEvent({
           type: FleetEventType.CONFIG_REJECTED,
@@ -323,14 +337,39 @@ export async function processFrame(
           dedupe_key: `rejected:${state.tenant_id}:${state.config_id}:${instanceUid}:${hashHex}:${msg.remote_config_status.error_message}`,
         }),
       );
+
+      // Emit CONFIG_STUCK when the retry budget is exhausted. The server
+      // will stop offering this config hash on subsequent heartbeats.
+      if (newFailCount >= MAX_CONFIG_FAIL_RETRIES) {
+        events.push(
+          makeFleetEvent({
+            type: FleetEventType.CONFIG_STUCK,
+            tenant_id: state.tenant_id,
+            config_id: state.config_id,
+            instance_uid: instanceUid,
+            timestamp: now,
+            event_id: context.randomId(),
+            config_hash: hashHex,
+            fail_count: newFailCount,
+            error_message: msg.remote_config_status.error_message,
+            dedupe_key: `stuck:${state.tenant_id}:${state.config_id}:${instanceUid}:${hashHex}`,
+          }),
+        );
+      }
     }
   }
 
-  // Offer remote config if needed — use stored capabilities, not just current message
+  // Offer remote config if needed — use stored capabilities, not just current message.
+  // Suppress re-delivery when the agent is stuck (exceeded retry budget for this hash).
+  const isStuck =
+    newState.config_fail_count >= MAX_CONFIG_FAIL_RETRIES &&
+    newState.desired_config_hash !== null &&
+    arraysEqual(newState.config_last_failed_hash, newState.desired_config_hash);
   if (
     newState.desired_config_hash &&
     !arraysEqual(newState.current_config_hash, newState.desired_config_hash) &&
-    (newState.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0
+    (newState.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0 &&
+    !isStuck
   ) {
     // C4 fix: Include config content in config_map when available
     const configMap: Record<string, { body: Uint8Array; content_type: string }> = {};

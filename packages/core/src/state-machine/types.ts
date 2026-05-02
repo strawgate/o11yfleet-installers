@@ -22,6 +22,10 @@ export interface AgentState {
   capabilities: number;
   component_health_map: Record<string, unknown> | null;
   available_components: Record<string, unknown> | null;
+  /** How many consecutive FAILED responses for the same config hash. */
+  config_fail_count: number;
+  /** The config hash that last triggered FAILED status (Uint8Array for arraysEqual). */
+  config_last_failed_hash: Uint8Array | null;
 }
 
 export interface ProcessResult {

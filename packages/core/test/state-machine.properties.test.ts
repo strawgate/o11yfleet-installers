@@ -12,6 +12,10 @@ import { ServerToAgentFlags } from "../src/codec/types.js";
 // ─── arbitraries ───────────────────────────────────────────────────────
 
 const uidArb = fc.uint8Array({ minLength: 16, maxLength: 16 });
+// Config hashes are SHA-256 outputs (32 bytes) elsewhere in the codebase.
+// Match that here so property tests exercise the same shape comparison logic
+// the runtime sees.
+const hashArb = fc.uint8Array({ minLength: 32, maxLength: 32 });
 
 function makeStateArb(): fc.Arbitrary<AgentState> {
   return fc.record({
@@ -23,8 +27,8 @@ function makeStateArb(): fc.Arbitrary<AgentState> {
     healthy: fc.boolean(),
     status: fc.constantFrom("connected", "disconnected", "unknown"),
     last_error: fc.string({ maxLength: 32 }),
-    current_config_hash: fc.option(uidArb, { nil: null }),
-    desired_config_hash: fc.option(uidArb, { nil: null }),
+    current_config_hash: fc.option(hashArb, { nil: null }),
+    desired_config_hash: fc.option(hashArb, { nil: null }),
     effective_config_hash: fc.option(fc.string({ maxLength: 64 }), { nil: null }),
     effective_config_body: fc.option(fc.string({ maxLength: 256 }), { nil: null }),
     last_seen_at: fc.integer({ min: 0, max: 2_000_000_000 }),
@@ -33,6 +37,8 @@ function makeStateArb(): fc.Arbitrary<AgentState> {
     capabilities: fc.integer({ min: 0, max: 0xffff }),
     component_health_map: fc.option(fc.constant({}), { nil: null }),
     available_components: fc.option(fc.constant({}), { nil: null }),
+    config_fail_count: fc.integer({ min: 0, max: 10 }),
+    config_last_failed_hash: fc.option(hashArb, { nil: null }),
   });
 }
 
@@ -379,7 +385,9 @@ describe("property: shouldPersist invariants", () => {
           agent_description: null,
           component_health_map: null,
           available_components: null,
-        };
+          config_fail_count: 0,
+          config_last_failed_hash: null,
+        } as AgentState;
         const msg = {
           sequence_num: seqNum,
           capabilities: 0,
@@ -422,6 +430,8 @@ describe("property: shouldPersist invariants", () => {
       "available_components",
       "effective_config_hash",
       "current_config_hash",
+      "config_fail_count",
+      "config_last_failed_hash",
     ]);
     await fc.assert(
       fc.asyncProperty(makeStateArb(), makeMsgArb(), async (state, msg) => {
