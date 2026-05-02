@@ -17,7 +17,8 @@ export function formatValue(value: number | null | undefined, unit?: Unit): stri
       return `${value.toFixed(value >= 10 ? 0 : 1)}%`;
     case "duration":
       return formatDuration(value);
-    default:
+    case "count":
+    case undefined:
       return formatCount(value);
   }
 }

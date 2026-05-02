@@ -24,14 +24,14 @@ test("generateSeries: deterministic given a seed", () => {
 test("generateSeries: respects min/max clamps", () => {
   const s = generateSeries("x", { range, count: 1000, min: 0, max: 100, seed: 1 });
   for (const [, v] of s.data) {
-    if (v == null) continue;
+    if (v === null) continue;
     assert.ok(v >= 0 && v <= 100, `out of range: ${v}`);
   }
 });
 
 test("generateSeries: gaps land at the requested cadence", () => {
   const s = generateSeries("x", { range, count: 100, gapEvery: 10, seed: 1 });
-  const nullIdxs = s.data.map(([, v], i) => (v == null ? i : -1)).filter((i) => i >= 0);
+  const nullIdxs = s.data.map(([, v], i) => (v === null ? i : -1)).filter((i) => i >= 0);
   // First gap is at index 10 (0 is never a gap), 20, 30, ...
   assert.deepEqual(nullIdxs, [10, 20, 30, 40, 50, 60, 70, 80, 90]);
 });

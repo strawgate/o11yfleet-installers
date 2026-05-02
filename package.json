@@ -5,7 +5,7 @@
   "scripts": {
     "lint": "turbo lint",
     "lint:scripts": "oxlint scripts",
-    "lint:type-aware": "oxlint --type-aware .",
+    "lint:type-aware": "oxlint --type-aware --ignore-pattern '.claude/**' --ignore-pattern 'infra/tfstate-worker/**' .",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
     "test:dev-check": "tsx --test scripts/dev-check.test.ts scripts/with-local-env.test.ts",

@@ -82,6 +82,16 @@ step("terraform-docs (fail-on-diff)", () => {
     );
     return;
   }
+  // CI uses terraform-docs v0.20.0 (bundled in terraform-docs/gh-actions:1.4.1).
+  // v0.22+ generates table dividers without spaces, producing churn the CI
+  // gate then rejects. Warn so the author can match versions.
+  const versionOut = execFileSync("terraform-docs", ["--version"], { encoding: "utf8" });
+  const versionMatch = versionOut.match(/version (v\d+\.\d+\.\d+)/);
+  if (versionMatch && versionMatch[1] !== "v0.20.0") {
+    process.stdout.write(
+      `  (warn) local terraform-docs is ${versionMatch[1]}; CI uses v0.20.0. Output may differ.\n`,
+    );
+  }
   // First snapshot the README so we can detect a diff after generation.
   const readmeBefore = execFileSync("git", ["diff", "--no-color", "infra/terraform/README.md"], {
     cwd: repoRoot,

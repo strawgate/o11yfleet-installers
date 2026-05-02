@@ -5,7 +5,7 @@
 		"target": "esnext",
 		"lib": ["esnext"],
 		"strict": true,
-		"moduleResolution": "node",
+		"moduleResolution": "bundler",
 		"types": [
 			"@cloudflare/workers-types",
 			"@cloudflare/vitest-pool-workers",

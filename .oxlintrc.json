@@ -13,7 +13,9 @@
     "**/.wrangler/**",
     "**/generated/**",
     "**/gen/**",
-    "**/experiments/**"
+    "**/experiments/**",
+    ".claude/**",
+    "infra/tfstate-worker/**"
   ],
   "rules": {
     "constructor-super": "error",

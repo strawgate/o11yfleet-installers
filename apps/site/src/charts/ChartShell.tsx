@@ -163,6 +163,7 @@ function emptyLabel(status: ObservationStatus, newAccountAgeMs: number | undefin
     return `Data started arriving ${sec}s ago.`;
   }
   switch (status) {
+    case "ok":
     case "missing":
       return "No data in this range.";
     case "partial":
@@ -171,7 +172,5 @@ function emptyLabel(status: ObservationStatus, newAccountAgeMs: number | undefin
       return "Metric source unavailable.";
     case "error":
       return "Couldn't query metrics.";
-    default:
-      return "No data in this range.";
   }
 }
