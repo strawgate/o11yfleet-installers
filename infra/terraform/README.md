@@ -176,7 +176,6 @@ Repository variables:
 | `TERRAFORM_STATE_R2_ENDPOINT`        | R2 S3 endpoint URL for the Cloudflare account                                      |
 | `TERRAFORM_STATE_R2_REGION`          | Optional; defaults to `auto`                                                       |
 | `TERRAFORM_REMOTE_STATE_ENABLED`     | Set to `true` after the state bucket exists                                        |
-| `TERRAFORM_PROVIDER_V5_STATE_READY`  | Set to `true` after the remote state is migrated/imported for provider v5          |
 | `TERRAFORM_PRODUCTION_APPLY_ENABLED` | Set to `true` only after production imports                                        |
 | `TERRAFORM_STAGING_DEPLOY_ENABLED`   | Set to `true` only after staging state and Worker secrets are ready for CI deploys |
 
@@ -185,19 +184,6 @@ GitHub plan supports it. If required reviewers are not available, restrict the
 environment to the `main` deployment branch policy and leave
 `TERRAFORM_PRODUCTION_APPLY_ENABLED` unset until the first production imports are complete
 and the plan shows no replacement for D1 or R2.
-
-Provider v5 cannot refresh every provider v4 state shape directly. Leave
-`TERRAFORM_PROVIDER_V5_STATE_READY` unset while this migration PR is under
-review. Pull requests use a backend-disabled empty-state plan in that state so
-they still validate provider schema without decoding v4 state. Pushes and
-production Worker releases require the variable to be `true` after the state
-migration and new imports below are complete.
-
-Do not set `TERRAFORM_PROVIDER_V5_STATE_READY=true` until the production Worker
-identity and data-bearing resources are already imported into remote state. The
-production apply and release workflows run `just tf-check-prod-imports prod` as
-a preflight so an accidentally enabled flag fails before Terraform can attempt a
-Worker rollout.
 
 ## Adopting Existing Production Resources
 

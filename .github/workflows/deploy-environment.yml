@@ -47,7 +47,6 @@ jobs:
       TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
       TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
       TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
-      TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
       REQUIRE_TERRAFORM_STATE_READY: ${{ inputs.require_state_ready }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -81,7 +80,6 @@ jobs:
           test -n "$O11YFLEET_SEED_ADMIN_PASSWORD"
 
           if [ "${{ inputs.environment }}" = "prod" ]; then
-            test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
             test "$TERRAFORM_PRODUCTION_APPLY_ENABLED" = "true"
           fi
 

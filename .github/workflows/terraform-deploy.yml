@@ -47,7 +47,6 @@ env:
   TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
   TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
   TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
-  TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
 
 jobs:
   validate:
@@ -72,12 +71,7 @@ jobs:
     if: >-
       ${{
         (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
-        vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true' &&
-        (
-          github.event_name == 'pull_request' ||
-          vars.TERRAFORM_PROVIDER_V5_STATE_READY == 'true' ||
-          github.event_name == 'workflow_dispatch'
-        )
+        vars.TERRAFORM_REMOTE_STATE_ENABLED == 'true'
       }}
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
@@ -126,51 +120,22 @@ jobs:
           fi
           echo "configured=true" >> "$GITHUB_OUTPUT"
 
-      - name: Remove orphaned state resources
-        if: ${{ steps.remote-state.outputs.configured == 'true' && steps.target.outputs.env == 'prod' }}
-        run: |
-          just tf-init-remote ${{ steps.target.outputs.env }}
-          cd infra/terraform
-          # Remove known orphaned resource types from v4 provider state
-          # Note: cloudflare_workers_route.api and cloudflare_dns_record.api are now
-          # properly imported and should not be removed
-          orphaned_patterns=(
-            "^cloudflare_pages_"
-          )
-          for resource in $(terraform state list 2>/dev/null); do
-            for pattern in "${orphaned_patterns[@]}"; do
-              if echo "$resource" | grep -qE "$pattern"; then
-                echo "Removing orphaned resource: $resource"
-                terraform state rm "$resource" 2>/dev/null || true
-                break
-              fi
-            done
-          done
-
       - name: Terraform plan
         if: ${{ steps.remote-state.outputs.configured == 'true' }}
-        run: |
-          if [ "$TERRAFORM_PROVIDER_V5_STATE_READY" != "true" ]; then
-            just tf-plan-empty-state ${{ steps.target.outputs.env }}
-          else
-            just tf-plan ${{ steps.target.outputs.env }}
-          fi
+        run: just tf-plan ${{ steps.target.outputs.env }}
 
   apply:
     needs: [plan]
     if: >-
       ${{
-        vars.TERRAFORM_PROVIDER_V5_STATE_READY == 'true' &&
+        (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true') ||
         (
-          (github.event_name == 'push' && github.ref == 'refs/heads/main' && vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true') ||
+          github.event_name == 'workflow_dispatch' &&
+          inputs.apply &&
+          github.ref == 'refs/heads/main' &&
           (
-            github.event_name == 'workflow_dispatch' &&
-            inputs.apply &&
-            github.ref == 'refs/heads/main' &&
-            (
-              inputs.environment != 'prod' ||
-              vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true'
-            )
+            inputs.environment != 'prod' ||
+            vars.TERRAFORM_PRODUCTION_APPLY_ENABLED == 'true'
           )
         )
       }}

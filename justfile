@@ -179,7 +179,7 @@ reproduce-check check:
         just tf-validate
         ;;
       terraform-plan)
-        just tf-plan-empty-state prod
+        just tf-plan prod
         ;;
       *)
         printf 'Unknown check: %s\n' "{{check}}" >&2
@@ -589,18 +589,6 @@ tf-plan env="staging" refresh="true": (tf-init-remote env)
     # `set -u` ("unbound variable") when refresh defaults to "true".
     terraform plan ${refresh_arg[@]+"${refresh_arg[@]}"} "${targets[@]}" -var-file=envs/{{env}}.tfvars
 
-# Terraform plan for PR validation while remote state is still provider-v4 shaped.
-tf-plan-empty-state env="staging":
-    #!/usr/bin/env bash
-    set -euo pipefail
-    tmp="$(mktemp -d)"
-    trap 'rm -rf "$tmp"' EXIT
-    cp -R infra/terraform/. "$tmp/"
-    perl -0pi -e 's/\n\s*backend\s+"s3"\s*\{[^{}]*\}\s*/\n/s or die "backend block not found\n"' "$tmp/main.tf"
-    cd "$tmp"
-    terraform init -backend=false
-    terraform plan -refresh=false -var-file=envs/{{env}}.tfvars
-
 # Terraform state addresses required before non-production Worker rollout checks.
 tf-required-rollout-state:
     #!/usr/bin/env bash
@@ -638,7 +626,7 @@ tf-check-prod-imports env="prod": (tf-init-remote env)
     if [ "${#missing[@]}" -ne 0 ]; then
         printf 'Missing required imported resources in %s remote state:\n' "{{env}}" >&2
         printf ' - %s\n' "${missing[@]}" >&2
-        printf 'Import these before setting TERRAFORM_PROVIDER_V5_STATE_READY=true.\n' >&2
+        printf 'Import these before enabling production Terraform apply.\n' >&2
         exit 1
     fi
 

@@ -64,7 +64,6 @@ jobs:
       TERRAFORM_STATE_R2_BUCKET: ${{ vars.TERRAFORM_STATE_R2_BUCKET }}
       TERRAFORM_STATE_R2_ENDPOINT: ${{ vars.TERRAFORM_STATE_R2_ENDPOINT }}
       TERRAFORM_STATE_R2_REGION: ${{ vars.TERRAFORM_STATE_R2_REGION || 'auto' }}
-      TERRAFORM_PROVIDER_V5_STATE_READY: ${{ vars.TERRAFORM_PROVIDER_V5_STATE_READY }}
       TERRAFORM_PRODUCTION_APPLY_ENABLED: ${{ vars.TERRAFORM_PRODUCTION_APPLY_ENABLED }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -86,7 +85,6 @@ jobs:
           test -n "$AWS_SECRET_ACCESS_KEY"
           test -n "$CLOUDFLARE_API_TOKEN"
           test -n "$CLOUDFLARE_ACCOUNT_ID"
-          test "$TERRAFORM_PROVIDER_V5_STATE_READY" = "true"
           test "$TERRAFORM_PRODUCTION_APPLY_ENABLED" = "true"
 
       # Production D1 migrations are expected to be expand-only and backward
