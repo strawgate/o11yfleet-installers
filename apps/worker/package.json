@@ -16,6 +16,8 @@
     "test": "vitest run --config vitest.node.config.ts",
     "test:runtime": "vitest run --config vitest.config.ts",
     "test:watch": "vitest --config vitest.node.config.ts",
+    "coverage": "vitest run --config vitest.node.config.ts --coverage",
+    "coverage:runtime": "vitest run --config vitest.config.ts --coverage",
     "mutate": "stryker run"
   },
   "dependencies": {

@@ -124,6 +124,15 @@ mutate:
     pnpm --filter @o11yfleet/core mutate
     pnpm --filter @o11yfleet/worker mutate
 
+# Run vitest coverage across packages. Reports go to
+# {package}/reports/coverage/. Worker has two test runners (Node and
+# workerd) — both produce a separate report; merging into a unified
+# view is a follow-up.
+coverage:
+    pnpm --filter @o11yfleet/core coverage
+    pnpm --filter @o11yfleet/worker coverage
+    pnpm --filter @o11yfleet/worker coverage:runtime
+
 # Run all fast CI checks
 ci: typegen-check check-all lint-scripts test-dev-check docs-api-check fmt-check
 

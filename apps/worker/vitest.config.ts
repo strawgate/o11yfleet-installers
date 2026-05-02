@@ -54,5 +54,22 @@ export default defineConfig({
     // Parallel file execution for faster CI runs on multi-core runners.
     testTimeout: 30_000,
     hookTimeout: 30_000,
+    coverage: {
+      // v8 coverage requires the test runtime to be v8-instrumented.
+      // The Cloudflare workerd pool runs tests in a separate workerd
+      // process that isn't, so v8 reports 0%. Istanbul instruments at
+      // transform time, before the bundle ships into workerd, and
+      // works end-to-end — at the cost of a slower transform pass.
+      provider: "istanbul",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "reports/coverage/runtime",
+      include: ["src/**/*.ts"],
+      exclude: [
+        "src/worker-configuration.d.ts",
+        // Generated/external surface — not a useful signal for tests.
+        "src/instrumented.ts",
+        "src/tracing.ts",
+      ],
+    },
   },
 });

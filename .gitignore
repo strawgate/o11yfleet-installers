@@ -44,3 +44,6 @@ tests/oracle/oracle
 # Stryker mutation-testing artifacts (run with `pnpm --filter @o11yfleet/worker mutate`)
 .stryker-tmp/
 reports/mutation/
+
+# Vitest coverage artifacts (run with `just coverage` or `pnpm coverage` per package)
+reports/coverage/

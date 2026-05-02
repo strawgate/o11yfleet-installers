@@ -21,5 +21,21 @@ export default defineConfig({
       "test/policy-schemas.test.ts",
       "test/properties.test.ts",
     ],
+    coverage: {
+      provider: "v8",
+      reporter: ["text", "html", "json-summary"],
+      reportsDirectory: "reports/coverage/node",
+      // Only the pure modules these tests actually exercise. Adding the
+      // workerd-only files here would drown the report in NoCoverage
+      // false positives — those are measured by `coverage:runtime` (the
+      // workerd-pool config below) and merged separately.
+      include: [
+        "src/durable-objects/do-name.ts",
+        "src/durable-objects/policy-schemas.ts",
+        "src/utils/**/*.ts",
+        "src/shared/origins.ts",
+        "src/shared/errors.ts",
+      ],
+    },
   },
 });

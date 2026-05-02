@@ -82,6 +82,21 @@ GitHub check mapping lives in [docs/development/dev-loop.md](docs/development/de
 | E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors      |
 | UI (Playwright)                   | `just test-ui`            | Browser tests against live stack              |
 | All fast tests                    | `just test`               | Core + worker (no live server needed)         |
+| Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/` |
+
+### Coverage
+
+`just coverage` runs Vitest with v8 coverage on the pure-Node tests
+(`packages/core`, `apps/worker` Node-runner) and Istanbul on the
+workerd-pool tests (`apps/worker` runtime). Each produces a separate
+HTML report under `{package}/reports/coverage/`. The workerd pool
+needs Istanbul because `@cloudflare/vitest-pool-workers` runs tests
+in a remote workerd process that isn't v8-instrumented.
+
+Coverage is informational today — there's no CI gate. Use it to find
+modules that ship untested (the natural source of bugs like
+`upsertPendingDevice`, which had broken SQL and zero tests when it
+landed in #403).
 
 ### AI Guidance Live Check
 
