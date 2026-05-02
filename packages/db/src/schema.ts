@@ -7,6 +7,9 @@ export interface Tenant {
   max_configs: number;
   max_agents_per_config: number;
   geo_enabled: boolean;
+  status: "pending" | "active" | "suspended";
+  approved_at: string | null;
+  approved_by: string | null;
   created_at: string;
   updated_at: string;
 }
