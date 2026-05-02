@@ -7,15 +7,9 @@ import { normalizeFleetOverview } from "@/api/models/fleet-overview";
 import type { Observed } from "@/api/models/observed";
 import { GuidancePanel, GuidanceSlot } from "@/components/ai";
 import { Button } from "@/components/ui/button";
-import {
-  DataTable,
-  EmptyState,
-  MetricCard,
-  PageHeader,
-  PageShell,
-  StatusBadge,
-  type ColumnDef,
-} from "@/components/app";
+import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
+import { Box, Group, Title } from "@mantine/core";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
 import { relTime } from "@/utils/format";
@@ -187,29 +181,33 @@ export default function OverviewPage() {
         excludeTargetKeys={["overview.configurations", "overview.agents"]}
       />
 
-      <DataTable
-        className="mt-6"
-        title="Recent configurations"
-        columns={columns}
-        data={recentConfigurations}
-        getRowId={(row) => row.id}
-        actions={
+      <Box mt="lg">
+        <Group justify="space-between" align="center" gap="xs" mb="xs">
+          <Title order={3} size="sm" fw={500}>
+            Recent configurations
+          </Title>
           <Button asChild variant="ghost" size="sm">
             <Link to="/portal/configurations">View all</Link>
           </Button>
-        }
-        emptyState={
-          <EmptyState
-            icon="file"
-            title="No configurations yet"
-            description="Create a configuration to start managing collectors and rollouts."
-          >
-            <Button asChild size="sm">
-              <Link to="/portal/getting-started">Get started</Link>
-            </Button>
-          </EmptyState>
-        }
-      />
+        </Group>
+        <DataTable
+          columns={columns}
+          data={recentConfigurations}
+          getRowId={(row) => row.id}
+          ariaLabel="Recent configurations"
+          empty={
+            <EmptyState
+              icon="file"
+              title="No configurations yet"
+              description="Create a configuration to start managing collectors and rollouts."
+            >
+              <Button asChild size="sm">
+                <Link to="/portal/getting-started">Get started</Link>
+              </Button>
+            </EmptyState>
+          }
+        />
+      </Box>
     </PageShell>
   );
 }

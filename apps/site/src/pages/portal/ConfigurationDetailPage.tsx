@@ -34,15 +34,9 @@ import {
 } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { includedFetch, pageYaml, unavailableFetch } from "../../ai/page-context";
-import {
-  DataTable,
-  EmptyState,
-  MetricCard,
-  PageHeader,
-  PageShell,
-  StatusBadge,
-  type ColumnDef,
-} from "@/components/app";
+import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
+import { Title } from "@mantine/core";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
@@ -564,30 +558,35 @@ export default function ConfigurationDetailPage() {
           {agents.isLoading ? (
             <LoadingSpinner />
           ) : (
-            <DataTable
-              title="Collectors"
-              columns={agentColumns}
-              data={agentList}
-              getRowId={(agent) => agentUid(agent)}
-              emptyState={
-                <EmptyState
-                  icon="plug"
-                  title="No agents connected"
-                  description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
-                >
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      setEnrollmentToken(null);
-                      setEnrollmentTokenError(null);
-                      setEnrollOpen(true);
-                    }}
+            <>
+              <Title order={3} size="sm" fw={500} mb="xs">
+                Collectors
+              </Title>
+              <DataTable
+                columns={agentColumns}
+                data={agentList}
+                getRowId={(agent) => agentUid(agent)}
+                ariaLabel="Collectors for this configuration"
+                empty={
+                  <EmptyState
+                    icon="plug"
+                    title="No agents connected"
+                    description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
                   >
-                    Enroll agent
-                  </Button>
-                </EmptyState>
-              }
-            />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        setEnrollmentToken(null);
+                        setEnrollmentTokenError(null);
+                        setEnrollOpen(true);
+                      }}
+                    >
+                      Enroll agent
+                    </Button>
+                  </EmptyState>
+                }
+              />
+            </>
           )}
           <div className="flex flex-wrap items-center gap-2 border-x border-b border-border px-4 py-3 text-sm text-muted-foreground">
             <Button

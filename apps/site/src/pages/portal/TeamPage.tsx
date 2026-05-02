@@ -1,14 +1,7 @@
 import { useMemo } from "react";
 import { useTeam, type TeamMember } from "@/api/hooks/portal";
-import {
-  DataTable,
-  EmptyState,
-  PageHeader,
-  PageShell,
-  StatusBadge,
-  type ColumnDef,
-  type StatusTone,
-} from "@/components/app";
+import { EmptyState, PageHeader, PageShell, StatusBadge, type StatusTone } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { relTime } from "@/utils/format";
@@ -73,7 +66,8 @@ export default function TeamPage() {
         columns={columns}
         data={memberList}
         getRowId={(row) => row.id}
-        emptyState={
+        ariaLabel="Team members"
+        empty={
           <EmptyState
             icon="users"
             title="No team members found"

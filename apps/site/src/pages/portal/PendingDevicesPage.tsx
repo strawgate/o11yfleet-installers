@@ -10,7 +10,9 @@ import {
   type PendingDevice,
   type PendingToken,
 } from "@/api/hooks/portal";
-import { DataTable, EmptyState, PageHeader, PageShell, type ColumnDef } from "@/components/app";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
+import { Group, Title } from "@mantine/core";
 import { CopyButton } from "@/components/common/CopyButton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -153,18 +155,21 @@ function PendingTokensSection() {
         </div>
       ) : null}
 
+      <Group justify="space-between" align="center" gap="xs" mb="xs">
+        <Title order={3} size="sm" fw={500}>
+          Pending Enrollment Tokens
+        </Title>
+        <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" />
+          Create pending token
+        </Button>
+      </Group>
       <DataTable
-        title="Pending Enrollment Tokens"
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" />
-            Create pending token
-          </Button>
-        }
         columns={columns}
         data={tokenList}
         getRowId={(row) => row.id}
-        emptyState={
+        ariaLabel="Pending enrollment tokens"
+        empty={
           <EmptyState
             title="No pending tokens"
             description="Create a pending token to allow collectors to enroll without a pre-assigned configuration."
@@ -320,12 +325,15 @@ function PendingDevicesSection() {
 
   return (
     <>
+      <Title order={3} size="sm" fw={500} mb="xs">
+        Pending Devices
+      </Title>
       <DataTable
-        title="Pending Devices"
         columns={columns}
         data={deviceList}
         getRowId={(row) => row.instance_uid}
-        emptyState={
+        ariaLabel="Pending devices"
+        empty={
           <EmptyState
             title="No pending devices"
             description="Pending devices will appear here when collectors connect with a pending enrollment token."

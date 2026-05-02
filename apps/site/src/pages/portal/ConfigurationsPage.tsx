@@ -9,7 +9,8 @@ import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { DataTable, EmptyState, PageHeader, PageShell, type ColumnDef } from "@/components/app";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
 import { relTime, trunc } from "@/utils/format";
 import { configurationAgentMetrics } from "@/utils/config-stats";
 
@@ -63,7 +64,8 @@ export default function ConfigurationsPage() {
         columns={columns}
         data={cfgList}
         getRowId={(row) => row.id}
-        emptyState={
+        ariaLabel="Configurations"
+        empty={
           <EmptyState
             icon="file"
             title="No configurations yet"

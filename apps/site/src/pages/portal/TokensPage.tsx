@@ -8,18 +8,13 @@ import {
   type Configuration,
   type EnrollmentToken,
 } from "@/api/hooks/portal";
-import {
-  DataTable,
-  EmptyState,
-  PageHeader,
-  PageShell,
-  StatusBadge,
-  type ColumnDef,
-} from "@/components/app";
+import { EmptyState, PageHeader, PageShell, StatusBadge } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
 import { CopyButton } from "@/components/common/CopyButton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Modal } from "@/components/common/Modal";
+import { Group, Text } from "@mantine/core";
 import { useToast } from "@/components/common/Toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -89,38 +84,37 @@ function TokenSection({ config }: { config: Configuration }) {
         </div>
       ) : null}
 
+      <Group justify="space-between" align="center" gap="xs">
+        <Text size="sm" fw={500}>
+          {config.name}{" "}
+          <Text component="span" c="dimmed">
+            {tokenList.length}
+          </Text>
+        </Text>
+        <Button size="sm" onClick={() => setCreateOpen(true)}>
+          <Plus className="size-4" />
+          New token
+        </Button>
+      </Group>
+
       <DataTable
-        title={
-          <span>
-            {config.name} <span className="text-muted-foreground">{tokenList.length}</span>
-          </span>
-        }
-        actions={
-          <Button size="sm" onClick={() => setCreateOpen(true)}>
-            <Plus className="size-4" />
-            New token
-          </Button>
-        }
         columns={columns}
-        data={isLoading || error ? [] : tokenList}
+        data={tokenList}
         getRowId={(row) => row.id}
-        emptyState={
-          isLoading ? (
-            <LoadingSpinner />
-          ) : error ? (
-            <ErrorState error={error} retry={() => void refetch()} />
-          ) : (
-            <EmptyState
-              icon="key"
-              title="No enrollment tokens"
-              description="Create a token when you are ready to connect a collector to this configuration."
-            >
-              <Button size="sm" onClick={() => setCreateOpen(true)}>
-                <Plus className="size-4" />
-                New token
-              </Button>
-            </EmptyState>
-          )
+        ariaLabel={`${config.name} enrollment tokens`}
+        loading={isLoading}
+        error={error ? { message: error.message, retry: () => void refetch() } : null}
+        empty={
+          <EmptyState
+            icon="key"
+            title="No enrollment tokens"
+            description="Create a token when you are ready to connect a collector to this configuration."
+          >
+            <Button size="sm" onClick={() => setCreateOpen(true)}>
+              <Plus className="size-4" />
+              New token
+            </Button>
+          </EmptyState>
         }
       />
 

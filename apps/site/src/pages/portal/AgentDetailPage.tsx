@@ -32,14 +32,14 @@ import {
 } from "./agent-detail-model";
 import { agentStatusView } from "./agent-view-model";
 import {
-  DataTable,
   EmptyState,
   MetricCard,
   PageHeader,
   PageShell,
   StatusBadge as AppStatusBadge,
-  type ColumnDef,
 } from "@/components/app";
+import { DataTable, type ColumnDef } from "@/components/data-table";
+import { Title } from "@mantine/core";
 import { Button } from "@/components/ui/button";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
@@ -537,11 +537,14 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
       )}
 
       {/* Component detail table */}
+      <Title order={3} size="sm" fw={500} mb="xs">
+        All components
+      </Title>
       <DataTable
-        title="All components"
         columns={columns}
         data={rows}
         getRowId={(row) => `${row.category}-${row.name}`}
+        ariaLabel="All components"
       />
     </div>
   );
