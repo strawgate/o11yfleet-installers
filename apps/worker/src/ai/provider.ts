@@ -22,10 +22,10 @@ import type { Env } from "../index.js";
 
 type AiGuidanceEnv = Pick<
   Env,
-  | "AI_GUIDANCE_MINIMAX_API_KEY"
-  | "AI_GUIDANCE_PROVIDER"
-  | "AI_GUIDANCE_MODEL"
-  | "AI_GUIDANCE_BASE_URL"
+  | "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY"
+  | "O11YFLEET_AI_GUIDANCE_PROVIDER"
+  | "O11YFLEET_AI_GUIDANCE_MODEL"
+  | "O11YFLEET_AI_GUIDANCE_BASE_URL"
 >;
 
 export class AiProviderError extends Error {
@@ -129,26 +129,26 @@ export async function streamAiChat(
 }
 
 function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiProviderConfig {
-  const providerMode = env.AI_GUIDANCE_PROVIDER?.trim().toLowerCase() || "fixture";
-  const model = env.AI_GUIDANCE_MODEL?.trim() || "MiniMax-M2.7";
+  const providerMode = env.O11YFLEET_AI_GUIDANCE_PROVIDER?.trim().toLowerCase() || "fixture";
+  const model = env.O11YFLEET_AI_GUIDANCE_MODEL?.trim() || "MiniMax-M2.7";
 
   if (providerMode === "fixture" || providerMode === "deterministic") {
     return { mode: "fixture", model: "o11yfleet-guidance-fixture" };
   }
 
   if (!["minimax", "openai-compatible"].includes(providerMode)) {
-    throw new AiProviderError(`Unsupported LLM provider: ${env.AI_GUIDANCE_PROVIDER}`);
+    throw new AiProviderError(`Unsupported LLM provider: ${env.O11YFLEET_AI_GUIDANCE_PROVIDER}`);
   }
-  if (!env.AI_GUIDANCE_MINIMAX_API_KEY) {
+  if (!env.O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY) {
     throw new AiProviderError(
-      "AI_GUIDANCE_MINIMAX_API_KEY is required when AI_GUIDANCE_PROVIDER uses the SDK",
+      "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY is required when O11YFLEET_AI_GUIDANCE_PROVIDER uses the SDK",
     );
   }
 
-  const baseURL = env.AI_GUIDANCE_BASE_URL?.trim();
+  const baseURL = env.O11YFLEET_AI_GUIDANCE_BASE_URL?.trim();
   if (providerMode === "openai-compatible" && !baseURL) {
     throw new AiProviderError(
-      "AI_GUIDANCE_BASE_URL is required when AI_GUIDANCE_PROVIDER is openai-compatible",
+      "O11YFLEET_AI_GUIDANCE_BASE_URL is required when O11YFLEET_AI_GUIDANCE_PROVIDER is openai-compatible",
     );
   }
 
@@ -157,7 +157,7 @@ function createProviderConfig(env: AiGuidanceEnv, fetchImpl?: typeof fetch): AiP
     model,
     provider: createOpenAICompatible({
       name: providerMode === "minimax" ? "minimax" : "openai-compatible",
-      apiKey: env.AI_GUIDANCE_MINIMAX_API_KEY,
+      apiKey: env.O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY,
       baseURL: (providerMode === "minimax"
         ? baseURL || "https://api.minimax.io/v1"
         : baseURL)!.replace(/\/$/, ""),

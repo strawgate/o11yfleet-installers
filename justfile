@@ -803,7 +803,7 @@ worker-optional-secrets:
     #!/usr/bin/env bash
     set -euo pipefail
     printf '%s\n' \
-        AI_GUIDANCE_MINIMAX_API_KEY
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY
 
 # Verify required Worker runtime secrets exist before Terraform inherits bindings.
 worker-secrets-check env="prod":
@@ -1318,21 +1318,21 @@ cloudflare-usage-secrets envs="dev staging prod":
     trap 'rm -f "$tmpfile"' EXIT
     ./scripts/bootstrap-cloudflare-credentials.sh --usage-tokens --usage-output "$tmpfile" --apply --envs "{{envs}}"
     echo ""
-    echo "Setting CLOUDFLARE_USAGE_API_TOKEN secrets..."
+    echo "Setting CLOUDFLARE_BILLING_API_TOKEN secrets..."
     cd apps/worker
     while IFS= read -r line; do
         env_name="$(echo "$line" | jq -r 'keys[0]')"
         token="$(echo "$line" | jq -r '.[].token')"
         if [ "$env_name" = "prod" ] || [ "$env_name" = "production" ]; then
-            echo "Setting CLOUDFLARE_USAGE_API_TOKEN for production..."
-            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_USAGE_API_TOKEN --name o11yfleet-worker 2>&1
+            echo "Setting CLOUDFLARE_BILLING_API_TOKEN for production..."
+            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_BILLING_API_TOKEN --name o11yfleet-worker 2>&1
         else
-            echo "Setting CLOUDFLARE_USAGE_API_TOKEN for $env_name..."
-            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_USAGE_API_TOKEN --env "$env_name" 2>&1
+            echo "Setting CLOUDFLARE_BILLING_API_TOKEN for $env_name..."
+            echo "$token" | pnpm wrangler versions secret put CLOUDFLARE_BILLING_API_TOKEN --env "$env_name" 2>&1
         fi
     done < <(jq -c '.' "$tmpfile")
     echo ""
-    echo "Done setting usage API token secrets."
+    echo "Done setting billing API token secrets."
 
 # ─── Full CI Pipeline ────────────────────────────────────────────────
 

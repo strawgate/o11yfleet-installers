@@ -5,8 +5,8 @@ SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd -- "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
-if [ -z "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
-  echo "AI_GUIDANCE_MINIMAX_API_KEY is required for the live AI guidance audit." >&2
+if [ -z "${O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
+  echo "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY is required for the live AI guidance audit." >&2
   exit 2
 fi
 

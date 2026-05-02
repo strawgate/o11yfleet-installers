@@ -315,14 +315,14 @@ describe("AI guidance routes", () => {
     });
     const llmEnv = {
       ...env,
-      AI_GUIDANCE_PROVIDER: "minimax",
-      AI_GUIDANCE_MINIMAX_API_KEY: undefined,
+      O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+      O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: undefined,
     };
     const response = await handleV1Request(request, llmEnv, new URL(request.url), "tenant-ai-test");
 
     expect(response.status).toBe(502);
     await expect(response.json()).resolves.toEqual({
-      error: "AI_GUIDANCE_MINIMAX_API_KEY is required when AI_GUIDANCE_PROVIDER uses the SDK",
+      error: "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY is required when O11YFLEET_AI_GUIDANCE_PROVIDER uses the SDK",
     });
   });
 
@@ -373,10 +373,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        AI_GUIDANCE_PROVIDER: "minimax",
-        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+        O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+        O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -439,10 +439,10 @@ describe("AI guidance routes", () => {
       },
       {
         env: {
-          AI_GUIDANCE_PROVIDER: "minimax",
-          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+          O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+          O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -480,10 +480,10 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          AI_GUIDANCE_PROVIDER: "minimax",
-          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+          O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+          O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -517,10 +517,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        AI_GUIDANCE_PROVIDER: "minimax",
-        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+        O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+        O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -541,16 +541,16 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          AI_GUIDANCE_PROVIDER: "openai-compatible",
-          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+          O11YFLEET_AI_GUIDANCE_PROVIDER: "openai-compatible",
+          O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: vi.fn(),
       }),
     ).rejects.toMatchObject({
       name: "AiProviderError",
-      message: "AI_GUIDANCE_BASE_URL is required when AI_GUIDANCE_PROVIDER is openai-compatible",
+      message: "O11YFLEET_AI_GUIDANCE_BASE_URL is required when O11YFLEET_AI_GUIDANCE_PROVIDER is openai-compatible",
     });
   });
 
@@ -594,10 +594,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        AI_GUIDANCE_PROVIDER: "minimax",
-        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+        O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+        O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -637,10 +637,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(overviewRequest, {
       env: {
-        AI_GUIDANCE_PROVIDER: "minimax",
-        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+        O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+        O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -696,10 +696,10 @@ describe("AI guidance routes", () => {
 
     const response = await generateAiGuidance(moderateCountOnlyRequest, {
       env: {
-        AI_GUIDANCE_PROVIDER: "minimax",
-        AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-        AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-        AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+        O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+        O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+        O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+        O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
       },
       scopeLabel: "tenant:tenant-ai-test",
       fetch: fakeFetch,
@@ -775,10 +775,10 @@ describe("AI guidance routes", () => {
       },
       {
         env: {
-          AI_GUIDANCE_PROVIDER: "minimax",
-          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+          O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+          O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,
@@ -824,10 +824,10 @@ describe("AI guidance routes", () => {
     await expect(
       generateAiGuidance(overviewRequest, {
         env: {
-          AI_GUIDANCE_PROVIDER: "minimax",
-          AI_GUIDANCE_MODEL: "MiniMax-M2.7",
-          AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
-          AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
+          O11YFLEET_AI_GUIDANCE_PROVIDER: "minimax",
+          O11YFLEET_AI_GUIDANCE_MODEL: "MiniMax-M2.7",
+          O11YFLEET_AI_GUIDANCE_BASE_URL: "https://api.minimax.test/v1",
+          O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY: "test-key",
         },
         scopeLabel: "tenant:tenant-ai-test",
         fetch: fakeFetch,

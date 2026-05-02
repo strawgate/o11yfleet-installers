@@ -107,7 +107,7 @@ variable "worker_analytics_engine_dataset" {
 
 variable "ai_guidance_provider" {
   type        = string
-  description = "AI guidance provider mode exposed to the Worker. Use fixture/deterministic without an SDK key, or minimax/openai-compatible with AI_GUIDANCE_MINIMAX_API_KEY inherited."
+  description = "AI guidance provider mode exposed to the Worker. Use fixture/deterministic without an SDK key, or minimax/openai-compatible with O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY inherited."
   default     = "fixture"
 
   validation {
@@ -138,7 +138,9 @@ variable "worker_inherited_binding_names" {
     "O11YFLEET_SEED_ADMIN_PASSWORD",
     "O11YFLEET_SEED_TENANT_USER_EMAIL",
     "O11YFLEET_SEED_TENANT_USER_PASSWORD",
-    "CLOUDFLARE_USAGE_API_TOKEN",
+    "CLOUDFLARE_BILLING_API_TOKEN",
+    "CLOUDFLARE_METRICS_API_TOKEN",
+    "O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY",
   ]
 
   validation {
@@ -164,7 +166,7 @@ variable "signup_auto_approve" {
 
 variable "email_from" {
   type        = string
-  description = "From address for outgoing emails bound to CLOUDFLARE_EMAIL_FROM (e.g. 'O11yFleet <noreply@yourdomain.com>')."
+  description = "From address for outgoing emails bound to O11YFLEET_EMAIL_FROM (e.g. 'O11yFleet <noreply@yourdomain.com>')."
   default     = null
 }
 

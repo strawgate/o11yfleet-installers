@@ -23,21 +23,18 @@ export interface Env {
   O11YFLEET_CLAIM_HMAC_SECRET: string;
   O11YFLEET_API_BEARER_SECRET?: string;
   ENVIRONMENT?: "staging" | "dev" | "production";
-  AI_GUIDANCE_MINIMAX_API_KEY?: string;
-  AI_GUIDANCE_PROVIDER?: string;
-  AI_GUIDANCE_MODEL?: string;
-  AI_GUIDANCE_BASE_URL?: string;
+  O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY?: string;
+  O11YFLEET_AI_GUIDANCE_PROVIDER?: string;
+  O11YFLEET_AI_GUIDANCE_MODEL?: string;
+  O11YFLEET_AI_GUIDANCE_BASE_URL?: string;
   O11YFLEET_SEED_TENANT_USER_EMAIL?: string;
   O11YFLEET_SEED_TENANT_USER_PASSWORD?: string;
   O11YFLEET_SEED_ADMIN_EMAIL?: string;
   O11YFLEET_SEED_ADMIN_PASSWORD?: string;
-  CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
-  CLOUDFLARE_USAGE_API_TOKEN?: string;
-  CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
-  CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
-  CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
-  CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID?: string;
-  CLOUDFLARE_ANALYTICS_SQL_API_TOKEN?: string;
+  CLOUDFLARE_BILLING_ACCOUNT_ID?: string;
+  CLOUDFLARE_BILLING_API_TOKEN?: string;
+  CLOUDFLARE_METRICS_ACCOUNT_ID?: string;
+  CLOUDFLARE_METRICS_API_TOKEN?: string;
   GITHUB_APP_CLIENT_ID?: string;
   GITHUB_APP_CLIENT_SECRET?: string;
   GITHUB_APP_ID?: string;
@@ -48,7 +45,7 @@ export interface Env {
   /** OIDC audience claim (defaults to "o11yfleet"). */
   O11YFLEET_OIDC_AUDIENCE?: string;
   /** Enable auto-approval of new tenant signups. Set to "true" to auto-approve (post-soft-launch). */
-  FP_SIGNUP_AUTO_APPROVE?: string;
+  O11YFLEET_SIGNUP_AUTO_APPROVE?: string;
   /** Cloudflare Email Service binding for sending emails. */
   CLOUDFLARE_EMAIL_SENDER?: {
     send(options: {
@@ -60,7 +57,7 @@ export interface Env {
     }): Promise<void>;
   };
   /** Default email from address for outgoing emails. */
-  CLOUDFLARE_EMAIL_FROM?: string;
+  O11YFLEET_EMAIL_FROM?: string;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

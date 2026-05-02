@@ -3,11 +3,8 @@ import type { Env } from "./index.js";
 const GRAPHQL_URL = "https://api.cloudflare.com/client/v4/graphql";
 
 type UsageEnv = Env & {
-  CLOUDFLARE_USAGE_ACCOUNT_ID?: string;
-  CLOUDFLARE_USAGE_API_TOKEN?: string;
-  CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME?: string;
-  CLOUDFLARE_USAGE_D1_DATABASE_ID?: string;
-  CLOUDFLARE_USAGE_R2_BUCKET_NAME?: string;
+  CLOUDFLARE_BILLING_ACCOUNT_ID?: string;
+  CLOUDFLARE_BILLING_API_TOKEN?: string;
 };
 
 type ServiceId = "workers" | "durable_objects" | "d1" | "r2";
@@ -306,11 +303,11 @@ function account<T extends { viewer?: { accounts?: unknown[] } }>(data: T): unkn
 }
 
 function configuredBase(env: UsageEnv): boolean {
-  return Boolean(env.CLOUDFLARE_USAGE_ACCOUNT_ID && apiToken(env));
+  return Boolean(env.CLOUDFLARE_BILLING_ACCOUNT_ID && apiToken(env));
 }
 
 function apiToken(env: UsageEnv): string | undefined {
-  return env.CLOUDFLARE_USAGE_API_TOKEN;
+  return env.CLOUDFLARE_BILLING_API_TOKEN;
 }
 
 function hasNonEmptyString(value: unknown): value is string {
@@ -318,14 +315,12 @@ function hasNonEmptyString(value: unknown): value is string {
 }
 
 export function cloudflareUsageRequiredEnv(env: Partial<UsageEnv>): string[] {
-  const requiredEnv = [
-    "CLOUDFLARE_USAGE_ACCOUNT_ID",
-    "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME",
-    "CLOUDFLARE_USAGE_D1_DATABASE_ID",
-    "CLOUDFLARE_USAGE_R2_BUCKET_NAME",
-  ].filter((key) => !hasNonEmptyString(env[key as keyof UsageEnv]));
+  const requiredEnv: string[] = [];
+  if (!hasNonEmptyString(env.CLOUDFLARE_BILLING_ACCOUNT_ID)) {
+    requiredEnv.push("CLOUDFLARE_BILLING_ACCOUNT_ID");
+  }
   if (!hasNonEmptyString(apiToken(env as UsageEnv))) {
-    requiredEnv.unshift("CLOUDFLARE_USAGE_API_TOKEN");
+    requiredEnv.unshift("CLOUDFLARE_BILLING_API_TOKEN");
   }
   return requiredEnv;
 }
@@ -410,18 +405,8 @@ async function workersUsage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME) {
-    return emptyService(
-      "workers",
-      "Workers",
-      "not_configured",
-      "Cloudflare GraphQL Analytics API",
-      [
-        "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME to query Worker usage.",
-      ],
-    );
-  }
-
+  // Worker script name defaults to the standard naming pattern
+  const scriptName = "o11yfleet-worker";
   const query = `
     query WorkerDaily($accountTag: string!, $scriptName: string!, $start: string!, $end: string!) {
       viewer {
@@ -441,8 +426,8 @@ async function workersUsage(
 
   try {
     const data = await graphql<WorkersQueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
-      scriptName: env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME,
+      accountTag: env.CLOUDFLARE_BILLING_ACCOUNT_ID!,
+      scriptName,
       start: window.startDatetime,
       end: window.endDatetime,
     });
@@ -499,7 +484,7 @@ async function workersUsage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Script: ${env.CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME}`,
+        `Script: ${scriptName}`,
         `Subrequests: ${subrequests.toLocaleString()}`,
         `Errors: ${errors.toLocaleString()}`,
         "CPU spend uses p50 CPU time multiplied by requests because the public adaptive query returns quantiles, not exact monthly CPU sum.",
@@ -521,12 +506,8 @@ async function d1Usage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_D1_DATABASE_ID) {
-    return emptyService("d1", "D1", "not_configured", "Cloudflare GraphQL Analytics API", [
-      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_D1_DATABASE_ID to query D1 usage.",
-    ]);
-  }
-
+  // D1 database ID defaults to the standard naming pattern
+  const databaseId = "o11yfleet-db";
   const query = `
     query D1Daily($accountTag: string!, $databaseId: string!, $start: Date, $end: Date) {
       viewer {
@@ -553,8 +534,8 @@ async function d1Usage(
 
   try {
     const data = await graphql<D1QueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
-      databaseId: env.CLOUDFLARE_USAGE_D1_DATABASE_ID,
+      accountTag: env.CLOUDFLARE_BILLING_ACCOUNT_ID!,
+      databaseId,
       start: window.startDate,
       end: window.endDate,
     });
@@ -628,7 +609,7 @@ async function d1Usage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Database id: ${env.CLOUDFLARE_USAGE_D1_DATABASE_ID}`,
+        `Database id: ${databaseId}`,
         `Read queries: ${readQueries.toLocaleString()}`,
         `Write queries: ${writeQueries.toLocaleString()}`,
       ],
@@ -656,7 +637,7 @@ async function durableObjectUsage(
       "not_configured",
       "Cloudflare GraphQL Analytics API",
       [
-        "Set CLOUDFLARE_USAGE_ACCOUNT_ID and CLOUDFLARE_USAGE_API_TOKEN to query Durable Object namespace usage.",
+        "Set CLOUDFLARE_BILLING_ACCOUNT_ID and CLOUDFLARE_BILLING_API_TOKEN to query Durable Object namespace usage.",
       ],
     );
   }
@@ -687,7 +668,7 @@ async function durableObjectUsage(
 
   try {
     const data = await graphql<DurableObjectQueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
+      accountTag: env.CLOUDFLARE_BILLING_ACCOUNT_ID!,
       start: window.startDate,
       end: window.endDate,
     });
@@ -778,12 +759,8 @@ async function r2Usage(
   env: UsageEnv,
   window: ReturnType<typeof currentWindow>,
 ): Promise<UsageService> {
-  if (!configuredBase(env) || !env.CLOUDFLARE_USAGE_R2_BUCKET_NAME) {
-    return emptyService("r2", "R2", "not_configured", "Cloudflare GraphQL Analytics API", [
-      "Set CLOUDFLARE_USAGE_ACCOUNT_ID, CLOUDFLARE_USAGE_API_TOKEN, and CLOUDFLARE_USAGE_R2_BUCKET_NAME to query R2 usage.",
-    ]);
-  }
-
+  // R2 bucket name defaults to the standard naming pattern
+  const bucketName = "o11yfleet-configs";
   const query = `
     query R2Daily($accountTag: string!, $bucketName: string!, $start: Time, $end: Time) {
       viewer {
@@ -810,8 +787,8 @@ async function r2Usage(
 
   try {
     const data = await graphql<R2QueryData>(env, query, {
-      accountTag: env.CLOUDFLARE_USAGE_ACCOUNT_ID!,
-      bucketName: env.CLOUDFLARE_USAGE_R2_BUCKET_NAME,
+      accountTag: env.CLOUDFLARE_BILLING_ACCOUNT_ID!,
+      bucketName,
       start: window.startDatetime,
       end: window.endDatetime,
     });
@@ -886,7 +863,7 @@ async function r2Usage(
         monthProjection(spend, window.daysElapsed, window.daysInMonth),
       ),
       notes: [
-        `Bucket: ${env.CLOUDFLARE_USAGE_R2_BUCKET_NAME}`,
+        `Bucket: ${bucketName}`,
         `Objects: ${objectCount.toLocaleString()}`,
         `Response bytes: ${responseBytes.toLocaleString()}`,
         "R2 operation class mapping is inferred from GraphQL actionType names.",

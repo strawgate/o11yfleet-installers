@@ -85,22 +85,22 @@ The manual **AI Guidance Live Check** workflow starts a local seeded
 Worker/site stack and runs the Playwright live-provider check against the
 MiniMax-backed guidance route.
 
-| Name                          | Where                 | Purpose                                                                    |
-| ----------------------------- | --------------------- | -------------------------------------------------------------------------- |
-| `AI_GUIDANCE_MINIMAX_API_KEY` | GitHub Actions secret | Passed to the local Worker as `AI_GUIDANCE_MINIMAX_API_KEY` during checks. |
+| Name                                    | Where                 | Purpose                                                                              |
+| --------------------------------------- | --------------------- | ------------------------------------------------------------------------------------ |
+| `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` | GitHub Actions secret | Passed to the local Worker as `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` during checks. |
 
 The workflow sets non-secret provider env vars itself. `scripts/serve-explore.sh`
-passes them to `wrangler dev` as Worker vars and bridges `AI_GUIDANCE_MINIMAX_API_KEY`
+passes them to `wrangler dev` as Worker vars and bridges `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY`
 through a short-lived dotenv file outside the repo, then removes that file once
 the Worker is healthy.
 
-| Name                   | Value                       |
-| ---------------------- | --------------------------- |
-| `AI_GUIDANCE_PROVIDER` | `minimax`                   |
-| `AI_GUIDANCE_MODEL`    | `MiniMax-M2.7`              |
-| `AI_GUIDANCE_BASE_URL` | `https://api.minimax.io/v1` |
+| Name                             | Value                       |
+| -------------------------------- | --------------------------- |
+| `O11YFLEET_AI_GUIDANCE_PROVIDER` | `minimax`                   |
+| `O11YFLEET_AI_GUIDANCE_MODEL`    | `MiniMax-M2.7`              |
+| `O11YFLEET_AI_GUIDANCE_BASE_URL` | `https://api.minimax.io/v1` |
 
-If `AI_GUIDANCE_MINIMAX_API_KEY` is absent, the workflow exits successfully with a notice
+If `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` is absent, the workflow exits successfully with a notice
 instead of silently falling back to fixture guidance.
 
 ## API Contract Rules

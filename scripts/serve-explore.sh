@@ -129,7 +129,7 @@ remove_worker_env_file() {
 }
 
 write_worker_env_file() {
-  [ -n "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ] || return 0
+  [ -n "${O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY:-}" ] || return 0
 
   WORKER_ENV_FILE="$(mktemp "${RUNNER_TEMP:-${TMPDIR:-/tmp}}/o11yfleet-worker-env.XXXXXX")"
   chmod 600 "$WORKER_ENV_FILE"
@@ -138,7 +138,7 @@ write_worker_env_file() {
   cat apps/worker/.dev.vars >"$WORKER_ENV_FILE"
   {
     printf '\n'
-    printf 'AI_GUIDANCE_MINIMAX_API_KEY=%s\n' "$AI_GUIDANCE_MINIMAX_API_KEY"
+    printf 'O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY=%s\n' "$O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY"
   } >>"$WORKER_ENV_FILE"
 }
 
@@ -228,11 +228,11 @@ stop_stack
 WORKER_VAR_ARGS=()
 # Always set ENVIRONMENT=dev to enable local dev CORS (localhost origins allowed)
 WORKER_VAR_ARGS+=(--var "ENVIRONMENT:dev")
-if [ -n "${AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
+if [ -n "${O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY:-}" ]; then
   write_worker_env_file
-  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_PROVIDER:${AI_GUIDANCE_PROVIDER:-minimax}")
-  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_MODEL:${AI_GUIDANCE_MODEL:-MiniMax-M2.7}")
-  WORKER_VAR_ARGS+=(--var "AI_GUIDANCE_BASE_URL:${AI_GUIDANCE_BASE_URL:-https://api.minimax.io/v1}")
+  WORKER_VAR_ARGS+=(--var "O11YFLEET_AI_GUIDANCE_PROVIDER:${O11YFLEET_AI_GUIDANCE_PROVIDER:-minimax}")
+  WORKER_VAR_ARGS+=(--var "O11YFLEET_AI_GUIDANCE_MODEL:${O11YFLEET_AI_GUIDANCE_MODEL:-MiniMax-M2.7}")
+  WORKER_VAR_ARGS+=(--var "O11YFLEET_AI_GUIDANCE_BASE_URL:${O11YFLEET_AI_GUIDANCE_BASE_URL:-https://api.minimax.io/v1}")
 fi
 
 echo "Starting worker at $FP_URL"

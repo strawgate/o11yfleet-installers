@@ -45,7 +45,7 @@ degraded or temporary path.
 | Admin DO debug                | `/api/admin/configurations/:id/do/*`                              | Cheap          | Manual troubleshooting of one DO                       | Product UI, dashboards, or AI context         |
 
 `GET /api/v1/overview` reads the latest per-config snapshot from Analytics
-Engine when `CLOUDFLARE_USAGE_ACCOUNT_ID` and `CLOUDFLARE_USAGE_API_TOKEN` are
+Engine when `CLOUDFLARE_BILLING_ACCOUNT_ID` and `CLOUDFLARE_BILLING_API_TOKEN` are
 configured. It does not fan out to per-config DO `/stats` when metrics are
 missing. Missing or failing metrics are surfaced as unavailable snapshot data so
 the UI can show an explicit empty or stale state without turning a dashboard

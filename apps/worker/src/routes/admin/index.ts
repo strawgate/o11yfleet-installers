@@ -1084,7 +1084,7 @@ async function handleUpdateSettings(_request: Request, _env: Env): Promise<Respo
   // This endpoint is primarily for reading current state
   // In a full implementation, you might persist settings to D1 or KV
   return jsonError(
-    "Settings must be updated via environment variables (FP_SIGNUP_AUTO_APPROVE)",
+    "Settings must be updated via environment variables (O11YFLEET_SIGNUP_AUTO_APPROVE)",
     400,
   );
 }

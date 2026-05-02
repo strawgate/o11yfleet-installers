@@ -112,8 +112,8 @@ test.describe("live AI guidance audit", () => {
   test.describe.configure({ retries: 0 });
 
   test.skip(
-    process.env.LIVE_AI_GUIDANCE !== "1" || !process.env.AI_GUIDANCE_MINIMAX_API_KEY,
-    "Set LIVE_AI_GUIDANCE=1 and provide AI_GUIDANCE_MINIMAX_API_KEY to run the live provider check.",
+    process.env.LIVE_AI_GUIDANCE !== "1" || !process.env.O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY,
+    "Set LIVE_AI_GUIDANCE=1 and provide O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY to run the live provider check.",
   );
 
   test("captures real-provider guidance artifacts and enforces objective hard gates", async ({

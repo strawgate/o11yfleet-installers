@@ -19,7 +19,7 @@ Options:
   --repo OWNER/REPO       GitHub repo. Default: detected by gh.
   --state-bucket NAME     R2 bucket for Terraform state. Default: gh variable or env.
   --include-zero-trust    Add Access app/policy write permission for admin Access.
-  --analytics-sql-tokens  Create Analytics Engine SQL API tokens and set CLOUDFLARE_ANALYTICS_SQL_* secrets.
+  --analytics-sql-tokens  Create Analytics Engine SQL API tokens and set CLOUDFLARE_METRICS_* secrets.
   -h, --help              Show this help.
 
 Required bootstrap env:
@@ -434,8 +434,8 @@ for target_env in $TARGET_ENVS; do
     analytics_sql_token="$(jq -r '.result.value' <<<"$analytics_sql_response")"
     [ -n "$analytics_sql_token" ] && [ "$analytics_sql_token" != "null" ] || die "Cloudflare did not return analytics sql token value"
 
-    set_github_secret "$gh_env" CLOUDFLARE_ANALYTICS_SQL_ACCOUNT_ID "$env_account_id"
-    set_github_secret "$gh_env" CLOUDFLARE_ANALYTICS_SQL_API_TOKEN "$analytics_sql_token"
+    set_github_secret "$gh_env" CLOUDFLARE_METRICS_ACCOUNT_ID "$env_account_id"
+    set_github_secret "$gh_env" CLOUDFLARE_METRICS_API_TOKEN "$analytics_sql_token"
     log "  created Analytics Engine SQL API token for ${target_env}"
   fi
 done

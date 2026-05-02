@@ -48,17 +48,17 @@ function getFromAddress(env: Env, category: EmailCategory): string {
     accounts: undefined, // e.g., "accounts@o11yfleet.com"
     fleet: undefined, // e.g., "fleet@o11yfleet.com"
     support: undefined, // e.g., "support@o11yfleet.com"
-    default: env.CLOUDFLARE_EMAIL_FROM, // the configured default
+    default: env.O11YFLEET_EMAIL_FROM, // the configured default
   };
 
-  return categoryAddresses[category] ?? env.CLOUDFLARE_EMAIL_FROM ?? "noreply@o11yfleet.com";
+  return categoryAddresses[category] ?? env.O11YFLEET_EMAIL_FROM ?? "noreply@o11yfleet.com";
 }
 
 /**
  * Check if Cloudflare Email Service is configured
  */
 export function isEmailConfigured(env: Env): boolean {
-  return Boolean(env.CLOUDFLARE_EMAIL_SENDER && env.CLOUDFLARE_EMAIL_FROM);
+  return Boolean(env.CLOUDFLARE_EMAIL_SENDER && env.O11YFLEET_EMAIL_FROM);
 }
 
 function htmlEncode(str: string): string {
@@ -235,5 +235,5 @@ export async function sendTenantApprovalEmail(
 }
 
 export function isAutoApproveEnabled(env: Env): boolean {
-  return env.FP_SIGNUP_AUTO_APPROVE === "true";
+  return env.O11YFLEET_SIGNUP_AUTO_APPROVE === "true";
 }

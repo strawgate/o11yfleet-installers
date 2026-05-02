@@ -46,16 +46,16 @@ Environment-level deployment credentials:
 Environment-level Worker and smoke-test secrets, configured separately for the
 `dev`, `staging`, and `production` GitHub Environments:
 
-| Secret                                | Notes                                                             |
-| ------------------------------------- | ----------------------------------------------------------------- |
-| `O11YFLEET_API_BEARER_SECRET`         | Worker admin bearer and deploy smoke auth                         |
-| `O11YFLEET_CLAIM_HMAC_SECRET`         | OpAMP enrollment claim signing                                    |
-| `O11YFLEET_SEED_TENANT_USER_EMAIL`    | `/auth/seed` tenant user email; required in dev/staging/prod      |
-| `O11YFLEET_SEED_TENANT_USER_PASSWORD` | `/auth/seed` tenant user password; required in dev/staging/prod   |
-| `O11YFLEET_SEED_ADMIN_EMAIL`          | `/auth/seed` admin email; required in dev/staging/prod            |
-| `O11YFLEET_SEED_ADMIN_PASSWORD`       | `/auth/seed` admin password; required in dev/staging/prod         |
-| `AI_GUIDANCE_MINIMAX_API_KEY`         | Optional; only required for SDK-backed AI guidance provider modes |
-| `CLOUDFLARE_USAGE_API_TOKEN`          | Admin usage/spend: GraphQL Analytics API (Terraform-inherited)    |
+| Secret                                  | Notes                                                             |
+| --------------------------------------- | ----------------------------------------------------------------- |
+| `O11YFLEET_API_BEARER_SECRET`           | Worker admin bearer and deploy smoke auth                         |
+| `O11YFLEET_CLAIM_HMAC_SECRET`           | OpAMP enrollment claim signing                                    |
+| `O11YFLEET_SEED_TENANT_USER_EMAIL`      | `/auth/seed` tenant user email; required in dev/staging/prod      |
+| `O11YFLEET_SEED_TENANT_USER_PASSWORD`   | `/auth/seed` tenant user password; required in dev/staging/prod   |
+| `O11YFLEET_SEED_ADMIN_EMAIL`            | `/auth/seed` admin email; required in dev/staging/prod            |
+| `O11YFLEET_SEED_ADMIN_PASSWORD`         | `/auth/seed` admin password; required in dev/staging/prod         |
+| `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` | Optional; only required for SDK-backed AI guidance provider modes |
+| `CLOUDFLARE_BILLING_API_TOKEN`          | Admin usage/spend: GraphQL Analytics API (Terraform-inherited)    |
 
 ### CF API Token Permissions
 
@@ -97,10 +97,10 @@ deployed environment. Terraform-managed Worker versions inherit `O11YFLEET_API_B
 `O11YFLEET_CLAIM_HMAC_SECRET`, and seed-account secrets from the latest Worker version by
 default. Provision them before Terraform Worker deployments so the uploaded
 version can inherit the secret bindings. AI guidance can also inherit the
-optional `AI_GUIDANCE_MINIMAX_API_KEY` when an environment's tfvars set an SDK
+optional `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` when an environment's tfvars set an SDK
 provider mode and include that secret in `worker_inherited_binding_names`;
-Terraform provides the non-secret `AI_GUIDANCE_PROVIDER`, `AI_GUIDANCE_MODEL`,
-and `AI_GUIDANCE_BASE_URL` Worker bindings.
+Terraform provides the non-secret `O11YFLEET_AI_GUIDANCE_PROVIDER`, `O11YFLEET_AI_GUIDANCE_MODEL`,
+and `O11YFLEET_AI_GUIDANCE_BASE_URL` Worker bindings.
 
 `apps/worker/wrangler.jsonc` also declares these names under
 `secrets.required` for the base, staging, and production Worker environments.
@@ -137,17 +137,14 @@ Wrangler deployment is intentional.
 
 ## Usage & Spend Bindings
 
-The admin portal's Usage & Spend page auto-derives all service identifiers from Terraform:
+The admin portal's Usage & Spend page uses the following binding and secret:
 
-| Binding                               | Source    | Notes                                                |
-| ------------------------------------- | --------- | ---------------------------------------------------- |
-| `CLOUDFLARE_ACCOUNT_ID`               | Terraform | From `cloudflare_account_id` variable                |
-| `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Terraform | Worker script name (`o11yfleet-worker`)              |
-| `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Terraform | D1 database UUID from `cloudflare_d1_database.fleet` |
-| `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Terraform | R2 bucket name from `cloudflare_r2_bucket.configs`   |
+| Name                            | Source    | Notes                                 |
+| ------------------------------- | --------- | ------------------------------------- |
+| `CLOUDFLARE_BILLING_ACCOUNT_ID` | Terraform | From `cloudflare_account_id` variable |
 
-The only secret required is `CLOUDFLARE_USAGE_API_TOKEN` for GraphQL Analytics API access.
-Create a read-only usage token and set it as a Worker secret:
+The only secret required is `CLOUDFLARE_BILLING_API_TOKEN` for GraphQL Analytics API access.
+Create a read-only billing/analytics token and set it as a Worker secret:
 
 ```bash
 # Dry-run first to see what would be created

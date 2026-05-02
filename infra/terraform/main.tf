@@ -68,17 +68,17 @@ locals {
       text = local.worker_environment_name
     },
     {
-      name = "AI_GUIDANCE_PROVIDER"
+      name = "O11YFLEET_AI_GUIDANCE_PROVIDER"
       type = "plain_text"
       text = var.ai_guidance_provider
     },
     {
-      name = "AI_GUIDANCE_MODEL"
+      name = "O11YFLEET_AI_GUIDANCE_MODEL"
       type = "plain_text"
       text = var.ai_guidance_model
     },
     {
-      name = "AI_GUIDANCE_BASE_URL"
+      name = "O11YFLEET_AI_GUIDANCE_BASE_URL"
       type = "plain_text"
       text = var.ai_guidance_base_url
     },
@@ -93,27 +93,22 @@ locals {
       text = var.cloudflare_account_id
     },
     {
-      name = "CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME"
+      name = "CLOUDFLARE_BILLING_ACCOUNT_ID"
       type = "plain_text"
-      text = local.worker_name
+      text = var.cloudflare_account_id
     },
     {
-      name = "CLOUDFLARE_USAGE_D1_DATABASE_ID"
+      name = "CLOUDFLARE_METRICS_ACCOUNT_ID"
       type = "plain_text"
-      text = cloudflare_d1_database.fleet.uuid
+      text = var.cloudflare_account_id
     },
     {
-      name = "CLOUDFLARE_USAGE_R2_BUCKET_NAME"
-      type = "plain_text"
-      text = cloudflare_r2_bucket.configs.name
-    },
-    {
-      name = "FP_SIGNUP_AUTO_APPROVE"
+      name = "O11YFLEET_SIGNUP_AUTO_APPROVE"
       type = "plain_text"
       text = var.signup_auto_approve ? "true" : "false"
     },
     {
-      name = "CLOUDFLARE_EMAIL_FROM"
+      name = "O11YFLEET_EMAIL_FROM"
       type = "plain_text"
       text = coalesce(var.email_from, "O11yFleet <noreply@o11yfleet.com>")
     },

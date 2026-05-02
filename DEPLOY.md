@@ -91,15 +91,15 @@ Repository-level Actions variables:
 Environment-level application secrets, configured separately for the same
 GitHub Environments:
 
-| Secret                                | Purpose                                  |
-| ------------------------------------- | ---------------------------------------- |
-| `O11YFLEET_API_BEARER_SECRET`         | Admin bearer and deploy smoke auth       |
-| `O11YFLEET_CLAIM_HMAC_SECRET`         | Enrollment claim signing                 |
-| `O11YFLEET_SEED_TENANT_USER_EMAIL`    | `/auth/seed` tenant user email           |
-| `O11YFLEET_SEED_TENANT_USER_PASSWORD` | `/auth/seed` tenant user password        |
-| `O11YFLEET_SEED_ADMIN_EMAIL`          | `/auth/seed` admin email                 |
-| `O11YFLEET_SEED_ADMIN_PASSWORD`       | `/auth/seed` admin password              |
-| `AI_GUIDANCE_MINIMAX_API_KEY`         | Optional SDK-backed AI guidance provider |
+| Secret                                  | Purpose                                  |
+| --------------------------------------- | ---------------------------------------- |
+| `O11YFLEET_API_BEARER_SECRET`           | Admin bearer and deploy smoke auth       |
+| `O11YFLEET_CLAIM_HMAC_SECRET`           | Enrollment claim signing                 |
+| `O11YFLEET_SEED_TENANT_USER_EMAIL`      | `/auth/seed` tenant user email           |
+| `O11YFLEET_SEED_TENANT_USER_PASSWORD`   | `/auth/seed` tenant user password        |
+| `O11YFLEET_SEED_ADMIN_EMAIL`            | `/auth/seed` admin email                 |
+| `O11YFLEET_SEED_ADMIN_PASSWORD`         | `/auth/seed` admin password              |
+| `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` | Optional SDK-backed AI guidance provider |
 
 Optional Cloudflare usage/spend estimate secrets can also be configured per
 environment; see [`infra/CLOUDFLARE_SETUP.md`](infra/CLOUDFLARE_SETUP.md).
@@ -155,20 +155,20 @@ just worker-secrets-check staging
 just worker-secrets-check prod
 ```
 
-| Name                                  | Required      | Purpose                                                                                                                                                     |
-| ------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `O11YFLEET_API_BEARER_SECRET`         | Yes           | Deployment-level bearer secret for controlled bootstrap and tenant-scoped programmatic access. It is not accepted for `/api/admin/*` employee admin routes. |
-| `O11YFLEET_CLAIM_HMAC_SECRET`         | Yes           | HMAC secret for enrollment and assignment claims.                                                                                                           |
-| `O11YFLEET_SEED_TENANT_USER_EMAIL`    | Shared env    | Tenant user email used by `/auth/seed` in deployed environments.                                                                                            |
-| `O11YFLEET_SEED_TENANT_USER_PASSWORD` | Shared env    | Tenant user password used by `/auth/seed` in deployed environments.                                                                                         |
-| `O11YFLEET_SEED_ADMIN_EMAIL`          | Shared env    | Admin email used by `/auth/seed` in deployed environments.                                                                                                  |
-| `O11YFLEET_SEED_ADMIN_PASSWORD`       | Shared env    | Admin password used by `/auth/seed` in deployed environments.                                                                                               |
-| `AI_GUIDANCE_MINIMAX_API_KEY`         | AI guidance   | Optional; enables SDK-backed AI guidance when Terraform sets `ai_guidance_provider` to `minimax` or `openai-compatible`.                                    |
-| `GITHUB_APP_CLIENT_ID`                | Self-service  | GitHub App OAuth client id used for social signup and login.                                                                                                |
-| `GITHUB_APP_CLIENT_SECRET`            | Self-service  | GitHub App OAuth client secret used to exchange GitHub authorization codes.                                                                                 |
-| `GITHUB_APP_ID`                       | Future GitOps | GitHub App id returned by the manifest flow; retained for repo installation features.                                                                       |
-| `GITHUB_APP_WEBHOOK_SECRET`           | Future GitOps | GitHub App webhook secret returned by the manifest flow; retained for repo installation webhooks.                                                           |
-| `GITHUB_APP_PRIVATE_KEY`              | Future GitOps | GitHub App private key returned by the manifest flow; retained for future installation-token minting.                                                       |
+| Name                                    | Required      | Purpose                                                                                                                                                     |
+| --------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `O11YFLEET_API_BEARER_SECRET`           | Yes           | Deployment-level bearer secret for controlled bootstrap and tenant-scoped programmatic access. It is not accepted for `/api/admin/*` employee admin routes. |
+| `O11YFLEET_CLAIM_HMAC_SECRET`           | Yes           | HMAC secret for enrollment and assignment claims.                                                                                                           |
+| `O11YFLEET_SEED_TENANT_USER_EMAIL`      | Shared env    | Tenant user email used by `/auth/seed` in deployed environments.                                                                                            |
+| `O11YFLEET_SEED_TENANT_USER_PASSWORD`   | Shared env    | Tenant user password used by `/auth/seed` in deployed environments.                                                                                         |
+| `O11YFLEET_SEED_ADMIN_EMAIL`            | Shared env    | Admin email used by `/auth/seed` in deployed environments.                                                                                                  |
+| `O11YFLEET_SEED_ADMIN_PASSWORD`         | Shared env    | Admin password used by `/auth/seed` in deployed environments.                                                                                               |
+| `O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` | AI guidance   | Optional; enables SDK-backed AI guidance when Terraform sets `ai_guidance_provider` to `minimax` or `openai-compatible`.                                    |
+| `GITHUB_APP_CLIENT_ID`                  | Self-service  | GitHub App OAuth client id used for social signup and login.                                                                                                |
+| `GITHUB_APP_CLIENT_SECRET`              | Self-service  | GitHub App OAuth client secret used to exchange GitHub authorization codes.                                                                                 |
+| `GITHUB_APP_ID`                         | Future GitOps | GitHub App id returned by the manifest flow; retained for repo installation features.                                                                       |
+| `GITHUB_APP_WEBHOOK_SECRET`             | Future GitOps | GitHub App webhook secret returned by the manifest flow; retained for repo installation webhooks.                                                           |
+| `GITHUB_APP_PRIVATE_KEY`                | Future GitOps | GitHub App private key returned by the manifest flow; retained for future installation-token minting.                                                       |
 
 Worker runtime secrets live on the deployed API Worker, not in Terraform state
 and not in the browser site. GitHub Actions secrets are only for deployment
@@ -406,16 +406,15 @@ The `just site-build <env>` recipe sets this automatically from
 
 Terraform-managed Worker deployments set the non-secret AI guidance bindings:
 
-| Name                    | Purpose                                        |
-| ----------------------- | ---------------------------------------------- |
-| `AI_GUIDANCE_PROVIDER`  | Provider mode; defaults to `fixture`.          |
-| `AI_GUIDANCE_MODEL`     | Model name; defaults to the fixture model.     |
-| `AI_GUIDANCE_BASE_URL`  | Provider API base URL.                         |
-| `AI_GUIDANCE_FIXTURE_*` | Optional fixture guidance for non-SDK testing. |
+| Name                             | Purpose                                    |
+| -------------------------------- | ------------------------------------------ |
+| `O11YFLEET_AI_GUIDANCE_PROVIDER` | Provider mode; defaults to `fixture`.      |
+| `O11YFLEET_AI_GUIDANCE_MODEL`    | Model name; defaults to the fixture model. |
+| `O11YFLEET_AI_GUIDANCE_BASE_URL` | Provider API base URL.                     |
 
-`AI_GUIDANCE_MINIMAX_API_KEY` is the runtime secret that enables SDK-backed AI
+`O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` is the runtime secret that enables SDK-backed AI
 guidance. Configure it as a Worker secret and include
-`AI_GUIDANCE_MINIMAX_API_KEY` in `worker_inherited_binding_names` only for
+`O11YFLEET_AI_GUIDANCE_MINIMAX_API_KEY` in `worker_inherited_binding_names` only for
 environments whose Terraform tfvars set `ai_guidance_provider` to `minimax` or
 `openai-compatible`. Also configure it as a GitHub Actions secret for the manual
 **AI Guidance Live Check** workflow.
@@ -428,15 +427,12 @@ The `/admin/usage` page estimates Cloudflare usage and spend from analytics
 APIs. It does not read Cloudflare billing totals. Configure these Worker runtime
 secrets to enable it:
 
-| Name                                  | Required | Source                                                                                                                                         |
-| ------------------------------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `CLOUDFLARE_USAGE_API_TOKEN`          | Yes      | Cloudflare API token with the permissions needed for account analytics and Analytics Engine SQL reads.                                         |
-| `CLOUDFLARE_USAGE_ACCOUNT_ID`         | Yes      | Cloudflare account id used by usage and spend estimates.                                                                                       |
-| `CLOUDFLARE_USAGE_WORKER_SCRIPT_NAME` | Yes      | Worker script name for invocation analytics. Local/prod: `o11yfleet-worker`; staging: `o11yfleet-worker-staging`; dev: `o11yfleet-worker-dev`. |
-| `CLOUDFLARE_USAGE_D1_DATABASE_ID`     | Yes      | D1 database id from `apps/worker/wrangler.jsonc`.                                                                                              |
-| `CLOUDFLARE_USAGE_R2_BUCKET_NAME`     | Yes      | R2 bucket name from `apps/worker/wrangler.jsonc`.                                                                                              |
+| Name                            | Required | Source                                                                                                          |
+| ------------------------------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_BILLING_API_TOKEN`  | Yes      | Cloudflare API token with the permissions needed for account analytics and Analytics Engine SQL reads.          |
+| `CLOUDFLARE_BILLING_ACCOUNT_ID` | Yes      | Cloudflare account id used by usage and spend estimates. Bound by Terraform as `CLOUDFLARE_BILLING_ACCOUNT_ID`. |
 
-Use `CLOUDFLARE_USAGE_API_TOKEN` for the runtime analytics token. The admin
+Use `CLOUDFLARE_BILLING_API_TOKEN` for the runtime analytics token. The admin
 usage page does not fall back to the deployment token; deployment tooling maps
 `CLOUDFLARE_DEPLOY_API_TOKEN` to Cloudflare's conventional
 `CLOUDFLARE_API_TOKEN` environment variable only inside CI/local deploy shells.
