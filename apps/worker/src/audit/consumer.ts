@@ -34,6 +34,8 @@
 import type { AuditActor, AuditEvent } from "@o11yfleet/core/audit";
 import { assertNever } from "@o11yfleet/core/assert-never";
 import type { Env } from "../index.js";
+import { getDb } from "../db/client.js";
+import { compileForBatch, insertAuditLog } from "../db/queries.js";
 
 export async function consumeAuditBatch(batch: MessageBatch<AuditEvent>, env: Env): Promise<void> {
   if (batch.messages.length === 0) return;
@@ -112,40 +114,34 @@ function safeStringifyMetadata(metadata: Record<string, unknown>): string {
   }
 }
 
-function buildInsertStatement(env: Env, event: AuditEvent) {
+function buildInsertStatement(env: Env, event: AuditEvent): D1PreparedStatement {
   // Map the AuditScope discriminated union to the storage column:
   // admin scope is represented as tenant_id NULL.
   const tenantId = event.scope.kind === "tenant" ? event.scope.tenant_id : null;
   const actor = projectActor(event.actor);
-  // ON CONFLICT(id) DO NOTHING makes inserts idempotent: event.id is
-  // generated in the producer (crypto.randomUUID), so a queue retry
-  // after a partial batch failure won't trip a PRIMARY KEY violation
-  // and spin into the DLQ.
-  return env.FP_DB.prepare(
-    `INSERT INTO audit_logs (
-       id, tenant_id,
-       actor_user_id, actor_api_key_id, actor_email, actor_ip, actor_user_agent,
-       impersonator_user_id,
-       action, resource_type, resource_id,
-       status, status_code, metadata, request_id, created_at
-     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO NOTHING`,
-  ).bind(
-    event.id,
-    tenantId,
-    actor.user_id,
-    actor.api_key_id,
-    actor.email,
-    actor.ip,
-    actor.user_agent,
-    actor.impersonator_user_id,
-    event.action,
-    event.resource_type,
-    event.resource_id,
-    event.status,
-    event.status_code,
-    event.metadata ? safeStringifyMetadata(event.metadata) : null,
-    event.request_id,
-    event.created_at,
+  // ON CONFLICT(id) DO NOTHING (via insertAuditLog) makes inserts
+  // idempotent: event.id is generated in the producer (crypto.randomUUID),
+  // so a queue retry after a partial batch failure won't trip a PRIMARY
+  // KEY violation and spin into the DLQ.
+  return compileForBatch(
+    insertAuditLog(getDb(env.FP_DB), {
+      id: event.id,
+      tenant_id: tenantId,
+      actor_user_id: actor.user_id,
+      actor_api_key_id: actor.api_key_id,
+      actor_email: actor.email,
+      actor_ip: actor.ip,
+      actor_user_agent: actor.user_agent,
+      impersonator_user_id: actor.impersonator_user_id,
+      action: event.action,
+      resource_type: event.resource_type,
+      resource_id: event.resource_id,
+      status: event.status,
+      status_code: event.status_code,
+      metadata: event.metadata ? safeStringifyMetadata(event.metadata) : null,
+      request_id: event.request_id,
+      created_at: event.created_at,
+    }),
+    env.FP_DB,
   );
 }

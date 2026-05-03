@@ -42,6 +42,7 @@ import { validateJsonBody } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { z } from "zod";
 import { getDb } from "../../db/client.js";
+import { compileForBatch } from "../../db/queries.js";
 import {
   countConfigsForTenant,
   findOwnedConfig,
@@ -480,14 +481,25 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
   }
 
   // Atomic batch — sessions, users, tenant must all delete or none.
-  // Kept as raw env.FP_DB.prepare() because Kysely's D1 batch isn't
-  // equivalent to D1's atomic batch().
+  // env.FP_DB.batch is the only way to commit multiple D1 statements
+  // atomically (kysely-d1 doesn't support transactions); compileForBatch
+  // lets us keep the type-safe builder.
+  const db = getDb(env.FP_DB);
   await env.FP_DB.batch([
-    env.FP_DB.prepare(
-      `DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id = ?)`,
-    ).bind(tenantId),
-    env.FP_DB.prepare(`DELETE FROM users WHERE tenant_id = ?`).bind(tenantId),
-    env.FP_DB.prepare(`DELETE FROM tenants WHERE id = ?`).bind(tenantId),
+    compileForBatch(
+      db
+        .deleteFrom("sessions")
+        .where((eb) =>
+          eb(
+            "user_id",
+            "in",
+            eb.selectFrom("users").select("id").where("tenant_id", "=", tenantId),
+          ),
+        ),
+      env.FP_DB,
+    ),
+    compileForBatch(db.deleteFrom("users").where("tenant_id", "=", tenantId), env.FP_DB),
+    compileForBatch(db.deleteFrom("tenants").where("id", "=", tenantId), env.FP_DB),
   ]);
   return new Response(null, { status: 204 });
 }
@@ -519,25 +531,38 @@ async function handleCreateConfiguration(
   const body = await validateJsonBody(request, createConfigurationRequestSchema);
 
   const id = crypto.randomUUID();
-  // Atomic create-with-quota check via INSERT ... SELECT. Kept as raw
-  // SQL because Kysely doesn't natively express the "INSERT only if
-  // (subquery COUNT) < max_configs" guard cleanly — a Kysely version
-  // would split into a SELECT-then-INSERT, which is racy under
-  // concurrent creates.
-  const insertResult = await env.FP_DB.prepare(
-    `INSERT INTO configurations (id, tenant_id, name, description)
-     SELECT ?, t.id, ?, ?
-     FROM tenants t
-     WHERE t.id = ?
-       AND (
-         SELECT COUNT(*) FROM configurations c WHERE c.tenant_id = t.id
-       ) < t.max_configs`,
-  )
-    .bind(id, body.name, body.description ?? null, tenantId)
-    .run();
+  // Atomic create-with-quota check via INSERT ... SELECT. Splitting this
+  // into a separate count + insert would be racy under concurrent creates;
+  // doing it in one statement lets SQLite enforce the quota inside the
+  // same row-locked operation that creates the row.
+  const db = getDb(env.FP_DB);
+  const insertResult = await db
+    .insertInto("configurations")
+    .columns(["id", "tenant_id", "name", "description"])
+    .expression((eb) =>
+      eb
+        .selectFrom("tenants as t")
+        .select([
+          sql<string>`${id}`.as("id"),
+          "t.id as tenant_id",
+          sql<string>`${body.name}`.as("name"),
+          sql<string | null>`${body.description ?? null}`.as("description"),
+        ])
+        .where("t.id", "=", tenantId)
+        .where(({ eb: e, selectFrom, fn, ref }) =>
+          e(
+            selectFrom("configurations as c")
+              .select(fn.countAll<number>().as("cnt"))
+              .whereRef("c.tenant_id", "=", "t.id"),
+            "<",
+            ref("t.max_configs"),
+          ),
+        ),
+    )
+    .executeTakeFirst();
 
-  if ((insertResult.meta.changes ?? 0) === 0) {
-    const tenant = await getDb(env.FP_DB)
+  if ((insertResult.numInsertedOrUpdatedRows ?? 0n) === 0n) {
+    const tenant = await db
       .selectFrom("tenants")
       .select("max_configs")
       .where("id", "=", tenantId)
@@ -609,21 +634,26 @@ async function handleDeleteConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const versions = await getDb(env.FP_DB)
+  const db = getDb(env.FP_DB);
+  const versions = await db
     .selectFrom("config_versions")
     .select("r2_key")
     .distinct()
     .where("config_id", "=", configId)
     .execute();
 
-  // Atomic batch — kept as raw env.FP_DB.prepare() so we get D1's
-  // atomic batch semantics (Kysely's batch on D1 isn't equivalent).
+  // env.FP_DB.batch is the only way to commit multiple D1 statements
+  // atomically (kysely-d1 doesn't support transactions); compileForBatch
+  // keeps the type-safe builder around each statement.
   await env.FP_DB.batch([
-    env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`).bind(configId),
-    env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`).bind(configId),
-    env.FP_DB.prepare(`DELETE FROM configurations WHERE id = ? AND tenant_id = ?`).bind(
-      configId,
-      tenantId,
+    compileForBatch(
+      db.deleteFrom("enrollment_tokens").where("config_id", "=", configId),
+      env.FP_DB,
+    ),
+    compileForBatch(db.deleteFrom("config_versions").where("config_id", "=", configId), env.FP_DB),
+    compileForBatch(
+      db.deleteFrom("configurations").where("id", "=", configId).where("tenant_id", "=", tenantId),
+      env.FP_DB,
     ),
   ]);
 

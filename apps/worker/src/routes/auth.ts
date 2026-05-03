@@ -14,6 +14,7 @@ import { isAutoApproveEnabled } from "../shared/email.js";
 import { sql } from "kysely";
 import { handleGitHubWebhook } from "../github/webhook.js";
 import { getDb } from "../db/client.js";
+import { compileForBatch } from "../db/queries.js";
 import {
   adminAuditContext,
   recordEvent,
@@ -767,24 +768,35 @@ async function findOrCreateGitHubUser(
     // Determine initial tenant status based on auto-approval setting
     const tenantStatus = isAutoApproveEnabled(env) ? "active" : "pending";
 
-    // Atomic D1 batch — both rows commit or neither does. Kept as raw
-    // `env.FP_DB.prepare(...)` because Kysely's batch on D1 is not
-    // equivalent to D1's atomic `batch()`, and we depend on the latter
-    // here so a partial-failure can't strand a tenant without its user.
+    // Atomic D1 batch — both rows commit or neither does. env.FP_DB.batch
+    // is the only way to get atomic multi-statement commits on D1
+    // (kysely-d1 doesn't support transactions); compileForBatch keeps the
+    // statement bodies type-checked.
+    const batchDb = getDb(env.FP_DB);
     await env.FP_DB.batch([
-      env.FP_DB.prepare(
-        "INSERT INTO tenants (id, name, plan, status, max_configs, max_agents_per_config, approved_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
-      ).bind(
-        tenantId,
-        `${profile.login}'s workspace`,
-        plan,
-        tenantStatus,
-        max_configs,
-        max_agents_per_config,
+      compileForBatch(
+        batchDb.insertInto("tenants").values({
+          id: tenantId,
+          name: `${profile.login}'s workspace`,
+          plan,
+          status: tenantStatus,
+          max_configs,
+          max_agents_per_config,
+          approved_at: sql<string>`datetime('now')`,
+        }),
+        env.FP_DB,
       ),
-      env.FP_DB.prepare(
-        "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, 'member', ?)",
-      ).bind(userId, email, `external:github:${providerUserId}`, displayName, tenantId),
+      compileForBatch(
+        batchDb.insertInto("users").values({
+          id: userId,
+          email,
+          password_hash: `external:github:${providerUserId}`,
+          display_name: displayName,
+          role: "member",
+          tenant_id: tenantId,
+        }),
+        env.FP_DB,
+      ),
     ]);
     user = {
       id: userId,

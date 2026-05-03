@@ -17,7 +17,7 @@
  */
 
 import { getDb } from "../db/client.js";
-import { existsBy, tenantScoped } from "../db/queries.js";
+import { compileForBatch, existsBy, tenantScoped } from "../db/queries.js";
 import type { Configuration, Tenant } from "../db/schema.js";
 
 interface DbEnv {
@@ -61,11 +61,15 @@ export async function tenantExists(env: DbEnv, tenantId: string): Promise<boolea
 /**
  * Delete a tenant by id. Returns the underlying D1 result so callers can
  * read `meta.changes` to tell whether the row existed without a prefetch
- * SELECT. Kept as a raw `prepare(...)` because callers depend on
- * `D1Result.meta`, which Kysely doesn't surface.
+ * SELECT. Built via Kysely + compileForBatch so the column reference is
+ * type-checked, then executed against D1 directly to expose `D1Result.meta`
+ * (which Kysely's executors don't surface).
  */
 export async function deleteTenantById(env: DbEnv, tenantId: string): Promise<D1Result> {
-  return env.FP_DB.prepare(`DELETE FROM tenants WHERE id = ?`).bind(tenantId).run();
+  return compileForBatch(
+    getDb(env.FP_DB).deleteFrom("tenants").where("id", "=", tenantId),
+    env.FP_DB,
+  ).run();
 }
 
 /**

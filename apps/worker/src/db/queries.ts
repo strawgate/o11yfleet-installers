@@ -19,7 +19,13 @@
 //    rules (quota enforcement, plan gating, audit recording) live in
 //    the route or domain modules above this layer.
 
-import { sql, type Insertable, type Kysely, type SelectQueryBuilder } from "kysely";
+import {
+  sql,
+  type Compilable,
+  type Insertable,
+  type Kysely,
+  type SelectQueryBuilder,
+} from "kysely";
 import type { AuditLogTable, Database } from "./schema.js";
 
 /** Tables that have a `tenant_id` column. */
@@ -101,6 +107,32 @@ export function insertAuditLog(db: Kysely<Database>, row: Insertable<AuditLogTab
     .insertInto("audit_logs")
     .values(row)
     .onConflict((oc) => oc.column("id").doNothing());
+}
+
+/**
+ * Compile a Kysely query into a `D1PreparedStatement` so it can be passed
+ * to `env.FP_DB.batch([...])` for atomic execution.
+ *
+ * Why this exists: `kysely-d1@0.4.0` does NOT support transactions
+ * (`beginTransaction()` literally throws "Transactions are not supported
+ * yet."). The only way to commit multiple statements atomically on D1 is
+ * its native `batch()` API, which takes `D1PreparedStatement`s. This
+ * helper bridges the two: build statements with Kysely's type-safe
+ * builder, then feed them into D1's atomic batch.
+ *
+ *     await env.FP_DB.batch([
+ *       compileForBatch(db.insertInto("config_versions").values({...}), env.FP_DB),
+ *       compileForBatch(db.updateTable("configurations").set({...}).where(...), env.FP_DB),
+ *     ]);
+ *
+ * Compiled SQL has been spot-checked against the previous hand-rolled
+ * forms and is semantically identical (Kysely emits `?` instead of `?1`
+ * and parameterizes some literals that were inline, but the planner
+ * receives the same query).
+ */
+export function compileForBatch(query: Compilable, d1: D1Database): D1PreparedStatement {
+  const compiled = query.compile();
+  return d1.prepare(compiled.sql).bind(...compiled.parameters);
 }
 
 /**

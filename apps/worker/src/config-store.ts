@@ -2,9 +2,10 @@
 // SHA-256 → R2 key `configs/sha256/{hash}.yaml`
 // D1 upsert for config versions
 
+import { sql } from "kysely";
 import { parse as parseYaml } from "yaml";
 import { getDb } from "./db/client.js";
-import { existsBy } from "./db/queries.js";
+import { compileForBatch, existsBy } from "./db/queries.js";
 
 export interface ConfigStoreEnv {
   FP_CONFIGS: R2Bucket;
@@ -79,27 +80,36 @@ export async function uploadConfigVersion(
   // configuration's current_config_hash is set even when the version
   // row already existed from a prior upload.
   //
-  // Kept as raw env.FP_DB.prepare() inside env.FP_DB.batch([...]) because
-  // Kysely's batch on D1 isn't equivalent to D1's atomic batch() — and
-  // we depend on atomicity here so a partial failure can't leave the
-  // version row in but the configurations.current_config_hash unchanged.
+  // env.FP_DB.batch([...]) is the only way to commit multiple D1
+  // statements atomically — kysely-d1@0.4.0 does not support transactions.
+  // The compileForBatch helper builds typed Kysely chains and emits
+  // D1PreparedStatements so the SQL stays type-checked at the call site.
+  const db = getDb(env.FP_DB);
   await env.FP_DB.batch([
-    env.FP_DB.prepare(
-      `INSERT INTO config_versions (id, config_id, tenant_id, config_hash, r2_key, size_bytes, created_by, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
-       ON CONFLICT(config_id, config_hash) DO NOTHING`,
-    ).bind(
-      candidateVersionId,
-      configId,
-      tenantId,
-      hash,
-      r2Key,
-      yamlBytes.byteLength,
-      createdBy ?? null,
+    compileForBatch(
+      db
+        .insertInto("config_versions")
+        .values({
+          id: candidateVersionId,
+          config_id: configId,
+          tenant_id: tenantId,
+          config_hash: hash,
+          r2_key: r2Key,
+          size_bytes: yamlBytes.byteLength,
+          created_by: createdBy ?? null,
+          created_at: sql<string>`datetime('now')`,
+        })
+        .onConflict((oc) => oc.columns(["config_id", "config_hash"]).doNothing()),
+      env.FP_DB,
     ),
-    env.FP_DB.prepare(
-      `UPDATE configurations SET current_config_hash = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`,
-    ).bind(hash, configId, tenantId),
+    compileForBatch(
+      db
+        .updateTable("configurations")
+        .set({ current_config_hash: hash, updated_at: sql<string>`datetime('now')` })
+        .where("id", "=", configId)
+        .where("tenant_id", "=", tenantId),
+      env.FP_DB,
+    ),
   ]);
 
   // Confirm the canonical id that was actually persisted. `ON CONFLICT
@@ -108,7 +118,7 @@ export async function uploadConfigVersion(
   // re-uploaded identical YAML or because a concurrent caller won the
   // race. The audit log uses this id as `resource_id`, so it must
   // always reference a row that actually lives in `config_versions`.
-  const canonical = await getDb(env.FP_DB)
+  const canonical = await db
     .selectFrom("config_versions")
     .select("id")
     .where("config_id", "=", configId)

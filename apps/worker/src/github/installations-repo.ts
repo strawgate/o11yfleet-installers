@@ -14,6 +14,53 @@
 
 import { sql } from "kysely";
 import { getDb } from "../db/client.js";
+import { compileForBatch } from "../db/queries.js";
+
+/**
+ * Build the TOCTOU-guarded INSERT used by both syncInstallationRepos and
+ * updateInstallationRepos. Composes Kysely's INSERT framing + ON CONFLICT
+ * upsert with a raw SELECT body that closes the TOCTOU window:
+ *
+ *   INSERT INTO installation_repositories (...)
+ *   SELECT ?, ?, ?, ?
+ *    WHERE EXISTS (
+ *      SELECT 1 FROM github_installations WHERE installation_id = ?
+ *    )
+ *   ON CONFLICT(full_name) DO UPDATE SET ...
+ *
+ * If the parent installation row was deleted between the precheck above
+ * and this batch executing, the SELECT yields zero rows and the INSERT
+ * becomes a no-op rather than a 5xx from a violated FK.
+ *
+ * The SELECT body is a raw `sql` template because Kysely doesn't have a
+ * clean "literal-values SELECT WHERE EXISTS" shape — using `sql` here is
+ * the smallest deviation from the type-safe builder elsewhere.
+ */
+function insertRepoWithGuard(
+  db: ReturnType<typeof getDb>,
+  installationId: number,
+  repo: InstallationRepo,
+) {
+  const branch = repo.default_branch ?? null;
+  return db
+    .insertInto("installation_repositories")
+    .columns(["installation_id", "repo_id", "full_name", "default_branch"])
+    .expression(
+      sql<{
+        installation_id: number;
+        repo_id: number;
+        full_name: string;
+        default_branch: string | null;
+      }>`SELECT ${installationId}, ${repo.id}, ${repo.full_name}, ${branch} WHERE EXISTS (SELECT 1 FROM github_installations WHERE installation_id = ${installationId})`,
+    )
+    .onConflict((oc) =>
+      oc.column("full_name").doUpdateSet({
+        installation_id: (eb) => eb.ref("excluded.installation_id"),
+        repo_id: (eb) => eb.ref("excluded.repo_id"),
+        default_branch: (eb) => eb.ref("excluded.default_branch"),
+      }),
+    );
+}
 
 interface DbEnv {
   FP_DB: D1Database;
@@ -94,35 +141,19 @@ export async function syncInstallationRepos(
     return;
   }
 
-  // Atomic batch — kept as raw env.FP_DB.prepare() so we get D1's atomic
-  // batch semantics (Kysely's batch on D1 isn't equivalent). The WHERE
-  // EXISTS guard inside each insert closes the TOCTOU window between the
-  // SELECT-1 precheck above and this batch executing.
-  const stmts = [
-    env.FP_DB.prepare(`DELETE FROM installation_repositories WHERE installation_id = ?1`).bind(
-      installationId,
+  // env.FP_DB.batch is the only way to commit multiple D1 statements
+  // atomically (kysely-d1 doesn't support transactions); compileForBatch
+  // keeps the type-safe builder. The WHERE EXISTS guard inside each
+  // insert closes the TOCTOU window between the precheck above and this
+  // batch executing.
+  const db = getDb(env.FP_DB);
+  await env.FP_DB.batch([
+    compileForBatch(
+      db.deleteFrom("installation_repositories").where("installation_id", "=", installationId),
+      env.FP_DB,
     ),
-    ...repos.map((r) =>
-      env.FP_DB.prepare(
-        // ON CONFLICT(full_name) handles the case where a repo was
-        // transferred to a different installation — we move ownership
-        // to the new one rather than silently dropping the insert,
-        // which would let findInstallationByRepo keep resolving the
-        // stale (wrong) installation.
-        `INSERT INTO installation_repositories
-           (installation_id, repo_id, full_name, default_branch)
-         SELECT ?1, ?2, ?3, ?4
-          WHERE EXISTS (
-            SELECT 1 FROM github_installations WHERE installation_id = ?1
-          )
-         ON CONFLICT(full_name) DO UPDATE SET
-           installation_id = excluded.installation_id,
-           repo_id = excluded.repo_id,
-           default_branch = excluded.default_branch`,
-      ).bind(installationId, r.id, r.full_name, r.default_branch ?? null),
-    ),
-  ];
-  await env.FP_DB.batch(stmts);
+    ...repos.map((r) => compileForBatch(insertRepoWithGuard(db, installationId, r), env.FP_DB)),
+  ]);
 }
 
 /**
@@ -148,30 +179,21 @@ export async function updateInstallationRepos(
   if (!exists) return;
 
   // Atomic batch — same rationale as syncInstallationRepos.
+  const db = getDb(env.FP_DB);
   const stmts = [
     // Remove dropped repos.
     ...removed.map((r) =>
-      env.FP_DB.prepare(
-        `DELETE FROM installation_repositories
-         WHERE installation_id = ?1 AND full_name = ?2`,
-      ).bind(installationId, r.full_name),
+      compileForBatch(
+        db
+          .deleteFrom("installation_repositories")
+          .where("installation_id", "=", installationId)
+          .where("full_name", "=", r.full_name),
+        env.FP_DB,
+      ),
     ),
     // Add new repos. ON CONFLICT(full_name) handles repo transfer between
     // installations; WHERE EXISTS closes the TOCTOU window.
-    ...added.map((r) =>
-      env.FP_DB.prepare(
-        `INSERT INTO installation_repositories
-           (installation_id, repo_id, full_name, default_branch)
-         SELECT ?1, ?2, ?3, ?4
-          WHERE EXISTS (
-            SELECT 1 FROM github_installations WHERE installation_id = ?1
-          )
-         ON CONFLICT(full_name) DO UPDATE SET
-           installation_id = excluded.installation_id,
-           repo_id = excluded.repo_id,
-           default_branch = excluded.default_branch`,
-      ).bind(installationId, r.id, r.full_name, r.default_branch ?? null),
-    ),
+    ...added.map((r) => compileForBatch(insertRepoWithGuard(db, installationId, r), env.FP_DB)),
   ];
   if (stmts.length === 0) return;
   await env.FP_DB.batch(stmts);
