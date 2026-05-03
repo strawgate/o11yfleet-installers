@@ -40,8 +40,9 @@ function mapNode(node: PipelineNode): BuilderNode {
     type: node.type ?? "processor",
     position: node.position,
     data: {
-      name: node.data.component.name,
-      signals: node.data.component.signals,
+      name: node.data.component?.name ?? node.id,
+      type: node.data.component?.type ?? "unknown",
+      signals: node.data.component?.signals ?? [],
     },
   };
 }

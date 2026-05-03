@@ -1,5 +1,6 @@
 import type { Edge, Node } from "@xyflow/react";
 import type { PipelineSignal } from "@o11yfleet/core/pipeline";
+import type { ComponentHealth } from "@o11yfleet/core/codec";
 
 /**
  * Pipeline-builder-local types. Keeps the xyflow node/edge view shape
@@ -12,10 +13,14 @@ export type BuilderRole = "receiver" | "processor" | "exporter" | "connector";
 export type BuilderNodeData = {
   /** OTel component name, e.g. "otlp", "batch", "filter/redact". */
   name: string;
+  /** Component type, e.g. "otlp", "batch" */
+  type: string;
   /** Signals this component accepts/emits. */
   signals: PipelineSignal[];
   /** Validation error message; renders red border and X icon when set. */
   invalid?: string;
+  /** Health status of the component. */
+  health?: ComponentHealth;
 };
 
 export type BuilderNode = Node<BuilderNodeData, BuilderRole>;

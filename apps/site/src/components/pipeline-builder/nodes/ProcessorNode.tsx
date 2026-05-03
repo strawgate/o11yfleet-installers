@@ -1,23 +1,25 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { NodeCard } from "./NodeCard";
+import { Position, type NodeProps } from "@xyflow/react";
+import { PipelineComponentNode } from "./PipelineComponentNode";
+import { NodeHandle } from "./NodeHandle";
 import { SignalBadge } from "../SignalBadge";
 import type { BuilderNode } from "../types";
-import classes from "./node.module.css";
 
 export function ProcessorNode({ data, selected }: NodeProps<BuilderNode>) {
   return (
     <>
-      <Handle type="target" position={Position.Left} className={classes["handle"]} />
-      <NodeCard
+      <NodeHandle type="target" position={Position.Left} />
+      <PipelineComponentNode
         role="processor"
         name={data.name}
+        type={data.type}
+        health={data.health}
         selected={selected}
         invalid={data.invalid}
         signals={data.signals.map((s) => (
           <SignalBadge key={s} signal={s} />
         ))}
       />
-      <Handle type="source" position={Position.Right} className={classes["handle"]} />
+      <NodeHandle type="source" position={Position.Right} />
     </>
   );
 }

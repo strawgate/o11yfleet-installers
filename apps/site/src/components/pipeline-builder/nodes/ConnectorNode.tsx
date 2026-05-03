@@ -1,28 +1,25 @@
-import { Handle, Position, type NodeProps } from "@xyflow/react";
-import { NodeCard } from "./NodeCard";
+import { Position, type NodeProps } from "@xyflow/react";
+import { PipelineComponentNode } from "./PipelineComponentNode";
+import { NodeHandle } from "./NodeHandle";
 import { SignalBadge } from "../SignalBadge";
 import type { BuilderNode } from "../types";
-import classes from "./node.module.css";
 
-/**
- * Connectors act as both exporter (input) and receiver (output) so they
- * fan out / fan in between signal types. We render both handles like a
- * processor; differentiation is the role label and palette ordering.
- */
 export function ConnectorNode({ data, selected }: NodeProps<BuilderNode>) {
   return (
     <>
-      <Handle type="target" position={Position.Left} className={classes["handle"]} />
-      <NodeCard
+      <NodeHandle type="target" position={Position.Left} />
+      <PipelineComponentNode
         role="connector"
         name={data.name}
+        type={data.type}
+        health={data.health}
         selected={selected}
         invalid={data.invalid}
         signals={data.signals.map((s) => (
           <SignalBadge key={s} signal={s} />
         ))}
       />
-      <Handle type="source" position={Position.Right} className={classes["handle"]} />
+      <NodeHandle type="source" position={Position.Right} />
     </>
   );
 }
