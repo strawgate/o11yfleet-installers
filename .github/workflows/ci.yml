@@ -207,7 +207,7 @@ jobs:
         run: pnpm --filter @o11yfleet/site test
 
       - uses: taiki-e/install-action@just
-        if: needs.changes.outputs.deploy == 'true'
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
 
       - name: Build worker bundle
         if: needs.changes.outputs.deploy == 'true'
