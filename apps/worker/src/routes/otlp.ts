@@ -17,7 +17,7 @@ export async function handleOtlpMetricsDebug(request: Request, _env: Env): Promi
   const url = new URL(request.url);
   const bodySize = request.headers.get("content-length") ?? "unknown";
 
-  console.log(`[otlp-debug] POST ${url.pathname} len=${bodySize}`);
+  console.warn(`[otlp-debug] POST ${url.pathname} len=${bodySize}`);
 
   // TODO(phase-2): Verify JWT token, extract tenant_id/collector_id,
   // forward to Config DO instead of just logging.
@@ -45,7 +45,7 @@ export async function handleOtlpMetrics(request: Request, env: Env): Promise<Res
 
   // TODO(phase-3): Forward to tenant's Config DO for normalization + storage.
 
-  console.log(
+  console.warn(
     `[otlp-ingest] tenant=${tenant_id} config=${config_id} collector=${collector_id} len=${body.byteLength}`,
   );
 
