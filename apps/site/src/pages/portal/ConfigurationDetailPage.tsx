@@ -503,7 +503,7 @@ export default function ConfigurationDetailPage() {
   async function handleCreateEnrollmentToken() {
     setEnrollmentTokenError(null);
     try {
-      const result = await createEnrollmentToken.mutateAsync({ name: "configuration-enrollment" });
+      const result = await createEnrollmentToken.mutateAsync({ label: "configuration-enrollment" });
       if (!result.token) {
         const message = "The server did not return an enrollment token.";
         setEnrollmentToken(null);

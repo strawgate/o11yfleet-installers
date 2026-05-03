@@ -48,6 +48,8 @@ export function MetricCard({
         borderRadius: "var(--mantine-radius-md)",
         background: "var(--mantine-color-body)",
         boxShadow: "var(--mantine-shadow-xs)",
+        minWidth: 0,
+        overflow: "hidden",
       }}
     >
       <Stack gap={4}>
@@ -66,7 +68,14 @@ export function MetricCard({
         <Text
           ff="monospace"
           fw={500}
-          style={{ fontSize: "1.5rem", lineHeight: 1.2, color: toneToColor[tone] }}
+          style={{
+            fontSize: "1.5rem",
+            lineHeight: 1.2,
+            color: toneToColor[tone],
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
         >
           {value}
         </Text>

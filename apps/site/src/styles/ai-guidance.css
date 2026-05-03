@@ -58,6 +58,9 @@
 .ai-slot-title strong {
   color: var(--fg);
   font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .ai-item p,
@@ -65,6 +68,10 @@
   margin-top: 6px;
   color: var(--fg-2);
   font-size: 13px;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 }
 
 .ai-badge {

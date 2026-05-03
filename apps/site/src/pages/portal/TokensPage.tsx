@@ -35,7 +35,7 @@ function TokenSection({ config }: { config: Configuration }) {
 
   async function handleCreate({ label }: { label: string }) {
     try {
-      const result = await createToken.mutateAsync({ name: label.trim() || undefined });
+      const result = await createToken.mutateAsync({ label: label.trim() || undefined });
       const value = result.token;
       if (value) setNewTokenValue(value);
       notifications.show({ title: "Token created", message: config.name, color: "green" });

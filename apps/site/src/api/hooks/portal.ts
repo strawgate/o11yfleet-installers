@@ -333,7 +333,7 @@ export function useDeleteConfiguration() {
 export function useCreateEnrollmentToken(configId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (body?: { name?: string }) =>
+    mutationFn: (body?: { label?: string }) =>
       apiPost<EnrollmentToken>(`/api/v1/configurations/${configId}/enrollment-token`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["configuration", configId, "tokens"] });

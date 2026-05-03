@@ -88,7 +88,7 @@ export default function GettingStartedPage() {
   async function handleGenerateToken() {
     if (!selectedConfigId) return;
     try {
-      const result = await createToken.mutateAsync({ name: "getting-started" });
+      const result = await createToken.mutateAsync({ label: "getting-started" });
       if (result.token) {
         setToken(result.token);
         setStep(2);
