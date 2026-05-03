@@ -26,7 +26,8 @@ fanout, and React/Vite for the marketing site, customer portal, and admin UI.
 cargo install just
 
 # Or via shell installer (Linux/macOS)
-curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash
+curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to ~/.local/bin
+export PATH="$HOME/.local/bin:$PATH"
 
 # Verify it works
 just --version
@@ -39,7 +40,7 @@ just --version
 git clone https://github.com/your-org/o11yfleet.git
 cd o11yfleet
 
-# 2. Install dependencies
+# 2. Install dependencies (runs pnpm install)
 just install
 
 # 3. Set up local environment variables
@@ -83,6 +84,9 @@ just test-runtime
 
 # UI tests require Playwright browsers (one-time setup)
 just playwright-install
+
+# UI tests also require the API backend to be running!
+# In a separate terminal, run `just dev` or `just dev-up` first, then:
 just test-ui
 
 # Full pre-PR gate

@@ -55,6 +55,8 @@ affected by those files. Use `just check-staged` for the pre-commit gate and
 
 One-time Playwright setup:
 
+Dependencies must be installed (`just install` or `pnpm install`) before running local app loop commands.
+
 ```bash
 just playwright-install
 ```
@@ -90,6 +92,15 @@ For a faster non-browser gate:
 ```bash
 just ci-fast
 ```
+
+## UI Testing
+
+```bash
+just test-ui
+```
+
+UI tests run in Playwright. First-time setup requires `just playwright-install`.
+Because UI tests interact with the site which proxies to the API backend, **the API worker must be running** (`just dev` or `just dev-up`) in a separate terminal before starting `just test-ui`. Playwright will automatically start the Vite site frontend, but not the API worker.
 
 ## Changed-File Check Options
 
