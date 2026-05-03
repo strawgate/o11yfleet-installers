@@ -41,7 +41,7 @@ import {
   StatusBadge as AppStatusBadge,
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Badge, Button, Card, Group, Tabs, Text, Title } from "@mantine/core";
+import { Badge, Box, Button, Card, Group, Paper, Stack, Tabs, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -616,13 +616,17 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
           Pipeline Flow
         </Title>
         {topology.pipelines.length === 0 ? (
-          <p className="meta">No pipelines defined in service configuration.</p>
+          <Text size="sm" c="dimmed">
+            No pipelines defined in service configuration.
+          </Text>
         ) : (
-          <div className="space-y-4">
+          <Stack gap="md">
             {topology.pipelines.map((pipeline) => (
-              <div key={pipeline.name} className="pipeline-row">
-                <div className="pipeline-label">{pipeline.name}</div>
-                <div className="pipeline-flow">
+              <Paper key={pipeline.name} withBorder p="md">
+                <Text size="xs" fw={500} c="dimmed" tt="uppercase" ff="monospace" mb="xs">
+                  {pipeline.name}
+                </Text>
+                <Group align="flex-start" gap="sm" wrap="wrap">
                   <ComponentGroup
                     label="Receivers"
                     names={pipeline.receivers}
@@ -640,10 +644,10 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
                     names={pipeline.exporters}
                     components={topology.exporters}
                   />
-                </div>
-              </div>
+                </Group>
+              </Paper>
             ))}
-          </div>
+          </Stack>
         )}
       </Card>
 
@@ -653,11 +657,11 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
           <Title order={3} size="sm" mb="md">
             Extensions
           </Title>
-          <div className="flex flex-wrap gap-2">
+          <Group gap="xs">
             {topology.extensions.map((ext) => (
               <ComponentChip key={ext.name ?? ext.type} component={ext} />
             ))}
-          </div>
+          </Group>
         </Card>
       )}
 
@@ -689,43 +693,61 @@ function ComponentGroup({
   );
 
   return (
-    <div className="pipeline-group">
-      <div className="pipeline-group-label">{label}</div>
-      <div className="pipeline-group-items">
+    <Stack gap={6} style={{ flex: 1, minWidth: 120 }}>
+      <Text size="xs" fw={500} c="dimmed" tt="uppercase" ff="monospace">
+        {label}
+      </Text>
+      <Stack gap={4}>
         {matched.map((c) => (
           <ComponentChip key={c.name ?? c.type} component={c} />
         ))}
-      </div>
-    </div>
+      </Stack>
+    </Stack>
   );
 }
 
 function ComponentChip({ component }: { component: PipelineComponent }) {
+  const color = component.healthy === false ? "red" : component.healthy === true ? "green" : "gray";
   return (
-    <div
-      className={`component-chip ${
-        component.healthy === false
-          ? "component-chip-err"
-          : component.healthy === true
-            ? "component-chip-ok"
-            : ""
-      }`}
+    <Badge
+      variant="light"
+      color={color}
+      size="sm"
+      tt="none"
+      leftSection={<ComponentHealthDot healthy={component.healthy} />}
       title={component.lastError ?? component.status ?? component.type}
     >
-      <ComponentHealthDot healthy={component.healthy} />
-      <span>{component.type}</span>
-    </div>
+      {component.type}
+    </Badge>
   );
 }
 
 function ComponentHealthDot({ healthy }: { healthy: boolean | null }) {
-  if (healthy === true) return <span className="health-dot health-dot-ok" />;
-  if (healthy === false) return <span className="health-dot health-dot-err" />;
-  return <span className="health-dot health-dot-unknown" />;
+  const color =
+    healthy === true
+      ? "var(--mantine-color-green-6)"
+      : healthy === false
+        ? "var(--mantine-color-red-6)"
+        : "var(--mantine-color-gray-5)";
+  return (
+    <Box
+      style={{
+        width: 7,
+        height: 7,
+        borderRadius: "50%",
+        background: color,
+        display: "inline-block",
+      }}
+    />
+  );
 }
 
 function PipelineArrow() {
-  return <div className="pipeline-arrow">→</div>;
+  return (
+    <Text c="dimmed" pt={26} aria-hidden>
+      →
+    </Text>
+  );
 }
 
 // ─── Config Tab ────────────────────────────────────────────────────
