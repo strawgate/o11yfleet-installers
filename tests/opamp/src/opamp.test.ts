@@ -1890,12 +1890,19 @@ describe("Per-Agent Restart Command", () => {
     expect(targetGotRestart).toBe(true);
 
     // Bystander must NOT have received a Restart command
+    // Bystander must NOT have received a Restart command. Drain whatever
+    // arrived in the same window the API call took to land, then stop on
+    // the first waitForMessage timeout — the helper rejects rather than
+    // returning undefined, so guard the loop with a try/catch.
     let bystanderGotRestart = false;
     const bystanderDeadline = Date.now() + 500;
     while (Date.now() < bystanderDeadline) {
-      const msg = await bystander.waitForMessage(Math.max(bystanderDeadline - Date.now(), 50));
-      if (msg?.command?.type === 0) bystanderGotRestart = true;
-      if (!msg) break;
+      try {
+        const msg = await bystander.waitForMessage(Math.max(bystanderDeadline - Date.now(), 50));
+        if (msg?.command?.type === 0) bystanderGotRestart = true;
+      } catch {
+        break;
+      }
     }
     expect(bystanderGotRestart).toBe(false);
 
