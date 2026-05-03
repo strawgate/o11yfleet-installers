@@ -28,13 +28,13 @@ just playwright-install  # One-time setup for UI tests
 
 ## Package Structure
 
-| Package                | Role                                              |
-| ---------------------- | ------------------------------------------------- |
-| `packages/core/`       | OpAMP codec, state machine, auth (pure TS, no CF) |
-| `packages/db/`         | D1 migrations and schema                          |
-| `packages/test-utils/` | Shared test fixtures and FakeOpampAgent           |
-| `apps/worker/`         | Cloudflare Worker (API + OpAMP + DO)              |
-| `apps/site/`           | React/Vite portal and admin UI                    |
+| Package                | Role                                               |
+| ---------------------- | -------------------------------------------------- |
+| `packages/core/`       | OpAMP codec, state machine, auth (pure TS, no CF)  |
+| `packages/db/`         | D1 migrations + Kysely schema (single type-source) |
+| `packages/test-utils/` | Shared test fixtures and FakeOpampAgent            |
+| `apps/worker/`         | Cloudflare Worker (API + OpAMP + DO)               |
+| `apps/site/`           | React/Vite portal and admin UI                     |
 
 ## Key Rules
 

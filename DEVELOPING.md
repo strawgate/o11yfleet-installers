@@ -26,7 +26,7 @@ UI, per-user API keys, progressive rollout state, and billing-provider wiring.
 | `apps/site/`           | React/Vite marketing site, customer portal, admin console |
 | `apps/cli/`            | `ofleet` CLI                                              |
 | `packages/core/`       | OpAMP codec, state machine, auth, AI and pipeline helpers |
-| `packages/db/`         | D1 schema and migrations                                  |
+| `packages/db/`         | D1 migrations + Kysely schema types (single type-source)  |
 | `packages/test-utils/` | Fake agents and shared test utilities                     |
 | `tests/e2e/`           | API/OpAMP end-to-end tests                                |
 | `tests/opamp/`         | OpAMP spec compliance tests (54/55 passing)               |
