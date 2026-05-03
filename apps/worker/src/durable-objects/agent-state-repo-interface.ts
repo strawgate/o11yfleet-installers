@@ -10,6 +10,13 @@ export interface DesiredConfig {
 /** Per-tenant policy values cached in this DO. See agent-state-repo.ts. */
 export interface DoPolicy {
   max_agents_per_config: number | null;
+  /**
+   * Auto-unenroll disconnected agents after this many days.
+   * null = disabled (agents persist indefinitely). Default: 30 days.
+   * Agents that reconnect after being purged re-enroll seamlessly via
+   * the normal UPSERT + ReportFullState path — no data loss.
+   */
+  auto_unenroll_after_days: number | null;
 }
 
 export type AgentSort = "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
@@ -100,6 +107,8 @@ export interface AgentStateRepository {
 
   // Sweep
   sweepStaleAgents(thresholdMs: number, isConnected?: (uid: string) => boolean): StaleAgent[];
+  /** Delete disconnected agents older than `days` days. Returns count removed. */
+  autoUnenrollStaleAgents(days: number): number;
   recordSweep(result: SweepResult): void;
   getSweepStats(): SweepStats;
 }

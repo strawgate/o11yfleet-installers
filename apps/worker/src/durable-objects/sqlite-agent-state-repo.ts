@@ -30,6 +30,7 @@ import {
   listAgentsPage,
   computeMetricsSql,
   sweepStaleAgents,
+  autoUnenrollStaleAgents,
   recordSweep,
   getSweepStats,
 } from "./agent-state-repo.js";
@@ -120,6 +121,10 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   sweepStaleAgents(thresholdMs: number, isConnected?: (uid: string) => boolean): StaleAgent[] {
     return sweepStaleAgents(this.sql, thresholdMs, isConnected);
+  }
+
+  autoUnenrollStaleAgents(days: number): number {
+    return autoUnenrollStaleAgents(this.sql, days);
   }
 
   recordSweep(result: SweepResult): void {

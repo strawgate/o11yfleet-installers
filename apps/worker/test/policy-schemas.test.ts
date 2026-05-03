@@ -172,3 +172,76 @@ describe("parseAndValidateBody — sync-policy body", () => {
     if (result.ok) expect(result.value).toEqual({});
   });
 });
+
+describe("auto_unenroll_after_days schema validation", () => {
+  it("accepts a positive integer", () => {
+    const result = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: 30 }),
+      initBodySchema,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.auto_unenroll_after_days).toBe(30);
+  });
+
+  it("accepts null (disable auto-unenroll)", () => {
+    const result = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: null }),
+      initBodySchema,
+    );
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.auto_unenroll_after_days).toBeNull();
+  });
+
+  it("absent field yields undefined (don't touch)", () => {
+    const result = parseAndValidateBody(JSON.stringify({}), initBodySchema);
+    expect(result.ok).toBe(true);
+    if (result.ok) expect(result.value.auto_unenroll_after_days).toBeUndefined();
+  });
+
+  it.each([
+    [0, "zero"],
+    [-1, "negative"],
+    [-100, "large negative"],
+    [1.5, "non-integer float"],
+  ])("rejects %p (%s)", (value) => {
+    const result = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: value }),
+      initBodySchema,
+    );
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.error.field).toBe("auto_unenroll_after_days");
+  });
+
+  it("rejects string posing as number", () => {
+    const result = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: "30" }),
+      initBodySchema,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("rejects NaN (not a valid JSON value, but exercises schema)", () => {
+    // NaN can't be in JSON, but if parsed from another source it would
+    // be undefined; test with a non-number type instead.
+    const result = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: true }),
+      initBodySchema,
+    );
+    expect(result.ok).toBe(false);
+  });
+
+  it("works identically on syncPolicyBodySchema", () => {
+    const good = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: 90 }),
+      syncPolicyBodySchema,
+    );
+    expect(good.ok).toBe(true);
+    if (good.ok) expect(good.value.auto_unenroll_after_days).toBe(90);
+
+    const bad = parseAndValidateBody(
+      JSON.stringify({ auto_unenroll_after_days: -5 }),
+      syncPolicyBodySchema,
+    );
+    expect(bad.ok).toBe(false);
+  });
+});

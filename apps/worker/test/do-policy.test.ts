@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from "vitest";
 import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import {
   isValidMaxAgents,
+  isValidPositiveInt,
   loadDoPolicy,
   saveDoPolicy,
 } from "../src/durable-objects/agent-state-repo.js";
@@ -16,7 +17,11 @@ function stubFor(name: string) {
   return env.CONFIG_DO.get(env.CONFIG_DO.idFromName(name));
 }
 
-describe("isValidMaxAgents (pure)", () => {
+describe("isValidPositiveInt / isValidMaxAgents (pure)", () => {
+  it("isValidMaxAgents is an alias for isValidPositiveInt", () => {
+    expect(isValidMaxAgents).toBe(isValidPositiveInt);
+  });
+
   it.each([
     [1, true],
     [1000, true],
@@ -47,7 +52,9 @@ describe("saveDoPolicy / loadDoPolicy (DO-SQLite)", () => {
       async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
         void instance;
         saveDoPolicy(state.storage.sql, { max_agents_per_config: 500 });
-        expect(loadDoPolicy(state.storage.sql)).toEqual({ max_agents_per_config: 500 });
+        const policy = loadDoPolicy(state.storage.sql);
+        expect(policy.max_agents_per_config).toBe(500);
+        expect(policy.auto_unenroll_after_days).toBe(30); // default
       },
     );
   });
@@ -104,5 +111,68 @@ describe("saveDoPolicy / loadDoPolicy (DO-SQLite)", () => {
     );
     expect(warn).toHaveBeenCalledWith(expect.stringContaining("discarding"));
     warn.mockRestore();
+  });
+
+  it("auto_unenroll_after_days round-trips", async () => {
+    const stub = stubFor("policy-unenroll-rt:cfg");
+    await stub.fetch(new Request("http://internal/init", { method: "POST" }));
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        void instance;
+        saveDoPolicy(state.storage.sql, { auto_unenroll_after_days: 90 });
+        expect(loadDoPolicy(state.storage.sql).auto_unenroll_after_days).toBe(90);
+      },
+    );
+  });
+
+  it("auto_unenroll_after_days null disables", async () => {
+    const stub = stubFor("policy-unenroll-null:cfg");
+    await stub.fetch(new Request("http://internal/init", { method: "POST" }));
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        void instance;
+        saveDoPolicy(state.storage.sql, { auto_unenroll_after_days: null });
+        expect(loadDoPolicy(state.storage.sql).auto_unenroll_after_days).toBeNull();
+      },
+    );
+  });
+
+  it("saveDoPolicy rejects bad auto_unenroll_after_days values", async () => {
+    const stub = stubFor("policy-unenroll-defense:cfg");
+    await stub.fetch(new Request("http://internal/init", { method: "POST" }));
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        void instance;
+        saveDoPolicy(state.storage.sql, { auto_unenroll_after_days: 90 });
+        for (const bad of [-1, 0, 1.5, Number.NaN] as unknown as number[]) {
+          saveDoPolicy(state.storage.sql, { auto_unenroll_after_days: bad });
+        }
+        expect(loadDoPolicy(state.storage.sql).auto_unenroll_after_days).toBe(90);
+      },
+    );
+    expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("existing DOs get null (disabled) via migration, not 30", async () => {
+    // Simulate an existing DO where the column was added via ALTER TABLE
+    // (no DEFAULT). The CREATE TABLE path gives new DOs DEFAULT 30, but
+    // ALTER TABLE ADD COLUMN without DEFAULT gives existing rows NULL.
+    const stub = stubFor("policy-migration-null:cfg");
+    await stub.fetch(new Request("http://internal/init", { method: "POST" }));
+    await runInDurableObject(
+      stub,
+      async (instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        void instance;
+        // Simulate what ALTER TABLE without DEFAULT produces for existing rows
+        state.storage.sql.exec(`UPDATE do_config SET auto_unenroll_after_days = NULL WHERE id = 1`);
+        const policy = loadDoPolicy(state.storage.sql);
+        expect(policy.auto_unenroll_after_days).toBeNull();
+      },
+    );
   });
 });

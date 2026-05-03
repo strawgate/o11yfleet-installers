@@ -20,15 +20,25 @@ import { z } from "zod";
  */
 const maxAgentsPerConfigSchema = z.number().int().positive().nullable().optional();
 
+/**
+ * `auto_unenroll_after_days` semantics:
+ *   undefined → field absent in body, don't touch the cached value
+ *   null      → caller wants to disable auto-unenroll
+ *   N (int>0) → delete disconnected agents older than N days
+ */
+const autoUnenrollAfterDaysSchema = z.number().int().positive().nullable().optional();
+
 export const initBodySchema = z
   .object({
     max_agents_per_config: maxAgentsPerConfigSchema,
+    auto_unenroll_after_days: autoUnenrollAfterDaysSchema,
   })
   .strip();
 
 export const syncPolicyBodySchema = z
   .object({
     max_agents_per_config: maxAgentsPerConfigSchema,
+    auto_unenroll_after_days: autoUnenrollAfterDaysSchema,
   })
   .strip();
 

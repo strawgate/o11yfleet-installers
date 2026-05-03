@@ -220,8 +220,20 @@ export async function handleSweep(
   emitMetrics: () => void,
 ): Promise<Response> {
   const start = Date.now();
+
+  // Auto-unenroll runs BEFORE stale sweep so only agents that were already
+  // disconnected (from a prior sweep) are eligible for deletion. Running it
+  // after sweep would delete agents freshly flipped to disconnected in the
+  // same pass — a data-loss race.
+  const policy = ctx.repo.loadDoPolicy();
+  const unenrolled =
+    policy.auto_unenroll_after_days !== null
+      ? ctx.repo.autoUnenrollStaleAgents(policy.auto_unenroll_after_days)
+      : 0;
+
   const staleUids = ctx.repo.sweepStaleAgents(STALE_AGENT_THRESHOLD_MS, isConnected);
   const activeSocketCount = ctx.getWebSockets().length;
+
   const durationMs = Date.now() - start;
   ctx.repo.recordSweep({
     staleCount: staleUids.length,
@@ -234,7 +246,7 @@ export async function handleSweep(
   try {
     ctx.analytics?.writeDataPoint({
       blobs: ["stale_sweep", tenantId, configId],
-      doubles: [Date.now(), staleUids.length, activeSocketCount, durationMs],
+      doubles: [Date.now(), staleUids.length, activeSocketCount, durationMs, unenrolled],
       indexes: [tenantId],
     });
   } catch {
@@ -248,6 +260,7 @@ export async function handleSweep(
 
   return Response.json({
     swept: staleUids.length,
+    unenrolled,
     active_websockets: activeSocketCount,
     duration_ms: durationMs,
   });

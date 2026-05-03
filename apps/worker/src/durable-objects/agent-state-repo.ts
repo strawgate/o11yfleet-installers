@@ -89,7 +89,8 @@ export function initSchema(sql: SqlStorage): void {
       total_sweeps INTEGER NOT NULL DEFAULT 0,
       total_stale_swept INTEGER NOT NULL DEFAULT 0,
       sweeps_with_stale INTEGER NOT NULL DEFAULT 0,
-      max_agents_per_config INTEGER
+      max_agents_per_config INTEGER,
+      auto_unenroll_after_days INTEGER DEFAULT 30
     )
   `);
   // Ensure singleton row exists
@@ -170,6 +171,10 @@ function migrateSchema(sql: SqlStorage): void {
   ]) {
     addDoConfigColumn(column);
   }
+  // Migration: auto-unenroll policy column. New DOs get DEFAULT 30 from the
+  // CREATE TABLE definition. Existing DOs get NULL here (no DEFAULT on ALTER)
+  // so behavior doesn't change silently — admins must opt in.
+  addDoConfigColumn("auto_unenroll_after_days", "auto_unenroll_after_days INTEGER");
   // Migration 2: add config_snapshots table (CREATE IF NOT EXISTS handles this)
   // Migration 3: migrate legacy effective_config_body values into config_snapshots.
   const agentCols = sql.exec(`PRAGMA table_info(agents)`).toArray();
@@ -270,28 +275,49 @@ export function saveDoIdentity(sql: SqlStorage, tenantId: string, configId: stri
 // type. The previous duplicate declaration here would have allowed the
 // two copies to drift; importing instead keeps them in sync.
 
-/** Pure validator for a single policy value. Exported for unit tests. */
-export function isValidMaxAgents(value: unknown): value is number {
+/** Reusable positive integer check for policy fields. */
+export function isValidPositiveInt(value: unknown): value is number {
   return (
     typeof value === "number" && Number.isFinite(value) && Number.isInteger(value) && value > 0
   );
 }
 
+/** @deprecated Use isValidPositiveInt. Kept for backward compatibility with tests. */
+export const isValidMaxAgents = isValidPositiveInt;
+
 export function loadDoPolicy(sql: SqlStorage): DoPolicy {
-  const row = sql.exec(`SELECT max_agents_per_config FROM do_config WHERE id = 1`).one();
-  const raw = row["max_agents_per_config"];
-  if (raw === null || raw === undefined) {
-    return { max_agents_per_config: null };
+  const row = sql
+    .exec(`SELECT max_agents_per_config, auto_unenroll_after_days FROM do_config WHERE id = 1`)
+    .one();
+
+  const rawMax = row["max_agents_per_config"];
+  let maxAgents: number | null = null;
+  if (rawMax !== null && rawMax !== undefined) {
+    if (isValidMaxAgents(rawMax)) {
+      maxAgents = rawMax;
+    } else {
+      console.warn(
+        `[do-policy] discarding invalid max_agents_per_config: ${typeof rawMax}=${String(rawMax).slice(0, 32)}`,
+      );
+    }
   }
-  if (!isValidMaxAgents(raw)) {
-    // Silent drift would mask data-corruption bugs; surface it loudly.
-    // We still fall back to `null` so callers see a sane default.
-    console.warn(
-      `[do-policy] discarding invalid max_agents_per_config: ${typeof raw}=${String(raw).slice(0, 32)}`,
-    );
-    return { max_agents_per_config: null };
+
+  const rawUnenroll = row["auto_unenroll_after_days"];
+  let autoUnenroll: number | null = null;
+  if (rawUnenroll !== null && rawUnenroll !== undefined) {
+    if (isValidPositiveInt(rawUnenroll)) {
+      autoUnenroll = rawUnenroll as number;
+    } else {
+      console.warn(
+        `[do-policy] discarding invalid auto_unenroll_after_days: ${typeof rawUnenroll}=${String(rawUnenroll).slice(0, 32)}`,
+      );
+    }
   }
-  return { max_agents_per_config: raw };
+
+  return {
+    max_agents_per_config: maxAgents,
+    auto_unenroll_after_days: autoUnenroll,
+  };
 }
 
 /**
@@ -300,25 +326,38 @@ export function loadDoPolicy(sql: SqlStorage): DoPolicy {
  * bug lets a bad value through), the column never holds garbage.
  *
  * `undefined` ⇒ field absent, no-op.
- * `null` ⇒ explicit "clear cap" — column set to NULL.
+ * `null` ⇒ explicit "clear" — column set to NULL.
  * positive integer ⇒ stored.
  * anything else ⇒ silent no-op (defensive); structured errors are the
  * caller's job before they reach here.
  */
 export function saveDoPolicy(sql: SqlStorage, policy: Partial<DoPolicy>): void {
-  if (policy.max_agents_per_config === undefined) return;
-  const v = policy.max_agents_per_config;
-  if (v === null) {
-    sql.exec(`UPDATE do_config SET max_agents_per_config = NULL WHERE id = 1`);
-    return;
+  // max_agents_per_config
+  if (policy.max_agents_per_config !== undefined) {
+    const v = policy.max_agents_per_config;
+    if (v === null) {
+      sql.exec(`UPDATE do_config SET max_agents_per_config = NULL WHERE id = 1`);
+    } else if (isValidMaxAgents(v)) {
+      sql.exec(`UPDATE do_config SET max_agents_per_config = ? WHERE id = 1`, v);
+    } else {
+      console.warn(
+        `[do-policy] saveDoPolicy rejected invalid max_agents_per_config: ${typeof v}=${String(v).slice(0, 32)}`,
+      );
+    }
   }
-  if (!isValidMaxAgents(v)) {
-    console.warn(
-      `[do-policy] saveDoPolicy rejected invalid max_agents_per_config: ${typeof v}=${String(v).slice(0, 32)}`,
-    );
-    return;
+  // auto_unenroll_after_days
+  if (policy.auto_unenroll_after_days !== undefined) {
+    const v = policy.auto_unenroll_after_days;
+    if (v === null) {
+      sql.exec(`UPDATE do_config SET auto_unenroll_after_days = NULL WHERE id = 1`);
+    } else if (isValidPositiveInt(v)) {
+      sql.exec(`UPDATE do_config SET auto_unenroll_after_days = ? WHERE id = 1`, v);
+    } else {
+      console.warn(
+        `[do-policy] saveDoPolicy rejected invalid auto_unenroll_after_days: ${typeof v}=${String(v).slice(0, 32)}`,
+      );
+    }
   }
-  sql.exec(`UPDATE do_config SET max_agents_per_config = ? WHERE id = 1`, v);
 }
 
 // ─── Agent State ─────────────────────────────────────────────────────
@@ -924,6 +963,23 @@ export function sweepStaleAgents(
   }
 
   return stale;
+}
+
+/**
+ * Delete disconnected agents that haven't been seen for `days` days.
+ * Returns the number of rows removed. Freed slots allow new agents to
+ * enroll up to the max_agents cap.
+ *
+ * Agents that reconnect after being auto-unenrolled re-enroll seamlessly:
+ * the normal UPSERT + ReportFullState path recreates their state row.
+ */
+export function autoUnenrollStaleAgents(sql: SqlStorage, days: number): number {
+  const cutoffMs = Date.now() - days * 86_400_000;
+  const result = sql.exec(
+    `DELETE FROM agents WHERE status = 'disconnected' AND last_seen_at > 0 AND last_seen_at < ?`,
+    cutoffMs,
+  );
+  return result.rowsWritten;
 }
 
 // ─── Alarm Sweep Tracking ───────────────────────────────────────────

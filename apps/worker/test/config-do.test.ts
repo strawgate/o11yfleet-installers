@@ -304,6 +304,156 @@ describe("Config Durable Object", () => {
     );
   });
 
+  it("auto-unenroll deletes disconnected agents past policy TTL", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-auto-unenroll");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        // Set policy: auto-unenroll after 7 days
+        state.storage.sql.exec(`UPDATE do_config SET auto_unenroll_after_days = 7 WHERE id = 1`);
+        // Agent disconnected 10 days ago — should be purged
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          "old-agent",
+          "tenant-1",
+          "config-auto-unenroll",
+          "disconnected",
+          Date.now() - 10 * 86_400_000,
+          Date.now() - 10 * 86_400_000,
+        );
+        // Agent disconnected 3 days ago — should be kept
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          "recent-agent",
+          "tenant-1",
+          "config-auto-unenroll",
+          "disconnected",
+          Date.now() - 3 * 86_400_000,
+          Date.now() - 3 * 86_400_000,
+        );
+      },
+    );
+
+    const response = await stub.fetch("http://internal/command/sweep", { method: "POST" });
+    expect(response.status).toBe(200);
+    const body = await response.json<{ unenrolled: number }>();
+    expect(body.unenrolled).toBe(1);
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        // Old agent deleted
+        const old = state.storage.sql
+          .exec(`SELECT * FROM agents WHERE instance_uid = ?`, "old-agent")
+          .toArray();
+        expect(old).toHaveLength(0);
+        // Recent agent still there
+        const recent = state.storage.sql
+          .exec(`SELECT * FROM agents WHERE instance_uid = ?`, "recent-agent")
+          .toArray();
+        expect(recent).toHaveLength(1);
+      },
+    );
+  });
+
+  it("auto-unenroll disabled when policy is null", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-unenroll-disabled");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        // Explicitly disable auto-unenroll
+        state.storage.sql.exec(`UPDATE do_config SET auto_unenroll_after_days = NULL WHERE id = 1`);
+        // Agent disconnected 60 days ago
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          "ancient-agent",
+          "tenant-1",
+          "config-unenroll-disabled",
+          "disconnected",
+          Date.now() - 60 * 86_400_000,
+          Date.now() - 60 * 86_400_000,
+        );
+      },
+    );
+
+    const response = await stub.fetch("http://internal/command/sweep", { method: "POST" });
+    expect(response.status).toBe(200);
+    const body = await response.json<{ unenrolled: number }>();
+    expect(body.unenrolled).toBe(0);
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        // Agent still there because auto-unenroll is disabled
+        const rows = state.storage.sql
+          .exec(`SELECT * FROM agents WHERE instance_uid = ?`, "ancient-agent")
+          .toArray();
+        expect(rows).toHaveLength(1);
+      },
+    );
+  });
+
+  it("auto-unenroll never deletes connected or running agents", async () => {
+    const id = env.CONFIG_DO.idFromName("tenant-1:config-unenroll-safety");
+    const stub = env.CONFIG_DO.get(id);
+    await stub.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      stub,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        state.storage.sql.exec(`UPDATE do_config SET auto_unenroll_after_days = 1 WHERE id = 1`);
+        // Agent is old but status = 'running' (not disconnected)
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          "running-agent",
+          "tenant-1",
+          "config-unenroll-safety",
+          "running",
+          Date.now() - 60 * 86_400_000,
+          Date.now() - 60 * 86_400_000,
+        );
+        // Agent is old but status = 'connected'
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          "connected-agent",
+          "tenant-1",
+          "config-unenroll-safety",
+          "connected",
+          Date.now() - 60 * 86_400_000,
+          Date.now() - 60 * 86_400_000,
+        );
+      },
+    );
+
+    // First sweep: auto-unenroll runs before stale sweep, so 0 unenrolled.
+    // Stale sweep then flips both agents to disconnected.
+    const res1 = await stub.fetch("http://internal/command/sweep", { method: "POST" });
+    expect(res1.status).toBe(200);
+    const body1 = await res1.json<{ unenrolled: number; swept: number }>();
+    expect(body1.unenrolled).toBe(0);
+
+    // Second sweep (immediately after): agents are now disconnected but
+    // last_seen_at is old enough to hit the cutoff. Auto-unenroll runs
+    // BEFORE sweep so it sees them as disconnected and old — they ARE
+    // eligible now. This is correct: they were already disconnected from
+    // a prior sweep pass, not freshly flipped.
+    const res2 = await stub.fetch("http://internal/command/sweep", { method: "POST" });
+    expect(res2.status).toBe(200);
+    const body2 = await res2.json<{ unenrolled: number }>();
+    expect(body2.unenrolled).toBe(2);
+  });
+
   it("rehydrates effective config bodies on the agent detail path", async () => {
     const id = env.CONFIG_DO.idFromName("tenant-1:config-agent-snapshots");
     const stub = env.CONFIG_DO.get(id);
