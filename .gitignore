@@ -50,3 +50,6 @@ reports/coverage/
 
 # AI agent worktrees and session state
 .claude/
+
+# Claude Code worktrees
+.claude/worktrees/
