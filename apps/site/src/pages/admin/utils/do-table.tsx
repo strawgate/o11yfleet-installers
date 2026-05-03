@@ -1,8 +1,6 @@
 import type { ReactNode } from "react";
+import { Text } from "@mantine/core";
 
-/**
- * Format a cell value for display in the DO viewer table.
- */
 export function formatCellValue(value: unknown): string {
   if (value === null) return "NULL";
   if (value === undefined) return "";
@@ -10,24 +8,27 @@ export function formatCellValue(value: unknown): string {
   return String(value);
 }
 
-/**
- * Get the column headers from query result rows.
- */
 export function getColumnKeys(rows: Array<Record<string, unknown>>): string[] {
   if (rows.length === 0) return [];
   const firstRow = rows[0] as Record<string, unknown>;
   return Object.keys(firstRow);
 }
 
-/**
- * Build a simple table cell ReactNode for DO query results.
- */
 export function buildDoCell(value: unknown): ReactNode {
   const formatted = formatCellValue(value);
   const isNull = value === null;
   return (
-    <span className={`do-cell${isNull ? " is-null" : ""}`} title={formatted}>
+    <Text
+      component="span"
+      title={formatted}
+      size="xs"
+      c={isNull ? "dimmed" : undefined}
+      fs={isNull ? "italic" : undefined}
+      ff="monospace"
+      truncate
+      style={{ display: "block", maxWidth: "280px" }}
+    >
       {formatted}
-    </span>
+    </Text>
   );
 }
