@@ -1175,6 +1175,28 @@ tf-apply-worker-do-migration env="prod": (tf-init-remote env)
         -var="worker_bundle_path=$BUNDLE_PATH" \
         -auto-approve
 
+# Apply the first Durable Object migration using wrangler deploy (atomic
+# version + deployment) instead of Terraform (which creates them as separate
+# API calls and fails the deployment precondition check).
+wrangler-do-migration env="prod":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    case "{{env}}" in
+      prod|production) WRANGLER_ENV="" ;;
+      staging|dev) WRANGLER_ENV="{{env}}" ;;
+      *)
+        printf 'unknown deployment env: %s\n' "{{env}}" >&2
+        exit 2
+        ;;
+    esac
+    args=(deploy)
+    if [ -n "$WRANGLER_ENV" ]; then
+        args+=(--env "$WRANGLER_ENV")
+    fi
+    echo "Applying first Durable Object migration via wrangler deploy (atomic)..."
+    pnpm --filter @o11yfleet/worker exec wrangler "${args[@]}"
+    echo "Durable Object migration applied. Importing deployment into Terraform state..."
+
 # Run the Durable Object bootstrap only before Terraform owns an API Worker deployment.
 tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
@@ -1219,7 +1241,7 @@ tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
             exit 0
         fi
     fi
-    just tf-apply-worker-do-migration {{env}}
+    just wrangler-do-migration {{env}}
 
 # Terraform plan that includes the static site Worker module and built assets.
 tf-plan-site env="prod": (tf-init-remote env)
