@@ -225,40 +225,6 @@ body.auth {
   font-size: 12.5px;
 }
 
-/* ---------- Prototype / placeholder indicators ---------- */
-.prototype-banner {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  margin: 16px 20px 0;
-  border-radius: 8px;
-  background: repeating-linear-gradient(
-    -45deg,
-    rgba(255, 170, 0, 0.08),
-    rgba(255, 170, 0, 0.08) 10px,
-    rgba(255, 170, 0, 0.04) 10px,
-    rgba(255, 170, 0, 0.04) 20px
-  );
-  border: 1.5px dashed rgba(255, 170, 0, 0.5);
-  color: #ffaa00;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 1.4;
-}
-.prototype-banner svg {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-}
-.prototype-banner .pb-title {
-  font-weight: 600;
-}
-.prototype-banner .pb-sub {
-  opacity: 0.8;
-  font-weight: 400;
-}
-
 /* Screen-reader only (visually hidden but accessible) */
 .sr-only {
   position: absolute;
