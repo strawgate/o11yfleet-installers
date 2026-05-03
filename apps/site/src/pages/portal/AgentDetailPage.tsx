@@ -449,8 +449,6 @@ export default function AgentDetailPage() {
   );
 }
 
-// ─── Overview Tab ──────────────────────────────────────────────────
-
 function OverviewTab({
   agent,
   identity,
@@ -601,8 +599,6 @@ function OverviewTab({
     </div>
   );
 }
-
-// ─── Pipeline Tab ──────────────────────────────────────────────────
 
 function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
   if (!topology) {
@@ -762,8 +758,6 @@ function PipelineArrow() {
   );
 }
 
-// ─── Config Tab ────────────────────────────────────────────────────
-
 function ConfigTab({
   effectiveConfig,
   effectiveHash,
@@ -836,8 +830,6 @@ function CopyButton({ text }: { text: string }) {
   );
 }
 
-// ─── Badge Components ──────────────────────────────────────────────
-
 function StatusBadge({ status }: { status: string | undefined }) {
   const view = agentStatusView(status);
   return <AppStatusBadge tone={view.tone}>{view.label}</AppStatusBadge>;
@@ -862,8 +854,6 @@ function HealthBadge({ healthy }: { healthy: boolean | null }) {
 function ConfigBadge({ sync }: { sync: ConfigSyncView }) {
   return <AppStatusBadge tone={sync.tone}>{sync.label}</AppStatusBadge>;
 }
-
-// ─── Helpers ───────────────────────────────────────────────────────
 
 function pipelineColumns(): ColumnDef<PipelineRow>[] {
   return [
