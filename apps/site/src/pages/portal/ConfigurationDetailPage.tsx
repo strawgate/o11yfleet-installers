@@ -45,6 +45,7 @@ import {
   Group,
   Modal,
   Stack,
+  Table,
   Tabs,
   Text,
   TextInput,
@@ -817,54 +818,52 @@ export default function ConfigurationDetailPage() {
               Summarize latest diff
             </Button>
           </Group>
-          <div className="dt-card">
-            {versions.isLoading ? (
-              <LoadingSpinner />
-            ) : (
-              <table className="dt">
-                <thead>
-                  <tr>
-                    <th>Config hash</th>
-                    <th>Version</th>
-                    <th>Created</th>
-                    <th>Status</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {versionList.length === 0 ? (
-                    <tr>
-                      <td colSpan={4}>
-                        <EmptyState
-                          icon="file"
-                          title="No versions yet"
-                          description="Upload or roll out a configuration to create the first version."
-                        />
-                      </td>
-                    </tr>
-                  ) : (
-                    versionList.map((v, i) => (
-                      <tr key={v.id}>
-                        <td className="mono-cell">{trunc(v.config_hash ?? v.id, 12)}</td>
-                        <td>{v.version}</td>
-                        <td className="meta">{relTime(v.created_at)}</td>
-                        <td>
-                          {i === 0 ? (
-                            <Badge color="brand" variant="light">
-                              current
-                            </Badge>
-                          ) : (
-                            <Badge color="gray" variant="light">
-                              previous
-                            </Badge>
-                          )}
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            )}
-          </div>
+          {versions.isLoading ? (
+            <LoadingSpinner />
+          ) : versionList.length === 0 ? (
+            <EmptyState
+              icon="file"
+              title="No versions yet"
+              description="Upload or roll out a configuration to create the first version."
+            />
+          ) : (
+            <Table.ScrollContainer minWidth={520}>
+              <Table striped highlightOnHover withTableBorder>
+                <Table.Thead>
+                  <Table.Tr>
+                    <Table.Th>Config hash</Table.Th>
+                    <Table.Th>Version</Table.Th>
+                    <Table.Th>Created</Table.Th>
+                    <Table.Th>Status</Table.Th>
+                  </Table.Tr>
+                </Table.Thead>
+                <Table.Tbody>
+                  {versionList.map((v, i) => (
+                    <Table.Tr key={v.id}>
+                      <Table.Td ff="monospace">{trunc(v.config_hash ?? v.id, 12)}</Table.Td>
+                      <Table.Td>{v.version}</Table.Td>
+                      <Table.Td>
+                        <Text size="sm" c="dimmed">
+                          {relTime(v.created_at)}
+                        </Text>
+                      </Table.Td>
+                      <Table.Td>
+                        {i === 0 ? (
+                          <Badge color="brand" variant="light">
+                            current
+                          </Badge>
+                        ) : (
+                          <Badge color="gray" variant="light">
+                            previous
+                          </Badge>
+                        )}
+                      </Table.Td>
+                    </Table.Tr>
+                  ))}
+                </Table.Tbody>
+              </Table>
+            </Table.ScrollContainer>
+          )}
         </Stack>
       )}
 
