@@ -108,6 +108,19 @@ export interface AgentDisconnect {}
 export interface ConnectionSettingsOffers {
   hash: Uint8Array;
   opamp?: OpAMPConnectionSettings;
+  /** Collector self-metrics export target (OpAMP own_metrics). */
+  own_metrics?: TelemetryConnectionSettings;
+  /** Collector self-traces export target (OpAMP own_traces). */
+  own_traces?: TelemetryConnectionSettings;
+  /** Collector self-logs export target (OpAMP own_logs). */
+  own_logs?: TelemetryConnectionSettings;
+}
+
+/** Settings for collector self-telemetry (metrics/traces/logs) export. */
+export interface TelemetryConnectionSettings {
+  destination_endpoint?: string;
+  headers?: Header[];
+  heartbeat_interval_seconds?: number;
 }
 
 export interface OpAMPConnectionSettings {

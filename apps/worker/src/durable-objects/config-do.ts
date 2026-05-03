@@ -546,6 +546,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       connected_at: Date.now(),
       is_enrollment: isEnrollment,
       is_first_message: true,
+      /** Tracks the DO-assigned UID before handleFirstMessage overwrites
+       *  instance_uid with the agent's own UID. Used to tell the agent
+       *  (via AgentIdentification) to reconnect with our UID. */
+      do_assigned_uid: instanceUid,
     };
     server.serializeAttachment(attachment);
 
@@ -570,10 +574,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     // Handle first message only (enrollment or reconnection claim signing).
     // Subsequent messages skip the expensive decode+signClaim crypto path.
+    let agentIdentification: Uint8Array | undefined;
+    const isEnrollment = !!attachment.is_enrollment;
     if (attachment.is_first_message || attachment.is_enrollment) {
       const result = await handleFirstMessage(this.sessionCtx(), ws, attachment, message);
       if (result.earlyReturn) return;
       attachment = result.attachment;
+      agentIdentification = result.agentIdentification;
     }
 
     const isPendingDo = attachment.config_id === PENDING_DO_CONFIG_ID;
@@ -820,9 +827,23 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           ws.serializeAttachment(attachment);
         }
 
+        // Inject AgentIdentification on enrollment to tell the agent to use
+        // our DO-assigned UID. Per OpAMP spec §3.2.1.2, agents MUST adopt it.
+        if (agentIdentification) {
+          result.response.agent_identification = { new_instance_uid: agentIdentification };
+        }
+
         ws.send(encodeServerToAgent(result.response));
         if (result.response.remote_config) {
           span.setAttribute("opamp.config_offered", true);
+        }
+
+        // Enrollment complete: tell the agent to reconnect with the DO-assigned UID.
+        // The new WS will be tagged with our UID, so ctx.getWebSockets(uid) works.
+        if (isEnrollment) {
+          span.setAttribute("opamp.enrollment_complete", true);
+          span.end();
+          ws.close(1000, "Reconnect with new instance_uid");
         }
       }
     } catch (err) {
@@ -1035,6 +1056,104 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       blobs: [tenant_id, config_id, FLEET_CONFIG_SNAPSHOT_INTERVAL],
       doubles: configMetricsToDoubles(metrics),
     });
+  }
+
+  // ─── Live Collector Telemetry (Phase 1) ─────────────────────────────────────
+
+  /**
+   * Send an OpAMP own_metrics offer to a specific collector to enable
+   * telemetry streaming. The collector's supervisor will open an OTLP/HTTP
+   * connection to the specified endpoint and begin streaming internal metrics.
+   */
+  async sendOwnMetricsOffer(
+    collectorId: string,
+    endpoint: string,
+    token: string,
+    signal: "metrics" | "traces" | "logs" = "metrics",
+  ): Promise<void> {
+    this.ensureInit();
+    // O(1) tag lookup — the collector's WS is tagged with its instance_uid,
+    // which matches the DO-assigned UID after enrollment reconnect.
+    const sockets = this.ctx.getWebSockets(collectorId);
+    if (sockets.length === 0) {
+      console.warn(`[own-metrics] collector ${collectorId} not connected, cannot send offer`);
+      return;
+    }
+    const ws = sockets[0]!;
+
+    const settings: ServerToAgent["connection_settings"] = {
+      hash: new Uint8Array(32),
+      own_metrics:
+        signal === "metrics"
+          ? {
+              destination_endpoint: endpoint,
+              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
+              heartbeat_interval_seconds: 60,
+            }
+          : undefined,
+      own_traces:
+        signal === "traces"
+          ? {
+              destination_endpoint: endpoint,
+              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
+              heartbeat_interval_seconds: 60,
+            }
+          : undefined,
+      own_logs:
+        signal === "logs"
+          ? {
+              destination_endpoint: endpoint,
+              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
+              heartbeat_interval_seconds: 60,
+            }
+          : undefined,
+    };
+
+    const ownMetricsMsg: ServerToAgent = {
+      instance_uid: hexToUint8Array(collectorId),
+      flags: 0,
+      capabilities: SERVER_CAPABILITIES,
+      connection_settings: settings,
+    };
+
+    try {
+      ws.send(encodeServerToAgent(ownMetricsMsg));
+      console.warn(`[own-metrics] sent ${signal} offer to collector ${collectorId}`);
+    } catch (err) {
+      console.error(`[own-metrics] failed to send offer to ${collectorId}:`, err);
+    }
+  }
+
+  /**
+   * Send an empty own_metrics offer to a collector to disable telemetry streaming.
+   * The supervisor will close its OTLP connection.
+   */
+  async revokeOwnMetricsOffers(collectorId: string): Promise<void> {
+    this.ensureInit();
+    const sockets = this.ctx.getWebSockets(collectorId);
+    if (sockets.length === 0) {
+      return;
+    }
+    const ws = sockets[0]!;
+
+    const revokeMsg: ServerToAgent = {
+      instance_uid: hexToUint8Array(collectorId),
+      flags: 0,
+      capabilities: SERVER_CAPABILITIES,
+      connection_settings: {
+        hash: new Uint8Array(32),
+        own_metrics: {},
+        own_traces: {},
+        own_logs: {},
+      },
+    };
+
+    try {
+      ws.send(encodeServerToAgent(revokeMsg));
+      console.warn(`[own-metrics] revoked telemetry offers for collector ${collectorId}`);
+    } catch (err) {
+      console.error(`[own-metrics] failed to revoke offers for ${collectorId}:`, err);
+    }
   }
 }
 

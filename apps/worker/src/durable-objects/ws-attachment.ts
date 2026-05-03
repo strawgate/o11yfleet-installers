@@ -23,6 +23,13 @@ export interface WSAttachment {
    * Flushed to SQLite on webSocketClose via markDisconnected.
    */
   last_seen_at?: number;
+  /**
+   * DO-assigned instance UID. Stored before handleFirstMessage potentially
+   * overwrites instance_uid with the agent's own UID. Used to tell the agent
+   * (via AgentIdentification) to reconnect with our UID, ensuring that
+   * ctx.getWebSockets(do_assigned_uid) finds the socket after reconnect.
+   */
+  do_assigned_uid?: string;
 }
 
 /** Runtime validation for WS attachment deserialized from hibernation storage. */
@@ -65,5 +72,7 @@ export function parseAttachment(raw: unknown): WSAttachment | null {
       typeof obj["last_seen_at"] === "number" && Number.isFinite(obj["last_seen_at"])
         ? obj["last_seen_at"]
         : undefined,
+    do_assigned_uid:
+      typeof obj["do_assigned_uid"] === "string" ? obj["do_assigned_uid"] : undefined,
   };
 }

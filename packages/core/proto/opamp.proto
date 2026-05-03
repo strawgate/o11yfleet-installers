@@ -148,10 +148,18 @@ message ComponentDetails {
 message ConnectionSettingsOffers {
   bytes hash = 1;
   OpAMPConnectionSettings opamp = 2;
-  // field 3: own_metrics (TelemetryConnectionSettings, not implemented)
-  // field 4: own_traces (TelemetryConnectionSettings, not implemented)
-  // field 5: own_logs (TelemetryConnectionSettings, not implemented)
+  TelemetryConnectionSettings own_metrics = 3;
+  TelemetryConnectionSettings own_traces = 4;
+  TelemetryConnectionSettings own_logs = 5;
   // field 6: other_connections (not implemented)
+}
+
+// Settings for collector self-telemetry (metrics/traces/logs) export.
+message TelemetryConnectionSettings {
+  string destination_endpoint = 1;
+  Headers headers = 2;
+  // field 3: certificate (TLSCertificate, not implemented)
+  uint64 heartbeat_interval_seconds = 4;
 }
 
 message OpAMPConnectionSettings {

@@ -13,6 +13,7 @@ import {
   RetryInfoSchema,
   ConnectionSettingsOffersSchema,
   OpAMPConnectionSettingsSchema,
+  TelemetryConnectionSettingsSchema,
   HeadersSchema,
   HeaderSchema,
   ServerToAgentCommandSchema,
@@ -55,6 +56,7 @@ import type {
   RemoteConfigStatus,
   KeyValue,
   AnyValue,
+  Header,
 } from "./types.js";
 import {
   RemoteConfigStatuses,
@@ -377,6 +379,26 @@ function internalComponentHealthToPb(health: ComponentHealth): PbComponentHealth
 
 // ─── Encode: internal types → protobuf binary ─────────────────────
 
+function internalTelemetrySettingsToPb(settings: {
+  destination_endpoint?: string;
+  headers?: Header[];
+  heartbeat_interval_seconds?: number;
+}) {
+  const pb = create(TelemetryConnectionSettingsSchema, {});
+  if (settings.destination_endpoint !== undefined) {
+    pb.destinationEndpoint = settings.destination_endpoint;
+  }
+  if (settings.heartbeat_interval_seconds !== undefined) {
+    pb.heartbeatIntervalSeconds = BigInt(settings.heartbeat_interval_seconds);
+  }
+  if (settings.headers?.length) {
+    pb.headers = create(HeadersSchema, {
+      headers: settings.headers.map((h) => create(HeaderSchema, { key: h.key, value: h.value })),
+    });
+  }
+  return pb;
+}
+
 export function encodeServerToAgentProto(msg: ServerToAgent): ArrayBuffer {
   const pb = internalToServerToAgentPb(msg);
   const payload = toBinary(ServerToAgentSchema, pb);
@@ -471,6 +493,15 @@ function internalToServerToAgentPb(msg: ServerToAgent): PbServerToAgent {
         });
       }
       cs.opamp = opamp;
+    }
+    if (msg.connection_settings.own_metrics) {
+      cs.ownMetrics = internalTelemetrySettingsToPb(msg.connection_settings.own_metrics);
+    }
+    if (msg.connection_settings.own_traces) {
+      cs.ownTraces = internalTelemetrySettingsToPb(msg.connection_settings.own_traces);
+    }
+    if (msg.connection_settings.own_logs) {
+      cs.ownLogs = internalTelemetrySettingsToPb(msg.connection_settings.own_logs);
     }
     pb.connectionSettings = cs;
   }
@@ -583,6 +614,42 @@ export function decodeServerToAgentProto(buf: ArrayBuffer): ServerToAgent {
                   pb.connectionSettings.opamp.heartbeatIntervalSeconds,
                 ),
                 headers: pb.connectionSettings.opamp.headers?.headers?.map((h) => ({
+                  key: h.key,
+                  value: h.value,
+                })),
+              }
+            : undefined,
+          own_metrics: pb.connectionSettings.ownMetrics
+            ? {
+                destination_endpoint: pb.connectionSettings.ownMetrics.destinationEndpoint,
+                heartbeat_interval_seconds: Number(
+                  pb.connectionSettings.ownMetrics.heartbeatIntervalSeconds,
+                ),
+                headers: pb.connectionSettings.ownMetrics.headers?.headers?.map((h) => ({
+                  key: h.key,
+                  value: h.value,
+                })),
+              }
+            : undefined,
+          own_traces: pb.connectionSettings.ownTraces
+            ? {
+                destination_endpoint: pb.connectionSettings.ownTraces.destinationEndpoint,
+                heartbeat_interval_seconds: Number(
+                  pb.connectionSettings.ownTraces.heartbeatIntervalSeconds,
+                ),
+                headers: pb.connectionSettings.ownTraces.headers?.headers?.map((h) => ({
+                  key: h.key,
+                  value: h.value,
+                })),
+              }
+            : undefined,
+          own_logs: pb.connectionSettings.ownLogs
+            ? {
+                destination_endpoint: pb.connectionSettings.ownLogs.destinationEndpoint,
+                heartbeat_interval_seconds: Number(
+                  pb.connectionSettings.ownLogs.heartbeatIntervalSeconds,
+                ),
+                headers: pb.connectionSettings.ownLogs.headers?.headers?.map((h) => ({
                   key: h.key,
                   value: h.value,
                 })),

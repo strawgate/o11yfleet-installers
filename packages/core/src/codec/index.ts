@@ -35,6 +35,7 @@ export type {
   AgentDisconnect,
   ConnectionSettingsOffers,
   OpAMPConnectionSettings,
+  TelemetryConnectionSettings,
   Header,
   ConnectionSettingsStatus,
   ServerToAgentCommand,

@@ -23,21 +23,32 @@ export async function handleFirstMessage(
   ws: WebSocket,
   attachment: WSAttachment,
   message: ArrayBuffer,
-): Promise<{ attachment: WSAttachment; earlyReturn: boolean }> {
+): Promise<{ attachment: WSAttachment; earlyReturn: boolean; agentIdentification?: Uint8Array }> {
   if (attachment.is_enrollment) {
     try {
       const agentMsg = decodeAgentToServer(message);
+
+      // Record the agent's self-reported UID (for logging/debugging only).
+      // For ALL subsequent operations (claim, SQLite rows, WS tag), we use
+      // the DO-assigned UID so that ctx.getWebSockets(uid) works correctly.
       if (agentMsg.instance_uid && agentMsg.instance_uid.byteLength > 0) {
-        attachment.instance_uid = uint8ToHex(agentMsg.instance_uid);
+        const agentReportedUid = uint8ToHex(agentMsg.instance_uid);
+        // Keep do_assigned_uid as the authoritative UID going forward.
+        // The agent will be told to reconnect with this UID via AgentIdentification.
+        attachment.instance_uid = agentReportedUid;
       }
 
-      const currentGen = ctx.repo.getAgentGeneration(attachment.instance_uid);
+      // Use the DO-assigned UID (do_assigned_uid) for the claim and SQLite.
+      // This ensures the claim contains the UID that matches the WS tag,
+      // so ctx.getWebSockets(do_assigned_uid) finds the socket on reconnect.
+      const doAssignedUid = attachment.do_assigned_uid!;
+      const currentGen = ctx.repo.getAgentGeneration(doAssignedUid);
       const nextGen = currentGen + 1;
       const claim: AssignmentClaim = {
         v: 1,
         tenant_id: attachment.tenant_id,
         config_id: attachment.config_id,
-        instance_uid: attachment.instance_uid,
+        instance_uid: doAssignedUid,
         generation: nextGen,
         iat: Math.floor(Date.now() / 1000),
         exp: Math.floor(Date.now() / 1000) + ASSIGNMENT_CLAIM_TTL_SECONDS,
@@ -49,7 +60,16 @@ export async function handleFirstMessage(
       await ctx.ensureAlarm();
 
       attachment.is_enrollment = false;
+      // Set instance_uid to the DO-assigned UID so that on reconnect (when
+      // the agent uses the claim), ctx.getWebSockets(doAssignedUid) finds it.
+      attachment.instance_uid = doAssignedUid;
       ws.serializeAttachment(attachment);
+
+      return {
+        attachment,
+        earlyReturn: false,
+        agentIdentification: hexToUint8Array(doAssignedUid),
+      };
     } catch (_err) {
       console.error("[enrollment] failed:", _err);
       ws.close(4500, "Enrollment failed");

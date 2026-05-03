@@ -362,6 +362,16 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     return addSecurityHeaders(addCorsHeaders(resp, request, env));
   }
 
+  // OTLP ingest — no session auth (uses per-collector JWT tokens instead)
+  // Phase 1: debug endpoint logs requests. Phase 2: full JWT verification.
+  if (url.pathname.startsWith("/otlp/")) {
+    if (url.pathname === "/otlp/v1/metrics") {
+      const { handleOtlpMetricsDebug } = await import("./routes/otlp.js");
+      return handleOtlpMetricsDebug(request, env);
+    }
+    return new Response("Not found", { status: 404 });
+  }
+
   // API routes — with auth + CORS
   if (url.pathname.startsWith("/api/")) {
     // Check Bearer token first (programmatic API access). O11YFLEET_API_BEARER_SECRET is intentionally
