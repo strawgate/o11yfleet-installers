@@ -5,7 +5,8 @@ import type { Env } from "../../index.js";
 import {
   recordMutation,
   type AuditContext,
-  type AuditCreateDescriptor,
+  type AuditCreateMeta,
+  type AuditCreateResult,
   type AuditDescriptor,
 } from "../../audit/recorder.js";
 import { handleListAuditLogs } from "./audit-logs.js";
@@ -77,19 +78,17 @@ export async function handleV1Request(
  * Wrap a mutating handler so the response is also written to the audit
  * log. Read-only routes don't need this. The wrapper is intentionally
  * thin so coverage is grep-able: each mutating route has exactly one
- * `withAudit(...)` call adjacent to the handler.
+ * `withAudit(...)` (or `withAuditCreate(...)`) call adjacent to the
+ * handler.
  */
 export async function withAudit(
   audit: AuditContext | undefined,
-  desc: AuditDescriptor | AuditCreateDescriptor,
+  desc: AuditDescriptor,
   fn: () => Promise<Response>,
 ): Promise<Response> {
   try {
     const response = await fn();
-    if (audit) {
-      const resolved = await resolveDescriptor(desc, response);
-      recordMutation(audit, response, resolved);
-    }
+    if (audit) recordMutation(audit, response, desc);
     return response;
   } catch (err) {
     if (audit) {
@@ -101,28 +100,32 @@ export async function withAudit(
   }
 }
 
-/** When the descriptor declares `resource_id_from_response`, clone the
- * response on a 2xx and read the named field. The original response
- * stays untouched so the caller pipes the same body to the user. If the
- * extraction fails (parse error, missing field, non-string value) we
- * keep the descriptor's literal `resource_id` so the event still
- * records — losing the id field is preferable to losing the event. */
-export async function resolveDescriptor(
-  desc: AuditDescriptor | AuditCreateDescriptor,
-  response: Response,
-): Promise<AuditDescriptor> {
-  const field = "resource_id_from_response" in desc ? desc.resource_id_from_response : undefined;
-  if (!field || response.status < 200 || response.status >= 300) return desc;
+/**
+ * Variant of `withAudit` for create routes. The handler signature
+ * forces it to surface the canonical id of the new resource alongside
+ * the response, which becomes the audit `resource_id`. This makes
+ * "forgot to wire the new id into audit" a compile-time error — the
+ * old `resource_id_from_response: "id"` indirection was easy to miss
+ * or get wrong (e.g. config_version.publish silently recorded the
+ * configuration id instead of the version id).
+ */
+export async function withAuditCreate(
+  audit: AuditContext | undefined,
+  meta: AuditCreateMeta,
+  fn: () => Promise<AuditCreateResult>,
+): Promise<Response> {
   try {
-    const body = (await response.clone().json()) as Record<string, unknown>;
-    const value = body[field];
-    if (typeof value === "string" && value.length > 0) {
-      return { ...desc, resource_id: value };
+    const { response, resource_id } = await fn();
+    if (audit) recordMutation(audit, response, { ...meta, resource_id });
+    return response;
+  } catch (err) {
+    if (audit) {
+      const status =
+        err instanceof ApiError ? err.status : err instanceof AiApiError ? err.status : 500;
+      recordMutation(audit, new Response(null, { status }), { ...meta, resource_id: null });
     }
-  } catch {
-    // Fall through: keep original descriptor.
+    throw err;
   }
-  return desc;
 }
 
 async function routeV1Request(
@@ -187,14 +190,9 @@ async function routeV1Request(
     return handleListConfigurations(env, tenantId);
   }
   if (path === "/api/v1/configurations" && method === "POST") {
-    return withAudit(
+    return withAuditCreate(
       audit,
-      {
-        action: "configuration.create",
-        resource_type: "configuration",
-        resource_id: null,
-        resource_id_from_response: "id",
-      },
+      { action: "configuration.create", resource_type: "configuration" },
       () => handleCreateConfiguration(request, env, tenantId),
     );
   }
@@ -223,13 +221,11 @@ async function routeV1Request(
   const versionsPostMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/versions$/);
   if (versionsPostMatch && method === "POST") {
     const configId = versionsPostMatch[1]!;
-    return withAudit(
+    return withAuditCreate(
       audit,
       {
         action: "config_version.publish",
         resource_type: "config_version",
-        resource_id: null,
-        resource_id_from_response: "id",
         metadata: { config_id: configId },
       },
       () => handleUploadVersion(request, env, tenantId, configId),
@@ -261,16 +257,11 @@ async function routeV1Request(
   const enrollMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/enrollment-token$/);
   if (enrollMatch && method === "POST") {
     const configId = enrollMatch[1]!;
-    return withAudit(
+    return withAuditCreate(
       audit,
       {
         action: "enrollment_token.create",
         resource_type: "enrollment_token",
-        // The token id (jti) is generated inside the handler, so we can't
-        // know it up front. Read it back from the success response so
-        // audit-log filtering by token id works for create + revoke alike.
-        resource_id: null,
-        resource_id_from_response: "id",
         metadata: { config_id: configId },
       },
       () => handleCreateEnrollmentToken(request, env, tenantId, configId),
@@ -398,15 +389,8 @@ async function routeV1Request(
   // ─── API Keys ────────────────────────────────────────────
 
   if (path === "/api/v1/api-keys" && method === "POST") {
-    return withAudit(
-      audit,
-      {
-        action: "api_key.create",
-        resource_type: "api_key",
-        resource_id: null,
-        resource_id_from_response: "jti",
-      },
-      () => handleCreateApiKey(request, env, tenantId),
+    return withAuditCreate(audit, { action: "api_key.create", resource_type: "api_key" }, () =>
+      handleCreateApiKey(request, env, tenantId),
     );
   }
 
@@ -416,14 +400,9 @@ async function routeV1Request(
     return handleListPendingTokens(env, tenantId);
   }
   if (path === "/api/v1/pending-tokens" && method === "POST") {
-    return withAudit(
+    return withAuditCreate(
       audit,
-      {
-        action: "pending_token.create",
-        resource_type: "pending_token",
-        resource_id: null,
-        resource_id_from_response: "id",
-      },
+      { action: "pending_token.create", resource_type: "pending_token" },
       () => handleCreatePendingToken(request, env, tenantId),
     );
   }
@@ -530,7 +509,7 @@ async function handleCreateConfiguration(
   request: Request,
   env: Env,
   tenantId: string,
-): Promise<Response> {
+): Promise<AuditCreateResult> {
   const body = await validateJsonBody(request, createConfigurationRequestSchema);
 
   const id = crypto.randomUUID();
@@ -550,15 +529,21 @@ async function handleCreateConfiguration(
     const tenant = await env.FP_DB.prepare(`SELECT max_configs FROM tenants WHERE id = ?`)
       .bind(tenantId)
       .first<{ max_configs: number }>();
-    if (!tenant) return jsonError("Tenant not found", 404);
-    return jsonError(`Configuration limit reached (${tenant.max_configs})`, 429);
+    if (!tenant) return { response: jsonError("Tenant not found", 404), resource_id: null };
+    return {
+      response: jsonError(`Configuration limit reached (${tenant.max_configs})`, 429),
+      resource_id: null,
+    };
   }
 
-  return typedJsonResponse(
-    createConfigurationResponseSchema,
-    { id, tenant_id: tenantId, name: body.name },
-    { status: 201 },
-  );
+  return {
+    response: typedJsonResponse(
+      createConfigurationResponseSchema,
+      { id, tenant_id: tenantId, name: body.name },
+      { status: 201 },
+    ),
+    resource_id: id,
+  };
 }
 
 async function handleGetConfiguration(
@@ -650,34 +635,37 @@ async function handleUploadVersion(
   env: Env,
   tenantId: string,
   configId: string,
-): Promise<Response> {
+): Promise<AuditCreateResult> {
   const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
+  if (!config) return { response: jsonError("Configuration not found", 404), resource_id: null };
 
   const yaml = await request.text();
   if (!yaml || yaml.length === 0) {
-    return jsonError("Request body (YAML) is required", 400);
+    return { response: jsonError("Request body (YAML) is required", 400), resource_id: null };
   }
   if (yaml.length > 256 * 1024) {
-    return jsonError("Config too large (max 256KB)", 413);
+    return { response: jsonError("Config too large (max 256KB)", 413), resource_id: null };
   }
 
   const yamlError = validateYaml(yaml);
-  if (yamlError) return jsonError(`Invalid YAML: ${yamlError}`, 400);
+  if (yamlError) {
+    return { response: jsonError(`Invalid YAML: ${yamlError}`, 400), resource_id: null };
+  }
 
   const result = await uploadConfigVersion(env, tenantId, configId, yaml);
-  // Expose `id` so audit logging can link the event to the version row,
-  // and so clients can reference the version without re-querying.
-  return Response.json(
-    {
-      id: result.versionId,
-      hash: result.hash,
-      r2Key: result.r2Key,
-      sizeBytes: result.sizeBytes,
-      deduplicated: result.deduplicated,
-    },
-    { status: 201 },
-  );
+  return {
+    response: Response.json(
+      {
+        id: result.versionId,
+        hash: result.hash,
+        r2Key: result.r2Key,
+        sizeBytes: result.sizeBytes,
+        deduplicated: result.deduplicated,
+      },
+      { status: 201 },
+    ),
+    resource_id: result.versionId,
+  };
 }
 
 async function handleListVersions(env: Env, tenantId: string, configId: string): Promise<Response> {
@@ -794,20 +782,23 @@ async function handleCreateEnrollmentToken(
   env: Env,
   tenantId: string,
   configId: string,
-): Promise<Response> {
+): Promise<AuditCreateResult> {
   const config = await getOwnedConfig(env, tenantId, configId);
-  if (!config) return jsonError("Configuration not found", 404);
+  if (!config) return { response: jsonError("Configuration not found", 404), resource_id: null };
 
   // Plan gate: only plans with supports_direct_enrollment can issue enrollment tokens.
   // This is the enforcement point — the WebSocket connect path trusts HMAC + expiry only.
   const tenant = await findTenantById(env, tenantId);
-  if (!tenant) return jsonError("Tenant not found", 404);
+  if (!tenant) return { response: jsonError("Tenant not found", 404), resource_id: null };
   const plan = normalizePlan(tenant.plan);
   if (!plan || !PLAN_DEFINITIONS[plan].supports_direct_enrollment) {
-    return jsonError(
-      "Your plan does not support direct enrollment. Use pending enrollment instead.",
-      403,
-    );
+    return {
+      response: jsonError(
+        "Your plan does not support direct enrollment. Use pending enrollment instead.",
+        403,
+      ),
+      resource_id: null,
+    };
   }
 
   const body = await validateJsonBody(request, createEnrollmentTokenRequestSchema);
@@ -815,10 +806,16 @@ async function handleCreateEnrollmentToken(
   let expiresInSeconds: number | undefined;
   if (body.expires_in_hours !== null && body.expires_in_hours !== undefined) {
     if (typeof body.expires_in_hours !== "number" || body.expires_in_hours <= 0) {
-      return jsonError("expires_in_hours must be a positive number", 400);
+      return {
+        response: jsonError("expires_in_hours must be a positive number", 400),
+        resource_id: null,
+      };
     }
     if (body.expires_in_hours > 8760) {
-      return jsonError("expires_in_hours must be 8760 (1 year) or less", 400);
+      return {
+        response: jsonError("expires_in_hours must be 8760 (1 year) or less", 400),
+        resource_id: null,
+      };
     }
     expiresInSeconds = body.expires_in_hours * 3600;
   }
@@ -841,11 +838,20 @@ async function handleCreateEnrollmentToken(
     .bind(id, configId, tenantId, tokenHash, body.label ?? null, expiresAt)
     .run();
 
-  return typedJsonResponse(
-    createEnrollmentTokenResponseSchema,
-    { id, token: rawToken, config_id: configId, label: body.label ?? null, expires_at: expiresAt },
-    { status: 201 },
-  );
+  return {
+    response: typedJsonResponse(
+      createEnrollmentTokenResponseSchema,
+      {
+        id,
+        token: rawToken,
+        config_id: configId,
+        label: body.label ?? null,
+        expires_at: expiresAt,
+      },
+      { status: 201 },
+    ),
+    resource_id: id,
+  };
 }
 
 async function handleListEnrollmentTokens(
@@ -1380,7 +1386,11 @@ const createApiKeyRequestSchema = z.object({
   expires_in_seconds: z.number().int().nonnegative().optional(),
 });
 
-async function handleCreateApiKey(request: Request, env: Env, tenantId: string): Promise<Response> {
+async function handleCreateApiKey(
+  request: Request,
+  env: Env,
+  tenantId: string,
+): Promise<AuditCreateResult> {
   const body = await validateJsonBody(request, createApiKeyRequestSchema);
 
   const result = await generateApiKey({
@@ -1390,29 +1400,34 @@ async function handleCreateApiKey(request: Request, env: Env, tenantId: string):
     label: body.label,
   });
 
-  return Response.json(
-    {
-      token: result.token,
-      jti: result.jti,
-      expires_at: result.expires_at,
-      tenant_id: tenantId,
-    },
-    { status: 201 },
-  );
+  return {
+    response: Response.json(
+      {
+        token: result.token,
+        jti: result.jti,
+        expires_at: result.expires_at,
+        tenant_id: tenantId,
+      },
+      { status: 201 },
+    ),
+    resource_id: result.jti,
+  };
 }
 
 async function handleCreatePendingToken(
   request: Request,
   env: Env,
   tenantId: string,
-): Promise<Response> {
+): Promise<AuditCreateResult> {
   const body = await validateJsonBody(request, createPendingTokenRequestSchema);
   const label = body.label ?? null;
   const targetConfigId = body.target_config_id ?? null;
 
   if (targetConfigId) {
     const config = await getOwnedConfig(env, tenantId, targetConfigId);
-    if (!config) return jsonError("Target configuration not found", 404);
+    if (!config) {
+      return { response: jsonError("Target configuration not found", 404), resource_id: null };
+    }
   }
 
   const id = crypto.randomUUID();
@@ -1453,7 +1468,13 @@ async function handleCreatePendingToken(
     .bind(id, tenantId, tokenHash, label, targetConfigId)
     .run();
 
-  return Response.json({ id, token, label, target_config_id: targetConfigId }, { status: 201 });
+  return {
+    response: Response.json(
+      { id, token, label, target_config_id: targetConfigId },
+      { status: 201 },
+    ),
+    resource_id: id,
+  };
 }
 
 async function handleRevokePendingToken(

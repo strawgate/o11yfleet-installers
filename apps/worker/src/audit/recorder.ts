@@ -35,13 +35,24 @@ export interface AuditDescriptor {
   metadata?: Record<string, unknown>;
 }
 
-/** Optional descriptor for create routes where the resource id is only
- * known once the handler finishes. `withAudit` clones the response,
- * reads the named field from the JSON body on success, and substitutes
- * it into the audit event so the entry is searchable by the new id. */
-export interface AuditCreateDescriptor extends AuditDescriptor {
-  /** JSON body field to read for resource_id on a 2xx response. */
-  resource_id_from_response?: string;
+/** Descriptor for create routes. Identical fields to `AuditDescriptor`
+ * minus `resource_id` — the *handler* supplies the id alongside its
+ * response (see `withAuditCreate`), so the wrapper never has to guess
+ * or peek into the response body. This makes "forgot to wire the
+ * resource id" a compile-time error rather than a silent NULL row. */
+export interface AuditCreateMeta {
+  action: AuditAction;
+  resource_type: AuditResourceType;
+  metadata?: Record<string, unknown>;
+}
+
+/** What a create handler returns: the HTTP response that flows back to
+ * the caller, plus the canonical id of whatever was created. `null` is
+ * for the failure paths (e.g. validation 4xx where no row was written)
+ * — the recorder still emits the failure event with resource_id NULL. */
+export interface AuditCreateResult {
+  response: Response;
+  resource_id: string | null;
 }
 
 export interface AuditContext {

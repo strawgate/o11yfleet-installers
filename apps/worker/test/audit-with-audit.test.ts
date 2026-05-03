@@ -1,14 +1,18 @@
 import { describe, it, expect } from "vitest";
-import { resolveDescriptor, withAudit } from "../src/routes/v1/index.js";
-import type { AuditContext, AuditCreateDescriptor } from "../src/audit/recorder.js";
+import { withAudit, withAuditCreate } from "../src/routes/v1/index.js";
+import type { AuditContext, AuditDescriptor } from "../src/audit/recorder.js";
 import { ApiError } from "../src/shared/errors.js";
 import { AiApiError } from "../src/ai/guidance.js";
 
-const baseDesc: AuditCreateDescriptor = {
+const baseDesc: AuditDescriptor = {
   action: "configuration.create",
   resource_type: "configuration",
   resource_id: null,
-  resource_id_from_response: "id",
+};
+
+const baseCreateMeta = {
+  action: "configuration.create" as const,
+  resource_type: "configuration" as const,
 };
 
 function jsonResp(body: unknown, status = 201): Response {
@@ -33,10 +37,10 @@ function fakeAuditContext(): {
   const ctx: AuditContext = {
     ctx: {
       waitUntil: (p: Promise<unknown>) => {
-        // Drive any pending queue.send so the test sees the event before
-        // assertion. The real ExecutionContext keeps the request alive
-        // until the promise settles; here we just await synchronously
-        // via a microtask drain.
+        // The real ExecutionContext keeps the request alive until the
+        // promise settles; here our fake AUDIT_QUEUE.send pushes the
+        // event synchronously before its first await, so the test sees
+        // the recorded event without further plumbing.
         void p;
       },
       passThroughOnException: () => {},
@@ -65,57 +69,6 @@ function fakeAuditContext(): {
   };
   return { ctx, recorded };
 }
-
-describe("resolveDescriptor", () => {
-  it("substitutes resource_id from response body field on 2xx", async () => {
-    const resp = jsonResp({ id: "cfg_123" }, 201);
-    const out = await resolveDescriptor(baseDesc, resp);
-    expect(out.resource_id).toBe("cfg_123");
-  });
-
-  it("keeps original resource_id when status is not 2xx", async () => {
-    const resp = jsonResp({ id: "ignored" }, 400);
-    const out = await resolveDescriptor({ ...baseDesc, resource_id: "fallback" }, resp);
-    expect(out.resource_id).toBe("fallback");
-  });
-
-  it("falls back to literal resource_id when body is non-JSON", async () => {
-    const resp = new Response("not json", { status: 201 });
-    const out = await resolveDescriptor({ ...baseDesc, resource_id: "fallback" }, resp);
-    expect(out.resource_id).toBe("fallback");
-  });
-
-  it("falls back when the named field is missing", async () => {
-    const resp = jsonResp({ other: "x" }, 201);
-    const out = await resolveDescriptor({ ...baseDesc, resource_id: null }, resp);
-    expect(out.resource_id).toBeNull();
-  });
-
-  it("falls back when the named field is not a non-empty string", async () => {
-    const resp = jsonResp({ id: "" }, 201);
-    const out = await resolveDescriptor({ ...baseDesc, resource_id: "fallback" }, resp);
-    expect(out.resource_id).toBe("fallback");
-  });
-
-  it("does not consume the response body", async () => {
-    const resp = jsonResp({ id: "cfg_abc" }, 201);
-    await resolveDescriptor(baseDesc, resp);
-    // Original response body must remain readable for the route caller.
-    const body = (await resp.json()) as { id: string };
-    expect(body.id).toBe("cfg_abc");
-  });
-
-  it("ignores extraction when descriptor has no resource_id_from_response", async () => {
-    const resp = jsonResp({ id: "ignored" }, 201);
-    const desc = {
-      action: "configuration.create" as const,
-      resource_type: "configuration" as const,
-      resource_id: "literal",
-    };
-    const out = await resolveDescriptor(desc, resp);
-    expect(out.resource_id).toBe("literal");
-  });
-});
 
 describe("withAudit", () => {
   it("records ApiError status when handler throws", async () => {
@@ -157,7 +110,7 @@ describe("withAudit", () => {
   it("records the response and returns it on success", async () => {
     const { ctx, recorded } = fakeAuditContext();
     const response = jsonResp({ id: "cfg_xyz" }, 201);
-    const out = await withAudit(ctx, baseDesc, async () => response);
+    const out = await withAudit(ctx, { ...baseDesc, resource_id: "cfg_xyz" }, async () => response);
     expect(out).toBe(response);
     expect(recorded.length).toBe(1);
     expect(recorded[0]?.resource_id).toBe("cfg_xyz");
@@ -168,6 +121,59 @@ describe("withAudit", () => {
   it("does not record when audit context is undefined", async () => {
     const response = jsonResp({ id: "cfg_xyz" }, 201);
     const out = await withAudit(undefined, baseDesc, async () => response);
+    expect(out).toBe(response);
+  });
+});
+
+describe("withAuditCreate", () => {
+  it("uses resource_id from the handler return value on success", async () => {
+    const { ctx, recorded } = fakeAuditContext();
+    const response = jsonResp({ id: "cfg_abc" }, 201);
+    const out = await withAuditCreate(ctx, baseCreateMeta, async () => ({
+      response,
+      resource_id: "cfg_abc",
+    }));
+    expect(out).toBe(response);
+    expect(recorded[0]?.resource_id).toBe("cfg_abc");
+    expect(recorded[0]?.status_code).toBe(201);
+    expect(recorded[0]?.status).toBe("success");
+  });
+
+  it("records resource_id NULL when handler returns it as null on a failure response", async () => {
+    const { ctx, recorded } = fakeAuditContext();
+    const response = jsonResp({ error: "tenant not found" }, 404);
+    await withAuditCreate(ctx, baseCreateMeta, async () => ({ response, resource_id: null }));
+    // 404 is classified as `skip` in classifyAuditStatus — nothing recorded.
+    expect(recorded.length).toBe(0);
+  });
+
+  it("records failure with resource_id NULL when handler returns 4xx with id null", async () => {
+    const { ctx, recorded } = fakeAuditContext();
+    const response = jsonResp({ error: "limit reached" }, 429);
+    await withAuditCreate(ctx, baseCreateMeta, async () => ({ response, resource_id: null }));
+    expect(recorded.length).toBe(1);
+    expect(recorded[0]?.resource_id).toBeNull();
+    expect(recorded[0]?.status_code).toBe(429);
+    expect(recorded[0]?.status).toBe("failure");
+  });
+
+  it("records ApiError thrown from handler with status_code and resource_id NULL", async () => {
+    const { ctx, recorded } = fakeAuditContext();
+    await expect(
+      withAuditCreate(ctx, baseCreateMeta, () => {
+        throw new ApiError("forbidden", 403);
+      }),
+    ).rejects.toBeInstanceOf(ApiError);
+    expect(recorded[0]?.resource_id).toBeNull();
+    expect(recorded[0]?.status_code).toBe(403);
+  });
+
+  it("does not record when audit context is undefined", async () => {
+    const response = jsonResp({ id: "cfg_xyz" }, 201);
+    const out = await withAuditCreate(undefined, baseCreateMeta, async () => ({
+      response,
+      resource_id: "cfg_xyz",
+    }));
     expect(out).toBe(response);
   });
 });

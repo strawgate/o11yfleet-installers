@@ -6,6 +6,8 @@ import {
   recordEvent,
   recordMutation,
   type AuditContext,
+  type AuditCreateMeta,
+  type AuditCreateResult,
   type AuditDescriptor,
 } from "../../audit/recorder.js";
 import {
@@ -74,7 +76,7 @@ export async function handleAdminRequest(
  * pass `customerTenantId` to also mirror an entry into that tenant's
  * stream so customers can see when support touched their tenant.
  */
-async function withAdminAudit(
+export async function withAdminAudit(
   audit: AuditContext | undefined,
   desc: AuditDescriptor,
   fn: () => Promise<Response>,
@@ -94,6 +96,34 @@ async function withAdminAudit(
   }
   if (audit) recordOnAdminAndCustomer(audit, desc, response, customerTenantId);
   return response;
+}
+
+/** Admin counterpart of `withAuditCreate`. Same compile-time guarantee:
+ * the create handler must surface `resource_id` alongside its response.
+ * Customer-mirror behavior is preserved when `customerTenantId` is set. */
+export async function withAdminAuditCreate(
+  audit: AuditContext | undefined,
+  meta: AuditCreateMeta,
+  fn: () => Promise<AuditCreateResult>,
+  customerTenantId?: string,
+): Promise<Response> {
+  let result: AuditCreateResult;
+  try {
+    result = await fn();
+  } catch (err) {
+    if (audit) {
+      const status =
+        err instanceof ApiError ? err.status : err instanceof AiApiError ? err.status : 500;
+      const errResp = new Response(null, { status });
+      recordOnAdminAndCustomer(audit, { ...meta, resource_id: null }, errResp, customerTenantId);
+    }
+    throw err;
+  }
+  if (audit) {
+    const desc: AuditDescriptor = { ...meta, resource_id: result.resource_id };
+    recordOnAdminAndCustomer(audit, desc, result.response, customerTenantId);
+  }
+  return result.response;
 }
 
 function recordOnAdminAndCustomer(
@@ -148,9 +178,9 @@ async function routeAdminRequest(
   // ─── Tenants ────────────────────────────────────────────────
 
   if (path === "/api/admin/tenants" && method === "POST") {
-    return withAdminAudit(
+    return withAdminAuditCreate(
       audit,
-      { action: "admin.tenant.create", resource_type: "tenant", resource_id: null },
+      { action: "admin.tenant.create", resource_type: "tenant" },
       () => handleCreateTenant(request, env),
     );
   }
@@ -325,12 +355,15 @@ async function routeAdminRequest(
 
 // ─── Tenant Handlers ────────────────────────────────────────────────
 
-async function handleCreateTenant(request: Request, env: Env): Promise<Response> {
+async function handleCreateTenant(request: Request, env: Env): Promise<AuditCreateResult> {
   const body = await validateJsonBody(request, adminCreateTenantRequestSchema);
 
   const plan = normalizePlan(body.plan ?? DEFAULT_PLAN);
   if (!plan) {
-    return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
+    return {
+      response: jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400),
+      resource_id: null,
+    };
   }
 
   const limits = PLAN_LIMITS[plan];
@@ -342,7 +375,10 @@ async function handleCreateTenant(request: Request, env: Env): Promise<Response>
     .bind(id, body.name, plan, limits.max_configs, limits.max_agents_per_config)
     .run();
 
-  return Response.json({ id, name: body.name, plan }, { status: 201 });
+  return {
+    response: Response.json({ id, name: body.name, plan }, { status: 201 }),
+    resource_id: id,
+  };
 }
 
 function boundedPositiveInt(value: string | null, fallback: number, max: number): number {
