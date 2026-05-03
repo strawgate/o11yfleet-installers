@@ -32,6 +32,13 @@ const resolveConfig = (env: any, _trigger: any) => {
 // Auto-instrumented handler: fetch, D1, R2, DO bindings.
 // Preserve non-fetch module handlers explicitly; production uses this entrypoint,
 // so cron handlers must be present here too.
+//
+// `scheduled` intentionally bypasses `instrument()` — `@microlabs/otel-cf-workers`
+// does not currently propagate trace context through the cron `scheduled`
+// handler, and wrapping it would surface as orphaned traces with no parent.
+// The cron jobs (manifest-drift-check, sweep, product metrics) emit their
+// own structured logs; once the instrumentation library supports cron, drop
+// this override.
 const instrumentedHandler = instrument(handler, resolveConfig);
 export default {
   ...instrumentedHandler,

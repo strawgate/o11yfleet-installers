@@ -309,15 +309,6 @@ async function routeAdminRequest(
     return handleGetSettings(env);
   }
 
-  // PUT /api/admin/settings — update admin settings (e.g., auto-approve)
-  if (path === "/api/admin/settings" && method === "PUT") {
-    return withAdminAudit(
-      audit,
-      { action: "admin.settings.update", resource_type: "settings", resource_id: null },
-      () => handleUpdateSettings(request, env),
-    );
-  }
-
   const configDOTablesMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/tables$/);
   if (configDOTablesMatch && method === "GET") {
     return handleDoTables(env, configDOTablesMatch[1]!);
@@ -1336,14 +1327,4 @@ async function handleGetSettings(env: Env): Promise<Response> {
   return Response.json({
     auto_approve_signups: isAutoApproveEnabled(env),
   });
-}
-
-async function handleUpdateSettings(_request: Request, _env: Env): Promise<Response> {
-  // Note: Settings are controlled via environment variables in production
-  // This endpoint is primarily for reading current state
-  // In a full implementation, you might persist settings to D1 or KV
-  return jsonError(
-    "Settings must be updated via environment variables (O11YFLEET_SIGNUP_AUTO_APPROVE)",
-    400,
-  );
 }

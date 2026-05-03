@@ -7,7 +7,7 @@ import {
 import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
-import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import { hexToUint8Array } from "@o11yfleet/core/hex";
 import type { AgentStateRepository } from "./agent-state-repo-interface.js";
 import type { WSAttachment } from "./ws-attachment.js";
 import { ASSIGNMENT_CLAIM_TTL_SECONDS, SERVER_CAPABILITIES } from "./constants.js";
@@ -26,17 +26,12 @@ export async function handleFirstMessage(
 ): Promise<{ attachment: WSAttachment; earlyReturn: boolean; agentIdentification?: Uint8Array }> {
   if (attachment.is_enrollment) {
     try {
-      const agentMsg = decodeAgentToServer(message);
-
-      // Record the agent's self-reported UID (for logging/debugging only).
-      // For ALL subsequent operations (claim, SQLite rows, WS tag), we use
-      // the DO-assigned UID so that ctx.getWebSockets(uid) works correctly.
-      if (agentMsg.instance_uid && agentMsg.instance_uid.byteLength > 0) {
-        const agentReportedUid = uint8ToHex(agentMsg.instance_uid);
-        // Keep do_assigned_uid as the authoritative UID going forward.
-        // The agent will be told to reconnect with this UID via AgentIdentification.
-        attachment.instance_uid = agentReportedUid;
-      }
+      // The agent sends an AgentToServer with its self-reported UID; we decode
+      // here to satisfy the protocol but ignore the value. The DO-assigned UID
+      // (`do_assigned_uid`) is the authoritative value used for the claim,
+      // SQLite rows, and the WebSocket tag — see the assignment to
+      // `attachment.instance_uid` below.
+      decodeAgentToServer(message);
 
       // Use the DO-assigned UID (do_assigned_uid) for the claim and SQLite.
       // This ensures the claim contains the UID that matches the WS tag,

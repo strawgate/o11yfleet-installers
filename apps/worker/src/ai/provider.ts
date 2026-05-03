@@ -446,15 +446,11 @@ function fixtureChatResponse(input: AiChatRequest, messages: UIMessage[]): Respo
   const textId = "fixture-text";
   const stream = createUIMessageStream<UIMessage>({
     originalMessages: messages,
-    async execute({ writer }) {
+    execute({ writer }) {
       writer.write({ type: "start" });
-      await Promise.resolve();
       writer.write({ type: "text-start", id: textId });
-      await Promise.resolve();
       writer.write({ type: "text-delta", id: textId, delta: buildFixtureChatText(input) });
-      await Promise.resolve();
       writer.write({ type: "text-end", id: textId });
-      await Promise.resolve();
       writer.write({ type: "finish", finishReason: "stop" });
     },
   });

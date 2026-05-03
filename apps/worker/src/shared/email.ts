@@ -23,35 +23,14 @@ export interface TenantApprovalEmail {
   reason?: string;
 }
 
-/**
- * Email category types for sender address selection
- * Best practice: use different addresses for different notification types
- */
-export type EmailCategory = "accounts" | "fleet" | "support" | "default";
-
-/**
- * EmailService interface for testability
- * Allows mocking the email service in tests
- */
+/** Implemented by MockEmailService in tests; the real path uses sendEmail directly. */
 export interface EmailService {
   send(options: EmailOptions): Promise<EmailResult>;
   isConfigured(): boolean;
 }
 
-/**
- * Get the from address for a given email category
- * Falls back to the default address if category-specific one is not configured
- */
-function getFromAddress(env: Env, category: EmailCategory): string {
-  // Category-specific addresses (for future use with Cloudflare Email Routing)
-  const categoryAddresses: Record<EmailCategory, string | undefined> = {
-    accounts: undefined, // e.g., "accounts@o11yfleet.com"
-    fleet: undefined, // e.g., "fleet@o11yfleet.com"
-    support: undefined, // e.g., "support@o11yfleet.com"
-    default: env.O11YFLEET_EMAIL_FROM, // the configured default
-  };
-
-  return categoryAddresses[category] ?? env.O11YFLEET_EMAIL_FROM ?? "noreply@o11yfleet.com";
+function getFromAddress(env: Env): string {
+  return env.O11YFLEET_EMAIL_FROM ?? "noreply@o11yfleet.com";
 }
 
 /**
@@ -189,7 +168,6 @@ O11yFleet — OpenTelemetry fleet management`;
 export async function sendEmail(
   env: Env,
   options: EmailOptions,
-  category: EmailCategory = "default",
 ): Promise<{ success: boolean; error?: string }> {
   if (!isEmailConfigured(env)) {
     console.warn("[email] Cloudflare Email Service not configured, skipping:", options.subject);
@@ -197,7 +175,7 @@ export async function sendEmail(
   }
 
   try {
-    const fromAddress = getFromAddress(env, category);
+    const fromAddress = getFromAddress(env);
     const toAddresses = Array.isArray(options.to) ? options.to : [options.to];
 
     await env.CLOUDFLARE_EMAIL_SENDER!.send({
