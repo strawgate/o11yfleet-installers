@@ -23,12 +23,12 @@ runs:
       shell: bash
       env:
         SMOKE_TARGETS: ${{ inputs.smoke-targets }}
-        NODE_PATH: /tmp/playwright-smoke/node_modules
       run: |
         set -euo pipefail
         sleep 5
 
-        node --input-type=module <<'SMOKE_SCRIPT'
+        # Write script into the playwright install dir so ESM resolves naturally
+        cat > /tmp/playwright-smoke/smoke.mjs <<'SMOKE_SCRIPT'
         import { chromium } from "playwright";
 
         const targets = process.env.SMOKE_TARGETS.trim().split("\n").filter(Boolean);
@@ -58,13 +58,12 @@ runs:
 
             for (let attempt = 1; attempt <= 5; attempt++) {
               try {
-                // Use networkidle to wait for CF challenge JS to complete if present
+                // networkidle waits for CF challenge JS to complete if present
                 const response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
                 const status = response?.status() ?? 0;
 
-                // CF challenge may have redirected; check final URL status
+                // CF challenge may redirect after JS execution
                 if (status !== 200) {
-                  // If we got a challenge page, wait for it to resolve
                   if (status === 403) {
                     await page.waitForURL(url, { timeout: 15000 }).catch(() => {});
                   }
@@ -108,3 +107,5 @@ runs:
           await browser.close();
         }
         SMOKE_SCRIPT
+
+        node /tmp/playwright-smoke/smoke.mjs
