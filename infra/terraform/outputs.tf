@@ -47,7 +47,7 @@ output "site_surfaces" {
   value = {
     for key, surface in local.site_surfaces : key => {
       domain = surface.domain
-      route  = cloudflare_workers_route.site[key].pattern
+      route  = try(cloudflare_workers_route.site[key].pattern, null)
     }
   }
   description = "Static site surfaces routed to the static-assets Worker."
