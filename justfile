@@ -1297,8 +1297,14 @@ tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
     # on the other hand, IS created by tf-apply-worker on a successful prior
     # deploy and persists in state. Use it as the gate to avoid re-running
     # wrangler deploy (which collides with existing DO instances).
-    if terraform state list | grep -Fx 'cloudflare_worker_version.fleet' >/dev/null 2>&1; then
-        echo "Terraform state already has cloudflare_worker_version.fleet; skipping Durable Object migration bootstrap"
+    # The resource has `count = var.manage_worker_deployment ? 1 : 0` so when
+    # provisioned, TF stores it as `cloudflare_worker_version.fleet[0]`, not
+    # `cloudflare_worker_version.fleet`. `grep -Fx` is exact-line, so the
+    # un-indexed form never matches and the gate silently fails open — every
+    # subsequent deploy re-runs the wrangler bootstrap and collides with
+    # existing Durable Object instances.
+    if terraform state list | grep -Fx 'cloudflare_worker_version.fleet[0]' >/dev/null 2>&1; then
+        echo "Terraform state already has cloudflare_worker_version.fleet[0]; skipping Durable Object migration bootstrap"
         exit 0
     fi
     cd ../..

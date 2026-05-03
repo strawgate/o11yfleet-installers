@@ -15,6 +15,7 @@ import {
   buildConfigAck,
   buildDescriptionReport,
 } from "@o11yfleet/test-utils";
+import { bootstrapSchema } from "./fixtures/schema.js";
 
 export const O11YFLEET_CLAIM_HMAC_SECRET = "dev-secret-key-for-testing-only-32ch";
 export const O11YFLEET_API_BEARER_SECRET = "test-api-secret-for-dev-only-32chars";
@@ -27,25 +28,10 @@ export function authHeaders(extra: Record<string, string> = {}): Record<string, 
 }
 
 async function ensureAuthTables(): Promise<void> {
-  await setupD1();
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), email TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, display_name TEXT NOT NULL, role TEXT NOT NULL DEFAULT 'member' CHECK(role IN ('member', 'admin')), tenant_id TEXT REFERENCES tenants(id), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_users_email ON users(email)`);
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS sessions (id TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, is_impersonation INTEGER NOT NULL DEFAULT 0, impersonator_user_id TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id)`);
-  await env.FP_DB.exec(`CREATE INDEX IF NOT EXISTS idx_sessions_expires ON sessions(expires_at)`);
-  await env.FP_DB.exec(
-    `CREATE INDEX IF NOT EXISTS idx_sessions_impersonation_expires ON sessions(is_impersonation, expires_at)`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS auth_identities (id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(16)))), user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, provider TEXT NOT NULL, provider_user_id TEXT NOT NULL, provider_login TEXT, provider_email TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(provider, provider_user_id))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE INDEX IF NOT EXISTS idx_auth_identities_user ON auth_identities(user_id)`,
-  );
+  // Production migrations create users / sessions / auth_identities (and
+  // their indexes). bootstrapSchema is idempotent so calling it from each
+  // helper that needs auth tables is fine.
+  await bootstrapSchema();
 }
 
 export async function adminSessionCookie(): Promise<string> {
@@ -173,42 +159,16 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 // ─── D1 Schema Setup ────────────────────────────────────────────────
 
 /**
- * Initialize all D1 tables. Idempotent — safe to call in every beforeAll.
+ * Initialize all D1 tables by applying the production migrations. Idempotent —
+ * `bootstrapSchema` records progress in the standard `d1_migrations` table and
+ * skips already-applied migrations, so calling this from every `beforeAll` is
+ * safe.
+ *
+ * @deprecated Prefer importing `bootstrapSchema` from `./fixtures/schema.js`
+ * directly. Kept as a thin alias so existing call sites don't break.
  */
 export async function setupD1(): Promise<void> {
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter' CHECK(plan IN ('hobby', 'pro', 'starter', 'growth', 'enterprise')), status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'suspended')), max_configs INTEGER NOT NULL DEFAULT 1 CHECK(max_configs >= 0), max_agents_per_config INTEGER NOT NULL DEFAULT 1000 CHECK(max_agents_per_config >= 0), approved_at TEXT, approved_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  // Migration: add columns that may not exist in older test databases
-  try {
-    await env.FP_DB.exec(
-      `ALTER TABLE tenants ADD COLUMN status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'active', 'suspended'))`,
-    );
-  } catch {
-    // Column already exists
-  }
-  try {
-    await env.FP_DB.exec(`ALTER TABLE tenants ADD COLUMN approved_at TEXT`);
-  } catch {
-    // Column already exists
-  }
-  try {
-    await env.FP_DB.exec(`ALTER TABLE tenants ADD COLUMN approved_by TEXT`);
-  } catch {
-    // Column already exists
-  }
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
+  await bootstrapSchema();
 }
 
 // ─── WebSocket Helpers ──────────────────────────────────────────────

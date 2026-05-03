@@ -10,26 +10,9 @@ import {
   type ServerToAgent,
 } from "@o11yfleet/core/codec";
 import { apiFetch, buildHello, buildHeartbeat } from "./helpers.js";
+import { bootstrapSchema } from "./fixtures/schema.js";
 
 const O11YFLEET_CLAIM_HMAC_SECRET = env.O11YFLEET_CLAIM_HMAC_SECRET;
-
-async function setupD1() {
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY, name TEXT NOT NULL, plan TEXT NOT NULL DEFAULT 'starter' CHECK(plan IN ('hobby', 'pro', 'starter', 'growth', 'enterprise')), max_configs INTEGER NOT NULL DEFAULT 1 CHECK(max_configs >= 0), max_agents_per_config INTEGER NOT NULL DEFAULT 1000 CHECK(max_agents_per_config >= 0), created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS configurations (id TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, name TEXT NOT NULL, description TEXT, current_config_hash TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS config_versions (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, config_hash TEXT NOT NULL, r2_key TEXT NOT NULL, size_bytes INTEGER NOT NULL, created_by TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), UNIQUE(config_id, config_hash))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS enrollment_tokens (id TEXT PRIMARY KEY, config_id TEXT NOT NULL, tenant_id TEXT NOT NULL, token_hash TEXT NOT NULL UNIQUE, label TEXT, expires_at TEXT, revoked_at TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-  await env.FP_DB.exec(
-    `CREATE TABLE IF NOT EXISTS agent_summaries (instance_uid TEXT PRIMARY KEY, tenant_id TEXT NOT NULL, config_id TEXT NOT NULL, status TEXT NOT NULL DEFAULT 'unknown', healthy INTEGER NOT NULL DEFAULT 1, current_config_hash TEXT, last_seen_at TEXT, connected_at TEXT, disconnected_at TEXT, agent_description TEXT, created_at TEXT NOT NULL DEFAULT (datetime('now')), updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-  );
-}
 
 function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEvent> {
   return new Promise((resolve, reject) => {
@@ -45,7 +28,7 @@ function waitForMsg(ws: WebSocket, timeoutMs = 3000): Promise<MessageEvent> {
   });
 }
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 // ========================
 // Phase 3-SYNC: Full Lifecycle E2E
@@ -350,8 +333,8 @@ describe("E2E Scenario #7: Queue consumer idempotency", () => {
     for (let i = 0; i < 2; i++) {
       await env.FP_DB.prepare(
         `INSERT INTO agent_summaries (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, created_at, updated_at)
-         VALUES (?, 's7-t', 's7-c', 'running', 1, datetime('now'), datetime('now'), datetime('now'), datetime('now'))
-         ON CONFLICT(instance_uid) DO UPDATE SET status = 'running', last_seen_at = datetime('now')`,
+         VALUES (?, 's7-t', 's7-c', 'connected', 1, datetime('now'), datetime('now'), datetime('now'), datetime('now'))
+         ON CONFLICT(instance_uid) DO UPDATE SET status = 'connected', last_seen_at = datetime('now')`,
       )
         .bind(uid)
         .run();

@@ -22,10 +22,12 @@ const DB = env.FP_DB;
 async function reset(): Promise<void> {
   await DB.prepare("DELETE FROM github_installations").run();
   await DB.prepare("DELETE FROM tenants").run();
-  // Seed the tenant IDs referenced by tests below; the FK is ON DELETE
-  // SET NULL so these aren't strictly required, but a real D1 with
-  // foreign_keys=ON would reject the inserts otherwise.
-  await DB.prepare("INSERT OR IGNORE INTO tenants (id) VALUES ('tenant-x'), ('tenant-abc')").run();
+  // Seed the tenant IDs referenced by tests below. The fixture schema
+  // mirrors production (`name NOT NULL`, etc.), so we have to populate
+  // the required columns rather than just `id`.
+  await DB.prepare(
+    "INSERT OR IGNORE INTO tenants (id, name) VALUES ('tenant-x', 'Tenant X'), ('tenant-abc', 'Tenant ABC')",
+  ).run();
 }
 
 describe("github_installations repo", () => {

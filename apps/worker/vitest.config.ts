@@ -1,5 +1,15 @@
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+import { cloudflareTest, readD1Migrations } from "@cloudflare/vitest-pool-workers";
 import { defineConfig } from "vitest/config";
+
+// Load production D1 migrations once at config time so every test starts
+// against the same schema as production. Beats hand-rolling CREATE TABLE
+// in every test file (which drifts) — migrations are the single source
+// of truth and `applyD1Migrations()` runs them in `beforeAll`.
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const migrationsPath = resolve(__dirname, "../../packages/db/migrations");
+const TEST_MIGRATIONS = await readD1Migrations(migrationsPath);
 
 const requiredWorkerSecretTestBindings = {
   O11YFLEET_API_BEARER_SECRET: "test-api-secret-for-dev-only-32chars",
@@ -24,6 +34,7 @@ export default defineConfig({
       miniflare: {
         bindings: {
           ...requiredWorkerSecretTestBindings,
+          TEST_MIGRATIONS,
           ENVIRONMENT: "dev",
           CLOUDFLARE_METRICS_API_TOKEN: "",
           CLOUDFLARE_METRICS_ACCOUNT_ID: "",
