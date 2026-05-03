@@ -567,6 +567,19 @@ export function getAgentGeneration(sql: SqlStorage, instanceUid: string): number
 /**
  * Mark an agent as disconnected, flushing attachment-tracked fields to SQLite.
  *
+ * This is the deferred write for Tier 0 heartbeat optimization: during normal
+ * heartbeats, seq_num and last_seen_at are tracked in the WS attachment (free)
+ * rather than written to SQLite (billed). This function performs the flush when
+ * the WebSocket closes, amortizing what would have been N writes per session
+ * into a single write on disconnect.
+ *
+ * The UPDATE is unconditional — it always sets status='disconnected' and flushes
+ * the attachment fields. Even if processFrame already set status='disconnected'
+ * (clean agent_disconnect message), the flush of last_seen_at/sequence_num is
+ * still needed because those were tracked in the attachment, not in processFrame.
+ *
+ * Cost: 1 SQLite row write ($1/M).
+ *
  * @param lastSeenAt  From the WS attachment (accurate even during Tier 0).
  *                    Falls back to Date.now() if not available.
  * @param sequenceNum From the WS attachment. Flushes the latest seq_num

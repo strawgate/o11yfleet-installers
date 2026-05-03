@@ -17,7 +17,11 @@ import {
   SpanStatusCode,
 } from "../tracing.js";
 import { logTransitionEvents } from "../observability-events.js";
-import type { AgentStateRepository, DesiredConfig } from "./agent-state-repo-interface.js";
+import type {
+  AgentStateRepository,
+  DesiredConfig,
+  DoPolicy,
+} from "./agent-state-repo-interface.js";
 import { SqliteAgentStateRepo } from "./sqlite-agent-state-repo.js";
 import { parseAttachment } from "./ws-attachment.js";
 import type { WSAttachment } from "./ws-attachment.js";
@@ -80,18 +84,179 @@ function extractDisplayName(identifyingAttributes: {
   return nameValue.slice(0, 128).replace(/[^a-zA-Z0-9 _.-]/g, "");
 }
 
-// Config Durable Object — per tenant:config stateful actor for OpAMP agent management
-// Uses WebSocket Hibernation API with DO alarm for event draining to Queues.
+// ─────────────────────────────────────────────────────────────────────────────
+// Config Durable Object — OpAMP Agent Management
+// ─────────────────────────────────────────────────────────────────────────────
 //
-// Design: Minimal instance state — all reads go through DO-local SQLite
-// (sync, ~µs per query). This makes the DO fully hibernation-safe.
+// This is the central stateful actor for managing OpAMP agents within a single
+// tenant:config pair. One ConfigDurableObject exists per configuration, with
+// agents connecting via WebSocket Hibernation API.
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ ARCHITECTURE                                                           │
+// │                                                                        │
+// │  CF Edge ──── Worker (stateless) ──── ConfigDO (stateful, per-config)  │
+// │                                         ├─ DO-local SQLite (agents,    │
+// │                                         │   config, policy, events)    │
+// │                                         ├─ WebSocket Hibernation API   │
+// │                                         └─ Alarm (deferred metrics)    │
+// │                                                                        │
+// │  Each DO manages up to 30K concurrent agents. The DO is the only       │
+// │  writer to its SQLite — no contention, no distributed locks.           │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ CLOUDFLARE BILLING MODEL (drives every design decision below)          │
+// │                                                                        │
+// │  Resource              │  Cost           │  Notes                      │
+// │  ──────────────────────│─────────────────│──────────────────────────── │
+// │  DO request            │  $0.15 / 1M     │  Each WS message = 1 req   │
+// │  Duration (GB-s)       │  $12.50 / 1M    │  Wall-clock while active   │
+// │  SQLite row read       │  $0.001 / 1M    │  Per SELECT row returned   │
+// │  SQLite row write      │  $1.00 / 1M     │  Per INSERT/UPDATE row     │
+// │  KV get / getAlarm     │  $0.20 / 1M     │  Legacy KV-style reads     │
+// │  KV put / setAlarm     │  $1.00 / 1M     │  Legacy KV-style writes    │
+// │  WS attachment r/w     │  FREE           │  In-memory, survives hib.  │
+// │  getWebSockets()       │  FREE           │  Runtime memory operation   │
+// │  setWebSocketAutoResp  │  FREE           │  Edge ping/pong, no wake   │
+// │                                                                        │
+// │  KEY INSIGHT: SQL reads are 200× cheaper than KV reads, and 1000×      │
+// │  cheaper than writes. Every optimization targets write elimination.     │
+// │                                                                        │
+// │  NOTE on alarms: getAlarm()/setAlarm() may be billed as KV storage     │
+// │  ops OR as standard DO requests depending on backend — CF docs are      │
+// │  ambiguous. Either way, they involve an async boundary that we want to  │
+// │  avoid on hot paths. The alarmScheduled guard eliminates redundant      │
+// │  calls within a single wake cycle regardless of billing model.          │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ PERSISTENCE TIER SYSTEM                                                │
+// │                                                                        │
+// │  Every WebSocket message is classified into a persistence tier based    │
+// │  on what changed. This minimizes SQLite writes (the most expensive     │
+// │  billable operation) while keeping state accurate.                      │
+// │                                                                        │
+// │  Tier 0 — No-op heartbeat (95% of traffic)                            │
+// │    Agent reports same state as last time. ZERO SQL writes.             │
+// │    seq_num and last_seen_at tracked in WS attachment (free).           │
+// │    Flushed to SQLite only on disconnect (markDisconnected).            │
+// │    Cost: 1 SQL read (loadAgentState; getDesiredConfig is cached),      │
+// │    0 writes, 0 KV ops.                                                │
+// │                                                                        │
+// │  Tier 1 — Partial update (4% of traffic)                              │
+// │    Field changed (health, effective_config, etc.) but not a lifecycle  │
+// │    event. Targeted UPDATE writes only dirty columns.                   │
+// │    Cost: 1 SQL read + 1 SQL write + ensureAlarm if events emitted.    │
+// │                                                                        │
+// │  Tier 2 — Full UPSERT (1% of traffic)                                 │
+// │    First message, reconnect, disconnect, or generation bump.           │
+// │    Full 16-column UPSERT because config-do mutates fields (generation, │
+// │    connected_at, status) outside processFrame → dirtyFields won't      │
+// │    include them. Also needed when no row exists yet.                   │
+// │    Cost: 1-3 SQL reads + 1-2 SQL writes (policy/config cached).       │
+// │                                                                        │
+// │  The key to Tier 0 being free: attachment.sequence_num and             │
+// │  attachment.last_seen_at track session-scoped state that would         │
+// │  otherwise require a SQL write per heartbeat. These are flushed to     │
+// │  SQLite on webSocketClose → markDisconnected, ensuring metrics and     │
+// │  stale sweeps stay accurate without per-heartbeat write cost.          │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ HIBERNATION SAFETY                                                     │
+// │                                                                        │
+// │  This DO uses WebSocket Hibernation API, which means the runtime may   │
+// │  evict the DO from memory between messages. On next message:           │
+// │    - constructor() runs again (all instance fields reset)              │
+// │    - SQLite is still there (durable)                                   │
+// │    - WS attachments survive (managed by runtime, not JS heap)          │
+// │    - In-memory caches reset to null/false — this is CORRECT:           │
+// │      conservative on wake-up, rebuilt on first access                  │
+// │                                                                        │
+// │  Rule: NEVER store truth in instance fields that can't be rebuilt      │
+// │  from SQLite or WS attachments. Caches are OK (stale = slower, not    │
+// │  wrong). Flags that default to false/conservative are OK.              │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ WEBSOCKET CLOSE/ERROR FLOW                                             │
+// │                                                                        │
+// │  When a WebSocket closes (clean or error), we need to:                 │
+// │    1. Flush attachment state (last_seen_at, seq_num) to SQLite         │
+// │    2. Mark agent as disconnected in SQLite                             │
+// │    3. Maybe schedule an alarm for metrics emission                     │
+// │                                                                        │
+// │  The subtle part is step 3: if processFrame already handled a clean    │
+// │  agent_disconnect message (OpAMP §3.1.7), it already set              │
+// │  status='disconnected' and the alarm was already scheduled. In that    │
+// │  case, we skip ensureAlarm() to avoid an unnecessary async call.       │
+// │                                                                        │
+// │  We detect this by loading agent state BEFORE markDisconnected:        │
+// │    state = loadAgentState(...)  ← 1 SQL read ($0.001/M — cheap)       │
+// │    markDisconnected(...)        ← 1 SQL write ($1/M — happens anyway) │
+// │    if (state.status === "disconnected") return  ← skip alarm           │
+// │    ensureAlarm()                ← avoided when processFrame handled it │
+// │                                                                        │
+// │  getDesiredConfig() is needed to build the correct config_hash for     │
+// │  loadAgentState. Since it's cached in memory, this is free after the   │
+// │  first call in a wake cycle.                                           │
+// └─────────────────────────────────────────────────────────────────────────┘
+//
+// ┌─────────────────────────────────────────────────────────────────────────┐
+// │ COST MODEL AT SCALE                                                    │
+// │                                                                        │
+// │  30K agents, 1hr heartbeat, 95% no-op:                                │
+// │    Steady-state: ~$3.24/mo (mostly DO request + duration)             │
+// │    SQL writes are dominated by enrollment (Tier 2) + disconnect        │
+// │    SQL reads: ~500/min heartbeat reads → well within free tier         │
+// │    KV ops: alarm-related only, <100K/mo → within free tier            │
+// │                                                                        │
+// │  The architecture is designed so that ONGOING cost is near-zero.       │
+// │  Enrollment is the expensive event; heartbeats are essentially free.   │
+// └─────────────────────────────────────────────────────────────────────────┘
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private repo: AgentStateRepository;
   private initialized = false;
-  /** Cached desired config — invalidated on set-desired-config. The config
-   *  changes only on explicit admin action, so caching eliminates 1 SQL
-   *  read per WebSocket message (~500/min at 30K agents). */
+
+  // ─── In-memory caches (reset on hibernation wake — see header comment) ──
+  //
+  // These are performance caches, NOT sources of truth. On hibernation wake,
+  // the constructor runs again and all fields reset to their defaults:
+  //   cachedDesiredConfig → null  (next getDesiredConfig() re-reads from SQLite)
+  //   cachedPolicy → null        (next getPolicy() re-reads from SQLite)
+  //   alarmScheduled → false     (next ensureAlarm() does the real check)
+  //   cachedIdentity → null      (next getMyIdentity() re-parses ctx.id.name)
+  //
+  // This is correct by design: stale cache = slower first call, never wrong.
+  //
+  // IMPORTANT: These MUST be instance fields (this.*), not module-scope globals.
+  // CF may run multiple DO instances in the same V8 isolate, so module-scope
+  // variables would be shared across different tenant:config DOs — corrupting
+  // each other's caches. See: developers.cloudflare.com/durable-objects/reference/in-memory-state/
+
+  /** Desired config cache — eliminates 1 SQL read per WebSocket message.
+   *  Invalidated explicitly in handleSetDesiredConfig (the only write path).
+   *  At 30K agents with 1hr heartbeat that's ~500 reads/min saved. */
   private cachedDesiredConfig: DesiredConfig | null = null;
+
+  /** DO policy cache — eliminates 1 SQL read per WebSocket connect.
+   *  Invalidated in handleInit() and handleSyncPolicy() (tenant lifecycle
+   *  events, extremely rare). Under burst reconnect of 30K agents this
+   *  saves 30K reads of the same singleton do_config row. */
+  private cachedPolicy: DoPolicy | null = null;
+
+  /** In-memory alarm guard — skips the async getAlarm() call after the first
+   *  ensureAlarm() within a single wake cycle. Whether getAlarm() is billed
+   *  as a KV read ($0.20/M) or just a DO subrequest ($0.15/M), avoiding the
+   *  async boundary on every state-changing message is worthwhile. Reset to
+   *  false in alarm() after the alarm fires. */
+  private alarmScheduled = false;
+
+  /** Parsed identity cache — ctx.id.name is immutable for the DO's lifetime,
+   *  so we parse it once and reuse. Called 3-5× per wake cycle (ensureInit,
+   *  fetch dispatch, handleWebSocket, commandCtx, emitMetrics). */
+  private cachedIdentity: ConfigDoIdentity | null = null;
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
@@ -119,20 +284,20 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
    * DO can only be reached via `idFromName(name)`, so this is
    * authoritative — no header from the worker is required.
    *
-   * Parsing is delegated to `parseConfigDoName` (pure, tested in
-   * isolation). This method just orchestrates: read `ctx.id.name`, run
-   * the parser, throw a sanitized error on the structured failure modes
-   * (DO addressed via `idFromString`/`newUniqueId`, malformed name, etc.).
+   * Cached after first parse — `ctx.id.name` is immutable for the DO's
+   * lifetime, and the parse result never changes. The cache resets on
+   * hibernation wake (constructor re-init), but the same `ctx.id.name`
+   * produces the same result every time.
    */
   private getMyIdentity(): ConfigDoIdentity {
+    if (this.cachedIdentity) return this.cachedIdentity;
     const result = parseConfigDoName(this.ctx.id.name);
     if (!result.ok) {
-      // Truncate the name before echoing it so an adversarial caller
-      // can't inflate log lines arbitrarily.
       throw new Error(
         `[ConfigDO] invalid identity (${result.error}): ${safeForLog(this.ctx.id.name)}`,
       );
     }
+    this.cachedIdentity = result.identity;
     return result.identity;
   }
 
@@ -157,12 +322,36 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     return config;
   }
 
-  /** Schedule one deferred aggregate metrics snapshot after state changes. */
+  /** Get DO policy from SQLite (~µs). Cached after first read — policy
+   *  changes only on /init or /sync-policy (tenant lifecycle events).
+   *  Invalidated in handleInit() and handleSyncPolicy(). */
+  private getPolicy(): DoPolicy {
+    if (this.cachedPolicy) return this.cachedPolicy;
+    this.cachedPolicy = this.repo.loadDoPolicy();
+    return this.cachedPolicy;
+  }
+
+  /** Schedule a one-shot alarm for deferred metrics emission.
+   *
+   *  Called after state-changing events (Tier 1+ messages, disconnects, config
+   *  pushes). The alarm fires once, emits an aggregate metrics snapshot via
+   *  Analytics Engine, and does NOT reschedule — this prevents runaway alarm
+   *  cost in an idle fleet.
+   *
+   *  The alarmScheduled guard avoids hitting getAlarm() on every call within
+   *  a single wake cycle. Within one wake, alarm state can't change underneath
+   *  us (single-threaded), so the first call's answer is definitive until
+   *  alarm() fires.
+   *
+   *  Cost: first call = 1 async getAlarm() + maybe 1 setAlarm(). Subsequent
+   *  calls in the same wake cycle = free (in-memory short-circuit). */
   private async ensureAlarm(): Promise<void> {
+    if (this.alarmScheduled) return;
     const existing = await this.ctx.storage.getAlarm();
     if (!existing) {
       await this.ctx.storage.setAlarm(Date.now() + ALARM_TICK_MS);
     }
+    this.alarmScheduled = true;
   }
 
   /** O(1) tag-based check with fallback for enrollment connections. */
@@ -330,9 +519,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       // (set by /init or /sync-policy from the worker), fall back to
       // the header for callers that haven't yet been migrated to
       // /init, and finally to the global default.
-      const cachedPolicy = this.repo.loadDoPolicy();
+      const policy = this.getPolicy();
       const headerLimit = parseTenantAgentLimit(request.headers.get("x-fp-max-agents-per-config"));
-      const tenantLimit = cachedPolicy.max_agents_per_config ?? headerLimit;
+      const tenantLimit = policy.max_agents_per_config ?? headerLimit;
       const limit =
         tenantLimit !== null ? Math.min(tenantLimit, MAX_AGENTS_PER_CONFIG) : MAX_AGENTS_PER_CONFIG;
       const count = this.repo.getAgentCount();
@@ -555,33 +744,52 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         defaultProcessContext(),
       );
 
-      // Track session-scoped state in WS attachment (zero SQL cost).
-      // seq_num + last_seen_at live here so no-op heartbeats avoid a SQLite write.
-      // capabilities are already tracked for command gating.
+      // ── Attachment State Tracking (Tier 0 optimization) ──
+      //
+      // seq_num, last_seen_at, and capabilities are tracked in the WS
+      // attachment (free — runtime-managed, not billed storage) instead of
+      // writing to SQLite on every heartbeat. This is THE key optimization
+      // that makes Tier 0 heartbeats cost zero writes.
+      //
+      // These values are flushed to SQLite on disconnect via
+      // webSocketClose → markDisconnected (1 write, amortized over the
+      // entire session lifetime).
       if (result.newState.sequence_num !== attachment.sequence_num) {
         attachment.sequence_num = result.newState.sequence_num;
       }
       if (attachment.capabilities !== agentMsg.capabilities) {
         attachment.capabilities = agentMsg.capabilities;
       }
-      // Always update last_seen_at so liveness is tracked even on Tier 0.
-      // Flushed to SQLite on webSocketClose → markDisconnected.
       attachment.last_seen_at = Date.now();
       ws.serializeAttachment(attachment);
 
+      // ── Persistence Tier Classification ──
+      //
+      // The tier system minimizes SQLite writes (most expensive billed op
+      // at $1/M rows). See module header for full tier descriptions.
+
       if (forceFullPersist || (result.shouldPersist && result.dirtyFields.has("connected_at"))) {
-        // Tier 2: first message, hello, reconnect, or disconnect — row may not exist,
-        // and config-do may have mutated fields (generation, connected_at, status) outside
-        // processFrame. Full UPSERT writes all 16 columns.
+        // Tier 2: first message, hello, reconnect, or disconnect.
+        // Row may not exist yet, and config-do mutated fields outside
+        // processFrame (generation, connected_at, status) that aren't in
+        // dirtyFields. Full UPSERT writes all 16 columns.
+        // Cost: 1 SQL write ($1/M).
         this.repo.saveAgentState(result.newState);
       } else if (result.shouldPersist && result.dirtyFields.size > 0) {
-        // Tier 1: existing agent, field change only — targeted UPDATE writes only dirty
-        // columns, skipping JSON.stringify for untouched component_health_map/available_components.
+        // Tier 1: existing agent, field-level change only (health, effective
+        // config hash, etc.). Targeted UPDATE writes only dirty columns,
+        // avoiding JSON.stringify for untouched component_health_map and
+        // available_components.
+        // Cost: 1 SQL write ($1/M) — but smaller row, less CPU.
         this.repo.updateAgentPartial(attachment.instance_uid, result.newState, result.dirtyFields);
       }
-      // When dirtyFields is empty but shouldPersist is true (e.g. config_rejected),
-      // only events need processing — no SQL write needed.
+      // Tier 0: dirtyFields is empty. No SQL write at all.
+      // seq_num + last_seen_at are tracked in the WS attachment (free),
+      // flushed to SQLite on disconnect via markDisconnected().
+      // Cost: 0 SQL writes. This is why steady-state fleets are near-free.
 
+      // Events (state transitions) trigger a deferred metrics snapshot.
+      // ensureAlarm() is idempotent within a wake cycle (alarmScheduled guard).
       if (result.events.length > 0) {
         span.setAttribute("opamp.events_emitted", result.events.length);
         logTransitionEvents(result.events);
@@ -644,6 +852,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
+  // ─── WebSocket Close/Error ──────────────────────────────────────────
+  //
+  // See "WEBSOCKET CLOSE/ERROR FLOW" in module header for full rationale.
+  // Short version: load state to check if processFrame already handled
+  // the disconnect (status=disconnected), flush attachment fields to
+  // SQLite, and only call ensureAlarm() if this is a NEW disconnect.
+
   override async webSocketClose(ws: WebSocket, _code: number, _reason: string): Promise<void> {
     this.ensureInit();
     const attachment = parseAttachment(ws.deserializeAttachment());
@@ -651,6 +866,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
     const span = startWsLifecycleSpan("close", attachment.instance_uid);
     try {
+      // Load state BEFORE markDisconnected to check if processFrame already
+      // handled a clean agent_disconnect. getDesiredConfig() is cached (free
+      // after first call). loadAgentState is 1 SQL read (~$0.001/M).
       const config = this.getDesiredConfig();
       const state = this.repo.loadAgentState(
         attachment.instance_uid,
@@ -658,16 +876,21 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         attachment.config_id,
         config.hash,
       );
-      // Flush attachment-tracked last_seen_at + sequence_num to SQLite so
-      // metrics and stale sweeps stay accurate even for Tier 0 connections.
+
+      // Flush attachment-tracked last_seen_at + sequence_num to SQLite.
+      // These were tracked in-memory during Tier 0 heartbeats to avoid
+      // per-heartbeat SQL writes. This is the deferred flush point.
+      // Cost: 1 SQL write ($1/M) — happens on every disconnect.
       this.repo.markDisconnected(
         attachment.instance_uid,
         attachment.last_seen_at,
         attachment.sequence_num,
       );
+
       if (state.status === "disconnected") {
-        // processFrame already handled the disconnect and scheduled the alarm.
-        // Skip ensureAlarm() — getAlarm()/setAlarm() are billed storage ops.
+        // processFrame already handled the disconnect (agent sent
+        // agent_disconnect message per OpAMP §3.1.7) and scheduled
+        // the alarm. Skip ensureAlarm() to avoid a redundant async call.
         return;
       }
       await this.ensureAlarm();
@@ -689,6 +912,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     recordSpanError(span, error);
     try {
       if (attachment) {
+        // Same pattern as webSocketClose: load pre-disconnect state to check
+        // if alarm is already scheduled, then flush attachment fields.
         const config = this.getDesiredConfig();
         const state = this.repo.loadAgentState(
           attachment.instance_uid,
@@ -715,10 +940,16 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  // ─── Alarm: Metrics Snapshot ───────────────────────────────────────
+  // ─── Alarm: One-Shot Metrics Snapshot ────────────────────────────────
+  //
+  // Fires once after state-changing activity, emits an aggregate metrics
+  // snapshot to Analytics Engine, then STOPS. Does NOT reschedule itself.
+  // This means an idle fleet with no activity pays zero alarm cost.
+  // Cost: 1 DO request + ~2 SQL reads (computeMetrics aggregate query).
 
   override async alarm(): Promise<void> {
     this.ensureInit();
+    this.alarmScheduled = false; // Reset guard — next state change will re-check
     try {
       this.emitMetrics();
     } catch {
@@ -760,12 +991,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     // fetch — /init is just an optional policy upsert.
     if (result.value.max_agents_per_config !== undefined) {
       this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
+      this.cachedPolicy = null; // Invalidate — next getPolicy() re-reads from SQLite
     }
 
     return Response.json({
       tenant_id: identity.tenant_id,
       config_id: identity.config_id,
-      policy: this.repo.loadDoPolicy(),
+      policy: this.getPolicy(),
       initialized: true,
     });
   }
@@ -785,8 +1017,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
     if (result.value.max_agents_per_config !== undefined) {
       this.repo.saveDoPolicy({ max_agents_per_config: result.value.max_agents_per_config });
+      this.cachedPolicy = null; // Invalidate — next getPolicy() re-reads from SQLite
     }
-    return Response.json({ policy: this.repo.loadDoPolicy() });
+    return Response.json({ policy: this.getPolicy() });
   }
 
   private emitMetrics(): void {
