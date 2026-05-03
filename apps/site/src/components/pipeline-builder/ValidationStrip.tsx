@@ -1,8 +1,25 @@
+import { Alert, Card, Stack, Text, Title } from "@mantine/core";
 import type { BuilderValidation } from "@/pages/portal/useBuilderState";
 
 export interface ValidationStripProps {
   validation: BuilderValidation;
   yamlPreviewError: string | null;
+}
+
+function IssueAlert({
+  color,
+  title,
+  body,
+}: {
+  color: "red" | "yellow" | "green";
+  title: string;
+  body: string;
+}) {
+  return (
+    <Alert color={color} variant="light" title={title}>
+      {body}
+    </Alert>
+  );
 }
 
 export function ValidationStrip({ validation, yamlPreviewError }: ValidationStripProps) {
@@ -11,73 +28,86 @@ export function ValidationStrip({ validation, yamlPreviewError }: ValidationStri
   const noIssues = !hasErrors && !hasWarnings;
 
   return (
-    <section className="card card-pad mt-6 pipe-validation-strip">
-      <h3>Validation and rollout readiness</h3>
-      <p className="meta mt-2">
+    <Card mt="md" className="pipe-validation-strip">
+      <Title order={3} size="sm">
+        Validation and rollout readiness
+      </Title>
+      <Text size="sm" c="dimmed" mt="xs">
         Graph checks run locally from the model. Collector runtime validation and rollout gates are
         separate backend contracts.
-      </p>
+      </Text>
 
-      <div className="pipe-issues mt-4">
+      <Stack gap="sm" mt="md">
         {!validation.canSave ? (
-          <div className="banner err mt-2">
-            <div>
-              <div className="b-title">Cannot save draft</div>
-              <div className="b-body">Please resolve all errors before saving.</div>
-            </div>
-          </div>
+          <IssueAlert
+            color="red"
+            title="Cannot save draft"
+            body="Please resolve all errors before saving."
+          />
         ) : null}
 
         {yamlPreviewError !== null ? (
-          <div className="banner err mt-2">
-            <div>
-              <div className="b-title">YAML preview unavailable</div>
-              <div className="b-body">{yamlPreviewError}</div>
-            </div>
-          </div>
+          <IssueAlert color="red" title="YAML preview unavailable" body={yamlPreviewError} />
         ) : null}
 
         {noIssues ? (
-          <div className="banner ok">
-            <div>
-              <div className="b-title">No graph issues detected</div>
-              <div className="b-body">Review the generated YAML before creating a version.</div>
-            </div>
-          </div>
+          <IssueAlert
+            color="green"
+            title="No graph issues detected"
+            body="Review the generated YAML before creating a version."
+          />
         ) : null}
 
         {validation.errors.length > 0 ? (
-          <details className="mt-2" open>
-            <summary className="font-semibold text-sm cursor-pointer select-none">
+          <details open>
+            <summary
+              style={{
+                fontSize: "var(--mantine-font-size-sm)",
+                fontWeight: 600,
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
               Errors ({validation.errors.length})
             </summary>
-            {validation.errors.map((issue, index) => (
-              <div key={`error-${index}-${issue.code}`} className="banner err mt-2">
-                <div>
-                  <div className="b-title">Error: {issue.code}</div>
-                  <div className="b-body">{issue.message}</div>
-                </div>
-              </div>
-            ))}
+            <Stack gap="xs" mt="xs">
+              {validation.errors.map((issue, index) => (
+                <IssueAlert
+                  key={`error-${index}-${issue.code}`}
+                  color="red"
+                  title={`Error: ${issue.code}`}
+                  body={issue.message}
+                />
+              ))}
+            </Stack>
           </details>
         ) : null}
 
         {validation.warnings.length > 0 ? (
-          <details className="mt-2" open>
-            <summary className="font-semibold text-sm cursor-pointer select-none">
+          <details open>
+            <summary
+              style={{
+                fontSize: "var(--mantine-font-size-sm)",
+                fontWeight: 600,
+                cursor: "pointer",
+                userSelect: "none",
+              }}
+            >
               Warnings ({validation.warnings.length})
             </summary>
-            {validation.warnings.map((issue, index) => (
-              <div key={`warning-${index}-${issue.code}`} className="banner warn mt-2">
-                <div>
-                  <div className="b-title">Warning: {issue.code}</div>
-                  <div className="b-body">{issue.message}</div>
-                </div>
-              </div>
-            ))}
+            <Stack gap="xs" mt="xs">
+              {validation.warnings.map((issue, index) => (
+                <IssueAlert
+                  key={`warning-${index}-${issue.code}`}
+                  color="yellow"
+                  title={`Warning: ${issue.code}`}
+                  body={issue.message}
+                />
+              ))}
+            </Stack>
           </details>
         ) : null}
-      </div>
-    </section>
+      </Stack>
+    </Card>
   );
 }

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { MantineProvider } from "@mantine/core";
 
 void React;
 import { ValidationStrip } from "../src/components/pipeline-builder/ValidationStrip";
@@ -16,7 +17,9 @@ test("ValidationStrip: rendering with no issues", () => {
   };
 
   const html = renderToStaticMarkup(
-    <ValidationStrip validation={validation} yamlPreviewError={null} />,
+    <MantineProvider>
+      <ValidationStrip validation={validation} yamlPreviewError={null} />
+    </MantineProvider>,
   );
 
   assert.match(html, /Validation and rollout readiness/);
@@ -39,7 +42,9 @@ test("ValidationStrip: rendering with errors only", () => {
   };
 
   const html = renderToStaticMarkup(
-    <ValidationStrip validation={validation} yamlPreviewError={null} />,
+    <MantineProvider>
+      <ValidationStrip validation={validation} yamlPreviewError={null} />
+    </MantineProvider>,
   );
 
   assert.match(html, /Validation and rollout readiness/);
@@ -60,7 +65,9 @@ test("ValidationStrip: rendering with warnings only", () => {
   };
 
   const html = renderToStaticMarkup(
-    <ValidationStrip validation={validation} yamlPreviewError={null} />,
+    <MantineProvider>
+      <ValidationStrip validation={validation} yamlPreviewError={null} />
+    </MantineProvider>,
   );
 
   assert.match(html, /Validation and rollout readiness/);
@@ -80,7 +87,9 @@ test("ValidationStrip: rendering with both errors and warnings", () => {
   };
 
   const html = renderToStaticMarkup(
-    <ValidationStrip validation={validation} yamlPreviewError="YAML broken" />,
+    <MantineProvider>
+      <ValidationStrip validation={validation} yamlPreviewError="YAML broken" />
+    </MantineProvider>,
   );
 
   assert.match(html, /Validation and rollout readiness/);
