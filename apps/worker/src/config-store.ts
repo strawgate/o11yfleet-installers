@@ -3,6 +3,8 @@
 // D1 upsert for config versions
 
 import { parse as parseYaml } from "yaml";
+import { getDb } from "./db/client.js";
+import { existsBy } from "./db/queries.js";
 
 export interface ConfigStoreEnv {
   FP_CONFIGS: R2Bucket;
@@ -76,6 +78,11 @@ export async function uploadConfigVersion(
   // current hash. On conflict the UPDATE still runs, so the
   // configuration's current_config_hash is set even when the version
   // row already existed from a prior upload.
+  //
+  // Kept as raw env.FP_DB.prepare() inside env.FP_DB.batch([...]) because
+  // Kysely's batch on D1 isn't equivalent to D1's atomic batch() — and
+  // we depend on atomicity here so a partial failure can't leave the
+  // version row in but the configurations.current_config_hash unchanged.
   await env.FP_DB.batch([
     env.FP_DB.prepare(
       `INSERT INTO config_versions (id, config_id, tenant_id, config_hash, r2_key, size_bytes, created_by, created_at)
@@ -101,11 +108,12 @@ export async function uploadConfigVersion(
   // re-uploaded identical YAML or because a concurrent caller won the
   // race. The audit log uses this id as `resource_id`, so it must
   // always reference a row that actually lives in `config_versions`.
-  const canonical = await env.FP_DB.prepare(
-    `SELECT id FROM config_versions WHERE config_id = ? AND config_hash = ?`,
-  )
-    .bind(configId, hash)
-    .first<{ id: string }>();
+  const canonical = await getDb(env.FP_DB)
+    .selectFrom("config_versions")
+    .select("id")
+    .where("config_id", "=", configId)
+    .where("config_hash", "=", hash)
+    .executeTakeFirst();
   if (!canonical) {
     // The row should always exist post-batch — either our INSERT
     // landed it, or a prior call did. Falling back to candidateVersionId
@@ -143,11 +151,10 @@ export async function deleteConfigContentIfUnreferenced(
   env: ConfigStoreEnv,
   r2Key: string,
 ): Promise<void> {
-  const remainingBeforeDelete = await env.FP_DB.prepare(
-    `SELECT 1 as found FROM config_versions WHERE r2_key = ? LIMIT 1`,
-  )
-    .bind(r2Key)
-    .first<{ found: number }>();
+  const db = getDb(env.FP_DB);
+  const remainingBeforeDelete = await existsBy(
+    db.selectFrom("config_versions").where("r2_key", "=", r2Key),
+  );
   if (remainingBeforeDelete) return;
 
   const object = await env.FP_CONFIGS.get(r2Key);
@@ -157,11 +164,9 @@ export async function deleteConfigContentIfUnreferenced(
 
   await env.FP_CONFIGS.delete(r2Key);
 
-  const remainingAfterDelete = await env.FP_DB.prepare(
-    `SELECT 1 as found FROM config_versions WHERE r2_key = ? LIMIT 1`,
-  )
-    .bind(r2Key)
-    .first<{ found: number }>();
+  const remainingAfterDelete = await existsBy(
+    db.selectFrom("config_versions").where("r2_key", "=", r2Key),
+  );
   if (remainingAfterDelete && bytes) {
     await env.FP_CONFIGS.put(r2Key, bytes, {
       httpMetadata: contentType ? { contentType } : undefined,

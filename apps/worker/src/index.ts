@@ -5,6 +5,7 @@ export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
+import { getDb } from "./db/client.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
 import { verifyClaim, verifyEnrollmentToken, isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
@@ -252,35 +253,30 @@ export default {
       return;
     }
 
-    const configs = await env.FP_DB.prepare(`SELECT id, tenant_id FROM configurations`).all<{
-      id: string;
-      tenant_id: string;
-    }>();
+    const configs = await getDb(env.FP_DB)
+      .selectFrom("configurations")
+      .select(["id", "tenant_id"])
+      .execute();
 
-    if (!configs.results?.length) {
+    if (configs.length === 0) {
       return;
     }
 
-    const results = await mapWithConcurrency(
-      configs.results,
-      CRON_SWEEP_CONCURRENCY,
-      async (config) => {
-        const doName = `${config.tenant_id}:${config.id}`;
-        const doId = env.CONFIG_DO.idFromName(doName);
-        const stub = env.CONFIG_DO.get(doId);
-        const resp = await withTimeout(
-          (signal) =>
-            stub.fetch(new Request("http://do/command/sweep", { method: "POST", signal })),
-          CRON_SWEEP_TIMEOUT_MS,
-          `[cron] sweep timed out for ${doName}`,
-        );
-        if (!resp.ok) {
-          const body = await resp.text().catch(() => "");
-          throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status} ${body}`);
-        }
-        return resp.json<{ swept: number }>();
-      },
-    );
+    const results = await mapWithConcurrency(configs, CRON_SWEEP_CONCURRENCY, async (config) => {
+      const doName = `${config.tenant_id}:${config.id}`;
+      const doId = env.CONFIG_DO.idFromName(doName);
+      const stub = env.CONFIG_DO.get(doId);
+      const resp = await withTimeout(
+        (signal) => stub.fetch(new Request("http://do/command/sweep", { method: "POST", signal })),
+        CRON_SWEEP_TIMEOUT_MS,
+        `[cron] sweep timed out for ${doName}`,
+      );
+      if (!resp.ok) {
+        const body = await resp.text().catch(() => "");
+        throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status} ${body}`);
+      }
+      return resp.json<{ swept: number }>();
+    });
 
     const swept = results
       .filter((r): r is PromiseFulfilledResult<{ swept: number }> => r.status === "fulfilled")
@@ -289,7 +285,7 @@ export default {
 
     if (swept > 0 || failed > 0) {
       console.warn(
-        `[cron] sweep complete: ${swept} stale agents across ${configs.results.length} configs (${failed} failures)`,
+        `[cron] sweep complete: ${swept} stale agents across ${configs.length} configs (${failed} failures)`,
       );
     }
   },
@@ -298,12 +294,14 @@ export default {
 async function emitProductMetrics(env: Env): Promise<void> {
   if (!env.FP_ANALYTICS) return;
 
-  const { results } = await env.FP_DB.prepare(
-    `SELECT plan, COUNT(*) as c FROM tenants GROUP BY plan`,
-  ).all<{ plan: string; c: number }>();
+  const rows = await getDb(env.FP_DB)
+    .selectFrom("tenants")
+    .select(["plan", (eb) => eb.fn.countAll<number>().as("c")])
+    .groupBy("plan")
+    .execute();
 
   const totals = { total: 0, free: 0, paid: 0, enterprise: 0 };
-  for (const row of results ?? []) {
+  for (const row of rows) {
     const bucket = tenantPlanBucket(row.plan);
     totals[bucket] += row.c;
     totals.total += row.c;
@@ -617,9 +615,11 @@ async function handleOpampRequest(request: Request, env: Env): Promise<Response>
   // crash recovery). Keeping this pull-based until enrollment QPS
   // actually requires the optimization.
   try {
-    const row = await env.FP_DB.prepare(`SELECT revoked_at FROM enrollment_tokens WHERE id = ?`)
-      .bind(claim.jti)
-      .first<{ revoked_at: string | null }>();
+    const row = await getDb(env.FP_DB)
+      .selectFrom("enrollment_tokens")
+      .select("revoked_at")
+      .where("id", "=", claim.jti)
+      .executeTakeFirst();
     if (!row) {
       return Response.json({ error: "Enrollment token not found" }, { status: 401 });
     }

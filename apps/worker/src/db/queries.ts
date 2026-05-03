@@ -102,3 +102,59 @@ export function insertAuditLog(db: Kysely<Database>, row: Insertable<AuditLogTab
     .values(row)
     .onConflict((oc) => oc.column("id").doNothing());
 }
+
+/**
+ * Composite-key cursor pagination. Adds the standard
+ * `(<sort_col> < ? OR (<sort_col> = ? AND <id_col> < ?))` filter to a
+ * Kysely select, plus the matching `ORDER BY <sort_col> DESC, <id_col> DESC`
+ * and `LIMIT <limit + 1>`. Caller handles deciding `hasMore` from the
+ * over-fetch and slicing the result.
+ *
+ *     const rows = await paginateByCursor(
+ *       tenantScoped(db, "audit_logs", tenantId),
+ *       { cursor, limit, sortColumn: "created_at", idColumn: "id" },
+ *     )
+ *       .select([...])
+ *       .execute();
+ *     const hasMore = rows.length > limit;
+ *     const slice = hasMore ? rows.slice(0, limit) : rows;
+ *
+ * The over-fetch (`limit + 1`) lets the caller answer "is there a next
+ * page?" in the same round-trip as the page itself, avoiding a separate
+ * COUNT query.
+ *
+ * Cursor format is the caller's concern — typically `${createdAt}|${id}`
+ * base64-encoded. Pass the decoded shape as `{ created_at, id }`.
+ */
+export interface CursorOptions<S extends string, I extends string> {
+  /** Decoded cursor (`null`/`undefined` = first page). */
+  cursor: { created_at: string; id: string } | null | undefined;
+  /** Page size (caller bounds this). The query fetches `limit + 1` rows. */
+  limit: number;
+  /** Column carrying the sort timestamp. Almost always `"created_at"`. */
+  sortColumn: S;
+  /** Column carrying the tiebreaker id. Almost always `"id"`. */
+  idColumn: I;
+}
+
+export function paginateByCursor<DB, TB extends keyof DB & string, O>(
+  query: SelectQueryBuilder<DB, TB, O>,
+  opts: CursorOptions<string, string>,
+): SelectQueryBuilder<DB, TB, O> {
+  let next = query;
+  if (opts.cursor) {
+    const { created_at, id } = opts.cursor;
+    // Bypass Kysely's where overload generics — the caller declares the
+    // sort/id columns as plain strings, and we know the SQL we want
+    // ((sort < ?) OR (sort = ? AND id < ?)). Use sql.raw with bound
+    // identifiers instead of trying to thread column-name generics
+    // through the type system.
+    next = next.where(
+      sql<boolean>`(${sql.ref(opts.sortColumn)} < ${created_at} OR (${sql.ref(opts.sortColumn)} = ${created_at} AND ${sql.ref(opts.idColumn)} < ${id}))`,
+    ) as typeof next;
+  }
+  return next
+    .orderBy(sql.ref(opts.sortColumn), "desc")
+    .orderBy(sql.ref(opts.idColumn), "desc")
+    .limit(opts.limit + 1) as SelectQueryBuilder<DB, TB, O>;
+}

@@ -14,6 +14,8 @@ import {
 import { jsonError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
 import { findTenantById } from "../../shared/db-helpers.js";
+import { getDb } from "../../db/client.js";
+import { paginateByCursor, tenantScoped } from "../../db/queries.js";
 import { PLAN_DEFINITIONS, normalizePlan } from "../../shared/plans.js";
 
 const DEFAULT_LIMIT = 50;
@@ -40,63 +42,58 @@ export async function handleListAuditLogs(env: Env, url: URL, tenantId: string):
     ? Math.min(Math.max(limitRaw, 1), MAX_LIMIT)
     : DEFAULT_LIMIT;
 
-  const filters: string[] = ["tenant_id = ?"];
-  const values: unknown[] = [tenantId];
-
-  const actor = params.get("actor_user_id");
-  if (actor) {
-    filters.push("actor_user_id = ?");
-    values.push(actor);
-  }
-  const resourceType = params.get("resource_type");
-  if (resourceType) {
-    filters.push("resource_type = ?");
-    values.push(resourceType);
-  }
-  const resourceId = params.get("resource_id");
-  if (resourceId) {
-    filters.push("resource_id = ?");
-    values.push(resourceId);
-  }
-  const action = params.get("action");
-  if (action) {
-    filters.push("action = ?");
-    values.push(action);
-  }
+  // Validate optional from/to filters before they reach SQL — see
+  // isIsoDateTime for why non-ISO values would silently misorder.
   const from = params.get("from");
-  if (from) {
-    if (!isIsoDateTime(from)) return jsonError("from must be an ISO-8601 timestamp", 400);
-    filters.push("created_at >= ?");
-    values.push(from);
-  }
+  if (from && !isIsoDateTime(from)) return jsonError("from must be an ISO-8601 timestamp", 400);
   const to = params.get("to");
-  if (to) {
-    if (!isIsoDateTime(to)) return jsonError("to must be an ISO-8601 timestamp", 400);
-    filters.push("created_at <= ?");
-    values.push(to);
-  }
+  if (to && !isIsoDateTime(to)) return jsonError("to must be an ISO-8601 timestamp", 400);
 
-  const cursor = params.get("cursor");
-  if (cursor) {
-    const parsed = decodeCursor(cursor);
-    if (!parsed) return jsonError("Invalid cursor", 400);
-    filters.push("(created_at < ? OR (created_at = ? AND id < ?))");
-    values.push(parsed.created_at, parsed.created_at, parsed.id);
-  }
+  // Decode cursor before any DB work so a malformed cursor 400s without
+  // costing an unnecessary read.
+  const cursorRaw = params.get("cursor");
+  const cursor = cursorRaw ? decodeCursor(cursorRaw) : null;
+  if (cursorRaw && !cursor) return jsonError("Invalid cursor", 400);
 
-  const sql = `SELECT id, tenant_id, actor_user_id, actor_api_key_id, actor_email, actor_ip,
-                      actor_user_agent, impersonator_user_id, action, resource_type, resource_id,
-                      status, status_code, metadata, request_id, created_at
-               FROM audit_logs
-               WHERE ${filters.join(" AND ")}
-               ORDER BY created_at DESC, id DESC
-               LIMIT ?`;
+  const db = getDb(env.FP_DB);
+  let query = tenantScoped(db, "audit_logs", tenantId);
+  const actor = params.get("actor_user_id");
+  if (actor) query = query.where("actor_user_id", "=", actor);
+  const resourceType = params.get("resource_type");
+  if (resourceType) query = query.where("resource_type", "=", resourceType);
+  const resourceId = params.get("resource_id");
+  if (resourceId) query = query.where("resource_id", "=", resourceId);
+  const action = params.get("action");
+  if (action) query = query.where("action", "=", action);
+  if (from) query = query.where("created_at", ">=", from);
+  if (to) query = query.where("created_at", "<=", to);
 
-  const result = await env.FP_DB.prepare(sql)
-    .bind(...values, limit + 1)
-    .all<AuditRow>();
+  const rows = await paginateByCursor(query, {
+    cursor,
+    limit,
+    sortColumn: "created_at",
+    idColumn: "id",
+  })
+    .select([
+      "id",
+      "tenant_id",
+      "actor_user_id",
+      "actor_api_key_id",
+      "actor_email",
+      "actor_ip",
+      "actor_user_agent",
+      "impersonator_user_id",
+      "action",
+      "resource_type",
+      "resource_id",
+      "status",
+      "status_code",
+      "metadata",
+      "request_id",
+      "created_at",
+    ])
+    .execute();
 
-  const rows = result.results ?? [];
   const hasMore = rows.length > limit;
   const slice = hasMore ? rows.slice(0, limit) : rows;
   const last = slice[slice.length - 1];
