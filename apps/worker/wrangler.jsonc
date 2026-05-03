@@ -9,6 +9,10 @@
   },
   // Wrangler treats secrets as non-inheritable, so keep this list mirrored in
   // each named environment below.
+  //
+  // Only CORE secrets are listed here. Feature-specific secrets (GitHub App,
+  // Cloudflare Metrics) are optional — the code handles them being undefined.
+  // Terraform manages actual secret bindings via inherited_binding_names.
   "secrets": {
     "required": [
       "O11YFLEET_API_BEARER_SECRET",
@@ -17,11 +21,6 @@
       "O11YFLEET_SEED_ADMIN_PASSWORD",
       "O11YFLEET_SEED_TENANT_USER_EMAIL",
       "O11YFLEET_SEED_TENANT_USER_PASSWORD",
-      "CLOUDFLARE_METRICS_ACCOUNT_ID",
-      "CLOUDFLARE_METRICS_API_TOKEN",
-      "GITHUB_APP_ID",
-      "GITHUB_APP_PRIVATE_KEY",
-      "GITHUB_APP_WEBHOOK_SECRET",
     ],
   },
   "d1_databases": [
@@ -292,13 +291,6 @@
           "O11YFLEET_SEED_ADMIN_PASSWORD",
           "O11YFLEET_SEED_TENANT_USER_EMAIL",
           "O11YFLEET_SEED_TENANT_USER_PASSWORD",
-          "CLOUDFLARE_METRICS_ACCOUNT_ID",
-          "CLOUDFLARE_METRICS_API_TOKEN",
-          "GITHUB_APP_CLIENT_ID",
-          "GITHUB_APP_CLIENT_SECRET",
-          "GITHUB_APP_ID",
-          "GITHUB_APP_PRIVATE_KEY",
-          "GITHUB_APP_WEBHOOK_SECRET",
         ],
       },
       "d1_databases": [
