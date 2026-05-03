@@ -57,7 +57,7 @@ export function validateTransition(
 export function transition(
   tenant: TenantState,
   desiredStatus: TenantStatus,
-  adminId?: string,
+  _adminId?: string,
 ): TenantTransitionResult {
   const currentStatus = tenant.status;
 
@@ -77,18 +77,6 @@ export function transition(
       newStatus: currentStatus,
       error: validation.error,
     };
-  }
-
-  // Build the update payload
-  const now = new Date().toISOString();
-  const updates: Partial<TenantState> = {
-    status: desiredStatus,
-  };
-
-  // Set approval metadata when activating
-  if (desiredStatus === "active") {
-    updates.approved_at = now;
-    updates.approved_by = adminId ?? null;
   }
 
   return {

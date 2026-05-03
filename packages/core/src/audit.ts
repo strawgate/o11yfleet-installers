@@ -1,40 +1,18 @@
-// Audit event types — pure TypeScript so they can be shared between the
-// worker (recording) and tests, with zero Cloudflare imports.
-//
-// Routing → action mapping is intentionally NOT done here. Each handler
-// declares its own audit descriptor at the call site (see
-// apps/worker/src/audit/recorder.ts). That keeps coverage explicit and
-// grep-able instead of mirroring the route table in two places.
-//
-// Vendor-portability note: this file is the canonical event shape.
-// Producers build `AuditEvent`s; the consumer translates them to the
-// storage backend. Today that's D1; the swap to WorkOS Audit Logs only
-// changes the consumer body (see apps/worker/src/audit/consumer.ts).
+// Audit event types — shared between the worker (recording) and tests,
+// with zero Cloudflare imports. Each handler declares its own audit
+// descriptor at the call site (see apps/worker/src/audit/recorder.ts);
+// the route table is not mirrored here.
 
 export type AuditStatus = "success" | "failure";
 
-/**
- * Customer (tenant-scoped) vs admin (platform-scoped) audit events.
- *
- * Modeled as a discriminated union so it's impossible to "accidentally"
- * route admin activity into a customer's audit stream or vice versa.
- * At the storage boundary, admin scope maps to `tenant_id IS NULL` in
- * the audit_logs table; tenant scope maps to the customer's tenant id.
- *
- * WorkOS migration: admin scope has no WorkOS organization, so the
- * consumer keeps admin-scope events in D1 and only forwards tenant-scope
- * events to WorkOS Audit Logs.
- */
+/** Tenant-scoped vs admin (platform-scoped) audit events. The discriminated
+ *  union prevents routing admin activity into a customer's audit stream
+ *  (or vice versa). At the storage boundary, admin scope persists with
+ *  `tenant_id IS NULL`. */
 export type AuditScope = { kind: "tenant"; tenant_id: string } | { kind: "admin" };
 
-/**
- * Audit actor — who performed the action.
- *
- * Discriminated union so invalid states (e.g., both user_id and
- * api_key_id set, or both null) are unrepresentable. Maps directly to
- * WorkOS's `actor.type` enum ("user" | "api" | "system") at the
- * consumer boundary.
- */
+/** Who performed the action. Discriminated union so invalid states
+ *  (both user_id and api_key_id set, neither set) are unrepresentable. */
 export type AuditActor =
   | {
       kind: "user";
@@ -61,11 +39,8 @@ export type AuditActor =
       user_agent: string | null;
     };
 
-/** Every action emitted to the audit log. Adding a new value requires
- * extending this array, which forces every call site, the UI filter, and
- * (after the WorkOS migration) the schema-registration helper to update
- * together. The literal-union `AuditAction` type is derived from this
- * array — single source of truth, no risk of array vs. type drift. */
+/** Every action emitted to the audit log. The literal-union `AuditAction`
+ *  type is derived from this array — single source of truth. */
 export const AUDIT_ACTIONS = [
   // Auth
   "auth.login",
@@ -107,8 +82,7 @@ export const AUDIT_ACTIONS = [
 
 export type AuditAction = (typeof AUDIT_ACTIONS)[number];
 
-/** Resource types referenced in audit entries; same single-source-of-truth
- * pattern as AuditAction. */
+/** Resource types referenced in audit entries (single source of truth). */
 export const AUDIT_RESOURCE_TYPES = [
   "tenant",
   "configuration",
@@ -127,8 +101,7 @@ export type AuditResourceType = (typeof AUDIT_RESOURCE_TYPES)[number];
 
 export interface AuditEvent {
   /** Stable producer-generated UUID. Used as the queue idempotency key
-   * and as the D1 PRIMARY KEY (and, after WorkOS migration, as the
-   * `idempotencyKey` argument to `workos.auditLogs.createEvent`). */
+   *  and as the D1 PRIMARY KEY. */
   id: string;
   scope: AuditScope;
   actor: AuditActor;
@@ -142,14 +115,9 @@ export interface AuditEvent {
   created_at: string;
 }
 
-/**
- * Classify an HTTP status as audit success / failure / skip.
- *
- * Skip is for noisy "expected" outcomes that aren't a real audit signal —
- * 404 (resource doesn't exist) and 405 (method not allowed) most often
- * come from clients probing, not from a security-relevant failure. Other
- * 4xx (auth/auth-z/validation) and all 5xx are recorded as failures.
- */
+/** Classify an HTTP status as audit success / failure / skip.
+ *  Skip covers 404/405 — typically client probing, not a security signal.
+ *  Other 4xx (auth/auth-z/validation) and all 5xx are failures. */
 export function classifyAuditStatus(statusCode: number): AuditStatus | "skip" {
   if (statusCode >= 200 && statusCode < 400) return "success";
   if (statusCode === 404 || statusCode === 405) return "skip";
