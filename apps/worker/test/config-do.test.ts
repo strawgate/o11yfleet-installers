@@ -3,7 +3,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { runInDurableObject } from "cloudflare:test";
 import {
-  setupD1,
+  bootstrapSchema,
   createTenant,
   createConfig,
   createEnrollmentToken,
@@ -553,7 +553,7 @@ describe("Config Durable Object", () => {
 
 // ─── isAgentConnected: O(1) tag-based lookup with enrollment fallback ───
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("isAgentConnected via agent detail endpoint", () => {
   it("returns is_connected=true for an agent with an active WebSocket", async () => {

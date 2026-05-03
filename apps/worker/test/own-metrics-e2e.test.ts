@@ -14,7 +14,7 @@ import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { runInDurableObject } from "cloudflare:test";
 import { verifyEnrollmentToken } from "@o11yfleet/core/auth";
 import {
-  setupD1,
+  bootstrapSchema,
   O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
@@ -28,7 +28,7 @@ describe("OpAMP own_metrics offers", () => {
   let enrollmentToken: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("OwnMetrics Corp");
     const config = await createConfig(tenant.id, "own-metrics-collectors");
     const token = await createEnrollmentToken(config.id);

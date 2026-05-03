@@ -83,7 +83,7 @@ const expected: ExpectedManifest = manifestJson;
 
 export interface DriftReport {
   /** Permissions present in the manifest but missing/different on the live App. */
-  permissionsAdded: Record<string, string>;
+  permissionsAddedInManifest: Record<string, string>;
   permissionsChanged: Record<string, { manifest: string; live: string }>;
   permissionsRemovedFromManifest: Record<string, string>;
   /** Events declared in the manifest but absent on the live App. */
@@ -107,12 +107,12 @@ export function diffManifestAgainstLive(
   const liveEvents = new Set(live.events ?? []);
   const manifestEvents = new Set(manifest.default_events);
 
-  const permissionsAdded: Record<string, string> = {};
+  const permissionsAddedInManifest: Record<string, string> = {};
   const permissionsChanged: Record<string, { manifest: string; live: string }> = {};
   for (const [name, level] of Object.entries(manifest.default_permissions)) {
     const liveLevel = livePerms[name];
     if (liveLevel === undefined) {
-      permissionsAdded[name] = level;
+      permissionsAddedInManifest[name] = level;
     } else if (liveLevel !== level) {
       permissionsChanged[name] = { manifest: level, live: liveLevel };
     }
@@ -135,14 +135,14 @@ export function diffManifestAgainstLive(
   }
 
   const noDrift =
-    Object.keys(permissionsAdded).length === 0 &&
+    Object.keys(permissionsAddedInManifest).length === 0 &&
     Object.keys(permissionsChanged).length === 0 &&
     Object.keys(permissionsRemovedFromManifest).length === 0 &&
     eventsAddedInManifest.length === 0 &&
     eventsRemovedFromManifest.length === 0;
 
   return {
-    permissionsAdded,
+    permissionsAddedInManifest,
     permissionsChanged,
     permissionsRemovedFromManifest,
     eventsAddedInManifest,
@@ -185,7 +185,7 @@ export async function runManifestDriftCheck(env: DriftCheckEnv): Promise<DriftRe
     console.warn({
       event: "github_app_manifest_drift",
       // Stable JSON keys for log queries / alerting.
-      permissions_added_to_manifest: report.permissionsAdded,
+      permissions_added_to_manifest: report.permissionsAddedInManifest,
       permissions_changed: report.permissionsChanged,
       permissions_removed_from_manifest: report.permissionsRemovedFromManifest,
       events_added_in_manifest: report.eventsAddedInManifest,

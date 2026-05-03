@@ -68,12 +68,7 @@ export async function handleListAuditLogs(env: Env, url: URL, tenantId: string):
   if (from) query = query.where("created_at", ">=", from);
   if (to) query = query.where("created_at", "<=", to);
 
-  const rows = await paginateByCursor(query, {
-    cursor,
-    limit,
-    sortColumn: "created_at",
-    idColumn: "id",
-  })
+  const rows = await paginateByCursor(query, { cursor, limit })
     .select([
       "id",
       "tenant_id",

@@ -19,7 +19,7 @@ import {
 import { KeyValueSchema, AnyValueSchema } from "@o11yfleet/core/codec/gen/anyvalue_pb";
 import { AgentCapabilities, ServerCapabilities } from "@o11yfleet/core/codec";
 import {
-  setupD1,
+  bootstrapSchema,
   createTenant,
   createConfig,
   createEnrollmentToken,
@@ -191,7 +191,7 @@ describe("Protobuf E2E — real OTel Collector wire format", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("pb-test-tenant");
     tenantId = tenant.id;
     const config = await createConfig(tenantId, "pb-test-config");

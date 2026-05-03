@@ -1,8 +1,8 @@
 import { env } from "cloudflare:workers";
 import { beforeAll, describe, expect, it } from "vitest";
-import { apiFetch, createTenant, setupD1 } from "./helpers.js";
+import { apiFetch, createTenant, bootstrapSchema } from "./helpers.js";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 function v1Headers(tenantId: string, extra: Record<string, string> = {}): Record<string, string> {
   return { "X-Tenant-Id": tenantId, ...extra };

@@ -16,7 +16,7 @@ import { env } from "cloudflare:workers";
 import { runInDurableObject } from "cloudflare:test";
 import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import {
-  setupD1,
+  bootstrapSchema,
   createTenant,
   createConfig,
   createEnrollmentToken,
@@ -28,7 +28,7 @@ import {
   buildHealthReport,
 } from "./helpers.js";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("Tiered Persistence", () => {
   it("no-op heartbeats do not write to SQLite (seq tracked in WS attachment)", async () => {

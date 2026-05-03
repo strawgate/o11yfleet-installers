@@ -21,7 +21,7 @@ describe("diffManifestAgainstLive", () => {
       events: ["push", "pull_request"],
     });
     expect(report.noDrift).toBe(true);
-    expect(report.permissionsAdded).toEqual({});
+    expect(report.permissionsAddedInManifest).toEqual({});
     expect(report.permissionsChanged).toEqual({});
     expect(report.permissionsRemovedFromManifest).toEqual({});
     expect(report.eventsAddedInManifest).toEqual([]);
@@ -34,7 +34,7 @@ describe("diffManifestAgainstLive", () => {
       events: ["push", "pull_request"],
     });
     expect(report.noDrift).toBe(false);
-    expect(report.permissionsAdded).toEqual({ checks: "write" });
+    expect(report.permissionsAddedInManifest).toEqual({ checks: "write" });
   });
 
   it("flags permission level changes (e.g. read → write or vice versa)", () => {
@@ -82,7 +82,7 @@ describe("diffManifestAgainstLive", () => {
     // (very unlikely, but the diff shouldn't NPE either way).
     const report = diffManifestAgainstLive(baseManifest, {});
     expect(report.noDrift).toBe(false);
-    expect(report.permissionsAdded).toEqual(baseManifest.default_permissions);
+    expect(report.permissionsAddedInManifest).toEqual(baseManifest.default_permissions);
     expect(report.eventsAddedInManifest).toEqual([...baseManifest.default_events]);
   });
 
@@ -97,7 +97,7 @@ describe("diffManifestAgainstLive", () => {
       events: ["push", "release"], // pull_request missing, release extra
     });
     expect(report.noDrift).toBe(false);
-    expect(report.permissionsAdded).toEqual({ contents: "read" });
+    expect(report.permissionsAddedInManifest).toEqual({ contents: "read" });
     expect(report.permissionsChanged).toEqual({
       checks: { manifest: "write", live: "read" },
     });

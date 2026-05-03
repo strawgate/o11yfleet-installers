@@ -5,7 +5,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
   apiFetch,
-  setupD1,
+  bootstrapSchema,
   O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
@@ -21,7 +21,7 @@ import {
   type ServerToAgent,
 } from "./helpers.js";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("Multi-Tenant Isolation", () => {
   let tenantA: { id: string };

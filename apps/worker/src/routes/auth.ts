@@ -14,6 +14,7 @@ import { isAutoApproveEnabled } from "../shared/email.js";
 import { sql } from "kysely";
 import { handleGitHubWebhook } from "../github/webhook.js";
 import { getDb } from "../db/client.js";
+import type { UserRole } from "../db/schema.js";
 import { compileForBatch } from "../db/queries.js";
 import {
   adminAuditContext,
@@ -296,7 +297,7 @@ export interface AuthContext {
   displayName: string;
   tenantId: string | null;
   tenantStatus: TenantApprovalStatus;
-  role: "member" | "admin";
+  role: UserRole;
   isImpersonation: boolean;
   /** When `isImpersonation` is true, the real admin user id who started the session. */
   impersonatorUserId: string | null;

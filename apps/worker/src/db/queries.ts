@@ -52,11 +52,6 @@ export function tenantScoped<T extends TenantScopedTable>(
   table: T,
   tenantId: string,
 ): SelectQueryBuilder<Database, T, Record<string, never>> {
-  // The `as any` cast on the column reference is unavoidable: TypeScript
-  // can't carry "every table in TenantScopedTable has a tenant_id column"
-  // through Kysely's deeply-generic where overloads, so the call site
-  // becomes ambiguous. Constraining `T` to the union above is what makes
-  // this safe at runtime — every table named there does have the column.
   // The double cast through `unknown` lets us bypass Kysely's overload
   // resolution on the column reference. Constraining `T` to the
   // `TenantScopedTable` union is what makes this safe at runtime — every
@@ -136,57 +131,48 @@ export function compileForBatch(query: Compilable, d1: D1Database): D1PreparedSt
 }
 
 /**
- * Composite-key cursor pagination. Adds the standard
- * `(<sort_col> < ? OR (<sort_col> = ? AND <id_col> < ?))` filter to a
- * Kysely select, plus the matching `ORDER BY <sort_col> DESC, <id_col> DESC`
- * and `LIMIT <limit + 1>`. Caller handles deciding `hasMore` from the
- * over-fetch and slicing the result.
+ * Composite-key cursor pagination on `(created_at, id)`. Appends
+ * `(created_at < ? OR (created_at = ? AND id < ?))`, `ORDER BY
+ * created_at DESC, id DESC`, and `LIMIT (limit + 1)` so the caller
+ * answers "is there a next page?" from the over-fetch in the same
+ * round-trip — no separate COUNT.
  *
  *     const rows = await paginateByCursor(
  *       tenantScoped(db, "audit_logs", tenantId),
- *       { cursor, limit, sortColumn: "created_at", idColumn: "id" },
+ *       { cursor, limit },
  *     )
  *       .select([...])
  *       .execute();
  *     const hasMore = rows.length > limit;
  *     const slice = hasMore ? rows.slice(0, limit) : rows;
  *
- * The over-fetch (`limit + 1`) lets the caller answer "is there a next
- * page?" in the same round-trip as the page itself, avoiding a separate
- * COUNT query.
- *
- * Cursor format is the caller's concern — typically `${createdAt}|${id}`
- * base64-encoded. Pass the decoded shape as `{ created_at, id }`.
+ * Hardcoded to `(created_at, id)` because that's the only sort key
+ * we paginate by today. The cursor carries the column values, so its
+ * shape has to follow the column names — generalizing to arbitrary
+ * columns would have to either thread a generic through the cursor
+ * type or accept a silent shape/column mismatch. When a second caller
+ * actually needs different columns, generalize then.
  */
-export interface CursorOptions<S extends string, I extends string> {
+export interface CursorOptions {
   /** Decoded cursor (`null`/`undefined` = first page). */
   cursor: { created_at: string; id: string } | null | undefined;
   /** Page size (caller bounds this). The query fetches `limit + 1` rows. */
   limit: number;
-  /** Column carrying the sort timestamp. Almost always `"created_at"`. */
-  sortColumn: S;
-  /** Column carrying the tiebreaker id. Almost always `"id"`. */
-  idColumn: I;
 }
 
 export function paginateByCursor<DB, TB extends keyof DB & string, O>(
   query: SelectQueryBuilder<DB, TB, O>,
-  opts: CursorOptions<string, string>,
+  opts: CursorOptions,
 ): SelectQueryBuilder<DB, TB, O> {
   let next = query;
   if (opts.cursor) {
     const { created_at, id } = opts.cursor;
-    // Bypass Kysely's where overload generics — the caller declares the
-    // sort/id columns as plain strings, and we know the SQL we want
-    // ((sort < ?) OR (sort = ? AND id < ?)). Use sql.raw with bound
-    // identifiers instead of trying to thread column-name generics
-    // through the type system.
     next = next.where(
-      sql<boolean>`(${sql.ref(opts.sortColumn)} < ${created_at} OR (${sql.ref(opts.sortColumn)} = ${created_at} AND ${sql.ref(opts.idColumn)} < ${id}))`,
+      sql<boolean>`(${sql.ref("created_at")} < ${created_at} OR (${sql.ref("created_at")} = ${created_at} AND ${sql.ref("id")} < ${id}))`,
     ) as typeof next;
   }
   return next
-    .orderBy(sql.ref(opts.sortColumn), "desc")
-    .orderBy(sql.ref(opts.idColumn), "desc")
+    .orderBy(sql.ref("created_at"), "desc")
+    .orderBy(sql.ref("id"), "desc")
     .limit(opts.limit + 1) as SelectQueryBuilder<DB, TB, O>;
 }

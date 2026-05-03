@@ -9,6 +9,9 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "kysely": "^0.28.17"
+  },
   "devDependencies": {
     "typescript": "^5.8.0"
   }

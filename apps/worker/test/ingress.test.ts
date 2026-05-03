@@ -3,9 +3,9 @@ import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { AgentCapabilities, decodeFrame, encodeFrame } from "@o11yfleet/core/codec";
 import type { AgentToServer, ServerToAgent } from "@o11yfleet/core/codec";
-import { apiFetch, setupD1, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
+import { apiFetch, bootstrapSchema, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("Ingress Router", () => {
   it("rejects requests without Authorization header", async () => {

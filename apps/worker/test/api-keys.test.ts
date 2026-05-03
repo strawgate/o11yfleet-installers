@@ -1,10 +1,10 @@
 // Runtime integration tests for tenant-scoped API keys (fp_key_)
 
 import { beforeAll, describe, expect, it } from "vitest";
-import { apiFetch, createTenant, setupD1, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
+import { apiFetch, createTenant, bootstrapSchema, O11YFLEET_CLAIM_HMAC_SECRET } from "./helpers.js";
 import { generateApiKey } from "@o11yfleet/core/auth";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("tenant-scoped API keys", () => {
   it("can generate and use an API key to access tenant routes", async () => {

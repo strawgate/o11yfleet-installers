@@ -4,8 +4,14 @@ D1 schema and migrations for the o11yfleet Worker.
 
 ## Layout
 
-- `src/schema.ts` — TypeScript row types (mirror `migrations/0001_initial.sql`)
+- `src/schema.ts` — Kysely schema (every table, plus convenience `Selectable` /
+  `Insertable` aliases). Single source of TypeScript truth for D1 queries;
+  the `.sql` migrations remain authoritative for runtime DDL.
 - `migrations/0001_initial.sql` — single baseline migration covering every table
+
+The Worker imports from `@o11yfleet/db` (re-exported via
+`apps/worker/src/db/schema.ts` for existing relative paths). When you add
+a column in a migration, mirror it here so the type checker can see it.
 
 ## Why one migration
 

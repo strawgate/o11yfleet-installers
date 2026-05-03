@@ -330,6 +330,11 @@ describe("E2E Scenario #7: Queue consumer idempotency", () => {
   it("duplicate D1 upserts are safe", async () => {
     const uid = "s7-uid-" + Date.now();
 
+    // status='connected' (not 'running'): agent_summaries.status has a
+    // CHECK(status IN ('connected', 'disconnected', 'unknown')). Earlier
+    // versions of this test inserted 'running' against an inline test
+    // schema that omitted the CHECK, masking an invalid value that prod
+    // would have rejected. See packages/db/migrations/0001_initial.sql.
     for (let i = 0; i < 2; i++) {
       await env.FP_DB.prepare(
         `INSERT INTO agent_summaries (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, created_at, updated_at)

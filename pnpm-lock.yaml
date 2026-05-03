@@ -351,6 +351,10 @@ importers:
         version: 4.1.5(@opentelemetry/api@1.9.1)(@types/node@25.6.0)(@vitest/coverage-istanbul@4.1.5)(@vitest/coverage-v8@4.1.5)(jsdom@26.1.0)(vite@8.0.10(@types/node@25.6.0)(esbuild@0.27.3)(jiti@2.6.1)(sugarss@5.0.1(postcss@8.5.12))(tsx@4.21.0)(yaml@2.8.3))
 
   packages/db:
+    dependencies:
+      kysely:
+        specifier: ^0.28.17
+        version: 0.28.17
     devDependencies:
       typescript:
         specifier: ^5.8.0

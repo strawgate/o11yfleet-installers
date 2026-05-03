@@ -6,7 +6,7 @@ import { describe, it, expect, beforeAll } from "vitest";
 import { env } from "cloudflare:workers";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
-  setupD1,
+  bootstrapSchema,
   O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
@@ -30,7 +30,7 @@ import {
   type AssignmentClaim,
 } from "./helpers.js";
 
-beforeAll(setupD1);
+beforeAll(() => bootstrapSchema());
 
 describe("Full Agent Lifecycle", () => {
   let configId: string;

@@ -11,7 +11,13 @@ const docsFiles = [
   "apps/site/public/docs/api/authentication.html",
   "apps/site/public/docs/api/endpoints.html",
 ] as const;
-const adminPortalFiles = ["apps/site/src/pages/admin/ApiReferencePage.tsx"] as const;
+const adminPortalFiles = [
+  "apps/site/src/pages/admin/ApiReferencePage.tsx",
+  // Endpoint table data lives in this sibling module; the page just renders
+  // it. Without scanning the data file the check would flag every admin
+  // route as "missing from the portal".
+  "apps/site/src/pages/admin/api-reference-data.ts",
+] as const;
 
 const legacyScanFiles = [
   ...docsFiles,

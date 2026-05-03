@@ -4,7 +4,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { exports } from "cloudflare:workers";
 import {
-  setupD1,
+  bootstrapSchema,
   createTenant,
   createConfig,
   createEnrollmentToken,
@@ -24,7 +24,7 @@ describe("Stale Agent Alarm Sweep", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("alarm-test-tenant");
     const config = await createConfig(tenant.id, "alarm-config");
     configId = config.id;
@@ -62,7 +62,7 @@ describe("WebSocket Error Handling", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("error-test-tenant");
     const config = await createConfig(tenant.id, "error-config");
     configId = config.id;
@@ -126,7 +126,7 @@ describe("Concurrent Enrollment", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("concurrent-enroll-tenant");
     const config = await createConfig(tenant.id, "concurrent-config");
     configId = config.id;
@@ -172,7 +172,7 @@ describe("Connected Stats Fix", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("stats-test-tenant");
     const config = await createConfig(tenant.id, "stats-config");
     configId = config.id;

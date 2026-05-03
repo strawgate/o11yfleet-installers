@@ -1,6 +1,6 @@
 import { describe, expect, it, beforeAll } from "vitest";
 import { env, exports } from "cloudflare:workers";
-import { setupD1 } from "./helpers.js";
+import { bootstrapSchema } from "./helpers.js";
 
 /**
  * Tests for OIDC "provision" scope authentication.
@@ -19,7 +19,7 @@ function workerFetch(path: string, init?: RequestInit): Promise<Response> {
 
 describe("OIDC provision auth", () => {
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
   });
 
   it("rejects a non-JWT bearer token on admin routes", async () => {

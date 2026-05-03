@@ -11,7 +11,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { verifyClaim } from "@o11yfleet/core/auth";
 import {
-  setupD1,
+  bootstrapSchema,
   O11YFLEET_CLAIM_HMAC_SECRET,
   createTenant,
   createConfig,
@@ -34,7 +34,7 @@ describe("parseAttachment field preservation (regression)", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("att-fields-tenant");
     const config = await createConfig(tenant.id, "att-fields");
     configId = config.id;
@@ -80,7 +80,7 @@ describe("parseAttachment field preservation (regression)", () => {
 
 describe("Generation increment on reconnect (regression)", () => {
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
   });
 
   it("generation increments on first enrollment", async () => {
@@ -162,7 +162,7 @@ describe("Zero UID handling (regression)", () => {
   let configId: string;
 
   beforeAll(async () => {
-    await setupD1();
+    await bootstrapSchema();
     const tenant = await createTenant("zero-uid-regression");
     const config = await createConfig(tenant.id, "zero-uid");
     configId = config.id;

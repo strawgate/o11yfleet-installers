@@ -158,18 +158,10 @@ export async function apiFetch(url: string, init?: RequestInit): Promise<Respons
 
 // ─── D1 Schema Setup ────────────────────────────────────────────────
 
-/**
- * Initialize all D1 tables by applying the production migrations. Idempotent —
- * `bootstrapSchema` records progress in the standard `d1_migrations` table and
- * skips already-applied migrations, so calling this from every `beforeAll` is
- * safe.
- *
- * @deprecated Prefer importing `bootstrapSchema` from `./fixtures/schema.js`
- * directly. Kept as a thin alias so existing call sites don't break.
- */
-export async function setupD1(): Promise<void> {
-  await bootstrapSchema();
-}
+// `bootstrapSchema` lives in `./fixtures/schema.js` (the canonical
+// migration-runner). Re-exported here so `import { bootstrapSchema }
+// from "./helpers.js"` keeps working alongside the other test utilities.
+export { bootstrapSchema };
 
 // ─── WebSocket Helpers ──────────────────────────────────────────────
 
