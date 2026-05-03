@@ -1,64 +1,63 @@
-import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import { useEffect, useCallback, useMemo, useState } from "react";
 import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Anchor, AppShell, Badge, Box, Burger, Group, Stack, Text } from "@mantine/core";
+import { Activity, Building2, Code2, CreditCard, Database, House, LifeBuoy } from "lucide-react";
 import { useAuth, useLogout } from "@/api/hooks/auth";
 import { useRegisterBrowserContext } from "@/ai/browser-context-react";
 import { CommandPalette, type CommandItem } from "@/components/common/CommandPalette";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { Logo } from "@/components/common/Logo";
-import { useTheme } from "@/hooks/useTheme";
-import { useClickOutside } from "@/hooks/useClickOutside";
-import "@/styles/portal-shared.css";
-import "@/styles/admin.css";
+import {
+  BreadcrumbCurrent,
+  BreadcrumbLink,
+  BreadcrumbList,
+  BreadcrumbSep,
+  ColorSchemeToggle,
+  CommandPaletteShortcut,
+  NotificationsButton,
+  ProfileMenu,
+  ShellNav,
+  ShellSearchButton,
+  type ShellNavEntry,
+  useSidebarToggle,
+} from "./components/Shell";
 
-/* ------------------------------------------------------------------ */
-/*  Icon map                                                          */
-/* ------------------------------------------------------------------ */
+const ICON_SIZE = 16;
 
-const ICONS: Record<string, string> = {
-  home: '<path d="M3 9.5L8 4l5 5.5V13a1 1 0 0 1-1 1h-2v-3H8v3H6a1 1 0 0 1-1-1V9.5z"/>',
-  building:
-    '<rect x="3" y="2" width="10" height="12" rx="0.5"/><path d="M5 5h2M5 8h2M5 11h2M9 5h2M9 8h2M9 11h2"/>',
-  users:
-    '<circle cx="6" cy="6" r="2.5"/><path d="M2 13c0-2 2-3.5 4-3.5s4 1.5 4 3.5"/><circle cx="11.5" cy="6" r="2"/><path d="M11 9.5c1.6 0 3 1.2 3 3"/>',
-  activity: '<path d="M2 8h3l2-5 3 10 2-5h3"/>',
-  support:
-    '<path d="M8 2.5a5.5 5.5 0 0 0-5.5 5.5v2.5A1.5 1.5 0 0 0 4 12h1V7H3.5"/><path d="M8 2.5a5.5 5.5 0 0 1 5.5 5.5v2.5A1.5 1.5 0 0 1 12 12h-1V7h1.5"/><path d="M11 12c0 1-1.2 1.8-3 1.8H6.5"/>',
-  card: '<rect x="2" y="4" width="12" height="9" rx="1.4"/><path d="M2 7h12"/>',
-  code: '<path d="M6 4L3 8l3 4M10 4l3 4-3 4M8.5 3.5l-1 9"/>',
-  database:
-    '<ellipse cx="8" cy="3.5" rx="5" ry="2"/><path d="M3 3.5v9c0 1.1 2.2 2 5 2s5-.9 5-2v-9"/><path d="M3 8c0 1.1 2.2 2 5 2s5-.9 5-2"/>',
-  tag: '<path d="M2 8V3a1 1 0 0 1 1-1h5l6 6-6 6-6-6z"/><circle cx="5.5" cy="5.5" r="0.8" fill="currentColor"/>',
-  settings:
-    '<circle cx="8" cy="8" r="2"/><path d="M8 1.5v2M8 12.5v2M14.5 8h-2M3.5 8h-2M12.6 3.4l-1.4 1.4M4.8 11.2l-1.4 1.4M12.6 12.6l-1.4-1.4M4.8 4.8L3.4 3.4"/>',
-};
-
-/* ------------------------------------------------------------------ */
-/*  Nav definition                                                    */
-/* ------------------------------------------------------------------ */
-
-type NavSection = { sec: string };
-type NavItem = {
-  id: string;
-  label: string;
-  href: string;
-  icon: string;
-  placeholder?: boolean;
-};
-
-const ADMIN_NAV: (NavSection | NavItem)[] = [
+const ADMIN_NAV: ShellNavEntry[] = [
   { sec: "Operations" },
-  { id: "overview", label: "Overview", href: "/admin/overview", icon: "home" },
-  { id: "tenants", label: "Tenants", href: "/admin/tenants", icon: "building" },
-  { id: "health", label: "System health", href: "/admin/health", icon: "activity" },
-  { id: "api", label: "API reference", href: "/admin/api", icon: "code" },
-  { id: "usage", label: "Usage & spend", href: "/admin/usage", icon: "card" },
-  { id: "support", label: "Support", href: "/admin/support", icon: "support" },
-  { id: "do-viewer", label: "DO viewer", href: "/admin/do-viewer", icon: "database" },
+  { id: "overview", label: "Overview", href: "/admin/overview", icon: <House size={ICON_SIZE} /> },
+  {
+    id: "tenants",
+    label: "Tenants",
+    href: "/admin/tenants",
+    icon: <Building2 size={ICON_SIZE} />,
+  },
+  {
+    id: "health",
+    label: "System health",
+    href: "/admin/health",
+    icon: <Activity size={ICON_SIZE} />,
+  },
+  { id: "api", label: "API reference", href: "/admin/api", icon: <Code2 size={ICON_SIZE} /> },
+  {
+    id: "usage",
+    label: "Usage & spend",
+    href: "/admin/usage",
+    icon: <CreditCard size={ICON_SIZE} />,
+  },
+  { id: "support", label: "Support", href: "/admin/support", icon: <LifeBuoy size={ICON_SIZE} /> },
+  {
+    id: "do-viewer",
+    label: "DO viewer",
+    href: "/admin/do-viewer",
+    icon: <Database size={ICON_SIZE} />,
+  },
   { sec: "Plans" },
-  { id: "plans", label: "Plans", href: "/admin/plans", icon: "card" },
+  { id: "plans", label: "Plans", href: "/admin/plans", icon: <CreditCard size={ICON_SIZE} /> },
 ];
 
-function navCommands(nav: (NavSection | NavItem)[]): CommandItem[] {
+function navCommands(nav: ShellNavEntry[]): CommandItem[] {
   let section = "";
   return nav.flatMap((item) => {
     if ("sec" in item) {
@@ -77,185 +76,7 @@ function navCommands(nav: (NavSection | NavItem)[]): CommandItem[] {
   });
 }
 
-/* ------------------------------------------------------------------ */
-/*  Components                                                        */
-/* ------------------------------------------------------------------ */
-
-function SidebarIcon({ name }: { name: string }) {
-  return (
-    <svg
-      viewBox="0 0 16 16"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="1.4"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      dangerouslySetInnerHTML={{ __html: ICONS[name] ?? "" }}
-    />
-  );
-}
-
-function SidebarNav({
-  nav,
-  onNavigate,
-}: {
-  nav: (NavSection | NavItem)[];
-  onNavigate?: () => void;
-}) {
-  return (
-    <nav className="sidebar-nav">
-      {nav.map((item, i) => {
-        if ("sec" in item) {
-          return (
-            <div key={item.sec} className="sidebar-section">
-              {item.sec}
-            </div>
-          );
-        }
-        if (item.placeholder) {
-          return (
-            <button
-              key={item.id + i}
-              type="button"
-              className="sidebar-link"
-              data-placeholder="true"
-              disabled
-            >
-              <SidebarIcon name={item.icon} />
-              <span>{item.label}</span>
-            </button>
-          );
-        }
-        return (
-          <NavLink
-            key={item.id + i}
-            to={item.href}
-            className="sidebar-link"
-            end={item.href.endsWith("/overview")}
-            onClick={onNavigate}
-          >
-            <SidebarIcon name={item.icon} />
-            <span>{item.label}</span>
-          </NavLink>
-        );
-      })}
-    </nav>
-  );
-}
-
-function ProfileDropdown({
-  userName,
-  userEmail,
-  onLogout,
-}: {
-  userName: string;
-  userEmail: string;
-  onLogout: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const wrapRef = useRef<HTMLDivElement>(null);
-
-  useClickOutside(wrapRef, () => setOpen(false));
-
-  const userInit = userName
-    .split(" ")
-    .map((w) => w[0])
-    .slice(0, 2)
-    .join("")
-    .toUpperCase();
-
-  return (
-    <div className="profile-wrap" ref={wrapRef}>
-      <button className="profile" onClick={() => setOpen((o) => !o)}>
-        <span className="avatar">{userInit}</span>
-        <span style={{ fontWeight: 450 }}>{userName.split(" ")[0]}</span>
-        <svg
-          className="chev"
-          viewBox="0 0 12 12"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.4"
-          width="11"
-          height="11"
-        >
-          <path d="M3 5l3 3 3-3" strokeLinecap="round" />
-        </svg>
-      </button>
-      <div className={`dropdown${open ? " open" : ""}`} id="profile-menu">
-        <div className="meta">
-          <div className="name">{userName}</div>
-          <div className="email">{userEmail}</div>
-        </div>
-        <button
-          onClick={() => {
-            const cur = document.documentElement.getAttribute("data-theme");
-            const next = cur === "dark" ? "light" : "dark";
-            document.documentElement.setAttribute("data-theme", next);
-            localStorage.setItem("fb-theme", next);
-            setOpen(false);
-          }}
-        >
-          Toggle theme
-        </button>
-        <button onClick={onLogout}>Sign out</button>
-      </div>
-    </div>
-  );
-}
-
-function ThemeToggle() {
-  const { toggle } = useTheme();
-  return (
-    <button className="icon-btn" aria-label="Theme" onClick={toggle}>
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M14 9.5A6 6 0 1 1 6.5 2c-.2 1.6.6 3.4 2 4.6 1.4 1.2 3.4 1.8 5.5.5z" />
-      </svg>
-    </button>
-  );
-}
-
-function NotificationsButton() {
-  return (
-    <button className="icon-btn" aria-label="Notifications">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M4 7a4 4 0 1 1 8 0v3l1 2H3l1-2V7z" />
-        <path d="M6.5 13.5a1.5 1.5 0 0 0 3 0" />
-      </svg>
-    </button>
-  );
-}
-
-function SidebarToggle({ open, onClick }: { open: boolean; onClick: () => void }) {
-  return (
-    <button
-      className="icon-btn sidebar-toggle"
-      aria-label={open ? "Close navigation" : "Open navigation"}
-      aria-expanded={open}
-      onClick={onClick}
-    >
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <path d="M2.5 4h11M2.5 8h11M2.5 12h11" strokeLinecap="round" />
-      </svg>
-    </button>
-  );
-}
-
-function SearchBar({ onOpen }: { onOpen: () => void }) {
-  return (
-    <button className="search" onClick={onOpen} aria-label="Open command menu">
-      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
-        <circle cx="7" cy="7" r="4.5" />
-        <path d="M10.5 10.5l3 3" strokeLinecap="round" />
-      </svg>
-      <span>Search pages…</span>
-      <span className="kbd-hint">⌘K</span>
-    </button>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Breadcrumbs                                                       */
-/* ------------------------------------------------------------------ */
+const ADMIN_ROOT = /^\/admin/;
 
 function Breadcrumbs() {
   const { pathname } = useLocation();
@@ -264,42 +85,27 @@ function Breadcrumbs() {
     .split("/")
     .filter(Boolean);
 
-  if (segments.length === 0) return <div className="crumbs" />;
+  if (segments.length === 0) return <BreadcrumbList>{null}</BreadcrumbList>;
 
   return (
-    <div className="crumbs">
+    <BreadcrumbList>
       {segments.map((seg, i) => {
         const label = seg.replace(/-/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
         const isIdSegment = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
           seg,
         );
         if (i === segments.length - 1) {
-          return (
-            <span key={seg} className="current">
-              {isIdSegment ? "Detail" : label}
-            </span>
-          );
+          return <BreadcrumbCurrent key={seg}>{isIdSegment ? "Detail" : label}</BreadcrumbCurrent>;
         }
         const href = "/admin/" + segments.slice(0, i + 1).join("/");
         return (
-          <span key={seg}>
-            <NavLink to={href}>{label}</NavLink>
-            <span className="sep">/</span>
-          </span>
+          <Group key={seg} gap={4} wrap="nowrap">
+            <BreadcrumbLink to={href}>{label}</BreadcrumbLink>
+            <BreadcrumbSep />
+          </Group>
         );
       })}
-    </div>
-  );
-}
-
-/* ------------------------------------------------------------------ */
-/*  Layout                                                            */
-/* ------------------------------------------------------------------ */
-
-function isEditableShortcutTarget(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
-  return Boolean(
-    target.closest('input, textarea, select, [contenteditable="true"], [role="textbox"]'),
+    </BreadcrumbList>
   );
 }
 
@@ -308,7 +114,7 @@ export default function AdminLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const logoutMutation = useLogout();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const sidebar = useSidebarToggle();
   const [commandOpen, setCommandOpen] = useState(false);
 
   const handleLogout = useCallback(() => {
@@ -319,7 +125,6 @@ export default function AdminLayout() {
     });
   }, [logoutMutation, navigate]);
 
-  // Must be admin
   useEffect(() => {
     if (!isLoading && (!user || !isAdmin)) {
       void navigate(user ? "/portal/overview" : "/admin/login", { replace: true });
@@ -327,20 +132,9 @@ export default function AdminLayout() {
   }, [isLoading, user, isAdmin, navigate]);
 
   useEffect(() => {
-    setSidebarOpen(false);
+    sidebar.close();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname]);
-
-  useEffect(() => {
-    function onKeyDown(event: KeyboardEvent) {
-      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
-        if (isEditableShortcutTarget(event.target)) return;
-        event.preventDefault();
-        setCommandOpen(true);
-      }
-    }
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, []);
 
   const browserContext = useMemo(
     () => ({
@@ -355,6 +149,8 @@ export default function AdminLayout() {
   );
   useRegisterBrowserContext(browserContext);
 
+  const openCommand = useCallback(() => setCommandOpen(true), []);
+
   if (isLoading) return <LoadingSpinner />;
   if (!user || !isAdmin) return null;
 
@@ -362,56 +158,90 @@ export default function AdminLayout() {
   const userEmail = user.email ?? "";
 
   return (
-    <div className="app">
-      <div className="admin-stripe" />
+    <AppShell
+      header={{ height: 56 }}
+      navbar={{ width: 260, breakpoint: "sm", collapsed: { mobile: !sidebar.opened } }}
+      padding="md"
+    >
+      <CommandPaletteShortcut onOpen={openCommand} />
 
-      <aside className={`sidebar${sidebarOpen ? " open" : ""}`}>
-        <NavLink to="/admin/overview" className="sidebar-brand">
-          <Logo />
-          O11yFleet
-          <span className="admin-badge">ADMIN</span>
-        </NavLink>
+      <Box
+        h={3}
+        style={{
+          background:
+            "linear-gradient(90deg, var(--mantine-color-red-7), var(--mantine-color-orange-7))",
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          zIndex: 300,
+        }}
+        aria-hidden
+      />
 
-        <SidebarNav nav={ADMIN_NAV} onNavigate={() => setSidebarOpen(false)} />
+      <AppShell.Header>
+        <Group h="100%" px="md" gap="md" wrap="nowrap">
+          <Burger
+            opened={sidebar.opened}
+            onClick={sidebar.toggle}
+            hiddenFrom="sm"
+            size="sm"
+            aria-label="Toggle navigation"
+          />
+          <Box style={{ flex: "0 0 auto", minWidth: 0 }}>
+            <Breadcrumbs />
+          </Box>
+          <Box style={{ flex: "1 1 auto", display: "flex", justifyContent: "center" }}>
+            <ShellSearchButton onOpen={openCommand} placeholder="Search pages…" />
+          </Box>
+          <Group gap="xs" wrap="nowrap">
+            <Anchor
+              component={NavLink}
+              to="/admin/health"
+              size="sm"
+              c="dimmed"
+              underline="never"
+              visibleFrom="sm"
+            >
+              Health
+            </Anchor>
+            <ColorSchemeToggle />
+            <NotificationsButton />
+            <ProfileMenu userName={userName} userEmail={userEmail} onLogout={handleLogout} />
+          </Group>
+        </Group>
+      </AppShell.Header>
 
-        <div className="sidebar-foot" />
-      </aside>
-      {sidebarOpen ? (
-        <button
-          className="sidebar-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setSidebarOpen(false)}
-          onKeyDown={(event) => {
-            if (event.key === "Escape") setSidebarOpen(false);
-          }}
-        />
-      ) : null}
+      <AppShell.Navbar>
+        <Box p="md" pb="xs">
+          <Anchor component={NavLink} to="/admin/overview" underline="never" c="bright">
+            <Group gap="xs">
+              <Logo />
+              <Text fw={600}>O11yFleet</Text>
+              <Badge size="xs" color="red" variant="filled">
+                ADMIN
+              </Badge>
+            </Group>
+          </Anchor>
+        </Box>
 
-      <header className="topbar">
-        <SidebarToggle open={sidebarOpen} onClick={() => setSidebarOpen((open) => !open)} />
-        <Breadcrumbs />
-        <SearchBar onOpen={() => setCommandOpen(true)} />
-        <div className="topbar-right">
-          <NavLink to="/admin/health" className="topbar-docs">
-            Health
-          </NavLink>
-          <ThemeToggle />
-          <NotificationsButton />
-          <ProfileDropdown userName={userName} userEmail={userEmail} onLogout={handleLogout} />
-        </div>
-      </header>
+        <Box style={{ flex: 1, overflowY: "auto" }}>
+          <ShellNav nav={ADMIN_NAV} onNavigate={sidebar.close} rootPattern={ADMIN_ROOT} />
+        </Box>
+
+        <Stack p="sm" gap={0} />
+      </AppShell.Navbar>
+
+      <AppShell.Main>
+        <Outlet />
+      </AppShell.Main>
+
       <CommandPalette
         open={commandOpen}
         onClose={() => setCommandOpen(false)}
         items={navCommands(ADMIN_NAV)}
         placeholder="Search pages..."
       />
-
-      <main className="main">
-        <div className="main-wide">
-          <Outlet />
-        </div>
-      </main>
-    </div>
+    </AppShell>
   );
 }

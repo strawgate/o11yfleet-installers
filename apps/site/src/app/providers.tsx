@@ -8,6 +8,7 @@ import { BrowserContextProvider } from "@/ai/browser-context-react";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
 import { theme } from "@/theme/theme";
 import { queryClient } from "./query-client";
+import { ThemeBridge } from "./ThemeBridge";
 
 /**
  * Provider stack.
@@ -30,6 +31,7 @@ export function AppProviders({ children }: { children: ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme} defaultColorScheme="dark">
+        <ThemeBridge />
         <ModalsProvider>
           <BrowserRouter>
             <Notifications

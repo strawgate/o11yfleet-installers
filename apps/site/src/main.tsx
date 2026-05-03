@@ -18,11 +18,6 @@ import "./styles/ai-guidance.css";
 
 import { App } from "./App";
 
-// Legacy theme attribute — kept for the existing stylesheets that still key on
-// it. Mantine's color scheme is set by the inline script in index.html.
-const legacyTheme = localStorage.getItem("fb-theme") || "dark";
-document.documentElement.setAttribute("data-theme", legacyTheme);
-
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

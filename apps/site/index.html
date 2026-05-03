@@ -23,8 +23,10 @@
             scheme = window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
           }
           document.documentElement.setAttribute("data-mantine-color-scheme", scheme);
+          document.documentElement.setAttribute("data-theme", scheme);
         } catch (e) {
           document.documentElement.setAttribute("data-mantine-color-scheme", "dark");
+          document.documentElement.setAttribute("data-theme", "dark");
         }
       })();
     </script>
