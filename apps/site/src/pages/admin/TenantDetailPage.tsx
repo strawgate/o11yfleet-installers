@@ -1,6 +1,22 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
+import {
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  Select,
+  Stack,
+  Table,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import {
   useAdminTenant,
   useAdminTenantConfigs,
@@ -11,10 +27,8 @@ import {
 } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel } from "../../components/ai";
-import { useToast } from "../../components/common/Toast";
-import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -35,12 +49,16 @@ const TAB_KEYS = ["overview", "configurations", "users", "settings"] as const;
 const isTab = (value: string | null): value is Tab =>
   value !== null && (TAB_KEYS as readonly string[]).includes(value);
 
+interface TenantSettingsForm {
+  name: string;
+  plan: string;
+}
+
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { toast } = useToast();
 
   const tenant = useAdminTenant(id);
   const configs = useAdminTenantConfigs(id);
@@ -51,23 +69,33 @@ export default function TenantDetailPage() {
 
   const tabParam = searchParams.get("tab");
   const [activeTab, setActiveTab] = useState<Tab>(isTab(tabParam) ? tabParam : "overview");
-  const [editName, setEditName] = useState("");
-  const [editPlan, setEditPlan] = useState("starter");
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+
+  const form = useForm<TenantSettingsForm>({
+    initialValues: { name: "", plan: "starter" },
+    validate: {
+      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
+    },
+  });
 
   useEffect(() => {
     setActiveTab(isTab(tabParam) ? tabParam : "overview");
   }, [tabParam]);
 
   useEffect(() => {
-    if (tenant.data?.name && !editName) {
-      setEditName(tenant.data.name);
+    // Re-seed the form when tenant data first loads or after a save. Skip
+    // when the form is dirty so a background refetch (cache invalidation,
+    // poll) can't clobber the user's in-flight edits.
+    if (tenant.data && !form.isDirty()) {
+      form.setInitialValues({
+        name: tenant.data.name,
+        plan: normalizePlanId(tenant.data.plan),
+      });
+      form.reset();
     }
-    if (tenant.data?.plan) {
-      setEditPlan(normalizePlanId(tenant.data.plan));
-    }
-  }, [tenant.data, editName]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tenant.data]);
 
   const t = tenant.data;
   const currentPlan = normalizePlanId(t?.plan);
@@ -122,22 +150,31 @@ export default function TenantDetailPage() {
   if (tenant.error) return <ErrorState error={tenant.error} retry={() => void tenant.refetch()} />;
   if (!t) return <ErrorState error={new Error("Tenant not found")} />;
 
-  async function handleSave() {
+  async function handleSave(values: TenantSettingsForm) {
     try {
-      await updateTenant.mutateAsync({ name: editName.trim(), plan: editPlan });
-      toast("Tenant updated");
+      await updateTenant.mutateAsync({ name: values.name.trim(), plan: values.plan });
+      notifications.show({ message: "Tenant updated", color: "green" });
+      form.resetDirty();
     } catch (err) {
-      toast("Failed to save", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Failed to save",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
   async function handleDelete() {
     try {
       await deleteTenant.mutateAsync();
-      toast("Tenant deleted", t!.name);
+      notifications.show({ title: "Tenant deleted", message: t!.name, color: "green" });
       void navigate("/admin/tenants");
     } catch (err) {
-      toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Delete failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
@@ -148,96 +185,97 @@ export default function TenantDetailPage() {
       queryClient.setQueryData(["auth", "me"], result);
       void navigate("/portal/overview");
     } catch (err) {
-      toast("Failed to view tenant", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Failed to view tenant",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
-  const tabs: { key: Tab; label: string }[] = [
-    { key: "overview", label: "Overview" },
-    { key: "configurations", label: "Configurations" },
-    { key: "users", label: "Users" },
-    { key: "settings", label: "Settings" },
-  ];
-
-  function handleTabChange(tab: Tab) {
-    setActiveTab(tab);
-    setSearchParams(tab === "overview" ? {} : { tab });
+  function handleTabChange(value: string | null) {
+    if (!value || !isTab(value)) return;
+    setActiveTab(value);
+    setSearchParams(value === "overview" ? {} : { tab: value });
   }
 
+  const planOptions = PLAN_OPTIONS.map((option) => ({
+    value: option.id,
+    label: `${option.label} (${option.audience})`,
+  }));
+
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>{t.name}</h1>
-        </div>
-        <div className="actions">
-          {<PlanTag plan={t.plan ?? "starter"} />}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            onClick={() => void handleImpersonate()}
-            disabled={impersonateTenant.isPending}
-          >
-            {impersonateTenant.isPending ? "Opening..." : "View as tenant"}
-          </button>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title={t.name}
+        actions={
+          <Group gap="xs">
+            <PlanTag plan={t.plan ?? "starter"} />
+            <Button
+              variant="subtle"
+              size="sm"
+              onClick={() => void handleImpersonate()}
+              loading={impersonateTenant.isPending}
+            >
+              View as tenant
+            </Button>
+          </Group>
+        }
+      />
 
-      <div className="tabs mt-6">
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            className={`tab${activeTab === tab.key ? " active" : ""}`}
-            onClick={() => handleTabChange(tab.key)}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+      <Tabs value={activeTab} onChange={handleTabChange}>
+        <Tabs.List>
+          <Tabs.Tab value="overview">Overview</Tabs.Tab>
+          <Tabs.Tab value="configurations">Configurations</Tabs.Tab>
+          <Tabs.Tab value="users">Users</Tabs.Tab>
+          <Tabs.Tab value="settings">Settings</Tabs.Tab>
+        </Tabs.List>
 
-      {/* Overview tab */}
-      {activeTab === "overview" && (
-        <>
-          <div className="card card-pad mt-6">
-            <h3>Tenant details</h3>
-            <table className="dt mt-2">
-              <tbody>
-                <tr>
-                  <td className="meta">Plan</td>
-                  <td>
+        <Tabs.Panel value="overview" pt="md">
+          <Card>
+            <Title order={3} size="sm" fw={500} mb="sm">
+              Tenant details
+            </Title>
+            <Table>
+              <Table.Tbody>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Plan</Table.Td>
+                  <Table.Td>
                     <PlanTag plan={t.plan ?? "starter"} />
-                  </td>
-                </tr>
-                <tr>
-                  <td className="meta">Policies</td>
-                  <td>{configList.length}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Policy limit</td>
-                  <td>{String(t.max_configs ?? "—")}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Collector limit</td>
-                  <td>{String(t.max_agents_per_config ?? "—")}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Users</td>
-                  <td>{userList.length}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Created</td>
-                  <td>{relTime(t.created_at)}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Tenant ID</td>
-                  <td className="mono-cell">
-                    <span style={{ marginRight: 8 }}>{t.id}</span>
-                    <CopyButton value={t.id} />
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+                  </Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Policies</Table.Td>
+                  <Table.Td>{configList.length}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Policy limit</Table.Td>
+                  <Table.Td>{String(t.max_configs ?? "—")}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Collector limit</Table.Td>
+                  <Table.Td>{String(t.max_agents_per_config ?? "—")}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Users</Table.Td>
+                  <Table.Td>{userList.length}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Created</Table.Td>
+                  <Table.Td>{relTime(t.created_at)}</Table.Td>
+                </Table.Tr>
+                <Table.Tr>
+                  <Table.Td c="dimmed">Tenant ID</Table.Td>
+                  <Table.Td>
+                    <Group gap="xs">
+                      <Text ff="monospace">{t.id}</Text>
+                      <CopyButton value={t.id} />
+                    </Group>
+                  </Table.Td>
+                </Table.Tr>
+              </Table.Tbody>
+            </Table>
+          </Card>
           <GuidancePanel
             title="Tenant operations"
             guidance={guidance.data}
@@ -245,213 +283,193 @@ export default function TenantDetailPage() {
             error={guidance.error}
             onRefresh={() => void guidance.refetch()}
           />
-        </>
-      )}
+        </Tabs.Panel>
 
-      {/* Configurations tab */}
-      {activeTab === "configurations" && (
-        <div className="dt-card mt-6">
-          {configs.isLoading ? (
-            <LoadingSpinner />
-          ) : (
-            <table className="dt">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Agents</th>
-                  <th>Status</th>
-                  <th>Updated</th>
-                </tr>
-              </thead>
-              <tbody>
-                {configList.length === 0 ? (
-                  <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        icon="file"
-                        title="No configurations found"
-                        description="This tenant does not have any managed collector configurations yet."
-                      />
-                    </td>
-                  </tr>
-                ) : (
-                  configList.map((c) => (
-                    <tr key={c.id}>
-                      <td className="name">{c.name}</td>
-                      <td>{(c["agents"] as number) ?? "—"}</td>
-                      <td>
-                        <span
-                          className={`tag tag-${(c["status"] as string) === "active" ? "ok" : "warn"}`}
-                        >
-                          {(c["status"] as string) ?? "unknown"}
-                        </span>
-                      </td>
-                      <td className="meta">{relTime(c["updated_at"] as string | undefined)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {/* Users tab */}
-      {activeTab === "users" && (
-        <div className="dt-card mt-6">
-          {users.isLoading ? (
-            <LoadingSpinner />
-          ) : (
-            <table className="dt">
-              <thead>
-                <tr>
-                  <th>Email</th>
-                  <th>Name</th>
-                  <th>Role</th>
-                  <th>Joined</th>
-                </tr>
-              </thead>
-              <tbody>
-                {userList.length === 0 ? (
-                  <tr>
-                    <td colSpan={4}>
-                      <EmptyState
-                        icon="users"
-                        title="No users found"
-                        description="Users will appear here after they join or are provisioned."
-                      />
-                    </td>
-                  </tr>
-                ) : (
-                  userList.map((u) => (
-                    <tr key={u.id}>
-                      <td>{u.email}</td>
-                      <td>{(u["name"] as string) ?? "—"}</td>
-                      <td>
-                        <span
-                          className="tag"
-                          style={
-                            u.role === "admin"
-                              ? { color: "var(--accent)", borderColor: "var(--accent)" }
-                              : undefined
-                          }
-                        >
-                          {u.role ?? "member"}
-                        </span>
-                      </td>
-                      <td className="meta">{relTime(u["created_at"] as string | undefined)}</td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          )}
-        </div>
-      )}
-
-      {/* Settings tab */}
-      {activeTab === "settings" && (
-        <div>
-          <div className="card card-pad mt-6">
-            <h3>General</h3>
-
-            <div className="field mt-6">
-              <label htmlFor="admin-tenant-name">Tenant name</label>
-              <input
-                id="admin-tenant-name"
-                className="input"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+        <Tabs.Panel value="configurations" pt="md">
+          <Card>
+            {configs.isLoading ? (
+              <LoadingSpinner />
+            ) : configList.length === 0 ? (
+              <EmptyState
+                icon="file"
+                title="No configurations found"
+                description="This tenant does not have any managed collector configurations yet."
               />
-            </div>
+            ) : (
+              <Table.ScrollContainer minWidth={500}>
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Agents</Table.Th>
+                      <Table.Th>Status</Table.Th>
+                      <Table.Th>Updated</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {configList.map((c) => (
+                      <Table.Tr key={c.id}>
+                        <Table.Td>{c.name}</Table.Td>
+                        <Table.Td>{(c["agents"] as number) ?? "—"}</Table.Td>
+                        <Table.Td>
+                          <Badge
+                            color={(c["status"] as string) === "active" ? "green" : "yellow"}
+                            variant="light"
+                          >
+                            {(c["status"] as string) ?? "unknown"}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" c="dimmed">
+                            {relTime(c["updated_at"] as string | undefined)}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            )}
+          </Card>
+        </Tabs.Panel>
 
-            <div className="field mt-6">
-              <label htmlFor="admin-tenant-plan">Plan</label>
-              <select
-                id="admin-tenant-plan"
-                className="input"
-                value={editPlan}
-                onChange={(e) => setEditPlan(e.target.value)}
-              >
-                {PLAN_OPTIONS.map((option) => (
-                  <option key={option.id} value={option.id}>
-                    {option.label} ({option.audience})
-                  </option>
-                ))}
-              </select>
-            </div>
+        <Tabs.Panel value="users" pt="md">
+          <Card>
+            {users.isLoading ? (
+              <LoadingSpinner />
+            ) : userList.length === 0 ? (
+              <EmptyState
+                icon="users"
+                title="No users found"
+                description="Users will appear here after they join or are provisioned."
+              />
+            ) : (
+              <Table.ScrollContainer minWidth={500}>
+                <Table>
+                  <Table.Thead>
+                    <Table.Tr>
+                      <Table.Th>Email</Table.Th>
+                      <Table.Th>Name</Table.Th>
+                      <Table.Th>Role</Table.Th>
+                      <Table.Th>Joined</Table.Th>
+                    </Table.Tr>
+                  </Table.Thead>
+                  <Table.Tbody>
+                    {userList.map((u) => (
+                      <Table.Tr key={u.id}>
+                        <Table.Td>{u.email}</Table.Td>
+                        <Table.Td>{(u["name"] as string) ?? "—"}</Table.Td>
+                        <Table.Td>
+                          <Badge color={u.role === "admin" ? "blue" : "gray"} variant="light">
+                            {u.role ?? "member"}
+                          </Badge>
+                        </Table.Td>
+                        <Table.Td>
+                          <Text size="sm" c="dimmed">
+                            {relTime(u["created_at"] as string | undefined)}
+                          </Text>
+                        </Table.Td>
+                      </Table.Tr>
+                    ))}
+                  </Table.Tbody>
+                </Table>
+              </Table.ScrollContainer>
+            )}
+          </Card>
+        </Tabs.Panel>
 
-            <button
-              className="btn btn-primary mt-6"
-              onClick={() => void handleSave()}
-              disabled={
-                updateTenant.isPending || (editName.trim() === t.name && editPlan === currentPlan)
-              }
-            >
-              {updateTenant.isPending ? "Saving…" : "Save changes"}
-            </button>
-          </div>
+        <Tabs.Panel value="settings" pt="md">
+          <Card>
+            <Title order={3} size="sm" fw={500} mb="md">
+              General
+            </Title>
+            <form onSubmit={form.onSubmit(handleSave)}>
+              <Stack gap="md">
+                <TextInput label="Tenant name" {...form.getInputProps("name")} />
+                <Select
+                  label="Plan"
+                  data={planOptions}
+                  allowDeselect={false}
+                  {...form.getInputProps("plan")}
+                />
+                <Group>
+                  <Button type="submit" loading={updateTenant.isPending} disabled={!form.isDirty()}>
+                    Save changes
+                  </Button>
+                </Group>
+              </Stack>
+            </form>
+          </Card>
 
-          <div className="danger-zone mt-6">
-            <div className="dz-head">Danger zone</div>
-            <div className="row">
-              <div className="desc">
-                <strong>Delete tenant</strong>
-                <p className="meta">
+          <Card mt="md" withBorder style={{ borderColor: "var(--mantine-color-red-7)" }}>
+            <Title order={3} size="sm" fw={500} c="red">
+              Danger zone
+            </Title>
+            <Group justify="space-between" align="flex-start" mt="md" wrap="wrap">
+              <Stack gap={4} style={{ flex: "1 1 16rem" }}>
+                <Text size="sm" fw={500}>
+                  Delete tenant
+                </Text>
+                <Text size="sm" c="dimmed">
                   Permanently delete this tenant and all its data. This action cannot be undone.
-                </p>
-              </div>
-              <button className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
+                </Text>
+              </Stack>
+              <Button color="red" onClick={() => setDeleteOpen(true)}>
                 Delete tenant
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+              </Button>
+            </Group>
+          </Card>
+        </Tabs.Panel>
+      </Tabs>
 
       <Modal
-        open={deleteOpen}
+        opened={deleteOpen}
         onClose={() => {
           setDeleteOpen(false);
           setConfirmText("");
         }}
         title="Delete tenant"
-        footer={
-          <>
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                setDeleteOpen(false);
-                setConfirmText("");
-              }}
-            >
-              Cancel
-            </button>
-            <button
-              className="btn btn-danger"
-              onClick={() => void handleDelete()}
-              disabled={confirmText !== "delete" || deleteTenant.isPending}
-            >
-              {deleteTenant.isPending ? "Deleting…" : "Delete permanently"}
-            </button>
-          </>
-        }
       >
-        <p>
-          Type <strong>delete</strong> to confirm.
-        </p>
-        <label className="sr-only" htmlFor="delete-confirmation">
-          Delete confirmation
-        </label>
-        <input
-          id="delete-confirmation"
-          className="input mt-2"
-          value={confirmText}
-          onChange={(e) => setConfirmText(e.target.value)}
-          placeholder="delete"
-          autoFocus
-        />
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            if (confirmText === "delete") void handleDelete();
+          }}
+        >
+          <Stack gap="md">
+            <Text size="sm">
+              Type <strong>delete</strong> to confirm.
+            </Text>
+            <TextInput
+              value={confirmText}
+              onChange={(e) => setConfirmText(e.currentTarget.value)}
+              placeholder="delete"
+              autoFocus
+              aria-label="Delete confirmation"
+            />
+            <Group justify="flex-end" gap="xs">
+              <Button
+                type="button"
+                variant="default"
+                onClick={() => {
+                  setDeleteOpen(false);
+                  setConfirmText("");
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                color="red"
+                disabled={confirmText !== "delete"}
+                loading={deleteTenant.isPending}
+              >
+                Delete permanently
+              </Button>
+            </Group>
+          </Stack>
+        </form>
       </Modal>
-    </>
+    </PageShell>
   );
 }

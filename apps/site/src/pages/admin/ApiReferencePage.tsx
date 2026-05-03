@@ -1,3 +1,6 @@
+import { Alert, Code, Table } from "@mantine/core";
+import { PageHeader, PageShell } from "@/components/app";
+
 type AdminEndpoint = {
   method: string;
   path: string;
@@ -85,64 +88,43 @@ const adminEndpoints: AdminEndpoint[] = [
     path: "/api/admin/plans",
     use: "List built-in plan limits",
   },
-  {
-    method: "POST",
-    path: "/api/admin/tenants/:id/approve",
-    use: "Approve a pending tenant signup",
-  },
-  {
-    method: "POST",
-    path: "/api/admin/bulk-approve",
-    use: "Approve a batch of pending tenants in one request",
-  },
-  {
-    method: "GET",
-    path: "/api/admin/settings",
-    use: "Read platform-wide admin settings (writes are env-var controlled in production)",
-  },
 ];
 
 export default function ApiReferencePage() {
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Admin API Reference</h1>
-          <p className="meta">
-            Admin-only routes for platform operations. These are intentionally kept out of the
-            public API documentation.
-          </p>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Admin API Reference"
+        description="Admin-only routes for platform operations. These are intentionally kept out of the public API documentation."
+      />
 
-      <div className="admin-callout mb-6">
-        <strong>Access model</strong>
-        <p>
-          Admin APIs require an authenticated admin session or controlled deployment automation.
-          Tenant-scoped customer and collector routes remain documented in the public reference.
-        </p>
-      </div>
+      <Alert color="blue" variant="light" title="Access model" mb="md">
+        Admin APIs require an authenticated admin session or controlled deployment automation.
+        Tenant-scoped customer and collector routes remain documented in the public reference.
+      </Alert>
 
-      <div className="dt-card">
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Method</th>
-              <th>Path</th>
-              <th>Use</th>
-            </tr>
-          </thead>
-          <tbody>
+      <Table.ScrollContainer minWidth={500}>
+        <Table withTableBorder withColumnBorders striped>
+          <Table.Thead>
+            <Table.Tr>
+              <Table.Th>Method</Table.Th>
+              <Table.Th>Path</Table.Th>
+              <Table.Th>Use</Table.Th>
+            </Table.Tr>
+          </Table.Thead>
+          <Table.Tbody>
             {adminEndpoints.map((endpoint) => (
-              <tr key={`${endpoint.method}:${endpoint.path}`}>
-                <td>{endpoint.method}</td>
-                <td className="mono-cell">{endpoint.path}</td>
-                <td>{endpoint.use}</td>
-              </tr>
+              <Table.Tr key={`${endpoint.method}:${endpoint.path}`}>
+                <Table.Td>{endpoint.method}</Table.Td>
+                <Table.Td>
+                  <Code>{endpoint.path}</Code>
+                </Table.Td>
+                <Table.Td>{endpoint.use}</Table.Td>
+              </Table.Tr>
             ))}
-          </tbody>
-        </table>
-      </div>
-    </>
+          </Table.Tbody>
+        </Table>
+      </Table.ScrollContainer>
+    </PageShell>
   );
 }

@@ -1,14 +1,34 @@
 import { useDeferredValue, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Checkbox,
+  Code,
+  Group,
+  Modal,
+  Pagination,
+  Paper,
+  ScrollArea,
+  SegmentedControl,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+} from "@mantine/core";
+import type { MantineColor } from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
+import {
   useAdminTenantsPage,
   useCreateTenant,
   useBulkApproveTenants,
   useAdminSettings,
 } from "../../api/hooks/admin";
-import { useToast } from "../../components/common/Toast";
-import { Modal } from "../../components/common/Modal";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, MetricCard, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -17,29 +37,25 @@ import { PLAN_OPTIONS } from "../../shared/plans";
 
 type StatusFilter = "all" | "pending" | "active" | "suspended";
 
+function statusColor(status?: string): MantineColor {
+  if (status === "active") return "green";
+  if (status === "pending") return "orange";
+  if (status === "suspended") return "red";
+  return "gray";
+}
+
 function StatusBadge({ status }: { status?: string }) {
   if (!status) return null;
-  const styles: Record<string, { bg: string; color: string; label: string }> = {
-    pending: { bg: "#f97316", color: "#fff", label: "Pending" },
-    active: { bg: "#4fd27b", color: "#061008", label: "Active" },
-    suspended: { bg: "#ef4444", color: "#fff", label: "Suspended" },
-  };
-  const style = styles[status] ?? { bg: "#6b7280", color: "#fff", label: status };
   return (
-    <span
-      style={{
-        display: "inline-block",
-        padding: "2px 8px",
-        borderRadius: 4,
-        fontSize: 12,
-        fontWeight: 500,
-        background: style.bg,
-        color: style.color,
-      }}
-    >
-      {style.label}
-    </span>
+    <Badge color={statusColor(status)} variant="light">
+      {status}
+    </Badge>
   );
+}
+
+interface CreateTenantForm {
+  name: string;
+  plan: string;
 }
 
 export default function TenantsPage() {
@@ -60,13 +76,17 @@ export default function TenantsPage() {
   const createTenant = useCreateTenant();
   const bulkApprove = useBulkApproveTenants();
   const settings = useAdminSettings();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [plan, setPlan] = useState("starter");
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
+
+  const form = useForm<CreateTenantForm>({
+    initialValues: { name: "", plan: "starter" },
+    validate: {
+      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
+    },
+  });
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
@@ -80,18 +100,24 @@ export default function TenantsPage() {
   const pendingCount = statusCounts["pending"] ?? 0;
   const activeCount = statusCounts["active"] ?? 0;
   const suspendedCount = statusCounts["suspended"] ?? 0;
+  const totalCount = pendingCount + activeCount + suspendedCount;
 
-  async function handleCreate() {
-    if (!name.trim()) return;
+  async function handleCreate(values: CreateTenantForm) {
     try {
-      const result = await createTenant.mutateAsync({ name: name.trim(), plan });
-      toast("Tenant created", name);
+      const result = await createTenant.mutateAsync({
+        name: values.name.trim(),
+        plan: values.plan,
+      });
+      notifications.show({ title: "Tenant created", message: values.name, color: "green" });
       setModalOpen(false);
-      setName("");
-      setPlan("starter");
+      form.reset();
       void navigate(`/admin/tenants/${result.id}`);
     } catch (err) {
-      toast("Failed to create tenant", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Failed to create tenant",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
@@ -104,17 +130,21 @@ export default function TenantsPage() {
       const approvedCount = result.approved.length;
       const failedCount = result.failed.length;
 
-      toast(
-        `Approved ${approvedCount} tenant${approvedCount !== 1 ? "s" : ""}`,
-        failedCount > 0 ? `${failedCount} failed` : undefined,
-        failedCount > 0 ? "err" : undefined,
-      );
+      notifications.show({
+        title: `Approved ${approvedCount} tenant${approvedCount !== 1 ? "s" : ""}`,
+        message: failedCount > 0 ? `${failedCount} failed` : undefined,
+        color: failedCount > 0 ? "yellow" : "green",
+      });
 
       setSelectedTenants(new Set());
       setBulkConfirmOpen(false);
       void refetch();
     } catch (err) {
-      toast("Bulk approve failed", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Bulk approve failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
@@ -128,145 +158,100 @@ export default function TenantsPage() {
     setSelectedTenants(newSet);
   }
 
-  const statusFilters: { key: StatusFilter; label: string; count: number }[] = [
-    { key: "all", label: "All", count: pendingCount + activeCount + suspendedCount },
-    { key: "pending", label: "Pending", count: pendingCount },
-    { key: "active", label: "Active", count: activeCount },
-    { key: "suspended", label: "Suspended", count: suspendedCount },
+  const planSelectOptions = [
+    { value: "all", label: "All plans" },
+    ...PLAN_OPTIONS.map((option) => ({ value: option.id, label: option.label })),
+  ];
+  const createPlanOptions = PLAN_OPTIONS.map((option) => ({
+    value: option.id,
+    label: `${option.label} (${option.audience})`,
+  }));
+
+  const statusFilterData = [
+    { value: "all", label: `All (${totalCount})` },
+    { value: "pending", label: `Pending (${pendingCount})` },
+    { value: "active", label: `Active (${activeCount})` },
+    { value: "suspended", label: `Suspended (${suspendedCount})` },
   ];
 
+  const autoApprove = settings.data?.auto_approve_signups;
+
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Tenants</h1>
-          <p className="meta">Workspaces, plan limits, and direct troubleshooting entry points.</p>
-        </div>
-        <div className="actions">
-          {/* Auto-approve indicator */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              marginRight: 16,
-              padding: "6px 12px",
-              background: settings.data?.auto_approve_signups ? "#4fd27b22" : "#f9731622",
-              borderRadius: 6,
-              fontSize: 13,
-              color: settings.data?.auto_approve_signups ? "#4fd27b" : "#f97316",
-            }}
-          >
-            <span
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: settings.data?.auto_approve_signups ? "#4fd27b" : "#f97316",
-              }}
-            />
-            {settings.data?.auto_approve_signups ? "Auto-approve ON" : "Manual approval"}
-          </div>
-          <button
-            className="btn btn-secondary"
-            onClick={() => setBulkConfirmOpen(true)}
-            disabled={selectedTenants.size === 0 || bulkApprove.isPending}
-          >
-            {bulkApprove.isPending ? "Approving..." : `Approve Selected (${selectedTenants.size})`}
-          </button>
-          <button className="btn btn-primary" onClick={() => setModalOpen(true)}>
-            Create tenant
-          </button>
-        </div>
-      </div>
+    <PageShell width="wide">
+      <PageHeader
+        title="Tenants"
+        description="Workspaces, plan limits, and direct troubleshooting entry points."
+        actions={
+          <Group gap="xs">
+            <Badge
+              variant="light"
+              color={autoApprove ? "green" : "orange"}
+              leftSection={
+                <Box
+                  w={8}
+                  h={8}
+                  style={{
+                    borderRadius: "50%",
+                    background: `var(--mantine-color-${autoApprove ? "green" : "orange"}-6)`,
+                  }}
+                />
+              }
+            >
+              {autoApprove ? "Auto-approve ON" : "Manual approval"}
+            </Badge>
+            <Button
+              variant="default"
+              onClick={() => setBulkConfirmOpen(true)}
+              disabled={selectedTenants.size === 0 || bulkApprove.isPending}
+              loading={bulkApprove.isPending}
+            >
+              Approve Selected ({selectedTenants.size})
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>Create tenant</Button>
+          </Group>
+        }
+      />
 
-      <div className="tenant-summary-grid">
-        <div className="stat">
-          <div className="val">{pagination?.total ?? 0}</div>
-          <div className="label">Matching tenants</div>
-        </div>
-        <div className="stat">
-          <div className="val">{totalConfigs}</div>
-          <div className="label">Configurations</div>
-        </div>
-        <div className="stat">
-          <div className="val">{totalAgents}</div>
-          <div className="label">Collectors</div>
-        </div>
-      </div>
+      <SimpleGrid cols={{ base: 3 }} spacing="md">
+        <MetricCard label="Matching tenants" value={String(pagination?.total ?? 0)} />
+        <MetricCard label="Configurations" value={String(totalConfigs)} />
+        <MetricCard label="Collectors" value={String(totalAgents)} />
+      </SimpleGrid>
 
-      <div className="dt-card">
-        <div className="dt-toolbar" style={{ flexWrap: "wrap", gap: 12 }}>
-          <input
-            className="input"
+      <Card mt="md">
+        <Group gap="md" wrap="wrap" mb="md">
+          <TextInput
             aria-label="Filter tenants by name, ID, or plan"
             placeholder="Filter by name, ID, or plan…"
             value={filter}
             onChange={(e) => {
-              setFilter(e.target.value);
+              setFilter(e.currentTarget.value);
               setPage(1);
             }}
-            style={{ maxWidth: 280 }}
+            w={280}
           />
-          <select
-            className="input"
+          <Select
             aria-label="Filter by plan"
             value={planFilter}
-            onChange={(e) => {
-              setPlanFilter(e.target.value);
+            onChange={(v) => {
+              setPlanFilter(v ?? "all");
               setPage(1);
             }}
-            style={{ maxWidth: 180 }}
-          >
-            <option value="all">All plans</option>
-            {PLAN_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-
-          {/* Status filter tabs */}
-          <div style={{ display: "flex", gap: 4, marginLeft: "auto" }}>
-            {statusFilters.map((sf) => (
-              <button
-                key={sf.key}
-                className={`tab${statusFilter === sf.key ? " active" : ""}`}
-                onClick={() => {
-                  setStatusFilter(sf.key);
-                  setPage(1);
-                }}
-                style={{ padding: "6px 12px", fontSize: 13 }}
-              >
-                {sf.label}
-                {sf.count > 0 && (
-                  <span
-                    style={{
-                      marginLeft: 6,
-                      padding: "1px 6px",
-                      borderRadius: 10,
-                      fontSize: 11,
-                      background:
-                        sf.key === "pending"
-                          ? "#f9731633"
-                          : sf.key === "active"
-                            ? "#4fd27b33"
-                            : "#6b728033",
-                      color:
-                        sf.key === "pending"
-                          ? "#f97316"
-                          : sf.key === "active"
-                            ? "#4fd27b"
-                            : "#9ca3af",
-                    }}
-                  >
-                    {sf.count}
-                  </span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
+            data={planSelectOptions}
+            allowDeselect={false}
+            w={180}
+          />
+          <Box style={{ flex: 1 }} />
+          <SegmentedControl
+            value={statusFilter}
+            onChange={(v) => {
+              setStatusFilter(v as StatusFilter);
+              setPage(1);
+            }}
+            data={statusFilterData}
+            size="sm"
+          />
+        </Group>
 
         {tenantList.length === 0 ? (
           <EmptyState
@@ -283,13 +268,13 @@ export default function TenantsPage() {
             }
           >
             {!filter && planFilter === "all" && statusFilter === "all" ? (
-              <button className="btn btn-primary btn-sm" onClick={() => setModalOpen(true)}>
+              <Button size="sm" onClick={() => setModalOpen(true)}>
                 Create tenant
-              </button>
+              </Button>
             ) : null}
           </EmptyState>
         ) : (
-          <div className="tenant-list">
+          <Stack gap="xs">
             {tenantList.map((t) => {
               const configCount = t.config_count ?? 0;
               const maxAgentsPerConfig = t.max_agents_per_config ?? 0;
@@ -298,185 +283,162 @@ export default function TenantsPage() {
               const isPending = t.status === "pending";
 
               return (
-                <article
+                <Paper
                   key={t.id}
-                  className="tenant-row"
+                  withBorder
+                  p="md"
                   style={{
-                    background: isSelected ? "rgba(79, 210, 123, 0.05)" : undefined,
-                    borderLeft: isSelected ? "3px solid #4fd27b" : undefined,
+                    borderLeft: isSelected ? "3px solid var(--mantine-color-green-6)" : undefined,
+                    background: isSelected ? "var(--mantine-color-green-light)" : undefined,
                   }}
                 >
-                  {/* Checkbox for pending tenants */}
-                  {isPending && (
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleTenantSelection(t.id)}
-                      style={{ marginRight: 12, width: 18, height: 18, cursor: "pointer" }}
-                    />
-                  )}
-
-                  <div className="tenant-main">
-                    <Link to={`/admin/tenants/${t.id}`} className="tenant-name">
-                      {t.name}
-                    </Link>
-                    <span className="meta mono tenant-id">{t.id}</span>
-                  </div>
-                  <div className="tenant-plan">
-                    <PlanTag plan={t.plan ?? "starter"} />
-                    <div style={{ marginTop: 6 }}>
+                  <Group wrap="nowrap" gap="md">
+                    {isPending ? (
+                      <Checkbox
+                        checked={isSelected}
+                        onChange={() => toggleTenantSelection(t.id)}
+                        aria-label={`Select tenant ${t.name}`}
+                      />
+                    ) : null}
+                    <Stack gap={2} style={{ flex: "1 1 16rem", minWidth: 0 }}>
+                      <Link to={`/admin/tenants/${t.id}`}>
+                        <Text fw={500}>{t.name}</Text>
+                      </Link>
+                      <Code style={{ fontSize: 11, alignSelf: "flex-start" }}>{t.id}</Code>
+                    </Stack>
+                    <Stack gap={6} align="flex-start">
+                      <PlanTag plan={t.plan ?? "starter"} />
                       <StatusBadge status={t.status} />
-                    </div>
-                  </div>
-                  <div className="tenant-stats">
-                    <span>
-                      <strong>{configCount}</strong>
-                      <span className="meta">policies / {t.max_configs ?? "—"}</span>
-                    </span>
-                    <span>
-                      <strong>{t.agent_count ?? 0}</strong>
-                      <span className="meta">
-                        {t.connected_agents ?? 0} connected / {totalAgentCapacity.toLocaleString()}{" "}
-                        capacity
-                      </span>
-                    </span>
-                    <span>
-                      <strong>{relTime(t.created_at)}</strong>
-                      <span className="meta">created</span>
-                    </span>
-                  </div>
-                  <div className="tenant-actions">
-                    <Link to={`/admin/tenants/${t.id}`} className="btn btn-secondary btn-sm">
+                    </Stack>
+                    <Group gap="xl" wrap="wrap" style={{ flex: 1 }}>
+                      <Stack gap={2}>
+                        <Text fw={600}>{configCount}</Text>
+                        <Text size="xs" c="dimmed">
+                          policies / {t.max_configs ?? "—"}
+                        </Text>
+                      </Stack>
+                      <Stack gap={2}>
+                        <Text fw={600}>{t.agent_count ?? 0}</Text>
+                        <Text size="xs" c="dimmed">
+                          {t.connected_agents ?? 0} connected /{" "}
+                          {totalAgentCapacity.toLocaleString()} capacity
+                        </Text>
+                      </Stack>
+                      <Stack gap={2}>
+                        <Text fw={600}>{relTime(t.created_at)}</Text>
+                        <Text size="xs" c="dimmed">
+                          created
+                        </Text>
+                      </Stack>
+                    </Group>
+                    <Button
+                      component={Link}
+                      to={`/admin/tenants/${t.id}`}
+                      variant="default"
+                      size="sm"
+                    >
                       Open
-                    </Link>
-                  </div>
-                </article>
+                    </Button>
+                  </Group>
+                </Paper>
               );
             })}
-          </div>
+          </Stack>
         )}
         {pagination ? (
-          <div className="support-list-footer mt-3">
-            <span className="meta">
+          <Group justify="space-between" mt="md">
+            <Text size="sm" c="dimmed">
               Page {pagination.page} · Showing {tenantList.length} of {pagination.total} matching
               tenants
               {selectedTenants.size > 0 && ` (${selectedTenants.size} selected)`}
-            </span>
-            <div style={{ display: "flex", gap: 8 }}>
-              <button
-                className="btn btn-ghost btn-sm"
-                disabled={pagination.page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </button>
-              <button
-                className="btn btn-ghost btn-sm"
-                disabled={!pagination.has_more}
-                onClick={() => setPage((p) => p + 1)}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+            </Text>
+            <Pagination
+              value={pagination.page}
+              onChange={setPage}
+              total={Math.max(1, Math.ceil(pagination.total / pagination.limit))}
+              size="sm"
+              withEdges={false}
+            />
+          </Group>
         ) : null}
-      </div>
+      </Card>
 
-      {/* Bulk Approve Confirmation Modal */}
       <Modal
-        open={bulkConfirmOpen}
+        opened={bulkConfirmOpen}
         onClose={() => setBulkConfirmOpen(false)}
         title="Approve selected tenants"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setBulkConfirmOpen(false)}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => void handleBulkApprove()}
-              disabled={bulkApprove.isPending}
-            >
-              {bulkApprove.isPending
-                ? "Approving..."
-                : `Approve ${selectedTenants.size} tenant${selectedTenants.size !== 1 ? "s" : ""}`}
-            </button>
-          </>
-        }
       >
-        <p style={{ marginBottom: 16 }}>
-          You are about to approve <strong>{selectedTenants.size}</strong> tenant
-          {selectedTenants.size !== 1 ? "s" : ""}. They will receive an email notification.
-        </p>
-        <div
-          style={{
-            background: "#1a1d24",
-            borderRadius: 8,
-            padding: 16,
-            maxHeight: 200,
-            overflow: "auto",
-          }}
-        >
-          {tenantList
-            .filter((t) => selectedTenants.has(t.id))
-            .map((t) => (
-              <div key={t.id} style={{ padding: "4px 0", borderBottom: "1px solid #252b35" }}>
-                <strong>{t.name}</strong>
-                <span className="meta" style={{ marginLeft: 8 }}>
-                  {t.plan}
-                </span>
-              </div>
-            ))}
-        </div>
+        <Stack gap="md">
+          <Text size="sm">
+            You are about to approve <strong>{selectedTenants.size}</strong> tenant
+            {selectedTenants.size !== 1 ? "s" : ""}. They will receive an email notification.
+          </Text>
+          <ScrollArea.Autosize mah={200}>
+            <Stack gap={4}>
+              {tenantList
+                .filter((t) => selectedTenants.has(t.id))
+                .map((t) => (
+                  <Group key={t.id} gap="xs" py={4}>
+                    <Text size="sm" fw={500}>
+                      {t.name}
+                    </Text>
+                    <Text size="sm" c="dimmed">
+                      {t.plan}
+                    </Text>
+                  </Group>
+                ))}
+            </Stack>
+          </ScrollArea.Autosize>
+          <Group justify="flex-end" gap="xs">
+            <Button variant="default" onClick={() => setBulkConfirmOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleBulkApprove()} loading={bulkApprove.isPending}>
+              Approve {selectedTenants.size} tenant{selectedTenants.size !== 1 ? "s" : ""}
+            </Button>
+          </Group>
+        </Stack>
       </Modal>
 
-      {/* Create Tenant Modal */}
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        opened={modalOpen}
+        onClose={() => {
+          setModalOpen(false);
+          form.reset();
+        }}
         title="Create tenant"
-        footer={
-          <>
-            <button className="btn btn-secondary" onClick={() => setModalOpen(false)}>
-              Cancel
-            </button>
-            <button
-              className="btn btn-primary"
-              onClick={() => void handleCreate()}
-              disabled={!name.trim() || createTenant.isPending}
-            >
-              {createTenant.isPending ? "Creating…" : "Create tenant"}
-            </button>
-          </>
-        }
       >
-        <div className="field">
-          <label htmlFor="tenant-name">Name</label>
-          <input
-            id="tenant-name"
-            className="input"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Tenant name"
-            autoFocus
-          />
-        </div>
-        <div className="field mt-6">
-          <label htmlFor="tenant-plan">Plan</label>
-          <select
-            id="tenant-plan"
-            className="input"
-            value={plan}
-            onChange={(e) => setPlan(e.target.value)}
-          >
-            {PLAN_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>
-                {option.label} ({option.audience})
-              </option>
-            ))}
-          </select>
-        </div>
+        <form onSubmit={form.onSubmit(handleCreate)}>
+          <Stack gap="md">
+            <TextInput
+              label="Name"
+              placeholder="Tenant name"
+              autoFocus
+              {...form.getInputProps("name")}
+            />
+            <Select
+              label="Plan"
+              data={createPlanOptions}
+              allowDeselect={false}
+              {...form.getInputProps("plan")}
+            />
+            <Group justify="flex-end" gap="xs">
+              <Button
+                variant="default"
+                onClick={() => {
+                  setModalOpen(false);
+                  form.reset();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button type="submit" loading={createTenant.isPending}>
+                Create tenant
+              </Button>
+            </Group>
+          </Stack>
+        </form>
       </Modal>
-    </>
+    </PageShell>
   );
 }

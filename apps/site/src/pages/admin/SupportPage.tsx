@@ -1,12 +1,34 @@
 import { useDeferredValue, useState } from "react";
 import { Link } from "react-router-dom";
+import {
+  Badge,
+  Button,
+  Card,
+  Code,
+  Group,
+  ScrollArea,
+  SimpleGrid,
+  Stack,
+  Text,
+  TextInput,
+  Title,
+  UnstyledButton,
+} from "@mantine/core";
+import type { MantineColor } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { useAdminHealth, useAdminTenantsPage } from "../../api/hooks/admin";
-import { useToast } from "../../components/common/Toast";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { SYMPTOMS, buildSupportBrief, healthLabel, healthTone } from "./support-model";
+
+function toneToColor(tone: string): MantineColor {
+  if (tone === "ok") return "green";
+  if (tone === "warn") return "yellow";
+  if (tone === "error") return "red";
+  return "gray";
+}
 
 export default function SupportPage() {
   const [tenantQuery, setTenantQuery] = useState("");
@@ -18,7 +40,6 @@ export default function SupportPage() {
     sort: "name_asc",
   });
   const healthQuery = useAdminHealth();
-  const { toast } = useToast();
 
   const [selectedTenantId, setSelectedTenantId] = useState("");
   const [selectedSymptomId, setSelectedSymptomId] = useState(SYMPTOMS[0]?.id ?? "");
@@ -30,14 +51,6 @@ export default function SupportPage() {
     SYMPTOMS.find((symptom) => symptom.id === selectedSymptomId) ?? SYMPTOMS[0] ?? null;
   const health = healthQuery.data;
   const healthChecks = health?.checks ?? {};
-  async function copyBrief() {
-    try {
-      await navigator.clipboard.writeText(supportBrief);
-      toast("Copied support brief");
-    } catch {
-      toast("Copy failed", "Clipboard access is blocked in this browser context.", "err");
-    }
-  }
 
   if (tenantsQuery.isLoading || healthQuery.isLoading) return <LoadingSpinner />;
   if (tenantsQuery.error)
@@ -54,40 +67,45 @@ export default function SupportPage() {
     health,
   });
 
+  async function copyBrief() {
+    try {
+      await navigator.clipboard.writeText(supportBrief);
+      notifications.show({ message: "Copied support brief", color: "green" });
+    } catch {
+      notifications.show({
+        title: "Copy failed",
+        message: "Clipboard access is blocked in this browser context.",
+        color: "red",
+      });
+    }
+  }
+
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>Support cockpit</h1>
-          <p className="meta">
-            Tenant-scoped starting point for symptom-first support triage. Pick the customer pain
-            first, then jump to the admin screen that can confirm it.
-          </p>
-        </div>
-        <div className="actions">
-          <button className="btn btn-ghost btn-sm" onClick={() => void healthQuery.refetch()}>
+    <PageShell width="wide">
+      <PageHeader
+        title="Support cockpit"
+        description="Tenant-scoped starting point for symptom-first support triage. Pick the customer pain first, then jump to the admin screen that can confirm it."
+        actions={
+          <Button variant="subtle" size="sm" onClick={() => void healthQuery.refetch()}>
             Refresh health
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      <div className="support-grid mt-6">
-        <section className="card card-pad">
-          <h3>1. Select tenant</h3>
-          <div className="field mt-4">
-            <label htmlFor="support-tenant-filter">Search by tenant name or ID</label>
-            <input
-              id="support-tenant-filter"
-              className="input"
-              value={tenantQuery}
-              onChange={(event) => {
-                setTenantQuery(event.target.value);
-              }}
-              placeholder="acme, tenant id"
-            />
-          </div>
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            1. Select tenant
+          </Title>
+          <TextInput
+            mt="md"
+            label="Search by tenant name or ID"
+            value={tenantQuery}
+            onChange={(event) => setTenantQuery(event.currentTarget.value)}
+            placeholder="acme, tenant id"
+          />
 
-          <div className="support-tenant-list mt-4">
+          <ScrollArea.Autosize mah={320} mt="md">
             {tenants.length === 0 ? (
               <EmptyState
                 icon="search"
@@ -95,119 +113,167 @@ export default function SupportPage() {
                 description="Try a broader name or clear the search term."
               />
             ) : (
-              tenants.map((tenant) => (
-                <button
-                  key={tenant.id}
-                  type="button"
-                  className={`support-tenant-item${selectedTenant?.id === tenant.id ? " selected" : ""}`}
-                  onClick={() => setSelectedTenantId(tenant.id)}
-                >
-                  <span>
-                    <strong>{tenant.name}</strong>
-                    <span className="meta mono">{tenant.id}</span>
-                  </span>
-                  <PlanTag plan={tenant.plan ?? "starter"} />
-                </button>
-              ))
+              <Stack gap="xs">
+                {tenants.map((tenant) => {
+                  const isSelected = selectedTenant?.id === tenant.id;
+                  return (
+                    <UnstyledButton
+                      key={tenant.id}
+                      aria-pressed={isSelected}
+                      onClick={() => setSelectedTenantId(tenant.id)}
+                      p="sm"
+                      style={{
+                        borderRadius: "var(--mantine-radius-md)",
+                        border: isSelected
+                          ? "1px solid var(--mantine-color-blue-6)"
+                          : "1px solid var(--mantine-color-default-border)",
+                        background: isSelected ? "var(--mantine-color-blue-light)" : "transparent",
+                      }}
+                    >
+                      <Group justify="space-between" wrap="nowrap">
+                        <Stack gap={2} style={{ minWidth: 0 }}>
+                          <Text size="sm" fw={500} truncate>
+                            {tenant.name}
+                          </Text>
+                          <Code style={{ fontSize: 11 }}>{tenant.id}</Code>
+                        </Stack>
+                        <PlanTag plan={tenant.plan ?? "starter"} />
+                      </Group>
+                    </UnstyledButton>
+                  );
+                })}
+              </Stack>
             )}
-          </div>
+          </ScrollArea.Autosize>
           {tenants.length > 0 ? (
-            <div className="support-list-footer mt-3">
-              <span className="meta">
-                Showing {tenants.length} of {tenantPagination?.total ?? tenants.length} matching
-                tenants.
-              </span>
-            </div>
+            <Text size="xs" c="dimmed" mt="xs">
+              Showing {tenants.length} of {tenantPagination?.total ?? tenants.length} matching
+              tenants.
+            </Text>
           ) : null}
-        </section>
+        </Card>
 
-        <section className="card card-pad">
-          <h3>2. Choose symptom</h3>
-          <div className="support-symptom-list mt-4">
-            {SYMPTOMS.map((symptom) => (
-              <button
-                key={symptom.id}
-                className={`support-symptom-card${selectedSymptom.id === symptom.id ? " selected" : ""}`}
-                onClick={() => setSelectedSymptomId(symptom.id)}
-                type="button"
-              >
-                <strong>{symptom.title}</strong>
-                <span className="meta">{symptom.summary}</span>
-              </button>
-            ))}
-          </div>
-        </section>
-      </div>
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            2. Choose symptom
+          </Title>
+          <Stack gap="xs" mt="md">
+            {SYMPTOMS.map((symptom) => {
+              const isSelected = selectedSymptom.id === symptom.id;
+              return (
+                <UnstyledButton
+                  key={symptom.id}
+                  aria-pressed={isSelected}
+                  onClick={() => setSelectedSymptomId(symptom.id)}
+                  p="sm"
+                  style={{
+                    borderRadius: "var(--mantine-radius-md)",
+                    border: isSelected
+                      ? "1px solid var(--mantine-color-blue-6)"
+                      : "1px solid var(--mantine-color-default-border)",
+                    background: isSelected ? "var(--mantine-color-blue-light)" : "transparent",
+                  }}
+                >
+                  <Stack gap={2}>
+                    <Text size="sm" fw={500}>
+                      {symptom.title}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {symptom.summary}
+                    </Text>
+                  </Stack>
+                </UnstyledButton>
+              );
+            })}
+          </Stack>
+        </Card>
+      </SimpleGrid>
 
-      <div className="support-grid mt-6">
-        <section className="card card-pad">
-          <div className="support-section-head">
-            <h3>3. Health context</h3>
-            <Link to="/admin/health" className="btn btn-ghost btn-sm">
+      <SimpleGrid cols={{ base: 1, md: 2 }} spacing="md" mt="md">
+        <Card>
+          <Group justify="space-between" align="center">
+            <Title order={3} size="sm" fw={500}>
+              3. Health context
+            </Title>
+            <Button component={Link} to="/admin/health" variant="subtle" size="xs">
               Open health
-            </Link>
-          </div>
-          <div className="support-chip-wrap mt-4">
-            <span className={`support-chip tone-${healthTone(health?.status)}`}>
-              <span>Overall</span>
-              <strong>{health?.status ?? "unknown"}</strong>
-            </span>
+            </Button>
+          </Group>
+          <Group gap="xs" mt="md" wrap="wrap">
+            <Badge color={toneToColor(healthTone(health?.status))} variant="light">
+              Overall: {health?.status ?? "unknown"}
+            </Badge>
             {Object.entries(healthChecks).map(([key, check]) => (
-              <span key={key} className={`support-chip tone-${healthTone(check.status)}`}>
-                <span>{healthLabel(key)}</span>
-                <strong>{check.status ?? "unknown"}</strong>
-                {check.latency_ms !== null && check.latency_ms !== undefined ? (
-                  <small>{check.latency_ms}ms</small>
-                ) : null}
-              </span>
+              <Badge key={key} color={toneToColor(healthTone(check.status))} variant="light">
+                {healthLabel(key)}: {check.status ?? "unknown"}
+                {check.latency_ms !== null && check.latency_ms !== undefined
+                  ? ` · ${check.latency_ms}ms`
+                  : ""}
+              </Badge>
             ))}
             {Object.keys(healthChecks).length === 0 ? (
-              <span className="meta">No dependency checks reported.</span>
+              <Text size="sm" c="dimmed">
+                No dependency checks reported.
+              </Text>
             ) : null}
-          </div>
-        </section>
+          </Group>
+        </Card>
 
-        <section className="card card-pad">
-          <h3>4. Next admin screens</h3>
-          <p className="meta mt-2">{selectedSymptom.whyItMatters}</p>
-          <div className="support-actions mt-4">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            4. Next admin screens
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
+            {selectedSymptom.whyItMatters}
+          </Text>
+          <Stack gap="xs" mt="md">
             {selectedSymptom.steps.map((step) => {
               const href = step.path(selectedTenant?.id ?? null);
               const disabled = step.requiresTenant && !selectedTenant;
               return (
-                <div key={step.label} className="support-action-row">
-                  <span>
-                    <strong>{step.label}</strong>
-                    <span className="meta">{step.description}</span>
-                  </span>
+                <Group key={step.label} justify="space-between" wrap="nowrap">
+                  <Stack gap={2} style={{ minWidth: 0 }}>
+                    <Text size="sm" fw={500}>
+                      {step.label}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {step.description}
+                    </Text>
+                  </Stack>
                   {disabled ? (
-                    <button type="button" className="btn btn-secondary" disabled>
+                    <Button variant="default" size="xs" disabled>
                       Open
-                    </button>
+                    </Button>
                   ) : (
-                    <Link to={href} className="btn btn-secondary">
+                    <Button component={Link} to={href} variant="default" size="xs">
                       Open
-                    </Link>
+                    </Button>
                   )}
-                </div>
+                </Group>
               );
             })}
-          </div>
+          </Stack>
           {!selectedTenant ? (
-            <p className="meta mt-3">Select a tenant to enable tenant-specific links.</p>
+            <Text size="sm" c="dimmed" mt="sm">
+              Select a tenant to enable tenant-specific links.
+            </Text>
           ) : null}
-        </section>
-      </div>
+        </Card>
+      </SimpleGrid>
 
-      <section className="card card-pad mt-6">
-        <div className="support-section-head">
-          <h3>Support brief</h3>
-          <button type="button" className="btn btn-primary btn-sm" onClick={() => void copyBrief()}>
+      <Card mt="md">
+        <Group justify="space-between" align="center">
+          <Title order={3} size="sm" fw={500}>
+            Support brief
+          </Title>
+          <Button size="sm" onClick={() => void copyBrief()}>
             Copy brief
-          </button>
-        </div>
-        <pre className="support-brief mt-4">{supportBrief}</pre>
-      </section>
-    </>
+          </Button>
+        </Group>
+        <Code block mt="md" style={{ whiteSpace: "pre-wrap" }}>
+          {supportBrief}
+        </Code>
+      </Card>
+    </PageShell>
   );
 }

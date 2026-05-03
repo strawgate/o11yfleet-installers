@@ -1,5 +1,6 @@
+import { Table } from "@mantine/core";
 import { useAdminPlans } from "../../api/hooks/admin";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -31,59 +32,53 @@ export default function PlansPage() {
   const planList = plans ?? [];
 
   return (
-    <>
-      <div className="page-head">
-        <h1>Plans</h1>
-      </div>
+    <PageShell width="wide">
+      <PageHeader title="Plans" />
 
-      <div className="dt-card">
-        <table className="dt">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Track</th>
-              <th>Users</th>
-              <th>Collectors</th>
-              <th>Policies</th>
-              <th>History</th>
-              <th>API / GitOps</th>
-              <th>Tenants</th>
-            </tr>
-          </thead>
-          <tbody>
-            {planList.length === 0 ? (
-              <tr>
-                <td colSpan={8}>
-                  <EmptyState
-                    icon="box"
-                    title="No plans configured"
-                    description="Plan definitions will appear here after they are seeded or configured."
-                  />
-                </td>
-              </tr>
-            ) : (
-              planList.map((p) => (
-                <tr key={p.id}>
-                  <td>
+      {planList.length === 0 ? (
+        <EmptyState
+          icon="box"
+          title="No plans configured"
+          description="Plan definitions will appear here after they are seeded or configured."
+        />
+      ) : (
+        <Table.ScrollContainer minWidth={700}>
+          <Table withTableBorder striped>
+            <Table.Thead>
+              <Table.Tr>
+                <Table.Th>Name</Table.Th>
+                <Table.Th>Track</Table.Th>
+                <Table.Th>Users</Table.Th>
+                <Table.Th>Collectors</Table.Th>
+                <Table.Th>Policies</Table.Th>
+                <Table.Th>History</Table.Th>
+                <Table.Th>API / GitOps</Table.Th>
+                <Table.Th>Tenants</Table.Th>
+              </Table.Tr>
+            </Table.Thead>
+            <Table.Tbody>
+              {planList.map((p) => (
+                <Table.Tr key={p.id}>
+                  <Table.Td>
                     <PlanTag plan={p.id} />
-                  </td>
-                  <td>{trackLabel(p["audience"])}</td>
-                  <td>{optionalNumber(p["max_users"])}</td>
-                  <td>{optionalNumber(p["max_collectors"])}</td>
-                  <td>{optionalNumber(p["max_policies"] ?? p["max_configs"])}</td>
-                  <td>
+                  </Table.Td>
+                  <Table.Td>{trackLabel(p["audience"])}</Table.Td>
+                  <Table.Td>{optionalNumber(p["max_users"])}</Table.Td>
+                  <Table.Td>{optionalNumber(p["max_collectors"])}</Table.Td>
+                  <Table.Td>{optionalNumber(p["max_policies"] ?? p["max_configs"])}</Table.Td>
+                  <Table.Td>
                     {typeof p["history_retention"] === "string" ? p["history_retention"] : "—"}
-                  </td>
-                  <td>
+                  </Table.Td>
+                  <Table.Td>
                     {yesNo(p["supports_api"])} / {yesNo(p["supports_gitops"])}
-                  </td>
-                  <td>{numberValue(p["tenant_count"], 0)}</td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
+                  </Table.Td>
+                  <Table.Td>{numberValue(p["tenant_count"], 0)}</Table.Td>
+                </Table.Tr>
+              ))}
+            </Table.Tbody>
+          </Table>
+        </Table.ScrollContainer>
+      )}
+    </PageShell>
   );
 }

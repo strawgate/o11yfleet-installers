@@ -1,5 +1,7 @@
+import { Badge, Card, Group, SimpleGrid, Stack, Text, Title, Button } from "@mantine/core";
+import type { MantineColor } from "@mantine/core";
 import { useAdminHealth } from "../../api/hooks/admin";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, MetricCard, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { relTime } from "../../utils/format";
@@ -12,18 +14,33 @@ const serviceLabels: Record<string, string> = {
   durable_objects: "Durable Objects",
 };
 
-function statusTag(status: string) {
-  const cls =
-    status === "healthy" || status === "ok" || status === "connected" || status === "configured"
-      ? "tag-ok"
-      : status === "degraded" ||
-          status === "write_only" ||
-          status === "not_bound" ||
-          status === "not_configured" ||
-          status === "unavailable"
-        ? "tag-warn"
-        : "tag-err";
-  return <span className={`tag ${cls}`}>{status}</span>;
+function statusColor(status: string): MantineColor {
+  if (
+    status === "healthy" ||
+    status === "ok" ||
+    status === "connected" ||
+    status === "configured"
+  ) {
+    return "green";
+  }
+  if (
+    status === "degraded" ||
+    status === "write_only" ||
+    status === "not_bound" ||
+    status === "not_configured" ||
+    status === "unavailable"
+  ) {
+    return "yellow";
+  }
+  return "red";
+}
+
+function StatusBadge({ status }: { status: string }) {
+  return (
+    <Badge color={statusColor(status)} variant="light">
+      {status}
+    </Badge>
+  );
 }
 
 function numberMetric(value: number | undefined): string {
@@ -58,6 +75,25 @@ function planSummary(planCounts: Record<string, number> | undefined): string {
   return entries.map(([plan, count]) => `${plan}: ${numberMetric(count)}`).join(" / ");
 }
 
+function MetricRow({ children }: { children: React.ReactNode }) {
+  return (
+    <Group gap="xl" wrap="wrap">
+      {children}
+    </Group>
+  );
+}
+
+function MetricItem({ value, label }: { value: string; label: string }) {
+  return (
+    <Stack gap={2}>
+      <Text fw={600}>{value}</Text>
+      <Text size="xs" c="dimmed">
+        {label}
+      </Text>
+    </Stack>
+  );
+}
+
 export default function HealthPage() {
   const { data, isLoading, error, refetch } = useAdminHealth();
 
@@ -77,189 +113,170 @@ export default function HealthPage() {
   const timestamp = data?.timestamp;
 
   return (
-    <>
-      <div className="page-head">
-        <div>
-          <h1>System Health</h1>
-          <p className="meta">
-            O11yFleet control-plane dependencies, fleet counters, and session state in one operator
-            view.
-          </p>
-        </div>
-        <div className="actions">
-          <button className="btn btn-ghost btn-sm" onClick={() => void refetch()}>
+    <PageShell width="wide">
+      <PageHeader
+        title="System Health"
+        description="O11yFleet control-plane dependencies, fleet counters, and session state in one operator view."
+        actions={
+          <Button variant="subtle" size="sm" onClick={() => void refetch()}>
             Refresh
-          </button>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      <div className="stat-grid">
-        <div className="stat">
-          <div className="val">{statusTag(data?.status ?? "unknown")}</div>
-          <div className="label">Overall status</div>
-        </div>
-        <div className="stat">
-          <div className="val">
-            {healthyChecks}/{checkEntries.length || "—"}
-          </div>
-          <div className="label">Healthy checks</div>
-        </div>
-        <div className="stat">
-          <div className="val">{numberMetric(metrics.connected_agents)}</div>
-          <div className="label">Connected collectors</div>
-        </div>
-        <div className="stat">
-          <div className="val">{timestamp ? relTime(timestamp) : "—"}</div>
-          <div className="label">Last checked</div>
-        </div>
-      </div>
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+        <MetricCard label="Overall status" value={data?.status ?? "unknown"} />
+        <MetricCard
+          label="Healthy checks"
+          value={`${healthyChecks}/${checkEntries.length || "—"}`}
+        />
+        <MetricCard label="Connected collectors" value={numberMetric(metrics.connected_agents)} />
+        <MetricCard label="Last checked" value={timestamp ? relTime(timestamp) : "—"} />
+      </SimpleGrid>
 
-      <div className="health-grid mt-6">
-        <section className="card card-pad">
-          <h3>O11yFleet app metrics</h3>
-          <div className="health-metrics mt-4">
-            <span>
-              <strong>{numberMetric(metrics.total_tenants)}</strong>
-              <span className="meta">tenants</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.total_configurations)}</strong>
-              <span className="meta">configs</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.total_agents)}</strong>
-              <span className="meta">collectors</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.healthy_agents)}</strong>
-              <span className="meta">healthy collectors</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.active_tokens)}</strong>
-              <span className="meta">active tokens</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.active_sessions)}</strong>
-              <span className="meta">active sessions</span>
-            </span>
-          </div>
-          <p className="meta mt-4">
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md" mt="md">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            O11yFleet app metrics
+          </Title>
+          <MetricRow>
+            <MetricItem value={numberMetric(metrics.total_tenants)} label="tenants" />
+            <MetricItem value={numberMetric(metrics.total_configurations)} label="configs" />
+            <MetricItem value={numberMetric(metrics.total_agents)} label="collectors" />
+            <MetricItem value={numberMetric(metrics.healthy_agents)} label="healthy collectors" />
+            <MetricItem value={numberMetric(metrics.active_tokens)} label="active tokens" />
+            <MetricItem value={numberMetric(metrics.active_sessions)} label="active sessions" />
+          </MetricRow>
+          <Text size="sm" c="dimmed" mt="md">
             Plan mix: {planSummary(metrics.plan_counts)}. Latest config update:{" "}
             {relTime(metrics.latest_configuration_updated_at)}.
-          </p>
-        </section>
+          </Text>
+        </Card>
 
-        <section className="card card-pad">
-          <h3>Operator attention</h3>
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Operator attention
+          </Title>
           {degradedChecks.length === 0 ? (
-            <p className="meta mt-4">No degraded control-plane dependencies reported.</p>
+            <Text size="sm" c="dimmed" mt="xs">
+              No degraded control-plane dependencies reported.
+            </Text>
           ) : (
-            <div className="health-issues mt-4">
+            <Stack gap="xs" mt="xs">
               {degradedChecks.map(([key, check]) => (
-                <div key={key} className="health-issue">
-                  <span>
-                    <strong>{serviceLabels[key] ?? key}</strong>
-                    <span className="meta">{check.error ?? check.detail ?? "Needs attention"}</span>
-                  </span>
-                  {statusTag(check.status ?? "unknown")}
-                </div>
+                <Group key={key} justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Text size="sm" fw={500}>
+                      {serviceLabels[key] ?? key}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {check.error ?? check.detail ?? "Needs attention"}
+                    </Text>
+                  </Stack>
+                  <StatusBadge status={check.status ?? "unknown"} />
+                </Group>
               ))}
-            </div>
+            </Stack>
           )}
-          <p className="meta mt-4">
+          <Text size="sm" c="dimmed" mt="md">
             Latest fleet metrics snapshot:{" "}
             {relTime(metrics.latest_fleet_snapshot_at ?? metrics.last_agent_seen_at)}
-          </p>
-          <p className="meta mt-2">
+          </Text>
+          <Text size="sm" c="dimmed" mt={4}>
             Active impersonation sessions: {numberMetric(metrics.impersonation_sessions)}
-          </p>
-        </section>
+          </Text>
+        </Card>
 
-        <section className="card card-pad">
-          <h3>Fleet gaps</h3>
-          <div className="health-metrics mt-4">
-            <span>
-              <strong>{numberMetric(metrics.disconnected_agents)}</strong>
-              <span className="meta">disconnected</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.unknown_agents)}</strong>
-              <span className="meta">unknown status</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.unhealthy_agents)}</strong>
-              <span className="meta">unhealthy</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.stale_agents)}</strong>
-              <span className="meta">stale heartbeats</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.tenants_without_configurations)}</strong>
-              <span className="meta">tenants without configs</span>
-            </span>
-            <span>
-              <strong>{numberMetric(metrics.configurations_without_agents)}</strong>
-              <span className="meta">configs without collectors</span>
-            </span>
-          </div>
-        </section>
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Fleet gaps
+          </Title>
+          <MetricRow>
+            <MetricItem value={numberMetric(metrics.disconnected_agents)} label="disconnected" />
+            <MetricItem value={numberMetric(metrics.unknown_agents)} label="unknown status" />
+            <MetricItem value={numberMetric(metrics.unhealthy_agents)} label="unhealthy" />
+            <MetricItem value={numberMetric(metrics.stale_agents)} label="stale heartbeats" />
+            <MetricItem
+              value={numberMetric(metrics.tenants_without_configurations)}
+              label="tenants without configs"
+            />
+            <MetricItem
+              value={numberMetric(metrics.configurations_without_agents)}
+              label="configs without collectors"
+            />
+          </MetricRow>
+        </Card>
 
-        <section className="card card-pad">
-          <h3>Data sources</h3>
-          <div className="health-source-list mt-4">
-            {Object.keys(sources).length === 0 ? (
-              <p className="meta">No source metadata reported.</p>
-            ) : (
-              Object.entries(sources).map(([key, source]) => (
-                <div key={key} className="health-source-row">
-                  <span>
-                    <strong>{key.replaceAll("_", " ")}</strong>
-                    <span className="meta">{source.detail ?? "No detail reported."}</span>
-                  </span>
-                  {statusTag(source.status ?? "unknown")}
-                </div>
-              ))
-            )}
-          </div>
-          <p className="meta mt-4">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Data sources
+          </Title>
+          {Object.keys(sources).length === 0 ? (
+            <Text size="sm" c="dimmed" mt="xs">
+              No source metadata reported.
+            </Text>
+          ) : (
+            <Stack gap="xs" mt="xs">
+              {Object.entries(sources).map(([key, source]) => (
+                <Group key={key} justify="space-between" wrap="nowrap">
+                  <Stack gap={2}>
+                    <Text size="sm" fw={500}>
+                      {key.replaceAll("_", " ")}
+                    </Text>
+                    <Text size="xs" c="dimmed">
+                      {source.detail ?? "No detail reported."}
+                    </Text>
+                  </Stack>
+                  <StatusBadge status={source.status ?? "unknown"} />
+                </Group>
+              ))}
+            </Stack>
+          )}
+          <Text size="sm" c="dimmed" mt="md">
             Cloudflare billing, account usage, Worker invocation analytics, and Analytics Engine
             queries are not included unless we add account credentials and API calls.
-          </p>
-        </section>
-      </div>
+          </Text>
+        </Card>
+      </SimpleGrid>
 
-      <div className="health-check-grid mt-6">
-        {Object.keys(checks).length === 0 ? (
-          <div className="card card-pad">
-            <EmptyState
-              icon="activity"
-              title="No health checks reported"
-              description="Service health checks will appear here when the worker reports them."
-            />
-          </div>
-        ) : (
-          checkEntries.map(([key, check]) => (
-            <section key={key} className="card card-pad health-check-card">
-              <div className="support-section-head">
-                <h3>{serviceLabels[key] ?? key}</h3>
-                {statusTag(check.status ?? "unknown")}
-              </div>
-              {check.latency_ms !== null && check.latency_ms !== undefined ? (
-                <div className="health-latency mt-4">{check.latency_ms}ms</div>
-              ) : (
-                <div className="health-latency mt-4">N/A</div>
-              )}
-              <div className="meta mt-2">{check.detail ?? "No extra detail reported."}</div>
+      <Title order={3} size="sm" fw={500} mt="xl" mb="md">
+        Service checks
+      </Title>
+      {Object.keys(checks).length === 0 ? (
+        <Card>
+          <EmptyState
+            icon="activity"
+            title="No health checks reported"
+            description="Service health checks will appear here when the worker reports them."
+          />
+        </Card>
+      ) : (
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 4 }} spacing="md">
+          {checkEntries.map(([key, check]) => (
+            <Card key={key}>
+              <Group justify="space-between" align="center">
+                <Title order={4} size="sm" fw={500}>
+                  {serviceLabels[key] ?? key}
+                </Title>
+                <StatusBadge status={check.status ?? "unknown"} />
+              </Group>
+              <Text size="lg" fw={600} mt="sm">
+                {check.latency_ms !== null && check.latency_ms !== undefined
+                  ? `${check.latency_ms}ms`
+                  : "N/A"}
+              </Text>
+              <Text size="xs" c="dimmed" mt={4}>
+                {check.detail ?? "No extra detail reported."}
+              </Text>
               {check.error ? (
-                <div className="meta mt-2" style={{ color: "var(--danger)" }}>
+                <Text size="xs" c="red" mt={4}>
                   {check.error}
-                </div>
+                </Text>
               ) : null}
-            </section>
-          ))
-        )}
-      </div>
-    </>
+            </Card>
+          ))}
+        </SimpleGrid>
+      )}
+    </PageShell>
   );
 }

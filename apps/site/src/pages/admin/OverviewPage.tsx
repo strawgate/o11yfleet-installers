@@ -1,9 +1,10 @@
 import { Link } from "react-router-dom";
 import { useMemo } from "react";
+import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { useAdminHealth, useAdminOverview, useAdminTenantsPage } from "../../api/hooks/admin";
 import { useAdminGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState, MetricCard, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
@@ -28,7 +29,6 @@ export default function OverviewPage() {
   const totalAgents = ov?.total_agents ?? ov?.agents ?? 0;
   const healthStatus = health.data?.status ?? (ov?.["health"] as string | undefined) ?? "unknown";
 
-  // Plan distribution
   const planCounts: Record<string, number> = {};
   for (const t of tenantList) {
     const plan = normalizePlanId(t.plan);
@@ -165,47 +165,48 @@ export default function OverviewPage() {
   if (health.error) return <ErrorState error={health.error} retry={() => void health.refetch()} />;
 
   return (
-    <>
-      <div className="page-head">
-        <h1>Admin Overview</h1>
-        <div className="actions">
-          <Link to="/admin/health" className="btn btn-ghost btn-sm">
+    <PageShell width="wide">
+      <PageHeader
+        title="Admin Overview"
+        actions={
+          <Button component={Link} to="/admin/health" variant="subtle" size="sm">
             System health
-          </Link>
-        </div>
-      </div>
+          </Button>
+        }
+      />
 
-      <div className="stat-grid">
-        <div className="stat">
-          <div className="val">{totalTenants}</div>
-          <div className="label">
-            {ov?.total_tenants !== undefined || ov?.tenants !== undefined
+      <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+        <MetricCard
+          label={
+            ov?.total_tenants !== undefined || ov?.tenants !== undefined
               ? "Total tenants"
-              : `Tenants in page ${tenantPagination?.page ?? 1}`}
-          </div>
+              : `Tenants in page ${tenantPagination?.page ?? 1}`
+          }
+          value={String(totalTenants)}
+        >
           <GuidanceSlot item={tenantInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">{totalConfigs}</div>
-          <div className="label">Total configs</div>
+        </MetricCard>
+        <MetricCard label="Total configs" value={String(totalConfigs)}>
           <GuidanceSlot item={configInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">{totalAgents}</div>
-          <div className="label">Total agents</div>
+        </MetricCard>
+        <MetricCard label="Total agents" value={String(totalAgents)}>
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
-        </div>
-        <div className="stat">
-          <div className="val">
-            <span
-              className={`tag tag-${healthStatus === "healthy" || healthStatus === "ok" ? "ok" : "warn"}`}
+        </MetricCard>
+        <Card>
+          <Stack gap={4}>
+            <Badge
+              color={healthStatus === "healthy" || healthStatus === "ok" ? "green" : "yellow"}
+              variant="light"
+              size="lg"
             >
               {healthStatus}
-            </span>
-          </div>
-          <div className="label">System health</div>
-        </div>
-      </div>
+            </Badge>
+            <Text size="xs" c="dimmed">
+              System health
+            </Text>
+          </Stack>
+        </Card>
+      </SimpleGrid>
 
       <GuidancePanel
         title="Platform operations"
@@ -220,97 +221,97 @@ export default function OverviewPage() {
         ]}
       />
 
-      <div className="mt-6" style={{ display: "grid", gridTemplateColumns: "1.2fr 1fr", gap: 24 }}>
-        {/* Recent tenants */}
-        <div className="dt-card">
-          <div className="dt-toolbar">
-            <h3>Recent tenants</h3>
-            <div className="spacer" />
-            <Link to="/admin/tenants" className="btn btn-ghost btn-sm">
+      <SimpleGrid
+        cols={{ base: 1, lg: 2 }}
+        spacing="md"
+        mt="md"
+        style={{ gridTemplateColumns: "1.2fr 1fr" }}
+      >
+        <Card>
+          <Group justify="space-between" align="center" mb="sm">
+            <Title order={3} size="sm" fw={500}>
+              Recent tenants
+            </Title>
+            <Button component={Link} to="/admin/tenants" variant="subtle" size="xs">
               View all
-            </Link>
-          </div>
-          <table className="dt">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Plan</th>
-                <th>Policy limit</th>
-                <th>Collector limit</th>
-                <th>Created</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recentTenants.length === 0 ? (
-                <tr>
-                  <td colSpan={5}>
-                    <EmptyState
-                      icon="users"
-                      title="No tenants yet"
-                      description="Create a tenant to start configuring workspaces and enrollment policy."
-                    >
-                      <Link to="/admin/tenants" className="btn btn-primary btn-sm">
-                        Create tenant
-                      </Link>
-                    </EmptyState>
-                  </td>
-                </tr>
-              ) : (
-                recentTenants.map((t) => (
-                  <tr key={t.id} className="clickable">
-                    <td className="name">
+            </Button>
+          </Group>
+          {recentTenants.length === 0 ? (
+            <EmptyState
+              icon="users"
+              title="No tenants yet"
+              description="Create a tenant to start configuring workspaces and enrollment policy."
+            >
+              <Button component={Link} to="/admin/tenants" size="sm">
+                Create tenant
+              </Button>
+            </EmptyState>
+          ) : (
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Name</Table.Th>
+                  <Table.Th>Plan</Table.Th>
+                  <Table.Th>Policy limit</Table.Th>
+                  <Table.Th>Collector limit</Table.Th>
+                  <Table.Th>Created</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {recentTenants.map((t) => (
+                  <Table.Tr key={t.id}>
+                    <Table.Td>
                       <Link to={`/admin/tenants/${t.id}`}>{t.name}</Link>
-                    </td>
-                    <td>
+                    </Table.Td>
+                    <Table.Td>
                       <PlanTag plan={t.plan ?? "starter"} />
-                    </td>
-                    <td>{(t["max_configs"] as number) ?? "—"}</td>
-                    <td>{(t["max_agents_per_config"] as number) ?? "—"}</td>
-                    <td className="meta">{relTime(t.created_at)}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
+                    </Table.Td>
+                    <Table.Td>{(t["max_configs"] as number) ?? "—"}</Table.Td>
+                    <Table.Td>{(t["max_agents_per_config"] as number) ?? "—"}</Table.Td>
+                    <Table.Td>
+                      <Text size="sm" c="dimmed">
+                        {relTime(t.created_at)}
+                      </Text>
+                    </Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Card>
 
-        {/* Plan distribution */}
-        <div className="dt-card">
-          <div className="dt-toolbar">
-            <h3>Plan distribution</h3>
-          </div>
-          <table className="dt">
-            <thead>
-              <tr>
-                <th>Plan</th>
-                <th>Tenants</th>
-              </tr>
-            </thead>
-            <tbody>
-              {Object.keys(planCounts).length === 0 ? (
-                <tr>
-                  <td colSpan={2}>
-                    <EmptyState
-                      icon="activity"
-                      title="No plan data"
-                      description="Plan distribution appears after tenants are created."
-                    />
-                  </td>
-                </tr>
-              ) : (
-                Object.entries(planCounts).map(([plan, count]) => (
-                  <tr key={plan}>
-                    <td>
+        <Card>
+          <Title order={3} size="sm" fw={500} mb="sm">
+            Plan distribution
+          </Title>
+          {Object.keys(planCounts).length === 0 ? (
+            <EmptyState
+              icon="activity"
+              title="No plan data"
+              description="Plan distribution appears after tenants are created."
+            />
+          ) : (
+            <Table>
+              <Table.Thead>
+                <Table.Tr>
+                  <Table.Th>Plan</Table.Th>
+                  <Table.Th>Tenants</Table.Th>
+                </Table.Tr>
+              </Table.Thead>
+              <Table.Tbody>
+                {Object.entries(planCounts).map(([plan, count]) => (
+                  <Table.Tr key={plan}>
+                    <Table.Td>
                       <PlanTag plan={plan} />
-                    </td>
-                    <td>{count}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </>
+                    </Table.Td>
+                    <Table.Td>{count}</Table.Td>
+                  </Table.Tr>
+                ))}
+              </Table.Tbody>
+            </Table>
+          )}
+        </Card>
+      </SimpleGrid>
+    </PageShell>
   );
 }
