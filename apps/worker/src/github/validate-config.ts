@@ -5,10 +5,30 @@
 // `{repo, sha}` and turns the result into a Check Run conclusion +
 // per-line annotations.
 //
-// MVP scope (this PR): YAML parses. Real validators (JSON Schema, exporter
-// reachability, fleet-version awareness) ship in follow-up PRs without
-// touching the orchestration around this function — keeps the workflow
-// plumbing stable while validator quality iterates.
+// What this PR validates:
+//   - YAML parses
+//   - Top-level is a mapping with known section keys (unknown keys → warning,
+//     not failure, since custom builders can extend the schema)
+//   - Each component section (receivers / processors / exporters / extensions
+//     / connectors) is a mapping of component-id → config
+//   - `service` is a mapping
+//   - `service.pipelines.<name>.{receivers,processors,exporters}` references
+//     resolve to a declared component (connectors count as both receivers
+//     and exporters per OpenTelemetry spec)
+//   - `service.extensions` references resolve to a declared extension
+//
+// Deliberately *not* validated here (each its own follow-up PR):
+//   - Per-component config schemas (would need a maintained schema source
+//     scattered across otelcol-contrib; high effort, separate scope)
+//   - `exporters[*].endpoint` URL parsing
+//   - Fleet-version awareness (component is in `available_components`)
+//   - Diff vs current rolled-out config (skip with neutral if unchanged)
+//
+// Annotation positions: every annotation lands on line 1 today. Pulling
+// real positions out of the YAML AST (via `parseDocument`) is mechanical
+// but adds enough code to deserve a separate PR. The Check Run UI shows
+// each annotation as a distinct row, so distinct messages on the same
+// line stay readable.
 
 import { parse as parseYaml } from "yaml";
 
@@ -41,11 +61,37 @@ export interface ValidationInput {
   yaml: string;
 }
 
+const TOP_LEVEL_SECTIONS = new Set([
+  "receivers",
+  "processors",
+  "exporters",
+  "extensions",
+  "connectors",
+  "service",
+]);
+
+type ComponentSection = "receivers" | "processors" | "exporters" | "extensions" | "connectors";
+const COMPONENT_SECTIONS: readonly ComponentSection[] = [
+  "receivers",
+  "processors",
+  "exporters",
+  "extensions",
+  "connectors",
+];
+
+interface Declarations {
+  receivers: Set<string>;
+  processors: Set<string>;
+  exporters: Set<string>;
+  extensions: Set<string>;
+  connectors: Set<string>;
+}
+
 /**
- * Run all validators against a single config file. The order of validators
- * is fixed so the highest-signal failure (parse) short-circuits cheaper
- * checks (schema, fleet-fit). Each validator returns annotations that are
- * concatenated into the final result.
+ * Run all validators against a single config file. Order is fixed so the
+ * highest-signal failure (parse) short-circuits cheaper checks. Each
+ * validator pushes annotations onto a shared list; the conclusion is
+ * derived from the worst level present.
  */
 export function validateCollectorConfig(input: ValidationInput): ValidationResult {
   const annotations: ValidationAnnotation[] = [];
@@ -92,13 +138,12 @@ export function validateCollectorConfig(input: ValidationInput): ValidationResul
   }
 
   if (!isPlainObject(parsed)) {
-    const got = Array.isArray(parsed) ? "array" : parsed instanceof Date ? "date" : typeof parsed;
     annotations.push({
       path: input.path,
       start_line: 1,
       end_line: 1,
       level: "failure",
-      message: `Top-level YAML must be a mapping (got ${got}).`,
+      message: `Top-level YAML must be a mapping (got ${typeName(parsed)}).`,
     });
     return {
       conclusion: "failure",
@@ -107,26 +152,268 @@ export function validateCollectorConfig(input: ValidationInput): ValidationResul
     };
   }
 
-  // ─── Real validators land in follow-up PRs ──────────────────────────
-  // Planned, in order of cheap → expensive:
-  //   - JSON Schema against a vendored otelcol-contrib schema
-  //   - Every component referenced by a `service.pipelines` entry is
-  //     declared in receivers/processors/exporters
-  //   - Every `exporters[*].endpoint` parses as a URL
-  //   - Every component is present in the fleet's known
-  //     `available_components` (per active collector versions)
-  //   - Diff vs current rolled-out config (skip with neutral if unchanged)
+  // ─── Structure ──────────────────────────────────────────────────────
+  validateStructure(parsed, input.path, annotations);
 
+  // ─── Pipeline reference resolution ──────────────────────────────────
+  const decls = gatherDeclarations(parsed);
+  validatePipelineRefs(parsed, decls, input.path, annotations);
+
+  // ─── Conclude ───────────────────────────────────────────────────────
+  return concludeFromAnnotations(annotations);
+}
+
+function validateStructure(
+  config: Record<string, unknown>,
+  path: string,
+  annotations: ValidationAnnotation[],
+): void {
+  // Unknown top-level keys are a warning, not a failure: custom collector
+  // builds can introduce new sections, and we don't want to block PRs over
+  // a key we don't recognize. The user gets a heads-up to double-check
+  // for typos (`recievers` is the classic one).
+  for (const key of Object.keys(config)) {
+    if (!TOP_LEVEL_SECTIONS.has(key)) {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "warning",
+        message: `Unknown top-level key '${key}'. Expected one of: ${[...TOP_LEVEL_SECTIONS].sort().join(", ")}.`,
+      });
+    }
+  }
+
+  for (const section of COMPONENT_SECTIONS) {
+    const value = config[section];
+    if (value !== undefined && value !== null && !isPlainObject(value)) {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "failure",
+        message: `'${section}' must be a mapping of component-id to config (got ${typeName(value)}).`,
+      });
+    }
+  }
+
+  const service = config["service"];
+  if (service !== undefined && service !== null && !isPlainObject(service)) {
+    annotations.push({
+      path,
+      start_line: 1,
+      end_line: 1,
+      level: "failure",
+      message: `'service' must be a mapping (got ${typeName(service)}).`,
+    });
+  }
+}
+
+function gatherDeclarations(config: Record<string, unknown>): Declarations {
+  const get = (key: ComponentSection): Set<string> => {
+    const section = config[key];
+    if (!isPlainObject(section)) return new Set();
+    return new Set(Object.keys(section));
+  };
+  return {
+    receivers: get("receivers"),
+    processors: get("processors"),
+    exporters: get("exporters"),
+    extensions: get("extensions"),
+    connectors: get("connectors"),
+  };
+}
+
+function validatePipelineRefs(
+  config: Record<string, unknown>,
+  decls: Declarations,
+  path: string,
+  annotations: ValidationAnnotation[],
+): void {
+  const service = config["service"];
+  if (!isPlainObject(service)) return;
+
+  // service.extensions: list of strings referencing declared extensions.
+  const serviceExtensions = service["extensions"];
+  if (serviceExtensions !== undefined) {
+    if (!Array.isArray(serviceExtensions)) {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "failure",
+        message: `service.extensions must be a list (got ${typeName(serviceExtensions)}).`,
+      });
+    } else {
+      for (const ref of serviceExtensions) {
+        if (typeof ref !== "string") {
+          annotations.push({
+            path,
+            start_line: 1,
+            end_line: 1,
+            level: "failure",
+            message: `service.extensions contains non-string entry: ${JSON.stringify(ref)}.`,
+          });
+          continue;
+        }
+        if (!decls.extensions.has(ref)) {
+          annotations.push({
+            path,
+            start_line: 1,
+            end_line: 1,
+            level: "failure",
+            message: `service.extensions references '${ref}', not declared in extensions.`,
+          });
+        }
+      }
+    }
+  }
+
+  const pipelines = service["pipelines"];
+  if (pipelines === undefined) return;
+  if (!isPlainObject(pipelines)) {
+    annotations.push({
+      path,
+      start_line: 1,
+      end_line: 1,
+      level: "failure",
+      message: `service.pipelines must be a mapping (got ${typeName(pipelines)}).`,
+    });
+    return;
+  }
+
+  // Connectors act as both receivers (in the downstream pipeline) and
+  // exporters (in the upstream pipeline) per the OpenTelemetry spec.
+  const validReceivers = new Set([...decls.receivers, ...decls.connectors]);
+  const validExporters = new Set([...decls.exporters, ...decls.connectors]);
+
+  for (const [pipelineName, pipelineDef] of Object.entries(pipelines)) {
+    if (!isPlainObject(pipelineDef)) {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "failure",
+        message: `pipelines.${pipelineName} must be a mapping (got ${typeName(pipelineDef)}).`,
+      });
+      continue;
+    }
+
+    checkPipelineRole(
+      pipelineName,
+      "receivers",
+      pipelineDef,
+      validReceivers,
+      "receivers or connectors",
+      path,
+      annotations,
+    );
+    checkPipelineRole(
+      pipelineName,
+      "processors",
+      pipelineDef,
+      decls.processors,
+      "processors",
+      path,
+      annotations,
+    );
+    checkPipelineRole(
+      pipelineName,
+      "exporters",
+      pipelineDef,
+      validExporters,
+      "exporters or connectors",
+      path,
+      annotations,
+    );
+  }
+}
+
+function checkPipelineRole(
+  pipelineName: string,
+  role: "receivers" | "processors" | "exporters",
+  pipeline: Record<string, unknown>,
+  validSet: Set<string>,
+  label: string,
+  path: string,
+  annotations: ValidationAnnotation[],
+): void {
+  const refs = pipeline[role];
+  if (refs === undefined) return;
+  if (!Array.isArray(refs)) {
+    annotations.push({
+      path,
+      start_line: 1,
+      end_line: 1,
+      level: "failure",
+      message: `pipelines.${pipelineName}.${role} must be a list (got ${typeName(refs)}).`,
+    });
+    return;
+  }
+  for (const ref of refs) {
+    if (typeof ref !== "string") {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "failure",
+        message: `pipelines.${pipelineName}.${role} contains non-string entry: ${JSON.stringify(ref)}.`,
+      });
+      continue;
+    }
+    if (!validSet.has(ref)) {
+      annotations.push({
+        path,
+        start_line: 1,
+        end_line: 1,
+        level: "failure",
+        message: `pipelines.${pipelineName}.${role} references '${ref}', not declared in ${label}.`,
+      });
+    }
+  }
+}
+
+function concludeFromAnnotations(annotations: ValidationAnnotation[]): ValidationResult {
+  const failures = annotations.filter((a) => a.level === "failure").length;
+  const warnings = annotations.filter((a) => a.level === "warning").length;
+
+  if (failures > 0) {
+    return {
+      conclusion: "failure",
+      summary: `❌ ${failures} error${failures === 1 ? "" : "s"}${warnings > 0 ? `, ${warnings} warning${warnings === 1 ? "" : "s"}` : ""}`,
+      text:
+        "Structural validation found one or more errors. Per-component config schema, " +
+        "endpoint URL parsing, and fleet-aware checks ship in follow-up PRs.",
+      annotations,
+    };
+  }
+  if (warnings > 0) {
+    return {
+      conclusion: "neutral",
+      summary: `⚠️ ${warnings} warning${warnings === 1 ? "" : "s"}`,
+      text: "Structure is valid but unknown top-level keys were found. Double-check for typos.",
+      annotations,
+    };
+  }
   return {
     conclusion: "success",
-    summary: "✅ YAML parses",
-    text: "YAML parses. Schema and fleet-aware checks land in follow-up PRs.",
+    summary: "✅ Structure valid, pipeline references resolve",
+    text:
+      "YAML parses, top-level structure is valid, and every pipeline reference resolves to a " +
+      "declared component. Per-component config schema and fleet-aware checks land in follow-up PRs.",
     annotations,
   };
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return Object.prototype.toString.call(value) === "[object Object]";
+}
+
+function typeName(value: unknown): string {
+  if (Array.isArray(value)) return "array";
+  if (value === null) return "null";
+  if (value instanceof Date) return "date";
+  return typeof value;
 }
 
 /**
