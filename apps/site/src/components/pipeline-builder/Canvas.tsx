@@ -22,13 +22,23 @@ import { determineConnectionSignal } from "@o11yfleet/core/pipeline";
 import type { BuilderEdge, BuilderNode } from "./types";
 import { mapToCoreNode } from "./schema/to-graph";
 
-export type CanvasProps = {
-  nodes: BuilderNode[];
-  edges: BuilderEdge[];
-  onChange: (next: { nodes: BuilderNode[]; edges: BuilderEdge[] }) => void;
-  readOnly?: boolean;
+type CanvasGraph = { nodes: BuilderNode[]; edges: BuilderEdge[] };
+
+type BaseCanvasProps = CanvasGraph & {
   height?: number;
 };
+
+type ReadOnlyCanvasProps = BaseCanvasProps & {
+  readOnly: true;
+  onChange?: never;
+};
+
+type EditableCanvasProps = BaseCanvasProps & {
+  readOnly?: false;
+  onChange: (next: CanvasGraph) => void;
+};
+
+export type CanvasProps = ReadOnlyCanvasProps | EditableCanvasProps;
 
 /**
  * Wraps <ReactFlow> with our node/edge types, validity rules, and
@@ -56,14 +66,14 @@ function CanvasInner({ nodes, edges, onChange, readOnly, height = 600 }: CanvasP
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BuilderNode>[]) => {
-      onChange({ nodes: applyNodeChanges<BuilderNode>(changes, nodes), edges });
+      onChange?.({ nodes: applyNodeChanges<BuilderNode>(changes, nodes), edges });
     },
     [edges, nodes, onChange],
   );
 
   const onEdgesChange = useCallback(
     (changes: EdgeChange<BuilderEdge>[]) => {
-      onChange({ nodes, edges: applyEdgeChanges<BuilderEdge>(changes, edges) });
+      onChange?.({ nodes, edges: applyEdgeChanges<BuilderEdge>(changes, edges) });
     },
     [edges, nodes, onChange],
   );
@@ -83,7 +93,7 @@ function CanvasInner({ nodes, edges, onChange, readOnly, height = 600 }: CanvasP
         type: "signal",
         data: { signal },
       };
-      onChange({ nodes, edges: addEdge(newEdge, edges) });
+      onChange?.({ nodes, edges: addEdge(newEdge, edges) });
     },
     [edges, nodeMap, nodes, onChange],
   );

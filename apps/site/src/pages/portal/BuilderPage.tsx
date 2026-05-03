@@ -41,7 +41,6 @@ import {
   ValidationStrip,
   layoutLR,
   toFlow,
-  type BuilderEdge,
   type BuilderNode,
 } from "@/components/pipeline-builder";
 import { AddComponentPanel } from "../../components/pipeline-builder/nodes/AddComponentPanel";
@@ -129,13 +128,6 @@ export default function BuilderPage() {
     const next = toFlow(graph);
     return { nodes: layoutLR(next.nodes, next.edges), edges: next.edges };
   }, [graph]);
-  const [canvasState, setCanvasState] = useState<{
-    nodes: BuilderNode[];
-    edges: BuilderEdge[];
-  }>(flow);
-  useEffect(() => {
-    setCanvasState(flow);
-  }, [flow]);
 
   const guidanceRequest: AiGuidanceRequest = buildInsightRequest(
     insightSurface,
@@ -230,13 +222,13 @@ export default function BuilderPage() {
       await savePipeline.mutateAsync(yamlPreview);
       setSaveModalOpen(false);
       notifications.show({
-        title: "Pipeline saved",
-        message: "Pipeline saved successfully.",
-        color: "green",
+        title: "Pipeline preview generated",
+        message: "Saving pipelines is not yet wired to the backend. Copy the YAML below to apply.",
+        color: "yellow",
       });
     } catch (error) {
       notifications.show({
-        title: "Failed to save pipeline",
+        title: "Failed to generate preview",
         message: error instanceof Error ? error.message : "Unknown error",
         color: "red",
       });
@@ -268,7 +260,7 @@ export default function BuilderPage() {
               onClick={() => setSaveModalOpen(true)}
               disabled={!validation.ok || yamlPreviewError !== null}
             >
-              Save pipeline
+              Review YAML export
             </Button>
           </>
         }
@@ -387,13 +379,7 @@ service:
             </Text>
 
             <Box mt="md">
-              <Canvas
-                nodes={canvasState.nodes}
-                edges={canvasState.edges}
-                onChange={setCanvasState}
-                readOnly
-                height={520}
-              />
+              <Canvas nodes={flow.nodes} edges={flow.edges} readOnly height={520} />
             </Box>
 
             <Group mt="md" gap="xs" aria-label="Component counts by role">
@@ -440,18 +426,22 @@ service:
         onRefresh={() => void guidance.refetch()}
       />
 
-      <Modal opened={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Save pipeline">
+      <Modal
+        opened={saveModalOpen}
+        onClose={() => setSaveModalOpen(false)}
+        title="Review YAML export"
+      >
         <Stack gap="md">
           <Text size="sm">
-            Are you sure you want to save this pipeline? This will create a new version of the
-            pipeline.
+            Saving pipelines is not yet wired to the backend. Review and copy the generated YAML
+            below if you want to apply it manually.
           </Text>
           <Group gap="xs" justify="flex-end">
             <Button variant="default" onClick={() => setSaveModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={() => void handleSavePipeline()} loading={savePipeline.isPending}>
-              Save
+              Continue
             </Button>
           </Group>
         </Stack>
@@ -461,7 +451,7 @@ service:
         opened={isAddPanelOpen}
         onClose={() => setIsAddPanelOpen(false)}
         onAddNode={handleAddNode}
-        existingNodes={canvasState.nodes}
+        existingNodes={flow.nodes}
       />
     </PageShell>
   );

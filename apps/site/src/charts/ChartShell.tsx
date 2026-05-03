@@ -16,9 +16,6 @@ export type ChartShellProps = {
   newAccountAgeMs?: number;
   /** Error from the data layer; render retry affordance. */
   error?: { message: string; retry?: () => void } | null;
-  /** When true, render the chart frame even with zero data so users don't
-   * see a blank "broken" panel (Cloudflare pattern). */
-  alwaysFrame?: boolean;
   /** Title rendered above the chart frame. Optional. */
   title?: ReactNode;
   /** Right-aligned subtitle: typically the chosen resolution. */
@@ -40,7 +37,6 @@ export function ChartShell(props: ChartShellProps) {
     status = "ok",
     newAccountAgeMs,
     error,
-    alwaysFrame = true,
     title,
     subtitle,
     children,
@@ -138,8 +134,6 @@ export function ChartShell(props: ChartShellProps) {
       </Box>
     </Stack>
   );
-
-  void alwaysFrame; // reserved: distinguish "draw axes anyway" from "no frame"
 }
 
 function ChartFrame({ height, children }: { height: number; children: ReactNode }) {
