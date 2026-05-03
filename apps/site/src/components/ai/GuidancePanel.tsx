@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Button } from "@mantine/core";
 import type { AiGuidanceItem, AiGuidanceResponse } from "@o11yfleet/core/ai";
 import { GuidanceBadge } from "./GuidanceBadge";
 
@@ -33,9 +34,9 @@ export function GuidancePanel({
           <h3>{title}</h3>
         </div>
         {onRefresh ? (
-          <button className="btn btn-ghost btn-sm" onClick={onRefresh} disabled={isLoading}>
-            {isLoading ? "Analyzing..." : "Refresh"}
-          </button>
+          <Button size="compact-xs" variant="default" onClick={onRefresh} loading={isLoading}>
+            Refresh
+          </Button>
         ) : null}
       </div>
 
@@ -72,9 +73,15 @@ function GuidanceItemView({ item }: { item: AiGuidanceItem }) {
         </div>
       ) : null}
       {href ? (
-        <Link className="btn btn-ghost btn-sm ai-action" to={href}>
+        <Button
+          component={Link}
+          to={href}
+          size="compact-xs"
+          variant="default"
+          className="ai-action"
+        >
           {item.action?.label ?? "Open"}
-        </Link>
+        </Button>
       ) : null}
     </article>
   );

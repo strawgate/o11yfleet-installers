@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Button } from "@mantine/core";
 import { useAuth } from "../api/hooks/auth";
 
 export default function NotFoundPage() {
@@ -13,9 +14,9 @@ export default function NotFoundPage() {
         <p className="sub">
           The page you&rsquo;re looking for doesn&rsquo;t exist or has been moved.
         </p>
-        <Link to={dest} className="btn btn-primary">
+        <Button component={Link} to={dest} mt="md">
           {user ? "Back to portal" : "Back to home"}
-        </Link>
+        </Button>
       </div>
     </div>
   );
