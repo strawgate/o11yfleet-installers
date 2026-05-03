@@ -41,7 +41,7 @@ import {
   StatusBadge as AppStatusBadge,
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Button, Tabs, Text, Title } from "@mantine/core";
+import { Button, Card, Tabs, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -469,8 +469,10 @@ function OverviewTab({
       className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2"
     >
       {/* Identity card */}
-      <div className="card card-pad">
-        <h3 className="card-title">Identity</h3>
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Identity
+        </Title>
         <dl className="detail-list">
           <dt>Instance UID</dt>
           <dd className="mono-cell text-sm">{agentUid}</dd>
@@ -505,11 +507,13 @@ function OverviewTab({
           <dt>Last seen</dt>
           <dd>{relTime(tsToIso(agent.last_seen_at))}</dd>
         </dl>
-      </div>
+      </Card>
 
       {/* Health card */}
-      <div className="card card-pad">
-        <h3 className="card-title">Health</h3>
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Health
+        </Title>
         <dl className="detail-list">
           <dt>Status</dt>
           <dd>
@@ -540,11 +544,13 @@ function OverviewTab({
             {(agent.last_error as string) || "—"}
           </dd>
         </dl>
-      </div>
+      </Card>
 
       {/* Configuration card */}
-      <div className="card card-pad">
-        <h3 className="card-title">Configuration</h3>
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Configuration
+        </Title>
         <dl className="detail-list">
           <dt>Config sync</dt>
           <dd>
@@ -559,11 +565,13 @@ function OverviewTab({
             {hashLabel(agent.effective_config_hash as string | undefined)}
           </dd>
         </dl>
-      </div>
+      </Card>
 
       {/* Capabilities card */}
-      <div className="card card-pad">
-        <h3 className="card-title">Capabilities</h3>
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Capabilities
+        </Title>
         {capabilities.length > 0 ? (
           <div className="flex flex-wrap gap-1.5 mt-2">
             {capabilities.map((cap) => (
@@ -575,7 +583,7 @@ function OverviewTab({
         ) : (
           <p className="meta mt-2">No capabilities reported</p>
         )}
-      </div>
+      </Card>
     </div>
   );
 }
@@ -601,8 +609,10 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
   return (
     <div id="agent-tab-pipeline" role="tabpanel" className="mt-6 space-y-4">
       {/* Pipeline flow */}
-      <div className="card card-pad">
-        <h3 className="card-title mb-3">Pipeline Flow</h3>
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Pipeline Flow
+        </Title>
         {topology.pipelines.length === 0 ? (
           <p className="meta">No pipelines defined in service configuration.</p>
         ) : (
@@ -633,18 +643,20 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
             ))}
           </div>
         )}
-      </div>
+      </Card>
 
       {/* Extensions */}
       {topology.extensions.length > 0 && (
-        <div className="card card-pad">
-          <h3 className="card-title mb-3">Extensions</h3>
+        <Card>
+          <Title order={3} size="sm" mb="md">
+            Extensions
+          </Title>
           <div className="flex flex-wrap gap-2">
             {topology.extensions.map((ext) => (
               <ComponentChip key={ext.name ?? ext.type} component={ext} />
             ))}
           </div>
-        </div>
+        </Card>
       )}
 
       {/* Component detail table */}
@@ -739,9 +751,11 @@ function ConfigTab({
 
   return (
     <div id="agent-tab-config" role="tabpanel" className="mt-6 space-y-4">
-      <div className="card card-pad">
+      <Card>
         <div className="flex items-center justify-between mb-3">
-          <h3 className="card-title">Effective Configuration</h3>
+          <Title order={3} size="sm" mb="md">
+            Effective Configuration
+          </Title>
           <div className="flex items-center gap-3">
             <span className="meta text-xs">
               Hash: <code className="mono-cell">{hashLabel(effectiveHash, 12)}</code>
@@ -756,7 +770,7 @@ function ConfigTab({
           </div>
         )}
         <pre className="config-viewer">{effectiveConfig}</pre>
-      </div>
+      </Card>
     </div>
   );
 }
