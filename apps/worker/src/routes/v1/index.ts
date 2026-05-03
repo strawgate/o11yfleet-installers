@@ -41,6 +41,7 @@ import { typedJsonResponse } from "../../shared/responses.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { z } from "zod";
+import { diffLines } from "diff";
 import { getDb } from "../../db/client.js";
 import { compileForBatch } from "../../db/queries.js";
 import {
@@ -1133,14 +1134,27 @@ function versionSummary(version: {
 }
 
 function summarizeTextDiff(previous: string, latest: string) {
-  const previousLines = previous.split(/\r?\n/);
-  const latestLines = latest.split(/\r?\n/);
-  const { addedLines, removedLines } = orderedLineDiffCounts(previousLines, latestLines);
+  // Use the `diff` package for accurate line-level diffs
+  // This replaces the hand-rolled LCS algorithm which had O(N×M) worst case
+  const changes = diffLines(previous, latest);
+  let addedLines = 0;
+  let removedLines = 0;
+
+  for (const part of changes) {
+    // Split by newlines and filter empty trailing entries
+    const lines = part.value.split(/\r?\n/).filter((l: string, i: number, arr: string[]) => i < arr.length - 1 || l !== "");
+    const count = lines.length || (part.value.length > 0 ? 1 : 0);
+    if (part.added) {
+      addedLines += count;
+    } else if (part.removed) {
+      removedLines += count;
+    }
+  }
 
   return {
-    previous_line_count: previousLines.length,
-    latest_line_count: latestLines.length,
-    line_count_delta: latestLines.length - previousLines.length,
+    previous_line_count: previous.split(/\r?\n/).length,
+    latest_line_count: latest.split(/\r?\n/).length,
+    line_count_delta: latest.split(/\r?\n/).length - previous.split(/\r?\n/).length,
     size_bytes_delta: utf8ByteLength(latest) - utf8ByteLength(previous),
     added_lines: addedLines,
     removed_lines: removedLines,
@@ -1170,83 +1184,6 @@ function utf8ByteLength(str: string): number {
   }
   return len;
 }
-
-/**
- * Computes the count of added and removed lines between two YAML texts.
- *
- * Uses a hybrid approach to balance accuracy and performance:
- * - For small diffs (middle section ≤200 lines each): exact LCS algorithm
- * - For large diffs: reports all middle lines as changed to avoid O(N×M) worst case
- *
- * The common prefix/suffix are excluded from the change count since they're
- * unchanged between the two versions.
- */
-function orderedLineDiffCounts(previousLines: string[], latestLines: string[]) {
-  const prefixLength = commonPrefixLength(previousLines, latestLines);
-  const suffixLength = commonSuffixLength(previousLines, latestLines, prefixLength);
-  const previousMiddle = previousLines.slice(prefixLength, previousLines.length - suffixLength);
-  const latestMiddle = latestLines.slice(prefixLength, latestLines.length - suffixLength);
-
-  // For small middle sections, use exact LCS which is fast enough.
-  // For large sections, fall back to a simpler approximation to avoid O(N×M) worst case.
-  // The threshold of 200 was chosen to keep worst-case under ~40K operations
-  // while still providing accurate results for typical diffs.
-  if (previousMiddle.length <= 200 && latestMiddle.length <= 200) {
-    const commonMiddleLines = longestCommonSubsequenceLength(previousMiddle, latestMiddle);
-    return {
-      addedLines: latestMiddle.length - commonMiddleLines,
-      removedLines: previousMiddle.length - commonMiddleLines,
-    };
-  }
-
-  // For large diffs, report the middle sections as changed without exact counts.
-  // This is a performance trade-off: we lose precision but avoid blocking the worker.
-  return {
-    addedLines: latestMiddle.length,
-    removedLines: previousMiddle.length,
-  };
-}
-
-/**
- * Standard LCS using DP. O(N×M) time, O(min(N,M)) space.
- * For small arrays (<=200 elements), this is fast enough (~40K ops worst case).
- */
-function longestCommonSubsequenceLength(left: string[], right: string[]): number {
-  const [shorter, longer] = left.length <= right.length ? [left, right] : [right, left];
-  let previous = new Uint32Array(shorter.length + 1);
-  let current = new Uint32Array(shorter.length + 1);
-
-  for (let i = 1; i <= longer.length; i += 1) {
-    const longerLine = longer[i - 1];
-    for (let j = 1; j <= shorter.length; j += 1) {
-      const shorterLine = shorter[j - 1];
-      current[j] =
-        longerLine === shorterLine
-          ? (previous[j - 1] ?? 0) + 1
-          : Math.max(previous[j] ?? 0, current[j - 1] ?? 0);
-    }
-    [previous, current] = [current, previous];
-  }
-
-  return previous[shorter.length] ?? 0;
-}
-
-function commonPrefixLength(left: string[], right: string[]) {
-  const max = Math.min(left.length, right.length);
-  let index = 0;
-  while (index < max && left[index] === right[index]) index += 1;
-  return index;
-}
-
-function commonSuffixLength(left: string[], right: string[], prefixLength: number) {
-  const max = Math.min(left.length, right.length) - prefixLength;
-  let count = 0;
-  while (count < max && left[left.length - 1 - count] === right[right.length - 1 - count]) {
-    count += 1;
-  }
-  return count;
-}
-
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
 }
