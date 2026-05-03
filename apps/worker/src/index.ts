@@ -6,6 +6,7 @@ import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { getDb } from "./db/client.js";
+import { runManifestDriftCheck } from "./jobs/manifest-drift-check.js";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
 import { verifyClaim, verifyEnrollmentToken, isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
@@ -91,6 +92,7 @@ const CRON_SWEEP_CONCURRENCY = 100;
 const CRON_SWEEP_TIMEOUT_MS = 2_000;
 const STALE_AGENT_SWEEP_CRON = "17 3 * * *";
 const PRODUCT_METRICS_CRON = "0 0 * * *";
+const MANIFEST_DRIFT_CHECK_CRON = "12 6 * * *";
 
 type TenantPlanBucket = "free" | "paid" | "enterprise";
 
@@ -247,6 +249,10 @@ export default {
   ): Promise<void> {
     if (controller.cron === PRODUCT_METRICS_CRON) {
       await emitProductMetrics(env);
+      return;
+    }
+    if (controller.cron === MANIFEST_DRIFT_CHECK_CRON) {
+      await runManifestDriftCheck(env);
       return;
     }
     if (controller.cron !== STALE_AGENT_SWEEP_CRON) {

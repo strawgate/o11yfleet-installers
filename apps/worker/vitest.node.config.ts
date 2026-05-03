@@ -24,6 +24,7 @@ export default defineConfig({
       "test/github-api.test.ts",
       "test/github-installation-token.test.ts",
       "test/github-check-runs.test.ts",
+      "test/manifest-drift-check.test.ts",
     ],
     coverage: {
       provider: "v8",
@@ -43,6 +44,7 @@ export default defineConfig({
         "src/github/validate-config.ts",
         "src/github/check-runs.ts",
         "src/github/installation-token.ts",
+        "src/jobs/manifest-drift-check.ts",
       ],
     },
   },

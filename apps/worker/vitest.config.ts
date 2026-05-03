@@ -65,6 +65,7 @@ export default defineConfig({
       "test/github-api.test.ts",
       "test/github-installation-token.test.ts",
       "test/github-check-runs.test.ts",
+      "test/manifest-drift-check.test.ts",
     ],
     // Parallel file execution for faster CI runs on multi-core runners.
     testTimeout: 30_000,
