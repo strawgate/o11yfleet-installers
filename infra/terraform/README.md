@@ -402,20 +402,20 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Requirements
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.5 |
 | <a name="requirement_cloudflare"></a> [cloudflare](#requirement\_cloudflare) | 5.19.1 |
 
 ## Providers
 
 | Name | Version |
-|------|---------|
+| ---- | ------- |
 | <a name="provider_cloudflare"></a> [cloudflare](#provider\_cloudflare) | 5.19.1 |
 
 ## Resources
 
 | Name | Type |
-|------|------|
+| ---- | ---- |
 | [cloudflare_d1_database.fleet](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/d1_database) | resource |
 | [cloudflare_dns_record.api](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/dns_record) | resource |
 | [cloudflare_dns_record.site](https://registry.terraform.io/providers/cloudflare/cloudflare/5.19.1/docs/resources/dns_record) | resource |
@@ -433,7 +433,7 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Inputs
 
 | Name | Description | Type | Default | Required |
-|------|-------------|------|---------|:--------:|
+| ---- | ----------- | ---- | ------- | :------: |
 | <a name="input_admin_domain"></a> [admin\_domain](#input\_admin\_domain) | Override admin custom domain. | `string` | `null` | no |
 | <a name="input_ai_guidance_base_url"></a> [ai\_guidance\_base\_url](#input\_ai\_guidance\_base\_url) | OpenAI-compatible AI guidance base URL exposed to the Worker. Empty for fixture mode. | `string` | `""` | no |
 | <a name="input_ai_guidance_model"></a> [ai\_guidance\_model](#input\_ai\_guidance\_model) | AI guidance model name exposed to the Worker. | `string` | `"o11yfleet-guidance-fixture"` | no |
@@ -480,7 +480,7 @@ not upload the built site assets unless `manage_site_deployment=true`.
 ## Outputs
 
 | Name | Description |
-|------|-------------|
+| ---- | ----------- |
 | <a name="output_api_domain"></a> [api\_domain](#output\_api\_domain) | API hostname routed to the Worker. |
 | <a name="output_d1_database_id"></a> [d1\_database\_id](#output\_d1\_database\_id) | D1 database ID for Wrangler FP\_DB binding. |
 | <a name="output_d1_database_name"></a> [d1\_database\_name](#output\_d1\_database\_name) | D1 database name for Wrangler FP\_DB binding. |
