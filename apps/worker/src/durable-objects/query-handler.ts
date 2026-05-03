@@ -73,15 +73,14 @@ export function handleGetAgents(repo: AgentStateRepository, request: Request): R
 export function handleGetAgent(
   repo: AgentStateRepository,
   uid: string,
-  getActiveInstanceUids: () => Set<string>,
+  isConnected: (uid: string) => boolean,
   getDesiredConfig: () => DesiredConfig,
 ): Response {
   const agent = repo.getAgent(uid);
   if (!agent) return Response.json({ error: "Agent not found" }, { status: 404 });
 
-  // Enrich with live connection status
-  const activeUids = getActiveInstanceUids();
-  const isConnected = activeUids.has(uid);
+  // Enrich with live connection status — O(1) tag lookup
+  const connected = isConnected(uid);
 
   // Desired config for drift detection
   const desired = getDesiredConfig();
@@ -90,11 +89,11 @@ export function handleGetAgent(
 
   // Uptime: time since connected_at (if currently connected)
   const connectedAt = agent["connected_at"] as number | null;
-  const uptimeMs = isConnected && connectedAt ? Date.now() - connectedAt : null;
+  const uptimeMs = connected && connectedAt ? Date.now() - connectedAt : null;
 
   return typedJsonResponse(agentDetailSchema, {
     ...(agent as Agent),
-    is_connected: isConnected,
+    is_connected: connected,
     desired_config_hash: desired.hash,
     is_drifted: isDrifted,
     uptime_ms: uptimeMs,

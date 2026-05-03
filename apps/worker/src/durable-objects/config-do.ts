@@ -155,15 +155,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  private getActiveInstanceUids(): Set<string> {
-    const active = new Set<string>();
+  /** O(1) tag-based check with fallback for enrollment connections. */
+  private isAgentConnected(uid: string): boolean {
+    // Fast path: tag-based O(1) lookup (covers reconnect connections)
+    if (this.ctx.getWebSockets(uid).length > 0) return true;
+    // Enrollment connections have a stale tag (UID assigned post-accept).
+    // This is rare (only until the agent's first reconnect) and only
+    // called from admin query paths, never the hot message path.
     for (const ws of this.ctx.getWebSockets()) {
-      const attachment = parseAttachment(ws.deserializeAttachment());
-      if (attachment) {
-        active.add(attachment.instance_uid);
-      }
+      const att = parseAttachment(ws.deserializeAttachment());
+      if (att?.instance_uid === uid) return true;
     }
-    return active;
+    return false;
   }
 
   private commandCtx(): CommandContext {
@@ -213,7 +216,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     if (url.pathname === "/command/sweep" && request.method === "POST")
       return handleSweep(
         this.commandCtx(),
-        () => this.getActiveInstanceUids(),
+        (uid) => this.isAgentConnected(uid),
         () => this.emitMetrics(),
       );
     if (url.pathname === "/command/disconnect" && request.method === "POST")
@@ -235,7 +238,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return handleGetAgent(
         this.repo,
         agentMatch[1]!,
-        () => this.getActiveInstanceUids(),
+        (uid) => this.isAgentConnected(uid),
         () => this.getDesiredConfig(),
       );
 
@@ -326,7 +329,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const pair = new WebSocketPair();
     const [client, server] = [pair[0], pair[1]];
 
-    this.ctx.acceptWebSocket(server);
+    this.ctx.acceptWebSocket(server, [instanceUid]);
 
     const attachment: WSAttachment = {
       tenant_id: tenantId,
@@ -404,13 +407,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         );
       }
 
-      // Duplicate UID detection (OpAMP spec §3.2.1.2)
+      // Duplicate UID detection (OpAMP spec §3.2.1.2) — O(1) via WebSocket tags
       if (agentMsg.sequence_num === 0) {
-        const otherSockets = this.ctx.getWebSockets().filter((s) => s !== ws);
-        const isDuplicate = otherSockets.some((s) => {
-          const att = parseAttachment(s.deserializeAttachment());
-          return att?.instance_uid === attachment!.instance_uid;
-        });
+        const existing = this.ctx.getWebSockets(attachment.instance_uid);
+        const isDuplicate = existing.length > 1 || (existing.length === 1 && existing[0] !== ws);
         if (isDuplicate) {
           const newUid = new Uint8Array(16);
           crypto.getRandomValues(newUid);
@@ -655,12 +655,17 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
   }
 
-  override async webSocketError(ws: WebSocket, _error: unknown): Promise<void> {
+  override async webSocketError(ws: WebSocket, error: unknown): Promise<void> {
     this.ensureInit();
-    const attachment = parseAttachment(ws.deserializeAttachment());
+    let attachment: ReturnType<typeof parseAttachment> = null;
+    try {
+      attachment = parseAttachment(ws.deserializeAttachment());
+    } catch {
+      // WebSocket may be in a bad state; proceed without attachment
+    }
 
     const span = startWsLifecycleSpan("error", attachment?.instance_uid ?? "unknown");
-    span.setStatus({ code: SpanStatusCode.ERROR });
+    recordSpanError(span, error);
     try {
       if (attachment) {
         const config = this.getDesiredConfig();

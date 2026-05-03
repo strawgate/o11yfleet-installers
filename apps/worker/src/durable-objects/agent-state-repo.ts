@@ -882,7 +882,7 @@ export function getAgent(sql: SqlStorage, uid: string): Record<string, unknown> 
 export function sweepStaleAgents(
   sql: SqlStorage,
   staleThresholdMs: number,
-  activeInstanceUids = new Set<string>(),
+  isConnected: (uid: string) => boolean = () => false,
 ): StaleAgent[] {
   const cutoff = Date.now() - staleThresholdMs;
   const candidates = sql
@@ -893,7 +893,7 @@ export function sweepStaleAgents(
       cutoff,
     )
     .toArray()
-    .filter((r) => !activeInstanceUids.has(r["instance_uid"] as string));
+    .filter((r) => !isConnected(r["instance_uid"] as string));
 
   const stale = candidates.map((r) => ({
     instance_uid: r["instance_uid"] as string,

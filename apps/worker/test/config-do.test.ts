@@ -282,7 +282,7 @@ describe("Config Durable Object", () => {
         const swept = sweepStaleAgents(
           state.storage.sql,
           3 * 60 * 60 * 1000,
-          new Set(["active-agent-1"]),
+          (uid) => uid === "active-agent-1",
         );
         expect(swept).toHaveLength(0);
 

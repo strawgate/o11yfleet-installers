@@ -48,6 +48,8 @@ export async function handleSetDesiredConfig(
   const sockets = ctx.getWebSockets();
   const desiredHashBytes = hexToUint8Array(body.config_hash);
   let pushed = 0;
+  let failed = 0;
+  let skippedNoCap = 0;
 
   const configMap = buildConfigMap(body.config_content ?? null);
 
@@ -62,6 +64,7 @@ export async function handleSetDesiredConfig(
 
   const protoBroadcast = prepareBroadcastMessage(broadcastTemplate);
 
+  let batchCount = 0;
   for (const ws of sockets) {
     const attachment = parseAttachment(ws.deserializeAttachment());
     if (!attachment) continue;
@@ -70,6 +73,7 @@ export async function handleSetDesiredConfig(
       attachment.capabilities !== undefined &&
       !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
     ) {
+      skippedNoCap++;
       continue;
     }
 
@@ -78,31 +82,45 @@ export async function handleSetDesiredConfig(
       ws.send(protoBroadcast(uid));
       pushed++;
     } catch {
-      /* Socket may have closed */
+      failed++;
+    }
+    batchCount++;
+    if (batchCount % 1000 === 0) {
+      // Yield to event loop periodically to allow GC and buffer flushing
+      await new Promise<void>((r) => {
+        setTimeout(r, 0);
+      });
     }
   }
 
   await ctx.ensureAlarm();
-  return Response.json({ pushed, config_hash: body.config_hash });
+  return Response.json({
+    pushed,
+    failed,
+    skipped_no_cap: skippedNoCap,
+    config_hash: body.config_hash,
+  });
 }
 
 export function handleDisconnectAll(ctx: CommandContext): Response {
   const sockets = ctx.getWebSockets();
   let closed = 0;
+  let failed = 0;
   for (const ws of sockets) {
     try {
       ws.close(4001, "Server-initiated disconnect");
       closed++;
     } catch {
-      /* already closed */
+      failed++;
     }
   }
-  return Response.json({ disconnected: closed });
+  return Response.json({ disconnected: closed, failed });
 }
 
 export function handleRestartCommand(ctx: CommandContext): Response {
   const sockets = ctx.getWebSockets();
   let sent = 0;
+  let failed = 0;
   let skippedNoCap = 0;
   for (const ws of sockets) {
     try {
@@ -124,27 +142,28 @@ export function handleRestartCommand(ctx: CommandContext): Response {
       ws.send(encodeServerToAgent(msg));
       sent++;
     } catch {
-      /* skip broken sockets */
+      failed++;
     }
   }
   return Response.json({
     restarted: sent,
+    failed,
     skipped_no_cap: skippedNoCap,
   });
 }
 
 export async function handleSweep(
   ctx: CommandContext,
-  getActiveInstanceUids: () => Set<string>,
+  isConnected: (uid: string) => boolean,
   emitMetrics: () => void,
 ): Promise<Response> {
   const start = Date.now();
-  const activeInstanceUids = getActiveInstanceUids();
-  const staleUids = ctx.repo.sweepStaleAgents(STALE_AGENT_THRESHOLD_MS, activeInstanceUids);
+  const staleUids = ctx.repo.sweepStaleAgents(STALE_AGENT_THRESHOLD_MS, isConnected);
+  const activeSocketCount = ctx.getWebSockets().length;
   const durationMs = Date.now() - start;
   ctx.repo.recordSweep({
     staleCount: staleUids.length,
-    activeSocketCount: activeInstanceUids.size,
+    activeSocketCount,
     durationMs,
   });
 
@@ -153,7 +172,7 @@ export async function handleSweep(
   try {
     ctx.analytics?.writeDataPoint({
       blobs: ["stale_sweep", tenantId, configId],
-      doubles: [Date.now(), staleUids.length, activeInstanceUids.size, durationMs],
+      doubles: [Date.now(), staleUids.length, activeSocketCount, durationMs],
       indexes: [tenantId],
     });
   } catch {
@@ -167,7 +186,7 @@ export async function handleSweep(
 
   return Response.json({
     swept: staleUids.length,
-    active_websockets: activeInstanceUids.size,
+    active_websockets: activeSocketCount,
     duration_ms: durationMs,
   });
 }

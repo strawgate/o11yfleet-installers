@@ -7,6 +7,7 @@
     "lint": "oxlint src",
     "typecheck": "tsc --noEmit",
     "load": "tsx src/load-test.ts",
+    "bench": "tsx src/scaling-bench.ts",
     "smoke": "tsx src/smoke-test.ts",
     "mixed": "tsx src/mixed-config-do.ts"
   },

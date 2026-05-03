@@ -99,7 +99,7 @@ export interface AgentStateRepository {
   computeMetrics(desiredConfigHash: string | null, staleThresholdMs: number): ConfigMetrics;
 
   // Sweep
-  sweepStaleAgents(thresholdMs: number, activeUids: Set<string>): StaleAgent[];
+  sweepStaleAgents(thresholdMs: number, isConnected?: (uid: string) => boolean): StaleAgent[];
   recordSweep(result: SweepResult): void;
   getSweepStats(): SweepStats;
 }

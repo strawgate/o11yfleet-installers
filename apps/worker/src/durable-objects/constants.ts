@@ -1,7 +1,9 @@
 import { ServerCapabilities } from "@o11yfleet/core/codec";
 
-// CF Durable Objects support max ~32K concurrent WebSocket connections.
-export const MAX_AGENTS_PER_CONFIG = 32_000;
+// Per-message processing is O(1) (tag-based UID lookup, no full materialization).
+// Remaining O(N) paths: broadcast (admin-triggered, with yielding) and
+// getWebSockets().length (~200 bytes/handle, ~6MB at 30K). Safe headroom.
+export const MAX_AGENTS_PER_CONFIG = 30_000;
 
 // Stale agent detection: agents not seen for this long are marked disconnected.
 // With zero-wake model, this only applies to agents whose SQLite last_seen_at

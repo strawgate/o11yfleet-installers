@@ -118,8 +118,8 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
     return computeMetricsSql(this.sql, desiredConfigHash, staleThresholdMs);
   }
 
-  sweepStaleAgents(thresholdMs: number, activeUids: Set<string>): StaleAgent[] {
-    return sweepStaleAgents(this.sql, thresholdMs, activeUids);
+  sweepStaleAgents(thresholdMs: number, isConnected?: (uid: string) => boolean): StaleAgent[] {
+    return sweepStaleAgents(this.sql, thresholdMs, isConnected);
   }
 
   recordSweep(result: SweepResult): void {
