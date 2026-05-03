@@ -130,6 +130,12 @@ jobs:
             .opencode
           sparse-checkout-cone-mode: true
           fetch-depth: 1
+      - name: Remove local worktree refs to avoid submodule errors
+        run: |
+          if [ -d ".git/worktrees" ]; then
+            rm -rf .git/worktrees/*
+            echo "Removed worktree refs"
+          fi
       - name: Save agent config folders for base branch restoration
         env:
           GH_AW_AGENT_FOLDERS: ".agents .claude .codex .crush .gemini .github .opencode"
