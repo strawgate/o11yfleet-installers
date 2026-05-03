@@ -11,7 +11,9 @@ import { validateJsonBody } from "../shared/validation.js";
 import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/origins.js";
 import { renderGitHubAppManifest } from "../github/manifest.js";
 import { isAutoApproveEnabled } from "../shared/email.js";
+import { sql } from "kysely";
 import { handleGitHubWebhook } from "../github/webhook.js";
+import { getDb } from "../db/client.js";
 import {
   adminAuditContext,
   recordEvent,
@@ -238,15 +240,18 @@ async function createSessionResponse(
 ): Promise<Response> {
   const sessionId = generateSessionId();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
-  await env.FP_DB.prepare(
-    "INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 0)",
-  )
-    .bind(sessionId, user.id, expiresAt)
-    .run();
-
-  await env.FP_DB.prepare("DELETE FROM sessions WHERE user_id = ? AND expires_at < datetime('now')")
-    .bind(user.id)
-    .run();
+  const db = getDb(env.FP_DB);
+  await db
+    .insertInto("sessions")
+    .values({ id: sessionId, user_id: user.id, expires_at: expiresAt, is_impersonation: 0 })
+    .execute();
+  // GC any expired sessions for this user opportunistically — keeps the
+  // sessions table from growing unbounded for users who never log out.
+  await db
+    .deleteFrom("sessions")
+    .where("user_id", "=", user.id)
+    .where("expires_at", "<", sql<string>`datetime('now')`)
+    .execute();
 
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
   const headers = new Headers({
@@ -300,26 +305,23 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
   const sessionId = getCookie(request, "fp_session");
   if (!sessionId) return null;
 
-  const row = await env.FP_DB.prepare(
-    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role,
-            s.is_impersonation, s.impersonator_user_id,
-            t.status as tenant_status
-     FROM sessions s
-     JOIN users u ON s.user_id = u.id
-     LEFT JOIN tenants t ON t.id = u.tenant_id
-     WHERE s.id = ? AND s.expires_at > datetime('now')`,
-  )
-    .bind(sessionId)
-    .first<{
-      user_id: string;
-      email: string;
-      display_name: string;
-      tenant_id: string | null;
-      role: string;
-      is_impersonation: number;
-      impersonator_user_id: string | null;
-      tenant_status: string | null;
-    }>();
+  const row = await getDb(env.FP_DB)
+    .selectFrom("sessions as s")
+    .innerJoin("users as u", "u.id", "s.user_id")
+    .leftJoin("tenants as t", "t.id", "u.tenant_id")
+    .select([
+      "u.id as user_id",
+      "u.email",
+      "u.display_name",
+      "u.tenant_id",
+      "u.role",
+      "s.is_impersonation",
+      "s.impersonator_user_id",
+      "t.status as tenant_status",
+    ])
+    .where("s.id", "=", sessionId)
+    .where("s.expires_at", ">", sql<string>`datetime('now')`)
+    .executeTakeFirst();
 
   if (!row) return null;
   return {
@@ -327,8 +329,8 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
     email: row.email,
     displayName: row.display_name,
     tenantId: row.tenant_id,
-    tenantStatus: (row.tenant_status as TenantApprovalStatus) ?? "pending",
-    role: row.role as "member" | "admin",
+    tenantStatus: (row.tenant_status as TenantApprovalStatus | null) ?? "pending",
+    role: row.role,
     isImpersonation: row.is_impersonation === 1,
     impersonatorUserId: row.impersonator_user_id,
   };
@@ -394,23 +396,20 @@ async function handleLogin(request: Request, env: Env, ctx?: ExecutionContext): 
   const email = body.email;
   const password = body.password;
 
-  const user = await env.FP_DB.prepare(
-    `SELECT u.id, u.email, u.password_hash, u.display_name, u.role, u.tenant_id,
-            t.status as tenant_status
-     FROM users u
-     LEFT JOIN tenants t ON t.id = u.tenant_id
-     WHERE u.email = ?`,
-  )
-    .bind(email)
-    .first<{
-      id: string;
-      email: string;
-      password_hash: string;
-      display_name: string;
-      role: string;
-      tenant_id: string | null;
-      tenant_status: string | null;
-    }>();
+  const user = await getDb(env.FP_DB)
+    .selectFrom("users as u")
+    .leftJoin("tenants as t", "t.id", "u.tenant_id")
+    .select([
+      "u.id",
+      "u.email",
+      "u.password_hash",
+      "u.display_name",
+      "u.role",
+      "u.tenant_id",
+      "t.status as tenant_status",
+    ])
+    .where("u.email", "=", email)
+    .executeTakeFirst();
 
   if (!user) {
     await verifyPassword(
@@ -449,14 +448,15 @@ async function handleLogout(request: Request, env: Env, ctx?: ExecutionContext):
     role: string;
   } | null = null;
   if (sessionId) {
-    session = await env.FP_DB.prepare(
-      `SELECT u.id as user_id, u.tenant_id, u.email, u.role
-       FROM sessions s JOIN users u ON s.user_id = u.id
-       WHERE s.id = ?`,
-    )
-      .bind(sessionId)
-      .first<{ user_id: string; tenant_id: string | null; email: string; role: string }>();
-    await env.FP_DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
+    const db = getDb(env.FP_DB);
+    session =
+      (await db
+        .selectFrom("sessions as s")
+        .innerJoin("users as u", "u.id", "s.user_id")
+        .select(["u.id as user_id", "u.tenant_id", "u.email", "u.role"])
+        .where("s.id", "=", sessionId)
+        .executeTakeFirst()) ?? null;
+    await db.deleteFrom("sessions").where("id", "=", sessionId).execute();
   }
   if (session && ctx) {
     const audit = buildAuthAuditContext(
@@ -627,9 +627,11 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
   // Fetch tenant status for the response
   let tenantStatus = "pending";
   if (user.tenant_id) {
-    const tenant = await env.FP_DB.prepare("SELECT status FROM tenants WHERE id = ?")
-      .bind(user.tenant_id)
-      .first<{ status: string }>();
+    const tenant = await getDb(env.FP_DB)
+      .selectFrom("tenants")
+      .select("status")
+      .where("id", "=", user.tenant_id)
+      .executeTakeFirst();
     tenantStatus = tenant?.status ?? "pending";
   }
 
@@ -714,46 +716,44 @@ async function findOrCreateGitHubUser(
   tenant_status?: string;
 }> {
   const providerUserId = String(profile.id);
-  const identity = await env.FP_DB.prepare(
-    `SELECT u.id, u.email, u.display_name, u.role, u.tenant_id, t.status as tenant_status
-     FROM auth_identities ai
-     JOIN users u ON u.id = ai.user_id
-     LEFT JOIN tenants t ON t.id = u.tenant_id
-     WHERE ai.provider = 'github' AND ai.provider_user_id = ?`,
-  )
-    .bind(providerUserId)
-    .first<{
-      id: string;
-      email: string;
-      display_name: string;
-      role: string;
-      tenant_id: string | null;
-      tenant_status: string | null;
-    }>();
+  const db = getDb(env.FP_DB);
+  const identity = await db
+    .selectFrom("auth_identities as ai")
+    .innerJoin("users as u", "u.id", "ai.user_id")
+    .leftJoin("tenants as t", "t.id", "u.tenant_id")
+    .select([
+      "u.id",
+      "u.email",
+      "u.display_name",
+      "u.role",
+      "u.tenant_id",
+      "t.status as tenant_status",
+    ])
+    .where("ai.provider", "=", "github")
+    .where("ai.provider_user_id", "=", providerUserId)
+    .executeTakeFirst();
   if (identity) {
-    await env.FP_DB.prepare(
-      `UPDATE auth_identities SET provider_login = ?, provider_email = ?, updated_at = datetime('now')
-       WHERE provider = 'github' AND provider_user_id = ?`,
-    )
-      .bind(profile.login, email, providerUserId)
-      .run();
+    await db
+      .updateTable("auth_identities")
+      .set({
+        provider_login: profile.login,
+        provider_email: email,
+        updated_at: sql`datetime('now')`,
+      })
+      .where("provider", "=", "github")
+      .where("provider_user_id", "=", providerUserId)
+      .execute();
     return {
       ...identity,
       tenant_status: identity.tenant_status ?? undefined,
     };
   }
 
-  let user = await env.FP_DB.prepare(
-    "SELECT id, email, display_name, role, tenant_id FROM users WHERE email = ?",
-  )
-    .bind(email)
-    .first<{
-      id: string;
-      email: string;
-      display_name: string;
-      role: string;
-      tenant_id: string | null;
-    }>();
+  let user = await db
+    .selectFrom("users")
+    .select(["id", "email", "display_name", "role", "tenant_id"])
+    .where("email", "=", email)
+    .executeTakeFirst();
 
   if (user && (user.role !== "member" || !user.tenant_id)) {
     throw new ApiError("Existing account is not eligible for self-service GitHub login", 409);
@@ -767,6 +767,10 @@ async function findOrCreateGitHubUser(
     // Determine initial tenant status based on auto-approval setting
     const tenantStatus = isAutoApproveEnabled(env) ? "active" : "pending";
 
+    // Atomic D1 batch — both rows commit or neither does. Kept as raw
+    // `env.FP_DB.prepare(...)` because Kysely's batch on D1 is not
+    // equivalent to D1's atomic `batch()`, and we depend on the latter
+    // here so a partial-failure can't strand a tenant without its user.
     await env.FP_DB.batch([
       env.FP_DB.prepare(
         "INSERT INTO tenants (id, name, plan, status, max_configs, max_agents_per_config, approved_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))",
@@ -791,15 +795,24 @@ async function findOrCreateGitHubUser(
     };
   }
 
-  await env.FP_DB.prepare(
-    `INSERT INTO auth_identities (user_id, provider, provider_user_id, provider_login, provider_email)
-     VALUES (?, 'github', ?, ?, ?)
-     ON CONFLICT(provider, provider_user_id)
-     DO UPDATE SET user_id = excluded.user_id, provider_login = excluded.provider_login,
-       provider_email = excluded.provider_email, updated_at = datetime('now')`,
-  )
-    .bind(user.id, providerUserId, profile.login, email)
-    .run();
+  await db
+    .insertInto("auth_identities")
+    .values({
+      user_id: user.id,
+      provider: "github",
+      provider_user_id: providerUserId,
+      provider_login: profile.login,
+      provider_email: email,
+    })
+    .onConflict((oc) =>
+      oc.columns(["provider", "provider_user_id"]).doUpdateSet({
+        user_id: (eb) => eb.ref("excluded.user_id"),
+        provider_login: (eb) => eb.ref("excluded.provider_login"),
+        provider_email: (eb) => eb.ref("excluded.provider_email"),
+        updated_at: sql`datetime('now')`,
+      }),
+    )
+    .execute();
 
   return {
     ...user,
@@ -1029,11 +1042,12 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
 
   const tenantEmail = e.O11YFLEET_SEED_TENANT_USER_EMAIL?.trim() || "demo@o11yfleet.com";
   const tenantPassword = e.O11YFLEET_SEED_TENANT_USER_PASSWORD ?? "demo-password";
-  const existingTenantUser = await env.FP_DB.prepare(
-    "SELECT id, tenant_id FROM users WHERE email = ?",
-  )
-    .bind(tenantEmail)
-    .first<{ id: string; tenant_id: string | null }>();
+  const db = getDb(env.FP_DB);
+  const existingTenantUser = await db
+    .selectFrom("users")
+    .select(["id", "tenant_id"])
+    .where("email", "=", tenantEmail)
+    .executeTakeFirst();
 
   const requestedTenantId = body.tenant_id ?? existingTenantUser?.tenant_id;
   if (existingTenantUser && !requestedTenantId) {
@@ -1060,35 +1074,42 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
 
   const seedPlan = "growth";
   const { max_configs, max_agents_per_config } = getPlanLimits(seedPlan);
-  await env.FP_DB.prepare(
-    `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config)
-     VALUES (?, ?, ?, ?, ?)
-     ON CONFLICT(id) DO UPDATE SET
-       name = excluded.name,
-       plan = excluded.plan,
-       max_configs = excluded.max_configs,
-       max_agents_per_config = excluded.max_agents_per_config,
-       updated_at = datetime('now')`,
-  )
-    .bind(tenantId, tenantName, seedPlan, max_configs, max_agents_per_config)
-    .run();
+  await db
+    .insertInto("tenants")
+    .values({ id: tenantId, name: tenantName, plan: seedPlan, max_configs, max_agents_per_config })
+    .onConflict((oc) =>
+      oc.column("id").doUpdateSet({
+        name: (eb) => eb.ref("excluded.name"),
+        plan: (eb) => eb.ref("excluded.plan"),
+        max_configs: (eb) => eb.ref("excluded.max_configs"),
+        max_agents_per_config: (eb) => eb.ref("excluded.max_agents_per_config"),
+        updated_at: sql`datetime('now')`,
+      }),
+    )
+    .execute();
   results.push(`Using seed tenant: ${tenantId}`);
 
   // Upsert tenant user — always bind to this tenant
   const tenantPasswordHash = await hashPassword(tenantPassword);
   if (!existingTenantUser) {
-    const userId = crypto.randomUUID();
-    await env.FP_DB.prepare(
-      "INSERT OR IGNORE INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
-    )
-      .bind(userId, tenantEmail, tenantPasswordHash, "Demo User", "member", tenantId)
-      .run();
+    await db
+      .insertInto("users")
+      .values({
+        id: crypto.randomUUID(),
+        email: tenantEmail,
+        password_hash: tenantPasswordHash,
+        display_name: "Demo User",
+        role: "member",
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
   }
-  const currentTenantUser = await env.FP_DB.prepare(
-    "SELECT id, tenant_id FROM users WHERE email = ?",
-  )
-    .bind(tenantEmail)
-    .first<{ id: string; tenant_id: string | null }>();
+  const currentTenantUser = await db
+    .selectFrom("users")
+    .select(["id", "tenant_id"])
+    .where("email", "=", tenantEmail)
+    .executeTakeFirst();
   if (!currentTenantUser || currentTenantUser.tenant_id !== tenantId) {
     return Response.json(
       {
@@ -1098,31 +1119,43 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
       { status: 409 },
     );
   }
-  await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ? AND tenant_id = ?")
-    .bind(tenantPasswordHash, tenantEmail, tenantId)
-    .run();
+  await db
+    .updateTable("users")
+    .set({ password_hash: tenantPasswordHash })
+    .where("email", "=", tenantEmail)
+    .where("tenant_id", "=", tenantId)
+    .execute();
   results.push(`${existingTenantUser ? "Updated" : "Created"} tenant user: ${tenantEmail}`);
 
   // Upsert admin user (no tenant binding)
   const adminEmail = e.O11YFLEET_SEED_ADMIN_EMAIL?.trim() || "admin@o11yfleet.com";
   const adminPassword = e.O11YFLEET_SEED_ADMIN_PASSWORD ?? "admin-password";
-  const existingAdmin = await env.FP_DB.prepare("SELECT id FROM users WHERE email = ?")
-    .bind(adminEmail)
-    .first();
+  const existingAdmin = await db
+    .selectFrom("users")
+    .select("id")
+    .where("email", "=", adminEmail)
+    .executeTakeFirst();
   if (!existingAdmin) {
     const hash = await hashPassword(adminPassword);
-    const userId = crypto.randomUUID();
-    await env.FP_DB.prepare(
-      "INSERT INTO users (id, email, password_hash, display_name, role, tenant_id) VALUES (?, ?, ?, ?, ?, ?)",
-    )
-      .bind(userId, adminEmail, hash, "Admin", "admin", null)
-      .run();
+    await db
+      .insertInto("users")
+      .values({
+        id: crypto.randomUUID(),
+        email: adminEmail,
+        password_hash: hash,
+        display_name: "Admin",
+        role: "admin",
+        tenant_id: null,
+      })
+      .execute();
     results.push(`Created admin user: ${adminEmail}`);
   } else {
     const hash = await hashPassword(adminPassword);
-    await env.FP_DB.prepare("UPDATE users SET password_hash = ? WHERE email = ?")
-      .bind(hash, adminEmail)
-      .run();
+    await db
+      .updateTable("users")
+      .set({ password_hash: hash })
+      .where("email", "=", adminEmail)
+      .execute();
     results.push(`Updated admin user password: ${adminEmail}`);
   }
 
