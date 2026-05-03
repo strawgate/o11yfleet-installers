@@ -287,18 +287,14 @@ test.describe("admin operations coverage", () => {
     await page.goto(`${UI_URL}/admin/overview?api=${encodeURIComponent(API_URL)}`);
 
     await expect(page.getByRole("heading", { name: "Admin Overview" })).toBeVisible();
-    await expect(page.locator(".stat", { hasText: "Total tenants" }).locator(".val")).toHaveText(
-      "1",
-    );
-    await expect(page.locator(".stat", { hasText: "Total configs" }).locator(".val")).toHaveText(
-      "2",
-    );
-    await expect(page.locator(".stat", { hasText: "Total agents" }).locator(".val")).toHaveText(
-      "3",
-    );
-    await expect(page.locator(".stat", { hasText: "System health" }).locator(".tag")).toHaveText(
-      "healthy",
-    );
+    // MetricCard renders with role="group" + aria-label={label}; assert the
+    // group contains the expected value text.
+    await expect(page.getByRole("group", { name: "Total tenants" })).toContainText("1");
+    await expect(page.getByRole("group", { name: "Total configs" })).toContainText("2");
+    await expect(page.getByRole("group", { name: "Total agents" })).toContainText("3");
+    // System health renders as a Mantine Badge inside a Card (no MetricCard
+    // group); match the visible badge text directly.
+    await expect(page.getByText("healthy", { exact: true }).first()).toBeVisible();
     await expect(page.getByRole("main").getByRole("link", { name: "System health" })).toBeVisible();
     await expect(page.getByText("Demo Org")).toBeVisible();
 

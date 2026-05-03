@@ -16,7 +16,7 @@ import SignupPage from "@/pages/auth/SignupPage";
 import ForgotPage from "@/pages/auth/ForgotPage";
 
 import NotFoundPage from "@/pages/NotFoundPage";
-import { Button } from "@/components/ui/button";
+import { Button } from "@mantine/core";
 
 function ChunkLoadError({ name }: { name: string }) {
   return (
@@ -26,7 +26,7 @@ function ChunkLoadError({ name }: { name: string }) {
         <p className="mt-2 text-sm text-muted-foreground">
           This usually happens after a deployment. A refresh should fix it.
         </p>
-        <Button className="mt-4" onClick={() => window.location.reload()}>
+        <Button mt="md" onClick={() => window.location.reload()}>
           Reload page
         </Button>
       </div>

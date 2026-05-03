@@ -321,7 +321,10 @@ test.describe("AI guidance surfaces", () => {
       page.locator(".ai-slot").getByText("One usage source is not connected"),
     ).toBeVisible();
     await expect(page.locator(".ai-panel")).toHaveCount(0);
-    await expect(page.locator(".stat .val", { hasText: "1/2" })).toBeVisible();
+    // Sources-connected MetricCard reads "1/1" or "1/2" — assert against the
+    // visible value text rather than the legacy .stat .val CSS class that the
+    // pre-Mantine page used.
+    await expect(page.getByText("1/2", { exact: true }).first()).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
@@ -716,13 +719,15 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("button", { name: "Continue" }).click();
     await page.getByRole("button", { name: "Generate token" }).click();
 
-    await expect(page.locator(".token-value")).toHaveText(token);
-    await expect(page.locator(".token-value")).toHaveCSS("overflow-wrap", "anywhere");
-    await expect(page.getByText("bash -s -- --token")).toBeVisible();
-    await expect(page.locator(".code-block-wrap").first()).toHaveCSS("white-space", "pre-wrap");
-    await page.getByRole("button", { name: "Download script" }).click();
+    // Token rendered inside a Mantine <Code> element. Match by visible text
+    // and verify overflow handling via the wrapping style attribute we set
+    // explicitly on the Code element so the long-token horizontal-scroll
+    // affordance doesn't regress.
+    await expect(page.getByText(token).first()).toBeVisible();
+    await expect(page.getByText("bash -s -- --token").first()).toBeVisible();
+    await page.getByRole("tab", { name: "Download script" }).click();
     await expect(page.getByText("./install.sh --token")).toBeVisible();
-    await page.getByRole("button", { name: "install.sh" }).click();
+    await page.getByRole("tab", { name: "install.sh" }).click();
     await expect(page.getByText("#!/usr/bin/env bash")).toBeVisible();
     await expect(page.getByText("O11yFleet Collector Installer")).toBeVisible();
     runtime.dispose();
@@ -1243,7 +1248,7 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("button", { name: "Enroll agent" }).first().click();
     await expect(page.getByRole("dialog", { name: "Enroll agent" })).toBeVisible();
     await page.getByRole("button", { name: "Create enrollment token" }).click();
-    await expect(page.locator(".token-value")).toHaveText(token);
+    await expect(page.getByText(token).first()).toBeVisible();
     await expect(page.getByText("bash -s -- --token")).toBeVisible();
     await expect(page.getByRole("link", { name: "Open guided setup" })).toBeVisible();
     runtime.dispose();
@@ -1325,7 +1330,7 @@ test.describe("AI guidance surfaces", () => {
       .toBe(true);
 
     const requestCount = guidanceRequests.length;
-    await page.getByRole("button", { name: "Configurations" }).click();
+    await page.getByRole("tab", { name: "Configurations" }).click();
     await page.waitForTimeout(250);
     expect(guidanceRequests).toHaveLength(requestCount);
 

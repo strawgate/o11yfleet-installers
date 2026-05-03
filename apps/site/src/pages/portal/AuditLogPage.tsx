@@ -1,11 +1,10 @@
 import { useState } from "react";
+import { Button, Code, Group, Select, TextInput } from "@mantine/core";
 import { useAuditLogs, useTenant, type AuditLogFilters } from "@/api/hooks/portal";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { EmptyState, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { relTime } from "@/utils/format";
 import type { AuditLogEntry } from "@o11yfleet/core/api";
 import { AUDIT_RESOURCE_TYPES } from "@o11yfleet/core/audit";
@@ -22,8 +21,6 @@ export default function AuditLogPage() {
   const [filters, setFilters] = useState<AuditLogFilters>({});
   const { data, isLoading, error, refetch } = useAuditLogs(filters, isEnterprise);
 
-  // Hold the upgrade CTA until the tenant query resolves; otherwise
-  // enterprise users briefly see the upgrade screen on first paint.
   if (tenantLoading) {
     return (
       <PageShell>
@@ -33,8 +30,6 @@ export default function AuditLogPage() {
     );
   }
 
-  // Tenant query failure must not silently route enterprise users to the
-  // upgrade CTA — surface the error and let them retry.
   if (tenantError) {
     return (
       <PageShell>
@@ -66,6 +61,11 @@ export default function AuditLogPage() {
 
   const entries = data?.entries ?? [];
 
+  const resourceTypeOptions = [
+    { value: "", label: "All" },
+    ...AUDIT_RESOURCE_TYPES.map((t) => ({ value: t, label: t })),
+  ];
+
   return (
     <PageShell>
       <PageHeader
@@ -73,58 +73,52 @@ export default function AuditLogPage() {
         description="Every mutating user action in this tenant. Read-only."
       />
 
-      <div className="flex flex-wrap items-end gap-3 pb-4">
-        <FilterField label="Action">
-          <Input
-            placeholder="e.g. configuration.update"
-            value={filters.action ?? ""}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, action: e.target.value, cursor: undefined }))
-            }
-          />
-        </FilterField>
-        <FilterField label="Resource type">
-          <select
-            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-            value={filters.resource_type ?? ""}
-            onChange={(e) =>
-              setFilters((f) => ({
-                ...f,
-                resource_type: e.target.value || undefined,
-                cursor: undefined,
-              }))
-            }
-          >
-            <option value="">All</option>
-            {AUDIT_RESOURCE_TYPES.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </FilterField>
-        <FilterField label="Resource id">
-          <Input
-            placeholder="resource id"
-            value={filters.resource_id ?? ""}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, resource_id: e.target.value, cursor: undefined }))
-            }
-          />
-        </FilterField>
-        <FilterField label="Actor user id">
-          <Input
-            placeholder="user id"
-            value={filters.actor_user_id ?? ""}
-            onChange={(e) =>
-              setFilters((f) => ({ ...f, actor_user_id: e.target.value, cursor: undefined }))
-            }
-          />
-        </FilterField>
-        <Button variant="outline" onClick={() => setFilters({})}>
+      <Group align="flex-end" gap="md" wrap="wrap" pb="md">
+        <TextInput
+          label="Action"
+          placeholder="e.g. configuration.update"
+          value={filters.action ?? ""}
+          onChange={(e) =>
+            setFilters((f) => ({ ...f, action: e.currentTarget.value, cursor: undefined }))
+          }
+        />
+        <Select
+          label="Resource type"
+          value={filters.resource_type ?? ""}
+          onChange={(value) =>
+            setFilters((f) => ({
+              ...f,
+              resource_type: value || undefined,
+              cursor: undefined,
+            }))
+          }
+          data={resourceTypeOptions}
+          allowDeselect={false}
+        />
+        <TextInput
+          label="Resource id"
+          placeholder="resource id"
+          value={filters.resource_id ?? ""}
+          onChange={(e) =>
+            setFilters((f) => ({ ...f, resource_id: e.currentTarget.value, cursor: undefined }))
+          }
+        />
+        <TextInput
+          label="Actor user id"
+          placeholder="user id"
+          value={filters.actor_user_id ?? ""}
+          onChange={(e) =>
+            setFilters((f) => ({
+              ...f,
+              actor_user_id: e.currentTarget.value,
+              cursor: undefined,
+            }))
+          }
+        />
+        <Button variant="default" onClick={() => setFilters({})}>
           Reset
         </Button>
-      </div>
+      </Group>
 
       {isLoading ? (
         <LoadingSpinner />
@@ -145,27 +139,18 @@ export default function AuditLogPage() {
         <>
           <DataTable<AuditLogEntry> columns={columns} data={entries} getRowId={(row) => row.id} />
           {data?.next_cursor && (
-            <div className="flex justify-center p-4">
+            <Group justify="center" p="md">
               <Button
-                variant="outline"
+                variant="default"
                 onClick={() => setFilters((f) => ({ ...f, cursor: data.next_cursor ?? undefined }))}
               >
                 Next page
               </Button>
-            </div>
+            </Group>
           )}
         </>
       )}
     </PageShell>
-  );
-}
-
-function FilterField({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="flex flex-col gap-1 text-xs text-muted-foreground">
-      <span>{label}</span>
-      {children}
-    </label>
   );
 }
 
@@ -180,13 +165,13 @@ const columns: ColumnDef<AuditLogEntry>[] = [
   {
     id: "action",
     header: "Action",
-    cell: ({ row }) => <code className="text-xs">{row.original.action}</code>,
+    cell: ({ row }) => <Code>{row.original.action}</Code>,
   },
   {
     id: "resource",
     header: "Resource",
     cell: ({ row }) => (
-      <span className="text-xs">
+      <span style={{ fontSize: 12 }}>
         {row.original.resource_type}
         {row.original.resource_id ? ` / ${row.original.resource_id}` : ""}
       </span>
@@ -199,7 +184,7 @@ const columns: ColumnDef<AuditLogEntry>[] = [
       const a = row.original.actor;
       const label = a.email ?? a.user_id ?? (a.api_key_id ? "api key" : "—");
       return (
-        <span className="text-xs">
+        <span style={{ fontSize: 12 }}>
           {label}
           {a.impersonator_user_id ? " (via support)" : ""}
         </span>
@@ -218,6 +203,6 @@ const columns: ColumnDef<AuditLogEntry>[] = [
   {
     id: "ip",
     header: "IP",
-    cell: ({ row }) => <span className="text-xs">{row.original.actor.ip ?? "—"}</span>,
+    cell: ({ row }) => <span style={{ fontSize: 12 }}>{row.original.actor.ip ?? "—"}</span>,
   },
 ];

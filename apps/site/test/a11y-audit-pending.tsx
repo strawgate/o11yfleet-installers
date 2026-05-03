@@ -25,7 +25,6 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 
 import MarketingLayout from "../src/layouts/MarketingLayout";
 import { LoadingSpinner } from "../src/components/common/LoadingSpinner";
-import { ToastProvider } from "../src/components/common/Toast";
 
 void React;
 
@@ -94,21 +93,22 @@ test("[C3] ConfigurationDetailPage tabs declare role=tablist / role=tab", () => 
 /* ------------------------------------------------------------------ */
 /* C4 — Toast container is announced via aria-live                    */
 /* ------------------------------------------------------------------ */
-test("[C4] ToastProvider's container has aria-live", () => {
-  const html = renderToStaticMarkup(
-    <ToastProvider>
-      <span>app</span>
-    </ToastProvider>,
-  );
-  // The toaster <div> must expose aria-live="polite" (or role="status") so
-  // screen readers announce each new toast. Find the tag first, then check
-  // its attributes — a valid prop reorder shouldn't fail the test.
-  const toasterTag = html.match(/<div\b[^>]*class="[^"]*\btoaster\b[^"]*"[^>]*>/)?.[0];
-  assert.ok(toasterTag, "ToastProvider must render a .toaster container");
+test("[C4] Notifications container declares aria-live", () => {
+  // After the toast → @mantine/notifications migration, screen-reader
+  // announcement of new toasts depends on the aria-live attribute on the
+  // <Notifications> container element. Mantine's <Notifications> renders a
+  // div with no built-in aria-live, but it spreads element props through, so
+  // we set role/aria-live/aria-atomic explicitly. Dropping these silently
+  // regresses C4 — the legacy ToastProvider provided this guarantee via its
+  // .toaster div.
+  const src = readSource("app/providers.tsx");
+  const block = src.match(/<Notifications\b[\s\S]*?\/>/);
+  assert.ok(block, "AppProviders must render <Notifications>");
+  assert.match(block![0], /aria-live="polite"/, "Notifications must declare aria-live='polite'");
   assert.match(
-    toasterTag!,
-    /aria-live="polite"|role="status"/,
-    "Toast container must declare aria-live='polite' or role='status'",
+    block![0],
+    /role="region"|role="status"/,
+    "Notifications must declare a region/status role",
   );
 });
 
