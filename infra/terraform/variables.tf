@@ -187,6 +187,12 @@ variable "worker_durable_object_migration_tag" {
   default     = "v1"
 }
 
+variable "worker_durable_object_migration_old_tag" {
+  type        = string
+  description = "Current Durable Object migration tag to verify before applying a migration. Empty string for the initial bootstrap migration."
+  default     = ""
+}
+
 variable "worker_include_durable_object_binding" {
   type        = bool
   description = "Whether Terraform-managed Worker versions bind CONFIG_DO. Disable only for the first-time Durable Object migration bootstrap."

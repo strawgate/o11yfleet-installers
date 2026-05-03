@@ -55,6 +55,7 @@ resource "cloudflare_worker_version" "fleet" {
   bindings = concat(local.worker_resource_bindings, local.worker_inherited_bindings)
 
   migrations = var.worker_include_durable_object_migration ? {
+    old_tag            = var.worker_durable_object_migration_old_tag
     new_tag            = var.worker_durable_object_migration_tag
     new_sqlite_classes = ["ConfigDurableObject"]
   } : null
