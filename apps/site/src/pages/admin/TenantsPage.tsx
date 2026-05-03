@@ -21,6 +21,7 @@ import {
 } from "@mantine/core";
 import type { MantineColor } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { zodResolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
 import {
   useAdminTenantsPage,
@@ -28,6 +29,7 @@ import {
   useBulkApproveTenants,
   useAdminSettings,
 } from "../../api/hooks/admin";
+import { createTenantSchema, type CreateTenantValues } from "@/api/form-schemas";
 import { EmptyState, MetricCard, PageHeader, PageShell } from "@/components/app";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
@@ -53,11 +55,6 @@ function StatusBadge({ status }: { status?: string }) {
   );
 }
 
-interface CreateTenantForm {
-  name: string;
-  plan: string;
-}
-
 export default function TenantsPage() {
   const [page, setPage] = useState(1);
   const [planFilter, setPlanFilter] = useState("all");
@@ -81,11 +78,9 @@ export default function TenantsPage() {
   const [modalOpen, setModalOpen] = useState(false);
   const [bulkConfirmOpen, setBulkConfirmOpen] = useState(false);
 
-  const form = useForm<CreateTenantForm>({
+  const form = useForm<CreateTenantValues>({
     initialValues: { name: "", plan: "starter" },
-    validate: {
-      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
-    },
+    validate: zodResolver(createTenantSchema),
   });
 
   if (isLoading) return <LoadingSpinner />;
@@ -102,10 +97,10 @@ export default function TenantsPage() {
   const suspendedCount = statusCounts["suspended"] ?? 0;
   const totalCount = pendingCount + activeCount + suspendedCount;
 
-  async function handleCreate(values: CreateTenantForm) {
+  async function handleCreate(values: CreateTenantValues) {
     try {
       const result = await createTenant.mutateAsync({
-        name: values.name.trim(),
+        name: values.name,
         plan: values.plan,
       });
       notifications.show({ title: "Tenant created", message: values.name, color: "green" });

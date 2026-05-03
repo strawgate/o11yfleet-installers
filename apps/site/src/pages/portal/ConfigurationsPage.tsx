@@ -3,8 +3,10 @@ import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
 import { ActionIcon, Badge, Button, Group, Modal, Stack, Textarea, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { zodResolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
 import { useCreateConfiguration, useOverview, type Configuration } from "@/api/hooks/portal";
+import { createConfigurationSchema, type CreateConfigurationValues } from "@/api/form-schemas";
 import { normalizeFleetOverview } from "@/api/models/fleet-overview";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
@@ -13,22 +15,15 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import { relTime, trunc } from "@/utils/format";
 import { configurationAgentMetrics } from "@/utils/config-stats";
 
-interface CreateConfigForm {
-  name: string;
-  description: string;
-}
-
 export default function ConfigurationsPage() {
   const overview = useOverview();
   const createConfig = useCreateConfiguration();
   const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const form = useForm<CreateConfigForm>({
+  const form = useForm<CreateConfigurationValues>({
     initialValues: { name: "", description: "" },
-    validate: {
-      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
-    },
+    validate: zodResolver(createConfigurationSchema),
   });
   const columns = useMemo(() => configurationColumns(), []);
 
@@ -39,11 +34,11 @@ export default function ConfigurationsPage() {
   const view = overview.data ? normalizeFleetOverview(overview.data) : null;
   const cfgList = view?.configurations.rows ?? [];
 
-  async function handleCreate(values: CreateConfigForm) {
+  async function handleCreate(values: CreateConfigurationValues) {
     try {
       const result = await createConfig.mutateAsync({
-        name: values.name.trim(),
-        description: values.description.trim(),
+        name: values.name,
+        description: values.description ?? "",
       });
       notifications.show({ title: "Configuration created", message: values.name, color: "green" });
       setModalOpen(false);

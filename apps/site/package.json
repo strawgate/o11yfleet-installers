@@ -52,7 +52,8 @@
     "streamdown": "^2.5.0",
     "uplot": "^1.6.31",
     "use-stick-to-bottom": "^1.1.3",
-    "yaml": "^2.8.3"
+    "yaml": "^2.8.3",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.2.4",

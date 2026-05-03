@@ -14,17 +14,14 @@ import {
   Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { zodResolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
 import { useAuth } from "@/api/hooks/auth";
 import { useDeleteTenant, useTenant, useUpdateTenant } from "@/api/hooks/portal";
+import { workspaceSettingsSchema, type WorkspaceSettingsValues } from "@/api/form-schemas";
 import { PageHeader, PageShell } from "@/components/app";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-
-interface TenantFormValues {
-  name: string;
-  geoEnabled: boolean;
-}
 
 export default function SettingsPage() {
   const tenant = useTenant();
@@ -37,11 +34,9 @@ export default function SettingsPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  const form = useForm<TenantFormValues>({
+  const form = useForm<WorkspaceSettingsValues>({
     initialValues: { name: "", geoEnabled: false },
-    validate: {
-      name: (value) => (value.trim().length === 0 ? "Workspace name is required" : null),
-    },
+    validate: zodResolver(workspaceSettingsSchema),
   });
 
   useEffect(() => {
@@ -61,10 +56,10 @@ export default function SettingsPage() {
 
   const t = tenant.data;
 
-  async function handleSave(values: TenantFormValues) {
+  async function handleSave(values: WorkspaceSettingsValues) {
     try {
       await updateTenant.mutateAsync({
-        name: values.name.trim(),
+        name: values.name,
         geo_enabled: values.geoEnabled,
       });
       notifications.show({ message: "Settings saved", color: "green" });

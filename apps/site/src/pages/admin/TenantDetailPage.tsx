@@ -16,7 +16,9 @@ import {
   Title,
 } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { zodResolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
+import { tenantSettingsSchema, type TenantSettingsValues } from "@/api/form-schemas";
 import {
   useAdminTenant,
   useAdminTenantConfigs,
@@ -49,11 +51,6 @@ const TAB_KEYS = ["overview", "configurations", "users", "settings"] as const;
 const isTab = (value: string | null): value is Tab =>
   value !== null && (TAB_KEYS as readonly string[]).includes(value);
 
-interface TenantSettingsForm {
-  name: string;
-  plan: string;
-}
-
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -72,11 +69,9 @@ export default function TenantDetailPage() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
-  const form = useForm<TenantSettingsForm>({
+  const form = useForm<TenantSettingsValues>({
     initialValues: { name: "", plan: "starter" },
-    validate: {
-      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
-    },
+    validate: zodResolver(tenantSettingsSchema),
   });
 
   useEffect(() => {
@@ -150,9 +145,9 @@ export default function TenantDetailPage() {
   if (tenant.error) return <ErrorState error={tenant.error} retry={() => void tenant.refetch()} />;
   if (!t) return <ErrorState error={new Error("Tenant not found")} />;
 
-  async function handleSave(values: TenantSettingsForm) {
+  async function handleSave(values: TenantSettingsValues) {
     try {
-      await updateTenant.mutateAsync({ name: values.name.trim(), plan: values.plan });
+      await updateTenant.mutateAsync({ name: values.name, plan: values.plan });
       notifications.show({ message: "Tenant updated", color: "green" });
       form.resetDirty();
     } catch (err) {
