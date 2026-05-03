@@ -10,8 +10,9 @@
 // later PRs and is intentionally not exercised here.
 
 import { env, exports } from "cloudflare:workers";
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { __clearWebhookDedupForTesting } from "../src/github/webhook.js";
+import { findInstallationById } from "../src/github/installations-repo.js";
 
 const SECRET = "test-webhook-secret-32-bytes-okay-okay";
 
@@ -60,9 +61,41 @@ async function postWebhook(opts: PostOpts): Promise<Response> {
 }
 
 describe("GitHub webhook receiver", () => {
-  beforeEach(() => {
+  beforeAll(async () => {
+    // Inline the github_installations and installation_repositories schema so
+    // the DB-backed installation handlers can write rows. Mirrors the
+    // production migration in packages/db/migrations/0002_github_installations.sql,
+    // including the `tenant_id REFERENCES tenants(id)` foreign key.
+    await env.FP_DB.exec(`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY)`);
+    await env.FP_DB.exec(
+      `CREATE TABLE IF NOT EXISTS github_installations (` +
+        `installation_id INTEGER PRIMARY KEY, ` +
+        `account_login TEXT NOT NULL, ` +
+        `account_type TEXT NOT NULL CHECK(account_type IN ('User', 'Organization')), ` +
+        `tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL, ` +
+        `config_path TEXT NOT NULL DEFAULT 'o11yfleet/config.yaml', ` +
+        `created_at TEXT NOT NULL DEFAULT (datetime('now')), ` +
+        `updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
+    );
+    await env.FP_DB.exec(
+      `CREATE TABLE IF NOT EXISTS installation_repositories (` +
+        `installation_id INTEGER NOT NULL ` +
+        `REFERENCES github_installations(installation_id) ON DELETE CASCADE, ` +
+        `repo_id INTEGER NOT NULL, ` +
+        `full_name TEXT NOT NULL, ` +
+        `default_branch TEXT, ` +
+        `PRIMARY KEY (installation_id, repo_id))`,
+    );
+    await env.FP_DB.exec(
+      `CREATE UNIQUE INDEX IF NOT EXISTS idx_installation_repositories_full_name ` +
+        `ON installation_repositories(full_name)`,
+    );
+  });
+
+  beforeEach(async () => {
     __clearWebhookDedupForTesting();
     env.GITHUB_APP_WEBHOOK_SECRET = SECRET;
+    await env.FP_DB.prepare("DELETE FROM github_installations").run();
   });
 
   it("rejects with 503 when GITHUB_APP_WEBHOOK_SECRET is unset", async () => {
@@ -175,6 +208,77 @@ describe("GitHub webhook receiver", () => {
       },
     });
     expect(response.status).toBe(202);
+  });
+
+  it("installation:created persists the row in github_installations", async () => {
+    const response = await postWebhook({
+      event: "installation",
+      payload: {
+        action: "created",
+        installation: { id: 4242, account: { login: "octo-org", type: "Organization" } },
+        repositories: [
+          { id: 100, full_name: "octo-org/repo-a" },
+          { id: 101, full_name: "octo-org/repo-b" },
+        ],
+      },
+    });
+    expect(response.status).toBe(202);
+    const row = await findInstallationById(env, 4242);
+    expect(row).not.toBeNull();
+    expect(row!.account_login).toBe("octo-org");
+    expect(row!.repos.map((r) => r.full_name).sort()).toEqual([
+      "octo-org/repo-a",
+      "octo-org/repo-b",
+    ]);
+  });
+
+  it("installation:deleted removes the row", async () => {
+    await postWebhook({
+      event: "installation",
+      payload: {
+        action: "created",
+        installation: { id: 4243, account: { login: "octo", type: "User" } },
+      },
+    });
+    await postWebhook({
+      event: "installation",
+      payload: {
+        action: "deleted",
+        installation: { id: 4243, account: { login: "octo", type: "User" } },
+      },
+    });
+    expect(await findInstallationById(env, 4243)).toBeNull();
+  });
+
+  it("installation_repositories:added/removed updates the repos array", async () => {
+    await postWebhook({
+      event: "installation",
+      payload: {
+        action: "created",
+        installation: { id: 4244, account: { login: "octo", type: "Organization" } },
+        repositories: [{ id: 200, full_name: "octo/keep-me" }],
+      },
+    });
+    await postWebhook({
+      event: "installation_repositories",
+      payload: {
+        action: "added",
+        installation: { id: 4244 },
+        repositories_added: [{ id: 201, full_name: "octo/added" }],
+        repositories_removed: [],
+      },
+    });
+    await postWebhook({
+      event: "installation_repositories",
+      payload: {
+        action: "removed",
+        installation: { id: 4244 },
+        repositories_added: [],
+        repositories_removed: [{ id: 200, full_name: "octo/keep-me" }],
+      },
+    });
+    const row = await findInstallationById(env, 4244);
+    expect(row!.repos.map((r) => r.full_name)).toEqual(["octo/added"]);
   });
 
   it("acks unsubscribed events with 204", async () => {

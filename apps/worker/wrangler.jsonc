@@ -19,6 +19,9 @@
       "O11YFLEET_SEED_TENANT_USER_PASSWORD",
       "CLOUDFLARE_METRICS_ACCOUNT_ID",
       "CLOUDFLARE_METRICS_API_TOKEN",
+      "GITHUB_APP_ID",
+      "GITHUB_APP_PRIVATE_KEY",
+      "GITHUB_APP_WEBHOOK_SECRET",
     ],
   },
   "d1_databases": [
@@ -70,6 +73,13 @@
       },
     ],
   },
+  "workflows": [
+    {
+      "name": "config-validation",
+      "binding": "CONFIG_VALIDATION",
+      "class_name": "ConfigValidationWorkflow",
+    },
+  ],
   // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
   // reconciliation fallback at 03:17 UTC.
   "triggers": {
@@ -101,6 +111,9 @@
           "O11YFLEET_SEED_TENANT_USER_PASSWORD",
           "CLOUDFLARE_METRICS_ACCOUNT_ID",
           "CLOUDFLARE_METRICS_API_TOKEN",
+          "GITHUB_APP_ID",
+          "GITHUB_APP_PRIVATE_KEY",
+          "GITHUB_APP_WEBHOOK_SECRET",
         ],
       },
       "observability": {
@@ -154,6 +167,13 @@
           },
         ],
       },
+      "workflows": [
+        {
+          "name": "config-validation",
+          "binding": "CONFIG_VALIDATION",
+          "class_name": "ConfigValidationWorkflow",
+        },
+      ],
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
@@ -184,6 +204,9 @@
           "O11YFLEET_OIDC_AUDIENCE",
           "CLOUDFLARE_METRICS_ACCOUNT_ID",
           "CLOUDFLARE_METRICS_API_TOKEN",
+          "GITHUB_APP_ID",
+          "GITHUB_APP_PRIVATE_KEY",
+          "GITHUB_APP_WEBHOOK_SECRET",
         ],
       },
       "observability": {
@@ -237,6 +260,13 @@
           },
         ],
       },
+      "workflows": [
+        {
+          "name": "config-validation",
+          "binding": "CONFIG_VALIDATION",
+          "class_name": "ConfigValidationWorkflow",
+        },
+      ],
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
@@ -266,6 +296,9 @@
           "CLOUDFLARE_METRICS_API_TOKEN",
           "GITHUB_APP_CLIENT_ID",
           "GITHUB_APP_CLIENT_SECRET",
+          "GITHUB_APP_ID",
+          "GITHUB_APP_PRIVATE_KEY",
+          "GITHUB_APP_WEBHOOK_SECRET",
         ],
       },
       "d1_databases": [
@@ -313,6 +346,13 @@
           },
         ],
       },
+      "workflows": [
+        {
+          "name": "config-validation",
+          "binding": "CONFIG_VALIDATION",
+          "class_name": "ConfigValidationWorkflow",
+        },
+      ],
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {

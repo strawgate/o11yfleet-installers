@@ -41,3 +41,7 @@ export default {
 // Auto-instrumented DO: traces fetch() calls to the DO
 const InstrumentedConfigDO = instrumentDO(ConfigDurableObject, resolveConfig);
 export { InstrumentedConfigDO as ConfigDurableObject };
+
+// Workflows are not currently auto-instrumented by @microlabs/otel-cf-workers
+// — re-export the class as-is so wrangler's binding lookup finds it.
+export { ConfigValidationWorkflow } from "./workflows/config-validation.js";

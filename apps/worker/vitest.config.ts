@@ -50,6 +50,10 @@ export default defineConfig({
       "test/do-name.test.ts",
       "test/policy-schemas.test.ts",
       "test/properties.test.ts",
+      "test/github-validate-config.test.ts",
+      "test/github-api.test.ts",
+      "test/github-installation-token.test.ts",
+      "test/github-check-runs.test.ts",
     ],
     // Parallel file execution for faster CI runs on multi-core runners.
     testTimeout: 30_000,

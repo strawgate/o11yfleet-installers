@@ -1,6 +1,7 @@
 // o11yfleet Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
+export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
@@ -14,6 +15,7 @@ export interface Env {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
   CONFIG_DO: DurableObjectNamespace;
+  CONFIG_VALIDATION: Workflow;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   /** Audit log queue. Producer: each mutating handler. Consumer: queue() in this Worker. */
   AUDIT_QUEUE?: Queue<AuditEvent>;
