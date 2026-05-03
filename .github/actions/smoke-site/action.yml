@@ -46,6 +46,7 @@ runs:
 
           for attempt in 1 2 3 4 5; do
             STATUS=$(curl -sS --connect-timeout 5 --max-time 20 \
+              -A "o11yfleet-smoke-test/1.0" \
               -o "$response_file" -w "%{http_code}" "$url" || true)
             [ "$STATUS" = "200" ] && break
             echo "$surface smoke attempt $attempt failed with status ${STATUS:-curl-error}; retrying..."
