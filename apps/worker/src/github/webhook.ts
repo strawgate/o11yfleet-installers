@@ -1,21 +1,36 @@
 // Receives webhook deliveries from the o11yfleet GitHub App.
 //
-// Responsibilities (this PR):
+// Responsibilities:
 //   1. Verify the X-Hub-Signature-256 HMAC against GITHUB_APP_WEBHOOK_SECRET
 //      with a constant-time compare. Reject 401 on mismatch.
-//   2. Dispatch by X-GitHub-Event header to a handler that logs and acks.
+//   2. Dispatch by X-GitHub-Event header to a handler that ack's quickly.
 //   3. Idempotency: same X-GitHub-Delivery within DEDUP_TTL_MS is a no-op.
 //
 // Deliberately out of scope (later PRs):
-//   - Mapping installation_id → tenant_id (requires DB schema)
-//   - Calling GitHub APIs back (requires installation token minting)
+//   - Mapping installation_id → tenant_id (requires DB schema; #511)
+//   - Calling GitHub APIs back (requires installation token minting; #511)
 //   - Validation pipeline / Check Runs (#511)
 //
-// In-memory dedup is per-isolate. GitHub retries with a fresh delivery_id, so
-// a different isolate seeing the same event is correctly handled. Crossing
-// isolates with the *same* delivery_id only happens if the same delivery is
-// replayed (e.g. via the GitHub UI's "Redeliver"); that's edge-case enough
-// that paying for KV/DO state isn't yet justified.
+// ─── Response time SLA ────────────────────────────────────────────────────
+// GitHub requires a 2xx within 10 seconds or the delivery is marked failed
+// and the app accumulates failure-rate against its delivery health metric.
+// (See: https://docs.github.com/en/webhooks/using-webhooks/best-practices-for-using-webhooks)
+// Handlers in this file MUST stay fast — anything that needs network I/O
+// (GitHub API, file fetch, validators) belongs in a Cloudflare Workflow
+// kicked off by the handler. The handler itself does HMAC + DB lookup +
+// `WORKFLOW.create({ id: ..., params: ... })` + return 202. Targets <500ms
+// at the 99th percentile.
+//
+// ─── Idempotency ──────────────────────────────────────────────────────────
+// In-memory dedup is per-isolate. From the docs:
+//   "If you request a redelivery, the X-GitHub-Delivery header will be the
+//    same as in the original delivery."
+// So the dedup catches the manual "Redeliver" UI button. GitHub's automatic
+// retries get fresh delivery IDs and are not deduped here — but those are
+// always for events GitHub thinks failed (non-2xx or timeout), which means
+// our prior attempt didn't actually do the work to begin with. The work-
+// level idempotency (don't post the same Check Run twice) lives in the
+// workflow itself via deterministic Workflow instance IDs.
 
 import type { Env } from "../index.js";
 import { timingSafeEqual } from "../utils/crypto.js";
@@ -215,8 +230,24 @@ interface PullRequestPayload {
   installation?: { id?: number };
 }
 
+// `pull_request` event fires for ~30 actions, only a handful of which
+// change the head commit / reopen review. Only those should kick the
+// validation pipeline. Filtering at the receiver keeps the workflow
+// concurrency budget for the events that actually move the system.
+const PULL_REQUEST_ACTIONS_OF_INTEREST = new Set([
+  "opened",
+  "synchronize",
+  "reopened",
+  "edited",
+  "ready_for_review",
+]);
+
 async function handlePullRequest(ctx: HandlerContext): Promise<HandlerResult> {
   const p = ctx.payload as PullRequestPayload;
+  if (!p.action || !PULL_REQUEST_ACTIONS_OF_INTEREST.has(p.action)) {
+    logEvent("github_app_pull_request_ignored", ctx, { action: p.action });
+    return { status: 204 };
+  }
   logEvent("github_app_pull_request", ctx, {
     action: p.action,
     repository: p.repository?.full_name,

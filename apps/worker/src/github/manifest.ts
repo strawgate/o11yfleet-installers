@@ -20,6 +20,7 @@ interface RenderedManifest {
   description: string;
   public: boolean;
   request_oauth_on_install: boolean;
+  setup_on_update: boolean;
   default_permissions: Record<string, "read" | "write">;
   default_events: string[];
   hook_attributes: { url: string; active: boolean };
@@ -49,6 +50,7 @@ export function renderGitHubAppManifest(placeholders: ManifestPlaceholders): Ren
     description: tpl.description,
     public: tpl.public,
     request_oauth_on_install: tpl.request_oauth_on_install,
+    setup_on_update: tpl.setup_on_update,
     default_permissions: { ...tpl.default_permissions },
     default_events: [...tpl.default_events],
     hook_attributes: {

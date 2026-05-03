@@ -180,6 +180,7 @@ describe("GitHub social auth", () => {
       default_permissions: Record<string, string>;
       default_events: string[];
       hook_attributes: { url: string; active: boolean };
+      setup_on_update?: boolean;
     };
 
     // Exact equality, not toMatchObject — a silently-added permission would
@@ -206,6 +207,11 @@ describe("GitHub social auth", () => {
     // starts delivering events immediately.
     expect(manifest.hook_attributes.active).toBe(true);
     expect(manifest.hook_attributes.url).toMatch(/\/auth\/github\/webhook$/);
+    // setup_on_update redirects users to the setup_url after they accept any
+    // newly-requested permission. Important for our GitOps onboarding because
+    // adding a permission re-prompts every install — we want to land them
+    // somewhere useful, not back on the GitHub app settings page.
+    expect(manifest.setup_on_update).toBe(true);
   });
 
   it("rejects malformed GitHub callbacks before exchanging tokens", async () => {

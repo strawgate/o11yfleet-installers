@@ -130,18 +130,40 @@ describe("GitHub webhook receiver", () => {
     expect(response.status).toBe(202);
   });
 
-  it("dispatches pull_request events with 202", async () => {
-    const response = await postWebhook({
-      event: "pull_request",
-      payload: {
-        action: "synchronize",
-        number: 7,
-        pull_request: { head: { sha: "abc", ref: "feature" } },
-        repository: { full_name: "octo/cat" },
-        installation: { id: 42 },
-      },
-    });
-    expect(response.status).toBe(202);
+  it("dispatches pull_request events of interest with 202", async () => {
+    for (const action of ["opened", "synchronize", "reopened", "edited", "ready_for_review"]) {
+      const response = await postWebhook({
+        event: "pull_request",
+        payload: {
+          action,
+          number: 7,
+          pull_request: { head: { sha: "abc", ref: "feature" } },
+          repository: { full_name: "octo/cat" },
+          installation: { id: 42 },
+        },
+      });
+      expect(response.status, `action=${action}`).toBe(202);
+    }
+  });
+
+  it("ignores pull_request actions outside the interest set with 204", async () => {
+    // pull_request fires for ~30 actions; only the head-changing / re-review
+    // ones should kick the workflow. Others (assigned, labeled, milestoned,
+    // etc.) get dropped at the receiver to keep the workflow concurrency
+    // budget for events that move the system.
+    for (const action of ["assigned", "labeled", "review_requested", "milestoned"]) {
+      const response = await postWebhook({
+        event: "pull_request",
+        payload: {
+          action,
+          number: 7,
+          pull_request: { head: { sha: "abc", ref: "feature" } },
+          repository: { full_name: "octo/cat" },
+          installation: { id: 42 },
+        },
+      });
+      expect(response.status, `action=${action}`).toBe(204);
+    }
   });
 
   it("dispatches installation events with 202", async () => {

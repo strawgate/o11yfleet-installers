@@ -5,6 +5,7 @@
   "description": "Sign in to O11yFleet and connect collector fleet GitOps. Validates collector configs in pull requests, rolls them out on push, and reports per-commit deployment status.",
   "public": true,
   "request_oauth_on_install": false,
+  "setup_on_update": true,
   "default_permissions": {
     "email_addresses": "read",
     "metadata": "read",
