@@ -41,16 +41,6 @@ body::before {
   color: var(--fg-4);
 }
 
-/* ---------- Mini-style overrides ---------- */
-.tag {
-  font-size: 10.5px;
-  padding: 2px 7px;
-}
-.tag.lg {
-  font-size: 11.5px;
-  padding: 3px 9px;
-}
-
 /* ---------- Auth pages ---------- */
 .auth-shell {
   display: flex;

@@ -41,7 +41,7 @@ import {
   StatusBadge as AppStatusBadge,
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Button, Card, Tabs, Text, Title } from "@mantine/core";
+import { Badge, Button, Card, Group, Tabs, Text, Title } from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -573,15 +573,17 @@ function OverviewTab({
           Capabilities
         </Title>
         {capabilities.length > 0 ? (
-          <div className="flex flex-wrap gap-1.5 mt-2">
+          <Group gap="xs" mt="xs">
             {capabilities.map((cap) => (
-              <span key={cap} className="tag">
+              <Badge key={cap} variant="default" tt="none">
                 {cap}
-              </span>
+              </Badge>
             ))}
-          </div>
+          </Group>
         ) : (
-          <p className="meta mt-2">No capabilities reported</p>
+          <Text size="sm" c="dimmed" mt="xs">
+            No capabilities reported
+          </Text>
         )}
       </Card>
     </div>
