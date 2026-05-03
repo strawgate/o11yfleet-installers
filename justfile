@@ -732,13 +732,14 @@ env-api-url env="prod":
         ;;
     esac
 
-# Print the API URL used by CI smoke tests. Non-prod uses workers.dev because
-# GitHub runner IPs can receive managed challenges on zone custom domains.
+# Print the API URL used by CI smoke tests. All environments use workers.dev
+# because Cloudflare Bot Fight Mode blocks bare HTTP clients from CI runner IPs
+# on zone custom domains.
 env-api-smoke-url env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{env}}" in
-      prod|production) printf '%s\n' "https://api.o11yfleet.com" ;;
+      prod|production) printf '%s\n' "https://o11yfleet-worker.o11yfleet.workers.dev" ;;
       staging|dev) printf '%s\n' "https://o11yfleet-worker-{{env}}.o11yfleet.workers.dev" ;;
       *)
         printf 'unknown deployment env: %s\n' "{{env}}" >&2
@@ -760,15 +761,16 @@ env-d1-name env="prod":
     esac
 
 # Print smoke-test targets for the static site Worker in a deployment environment.
+# All environments use workers.dev URLs to avoid CF Bot Fight Mode on custom domains.
 env-site-smoke-targets env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
     case "{{env}}" in
       prod|production)
         printf '%s\n' \
-          "site|https://o11yfleet.com/" \
-          "app|https://app.o11yfleet.com/portal/overview" \
-          "admin|https://admin.o11yfleet.com/admin/overview"
+          "site|https://o11yfleet-site-worker.o11yfleet.workers.dev/" \
+          "app|https://o11yfleet-site-worker.o11yfleet.workers.dev/portal/overview" \
+          "admin|https://o11yfleet-site-worker.o11yfleet.workers.dev/admin/overview"
         ;;
       staging|dev)
         printf '%s\n' \
