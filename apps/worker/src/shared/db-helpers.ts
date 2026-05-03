@@ -7,37 +7,34 @@
  * - Concentrate column projections in one place so a future change
  *   (e.g. a new tenant column or an index-friendly LIKE clause) only
  *   updates one site.
- * - No new query semantics — every helper here is a literal extraction
- *   of an existing inline SQL string.
+ *
+ * As of the Kysely migration, every helper here is built with the type-safe
+ * query builder, composed from primitives in `../db/queries.ts` where the
+ * shape repeats. The compiled SQL is a 1:1 mapping with the previous inline
+ * strings — no new query semantics. New helpers should follow the same
+ * pattern. Existing call sites that still use `env.FP_DB.prepare(...)` keep
+ * working; they migrate one route file at a time.
  */
+
+import { getDb } from "../db/client.js";
+import { existsBy, tenantScoped } from "../db/queries.js";
+import type { Configuration, Tenant } from "../db/schema.js";
 
 interface DbEnv {
   FP_DB: D1Database;
 }
 
-/** Full tenant row. Columns mirror the `tenants` table. */
-export interface TenantRow {
-  id: string;
-  name: string;
-  plan: string;
-  max_configs: number;
-  max_agents_per_config: number;
-  created_at: string;
-  updated_at: string;
-  [key: string]: unknown;
-}
+/**
+ * @deprecated Prefer the precise `Tenant` type from `db/schema.ts`. Kept
+ * to avoid breaking call sites that imported `TenantRow` directly.
+ */
+export type TenantRow = Tenant & { [key: string]: unknown };
 
-/** Configuration row trimmed to columns route handlers actually read. */
-export interface ConfigurationRow {
-  id: string;
-  tenant_id: string;
-  name: string;
-  description: string | null;
-  current_config_hash: string | null;
-  created_at: string;
-  updated_at: string;
-  [key: string]: unknown;
-}
+/**
+ * @deprecated Prefer `Configuration` from `db/schema.ts`. Kept for the same
+ * reason as `TenantRow`.
+ */
+export type ConfigurationRow = Configuration & { [key: string]: unknown };
 
 /**
  * Look up a tenant row by id. Returns `null` when the tenant doesn't
@@ -45,23 +42,27 @@ export interface ConfigurationRow {
  * appeared in 7+ handlers.
  */
 export async function findTenantById(env: DbEnv, tenantId: string): Promise<TenantRow | null> {
-  return env.FP_DB.prepare(`SELECT * FROM tenants WHERE id = ?`).bind(tenantId).first<TenantRow>();
+  const row = await getDb(env.FP_DB)
+    .selectFrom("tenants")
+    .selectAll()
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
+  return (row as TenantRow | undefined) ?? null;
 }
 
 /**
- * Cheap "does this tenant exist?" check that returns only the id.
- * For preflight checks where the row contents don't matter.
+ * Cheap "does this tenant exist?" check. For preflight checks where the
+ * row contents don't matter.
  */
 export async function tenantExists(env: DbEnv, tenantId: string): Promise<boolean> {
-  const row = await env.FP_DB.prepare(`SELECT id FROM tenants WHERE id = ? LIMIT 1`)
-    .bind(tenantId)
-    .first<{ id: string }>();
-  return row !== null;
+  return existsBy(getDb(env.FP_DB).selectFrom("tenants").where("id", "=", tenantId));
 }
 
 /**
- * Delete a tenant by id. The `D1Result` lets callers tell whether the
- * row existed (`meta.changes === 1`) without a prefetch SELECT.
+ * Delete a tenant by id. Returns the underlying D1 result so callers can
+ * read `meta.changes` to tell whether the row existed without a prefetch
+ * SELECT. Kept as a raw `prepare(...)` because callers depend on
+ * `D1Result.meta`, which Kysely doesn't surface.
  */
 export async function deleteTenantById(env: DbEnv, tenantId: string): Promise<D1Result> {
   return env.FP_DB.prepare(`DELETE FROM tenants WHERE id = ?`).bind(tenantId).run();
@@ -80,12 +81,19 @@ export async function findOwnedConfig(
   tenantId: string,
   configId: string,
 ): Promise<ConfigurationRow | null> {
-  return env.FP_DB.prepare(
-    `SELECT id, tenant_id, name, description, current_config_hash, created_at, updated_at
-     FROM configurations WHERE id = ? AND tenant_id = ?`,
-  )
-    .bind(configId, tenantId)
-    .first<ConfigurationRow>();
+  const row = await tenantScoped(getDb(env.FP_DB), "configurations", tenantId)
+    .where("id", "=", configId)
+    .select([
+      "id",
+      "tenant_id",
+      "name",
+      "description",
+      "current_config_hash",
+      "created_at",
+      "updated_at",
+    ])
+    .executeTakeFirst();
+  return (row as ConfigurationRow | undefined) ?? null;
 }
 
 /**
@@ -93,11 +101,9 @@ export async function findOwnedConfig(
  * creating a new configuration.
  */
 export async function countConfigsForTenant(env: DbEnv, tenantId: string): Promise<number> {
-  const row = await env.FP_DB.prepare(
-    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
-  )
-    .bind(tenantId)
-    .first<{ count: number }>();
+  const row = await tenantScoped(getDb(env.FP_DB), "configurations", tenantId)
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .executeTakeFirst();
   return row?.count ?? 0;
 }
 
@@ -109,11 +115,17 @@ export async function listConfigsForTenant(
   env: DbEnv,
   tenantId: string,
 ): Promise<ConfigurationRow[]> {
-  const result = await env.FP_DB.prepare(
-    `SELECT id, name, description, current_config_hash, tenant_id, created_at, updated_at
-     FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(tenantId)
-    .all<ConfigurationRow>();
-  return result.results;
+  const rows = await tenantScoped(getDb(env.FP_DB), "configurations", tenantId)
+    .select([
+      "id",
+      "name",
+      "description",
+      "current_config_hash",
+      "tenant_id",
+      "created_at",
+      "updated_at",
+    ])
+    .orderBy("created_at", "desc")
+    .execute();
+  return rows as ConfigurationRow[];
 }

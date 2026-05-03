@@ -27,6 +27,8 @@
     "@o11yfleet/db": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
     "ai": "^6.0.170",
+    "kysely": "^0.28.17",
+    "kysely-d1": "^0.4.0",
     "yaml": "^2.8.3",
     "zod": "^3.25.76"
   },
