@@ -13,9 +13,12 @@ import {
   SimpleGrid,
   Stack,
   Text,
-  Textarea,
   Title,
 } from "@mantine/core";
+import CodeMirror from "@uiw/react-codemirror";
+import { yaml as codemirrorYaml } from "@codemirror/lang-yaml";
+import { linter, lintGutter } from "@codemirror/lint";
+import { parseDocument } from "yaml";
 import { notifications } from "@mantine/notifications";
 import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
@@ -231,6 +234,38 @@ service:
       receivers: [otlp]
       exporters: [debug]`;
 
+  const yamlLinter = linter((view) => {
+    const docText = view.state.doc.toString();
+    if (!docText.trim()) return [];
+
+    const doc = parseDocument(docText);
+    if (!doc.errors || doc.errors.length === 0) return [];
+
+    return doc.errors.map((error) => {
+      const from = error.pos[0];
+      const to = error.pos[1];
+      return {
+        from,
+        to: to > from ? to : from + 1,
+        severity: "error",
+        message: error.message,
+      };
+    });
+  });
+
+  function handleFormatYaml() {
+    if (!yamlInput.trim()) return;
+    try {
+      const doc = parseDocument(yamlInput);
+      if (doc.errors && doc.errors.length > 0) {
+        return; // Don't format if there are syntax errors
+      }
+      setYamlInput(doc.toString());
+    } catch {
+      // Ignore formatting errors
+    }
+  }
+
   return (
     <PageShell width="wide">
       <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
@@ -288,20 +323,41 @@ service:
           )}
         </Group>
 
-        <Textarea
+        <Box
           mt="md"
-          minRows={6}
-          autosize
-          value={yamlInput}
-          onChange={(event) => setYamlInput(event.currentTarget.value)}
-          placeholder={yamlPlaceholder}
-          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
-        />
+          style={{
+            border: "1px solid var(--mantine-color-default-border)",
+            borderRadius: "var(--mantine-radius-sm)",
+            overflow: "hidden",
+          }}
+        >
+          <CodeMirror
+            value={yamlInput}
+            height="300px"
+            extensions={[codemirrorYaml(), lintGutter(), yamlLinter]}
+            onChange={(value) => setYamlInput(value)}
+            placeholder={yamlPlaceholder}
+            basicSetup={{
+              lineNumbers: true,
+              tabSize: 2,
+            }}
+          />
+        </Box>
 
         <Group mt="sm" gap="xs">
           <Button onClick={handleImportYaml} disabled={yamlInput.trim().length === 0}>
             Import YAML
           </Button>
+          <Button
+            variant="default"
+            onClick={handleFormatYaml}
+            disabled={yamlInput.trim().length === 0}
+          >
+            Format YAML
+          </Button>
+          {yamlInput.trim().length > 0 && (
+            <CopyButton value={yamlInput} label="Copy to clipboard" />
+          )}
           {importResult ? (
             <Button variant="subtle" onClick={handleBackToExample}>
               Back to selected example

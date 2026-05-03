@@ -90,6 +90,9 @@ importers:
       '@codemirror/language':
         specifier: ^6.10.0
         version: 6.12.3
+      '@codemirror/lint':
+        specifier: ^6.9.5
+        version: 6.9.5
       '@codemirror/merge':
         specifier: ^6.7.0
         version: 6.12.1
