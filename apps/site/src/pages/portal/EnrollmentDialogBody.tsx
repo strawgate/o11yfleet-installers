@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Alert, Button, Code, Group, Stack } from "@mantine/core";
 import { CopyButton } from "../../components/common/CopyButton";
-import { EmptyState } from "../../components/common/EmptyState";
+import { EmptyState } from "@/components/app";
 
 const INSTALL_COMMAND = (token: string) =>
   `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;

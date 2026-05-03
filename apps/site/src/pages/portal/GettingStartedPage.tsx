@@ -22,10 +22,9 @@ import {
   useConfigurationStats,
 } from "../../api/hooks/portal";
 import { CopyButton } from "../../components/common/CopyButton";
-import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
-import { PageHeader, PageShell } from "@/components/app";
+import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { configurationAgentMetrics } from "../../utils/config-stats";
 import installScriptSource from "../../../install.sh?raw";
 
