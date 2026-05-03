@@ -41,6 +41,8 @@ export default defineConfig({
         "src/shared/errors.ts",
         "src/github/api.ts",
         "src/github/validate-config.ts",
+        "src/github/check-runs.ts",
+        "src/github/installation-token.ts",
       ],
     },
   },

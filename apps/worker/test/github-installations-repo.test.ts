@@ -3,13 +3,10 @@
 // Uses the live D1 from cloudflare:test instead of mocking — the ON CONFLICT
 // upsert and batch statements are tricky enough that mocking would just
 // re-implement SQLite.
-//
-// Other tests in this suite follow the convention of inline-creating the
-// schema in beforeAll rather than running real migrations, so we do the
-// same to stay consistent.
 
 import { env } from "cloudflare:workers";
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { bootstrapSchema } from "./fixtures/schema.js";
 import {
   deleteInstallation,
   findInstallationById,
@@ -33,33 +30,7 @@ async function reset(): Promise<void> {
 
 describe("github_installations repo", () => {
   beforeAll(async () => {
-    // Mirror packages/db/migrations/0002_github_installations.sql so this
-    // test exercises the same shape the production migration creates,
-    // including the `tenant_id REFERENCES tenants(id)` foreign key.
-    await DB.exec(`CREATE TABLE IF NOT EXISTS tenants (id TEXT PRIMARY KEY)`);
-    await DB.exec(
-      `CREATE TABLE IF NOT EXISTS github_installations (` +
-        `installation_id INTEGER PRIMARY KEY, ` +
-        `account_login TEXT NOT NULL, ` +
-        `account_type TEXT NOT NULL CHECK(account_type IN ('User', 'Organization')), ` +
-        `tenant_id TEXT REFERENCES tenants(id) ON DELETE SET NULL, ` +
-        `config_path TEXT NOT NULL DEFAULT 'o11yfleet/config.yaml', ` +
-        `created_at TEXT NOT NULL DEFAULT (datetime('now')), ` +
-        `updated_at TEXT NOT NULL DEFAULT (datetime('now')))`,
-    );
-    await DB.exec(
-      `CREATE TABLE IF NOT EXISTS installation_repositories (` +
-        `installation_id INTEGER NOT NULL ` +
-        `REFERENCES github_installations(installation_id) ON DELETE CASCADE, ` +
-        `repo_id INTEGER NOT NULL, ` +
-        `full_name TEXT NOT NULL, ` +
-        `default_branch TEXT, ` +
-        `PRIMARY KEY (installation_id, repo_id))`,
-    );
-    await DB.exec(
-      `CREATE UNIQUE INDEX IF NOT EXISTS idx_installation_repositories_full_name ` +
-        `ON installation_repositories(full_name)`,
-    );
+    await bootstrapSchema(DB);
   });
   beforeEach(reset);
 
