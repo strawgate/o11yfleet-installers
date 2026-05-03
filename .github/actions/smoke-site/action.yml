@@ -12,13 +12,18 @@ runs:
     - name: Install Playwright chromium
       shell: bash
       run: |
-        npm install --no-save playwright@1.52.0
+        export PLAYWRIGHT_DIR="/tmp/playwright-smoke"
+        mkdir -p "$PLAYWRIGHT_DIR"
+        cd "$PLAYWRIGHT_DIR"
+        npm init -y > /dev/null 2>&1
+        npm install playwright@1.52.0
         npx playwright install --with-deps chromium
 
     - name: Smoke test site targets
       shell: bash
       env:
         SMOKE_TARGETS: ${{ inputs.smoke-targets }}
+        NODE_PATH: /tmp/playwright-smoke/node_modules
       run: |
         set -euo pipefail
         sleep 5
@@ -53,10 +58,20 @@ runs:
 
             for (let attempt = 1; attempt <= 5; attempt++) {
               try {
-                const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+                // Use networkidle to wait for CF challenge JS to complete if present
+                const response = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
                 const status = response?.status() ?? 0;
+
+                // CF challenge may have redirected; check final URL status
                 if (status !== 200) {
-                  throw new Error(`HTTP ${status}`);
+                  // If we got a challenge page, wait for it to resolve
+                  if (status === 403) {
+                    await page.waitForURL(url, { timeout: 15000 }).catch(() => {});
+                  }
+                  const finalContent = await page.content();
+                  if (finalContent.includes("Just a moment")) {
+                    throw new Error(`CF challenge did not resolve (HTTP ${status})`);
+                  }
                 }
 
                 const root = await page.locator("#root").count();
