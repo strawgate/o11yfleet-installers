@@ -34,6 +34,8 @@ import {
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { sessionCookie } from "../../shared/cookies.js";
 import { validateJsonBody } from "../../shared/validation.js";
+import { sql, type RawBuilder } from "kysely";
+import { getDb } from "../../db/client.js";
 import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
 import { currentFleetSummary, currentFleetSummaryByTenant } from "@o11yfleet/core/metrics";
 import { sendTenantApprovalEmail, isAutoApproveEnabled } from "../../shared/email.js";
@@ -324,9 +326,11 @@ async function routeAdminRequest(
   const configDOQueryMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/query$/);
   if (configDOQueryMatch && method === "POST") {
     const configId = configDOQueryMatch[1]!;
-    const owner = await env.FP_DB.prepare(`SELECT tenant_id FROM configurations WHERE id = ?`)
-      .bind(configId)
-      .first<{ tenant_id: string }>();
+    const owner = await getDb(env.FP_DB)
+      .selectFrom("configurations")
+      .select("tenant_id")
+      .where("id", "=", configId)
+      .executeTakeFirst();
     return withAdminAudit(
       audit,
       { action: "admin.do.query", resource_type: "configuration", resource_id: configId },
@@ -369,11 +373,16 @@ async function handleCreateTenant(request: Request, env: Env): Promise<AuditCrea
   const limits = PLAN_LIMITS[plan];
 
   const id = crypto.randomUUID();
-  await env.FP_DB.prepare(
-    `INSERT INTO tenants (id, name, plan, max_configs, max_agents_per_config) VALUES (?, ?, ?, ?, ?)`,
-  )
-    .bind(id, body.name, plan, limits.max_configs, limits.max_agents_per_config)
-    .run();
+  await getDb(env.FP_DB)
+    .insertInto("tenants")
+    .values({
+      id,
+      name: body.name,
+      plan,
+      max_configs: limits.max_configs,
+      max_agents_per_config: limits.max_agents_per_config,
+    })
+    .execute();
 
   return {
     response: Response.json({ id, name: body.name, plan }, { status: 201 }),
@@ -408,57 +417,62 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   const requestedPlan = url.searchParams.get("plan");
   const plan = requestedPlan ? (normalizePlan(requestedPlan) ?? "all") : "all";
   const requestedStatus = url.searchParams.get("status");
-  const status = ["pending", "active", "suspended"].includes(requestedStatus ?? "")
-    ? requestedStatus
-    : null;
+  const status: "pending" | "active" | "suspended" | null =
+    requestedStatus === "pending" || requestedStatus === "active" || requestedStatus === "suspended"
+      ? requestedStatus
+      : null;
   const sort = normalizeTenantSort(url.searchParams.get("sort"));
   const limit = boundedPositiveInt(url.searchParams.get("limit"), 100, 500);
   const page = boundedPositiveInt(url.searchParams.get("page"), 1, 10_000);
   const offset = (page - 1) * limit;
 
-  const whereClauses: string[] = [];
-  const whereParams: unknown[] = [];
-  if (q.length > 0) {
-    // SQLite's LIKE is case-insensitive by default for ASCII when both
-    // sides have the same case folding behavior; `COLLATE NOCASE`
-    // lets the planner use indexes on `t.name`/`t.id` instead of
-    // recomputing `LOWER(...)` for every row. The previous shape
-    // (`LOWER(t.name) LIKE LOWER(?)`) forced a full table scan.
-    whereClauses.push(
-      "(t.name LIKE ? ESCAPE '\\' COLLATE NOCASE OR t.id LIKE ? ESCAPE '\\' COLLATE NOCASE)",
-    );
-    const escaped = q.replace(/[\\%_]/g, "\\$&");
-    const qLike = `%${escaped}%`;
-    whereParams.push(qLike, qLike);
-  }
-  if (plan !== "all") {
-    whereClauses.push("t.plan = ?");
-    whereParams.push(plan);
-  }
-  if (status) {
-    whereClauses.push("t.status = ?");
-    whereParams.push(status);
-  }
-  const whereSql = whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
+  const db = getDb(env.FP_DB);
 
-  const totalRow = await env.FP_DB.prepare(`SELECT COUNT(*) as count FROM tenants t ${whereSql}`)
-    .bind(...whereParams)
-    .first<{ count: number }>();
-  const result = await env.FP_DB.prepare(
-    `SELECT
-      t.*,
-      (SELECT COUNT(*) FROM configurations WHERE tenant_id = t.id) as config_count
-     FROM tenants t
-     ${whereSql}
-     ORDER BY ${TENANT_SORTS[sort]}
-     LIMIT ? OFFSET ?`,
-  )
-    .bind(...whereParams, limit, offset)
-    .all();
+  // Compose WHERE filters once; reuse for both the count and the page query.
+  // Kysely's `eb.and([...])` lets the column references stay typed and the
+  // planner still gets to use the same index-friendly shapes the previous
+  // raw SQL did (LIKE ESCAPE '\' COLLATE NOCASE on t.name/t.id).
+  const applyFilters = <T extends ReturnType<typeof db.selectFrom<"tenants as t">>>(qb: T): T => {
+    let next = qb;
+    if (q.length > 0) {
+      const escaped = q.replace(/[\\%_]/g, "\\$&");
+      const qLike = `%${escaped}%`;
+      next = next.where((eb) =>
+        eb.or([
+          sql<boolean>`t.name LIKE ${qLike} ESCAPE '\\' COLLATE NOCASE`,
+          sql<boolean>`t.id LIKE ${qLike} ESCAPE '\\' COLLATE NOCASE`,
+        ]),
+      ) as T;
+    }
+    if (plan !== "all") next = next.where("t.plan", "=", plan) as T;
+    if (status) next = next.where("t.status", "=", status) as T;
+    return next;
+  };
+
+  const totalRow = await applyFilters(db.selectFrom("tenants as t"))
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .executeTakeFirst();
+
+  // The TENANT_SORTS values are already SQL fragments (table-qualified column
+  // refs with direction); pass them through as raw expressions so the planner
+  // sees the same ORDER BY shape as the previous inline SQL.
+  const rows = await applyFilters(db.selectFrom("tenants as t"))
+    .selectAll("t")
+    .select((eb) =>
+      eb
+        .selectFrom("configurations")
+        .select((cb) => cb.fn.countAll<number>().as("c"))
+        .whereRef("configurations.tenant_id", "=", "t.id")
+        .as("config_count"),
+    )
+    .orderBy(sql.raw(TENANT_SORTS[sort]))
+    .limit(limit)
+    .offset(offset)
+    .execute();
+
   const tenantMetrics = await readTenantFleetSummaries(env);
-  const tenants = result.results.map((tenant) => {
-    const tenantId = String(tenant["id"] ?? "");
-    const metrics = tenantMetrics.byTenant.get(tenantId);
+  const tenants = rows.map((tenant) => {
+    const metrics = tenantMetrics.byTenant.get(tenant.id);
     return {
       ...tenant,
       agent_count: numberMetric(metrics?.agent_count),
@@ -469,19 +483,19 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
   });
   const total = totalRow?.count ?? 0;
 
-  // Get counts by status for filter badges
-  const statusCounts = await env.FP_DB.prepare(
-    "SELECT status, COUNT(*) as count FROM tenants GROUP BY status",
-  ).all<{ status: string; count: number }>();
+  // Get counts by status for filter badges.
+  const statusCounts = await db
+    .selectFrom("tenants")
+    .select(["status", (eb) => eb.fn.countAll<number>().as("count")])
+    .groupBy("status")
+    .execute();
 
   const statusCountsMap: Record<string, number> = {};
-  for (const row of statusCounts.results) {
-    statusCountsMap[row.status] = row.count;
-  }
+  for (const row of statusCounts) statusCountsMap[row.status] = row.count;
 
   return Response.json({
     tenants,
-    pagination: { page, limit, total, has_more: offset + result.results.length < total },
+    pagination: { page, limit, total, has_more: offset + rows.length < total },
     filters: { q, plan, status, sort },
     status_counts: statusCountsMap,
     metrics_source: tenantMetrics.available ? "analytics_engine" : "unavailable",
@@ -499,61 +513,56 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
   // Validate the body BEFORE the existence check so a 400 doesn't cost
   // an unnecessary D1 read.
   const body = await validateJsonBody(request, adminUpdateTenantRequestSchema);
-  const updates: string[] = [];
-  const values: unknown[] = [];
+  const set: {
+    name?: string;
+    plan?: NonNullable<ReturnType<typeof normalizePlan>>;
+    max_configs?: number;
+    max_agents_per_config?: number;
+    geo_enabled?: 0 | 1;
+    status?: "pending" | "active" | "suspended";
+    approved_at?: RawBuilder<string>;
+    approved_by?: string;
+    updated_at: RawBuilder<string>;
+  } = { updated_at: sql<string>`datetime('now')` };
 
-  if (body.name) {
-    updates.push("name = ?");
-    values.push(body.name);
-  }
+  if (body.name) set.name = body.name;
   if (body.plan) {
     const plan = normalizePlan(body.plan);
     if (!plan) {
       return jsonError(`Invalid plan. Must be one of: ${VALID_PLANS.join(", ")}`, 400);
     }
-    updates.push("plan = ?");
-    values.push(plan);
+    set.plan = plan;
     const limits = PLAN_LIMITS[plan];
-    updates.push("max_configs = ?");
-    values.push(limits.max_configs);
-    updates.push("max_agents_per_config = ?");
-    values.push(limits.max_agents_per_config);
+    set.max_configs = limits.max_configs;
+    set.max_agents_per_config = limits.max_agents_per_config;
   }
-  if (body.geo_enabled !== undefined) {
-    updates.push("geo_enabled = ?");
-    values.push(body.geo_enabled ? 1 : 0);
-  }
+  if (body.geo_enabled !== undefined) set.geo_enabled = body.geo_enabled ? 1 : 0;
   if (body.status) {
     if (!["pending", "active", "suspended"].includes(body.status)) {
       return jsonError("Invalid status. Must be one of: pending, active, suspended", 400);
     }
-    updates.push("status = ?");
-    values.push(body.status);
-    // If approving (setting to active), set approved_at
+    set.status = body.status as "pending" | "active" | "suspended";
+    // If approving (setting to active), set approved_at + approved_by
     if (body.status === "active") {
-      updates.push("approved_at = datetime('now')");
-      const adminId = request.headers.get("X-Admin-Id") ?? "system";
-      updates.push("approved_by = ?");
-      values.push(adminId);
+      set.approved_at = sql<string>`datetime('now')`;
+      set.approved_by = request.headers.get("X-Admin-Id") ?? "system";
     }
   }
 
-  if (updates.length === 0) {
+  if (Object.keys(set).length === 1) {
     return jsonError("No fields to update", 400);
   }
-
-  updates.push("updated_at = datetime('now')");
-  values.push(tenantId);
 
   // One round-trip: D1 supports `UPDATE ... RETURNING *`, so we can
   // collapse the previous existence-check SELECT, the UPDATE, and the
   // post-update SELECT into a single statement. A missing tenant
   // returns zero rows and we surface 404 from that.
-  const updated = await env.FP_DB.prepare(
-    `UPDATE tenants SET ${updates.join(", ")} WHERE id = ? RETURNING *`,
-  )
-    .bind(...values)
-    .first();
+  const updated = await getDb(env.FP_DB)
+    .updateTable("tenants")
+    .set(set)
+    .where("id", "=", tenantId)
+    .returningAll()
+    .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
   return Response.json(updated);
 }
@@ -564,11 +573,11 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
     return jsonError("Tenant not found", 404);
   }
 
-  const configs = await env.FP_DB.prepare(
-    `SELECT COUNT(*) as count FROM configurations WHERE tenant_id = ?`,
-  )
-    .bind(tenantId)
-    .first<{ count: number }>();
+  const configs = await getDb(env.FP_DB)
+    .selectFrom("configurations")
+    .select((eb) => eb.fn.countAll<number>().as("count"))
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
   if (configs && configs.count > 0) {
     return jsonError(
       `Cannot delete tenant with ${configs.count} configuration(s). Delete configurations first.`,
@@ -581,12 +590,13 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
 }
 
 async function handleListConfigurations(env: Env, tenantId: string): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT * FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(tenantId)
-    .all();
-  return Response.json({ configurations: result.results });
+  const configurations = await getDb(env.FP_DB)
+    .selectFrom("configurations")
+    .selectAll()
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .execute();
+  return Response.json({ configurations });
 }
 
 // ─── Tenant Users ───────────────────────────────────────────────────
@@ -596,18 +606,21 @@ async function handleListTenantUsers(env: Env, tenantId: string): Promise<Respon
     return jsonError("Tenant not found", 404);
   }
 
-  const result = await env.FP_DB.prepare(
-    `SELECT id, email, display_name, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(tenantId)
-    .all();
-  return Response.json({ users: result.results });
+  const users = await getDb(env.FP_DB)
+    .selectFrom("users")
+    .select(["id", "email", "display_name", "role", "created_at"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .execute();
+  return Response.json({ users });
 }
 
 async function getConfigDoStub(env: Env, configId: string): Promise<DurableObjectStub> {
-  const config = await env.FP_DB.prepare("SELECT id, tenant_id FROM configurations WHERE id = ?")
-    .bind(configId)
-    .first<{ id: string; tenant_id: string }>();
+  const config = await getDb(env.FP_DB)
+    .selectFrom("configurations")
+    .select(["id", "tenant_id"])
+    .where("id", "=", configId)
+    .executeTakeFirst();
   if (!config) throw new ApiError("Configuration not found", 404);
 
   return env.CONFIG_DO.get(env.CONFIG_DO.idFromName(`${config.tenant_id}:${config.id}`));
@@ -830,52 +843,80 @@ async function handleHealthCheck(env: Env): Promise<Response> {
   const d1Start = Date.now();
   try {
     const nowIso = new Date().toISOString();
-    const results = await env.FP_DB.batch([
-      env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants"),
-      env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
-      env.FP_DB.prepare(
-        `SELECT COUNT(*) as count
-         FROM tenants t
-         LEFT JOIN configurations c ON c.tenant_id = t.id
-         WHERE c.id IS NULL`,
-      ),
-      env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
-      env.FP_DB.prepare("SELECT COUNT(*) as count FROM sessions WHERE expires_at > ?").bind(nowIso),
-      env.FP_DB.prepare(
-        "SELECT COUNT(*) as count FROM sessions WHERE is_impersonation = 1 AND expires_at > ?",
-      ).bind(nowIso),
-      env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
-      env.FP_DB.prepare(
-        "SELECT MAX(updated_at) as latest_configuration_updated_at FROM configurations",
-      ),
-      env.FP_DB.prepare("SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan"),
+    const db = getDb(env.FP_DB);
+    // Run the count queries in parallel via Promise.all. The previous
+    // env.FP_DB.batch([...]) was being used for parallelism, not
+    // atomicity, so this preserves the original behaviour.
+    const [
+      tenantsCount,
+      configsCount,
+      tenantsWithoutConfigsCount,
+      usersCount,
+      activeSessionsCount,
+      impersonationSessionsCount,
+      activeTokensCount,
+      latestConfigRow,
+      planRows,
+    ] = await Promise.all([
+      db
+        .selectFrom("tenants")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("configurations")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("tenants as t")
+        .leftJoin("configurations as c", "c.tenant_id", "t.id")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("c.id", "is", null)
+        .executeTakeFirst(),
+      db
+        .selectFrom("users")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("sessions")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("expires_at", ">", nowIso)
+        .executeTakeFirst(),
+      db
+        .selectFrom("sessions")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("is_impersonation", "=", 1)
+        .where("expires_at", ">", nowIso)
+        .executeTakeFirst(),
+      db
+        .selectFrom("enrollment_tokens")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("revoked_at", "is", null)
+        .executeTakeFirst(),
+      db
+        .selectFrom("configurations")
+        .select((eb) => eb.fn.max("updated_at").as("latest_configuration_updated_at"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("tenants")
+        .select(["plan", (eb) => eb.fn.countAll<number>().as("count")])
+        .groupBy("plan")
+        .execute(),
     ]);
 
-    function countAt(index: number): number {
-      const row = results[index]?.results?.[0] as { count?: number } | undefined;
-      return row?.count ?? 0;
-    }
-
-    const latestConfigRow = results[7]?.results?.[0] as
-      | { latest_configuration_updated_at?: string | null }
-      | undefined;
-    const planRows = (results[8]?.results ?? []) as Array<{ plan?: string; count?: number }>;
     const planCounts: Record<string, number> = {};
-    for (const row of planRows) {
-      if (row.plan) planCounts[row.plan] = row.count ?? 0;
-    }
+    for (const row of planRows) planCounts[row.plan] = row.count;
 
     metrics = {
-      total_tenants: countAt(0),
-      total_configurations: countAt(1),
-      tenants_without_configurations: countAt(2),
+      total_tenants: tenantsCount?.count ?? 0,
+      total_configurations: configsCount?.count ?? 0,
+      tenants_without_configurations: tenantsWithoutConfigsCount?.count ?? 0,
       configurations_without_agents: fleetMetrics.available
-        ? Math.max(countAt(1) - fleetMetrics.configurations_with_agents, 0)
+        ? Math.max((configsCount?.count ?? 0) - fleetMetrics.configurations_with_agents, 0)
         : 0,
-      total_users: countAt(3),
-      active_sessions: countAt(4),
-      impersonation_sessions: countAt(5),
-      active_tokens: countAt(6),
+      total_users: usersCount?.count ?? 0,
+      active_sessions: activeSessionsCount?.count ?? 0,
+      impersonation_sessions: impersonationSessionsCount?.count ?? 0,
+      active_tokens: activeTokensCount?.count ?? 0,
       total_agents: fleetMetrics.total_agents,
       connected_agents: fleetMetrics.connected_agents,
       disconnected_agents: fleetMetrics.disconnected_agents,
@@ -1003,12 +1044,14 @@ async function handleHealthCheck(env: Env): Promise<Response> {
 async function handleListPlans(env: Env): Promise<Response> {
   const planDefs = Object.values(PLAN_DEFINITIONS);
 
-  const counts = await env.FP_DB.prepare(
-    `SELECT plan, COUNT(*) as count FROM tenants GROUP BY plan`,
-  ).all<{ plan: string; count: number }>();
+  const counts = await getDb(env.FP_DB)
+    .selectFrom("tenants")
+    .select(["plan", (eb) => eb.fn.countAll<number>().as("count")])
+    .groupBy("plan")
+    .execute();
 
   const countMap: Record<string, number> = {};
-  for (const row of counts.results) {
+  for (const row of counts) {
     const plan = normalizePlan(row.plan) ?? row.plan;
     countMap[plan] = (countMap[plan] ?? 0) + row.count;
   }
@@ -1024,24 +1067,34 @@ async function handleListPlans(env: Env): Promise<Response> {
 // ─── Admin Overview ─────────────────────────────────────────────────
 
 async function handleAdminOverview(env: Env): Promise<Response> {
-  const results = await env.FP_DB.batch([
-    env.FP_DB.prepare("SELECT COUNT(*) as count FROM tenants"),
-    env.FP_DB.prepare("SELECT COUNT(*) as count FROM configurations"),
-    env.FP_DB.prepare("SELECT COUNT(*) as count FROM enrollment_tokens WHERE revoked_at IS NULL"),
-    env.FP_DB.prepare("SELECT COUNT(*) as count FROM users"),
-  ]);
-  const fleetMetrics = await readFleetMetricsSummary(env);
-
-  function getCount(idx: number): number {
-    const row = results[idx]?.results?.[0] as { count?: number } | undefined;
-    return row?.count ?? 0;
-  }
+  const db = getDb(env.FP_DB);
+  const [tenantsCount, configsCount, activeTokensCount, usersCount, fleetMetrics] =
+    await Promise.all([
+      db
+        .selectFrom("tenants")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("configurations")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      db
+        .selectFrom("enrollment_tokens")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .where("revoked_at", "is", null)
+        .executeTakeFirst(),
+      db
+        .selectFrom("users")
+        .select((eb) => eb.fn.countAll<number>().as("count"))
+        .executeTakeFirst(),
+      readFleetMetricsSummary(env),
+    ]);
 
   return Response.json({
-    total_tenants: getCount(0),
-    total_configurations: getCount(1),
-    total_active_tokens: getCount(2),
-    total_users: getCount(3),
+    total_tenants: tenantsCount?.count ?? 0,
+    total_configurations: configsCount?.count ?? 0,
+    total_active_tokens: activeTokensCount?.count ?? 0,
+    total_users: usersCount?.count ?? 0,
     total_agents: fleetMetrics.total_agents,
     connected_agents: fleetMetrics.connected_agents,
     healthy_agents: fleetMetrics.healthy_agents,
@@ -1058,54 +1111,41 @@ async function handleImpersonateTenant(
   tenantId: string,
   adminUserId: string | null,
 ): Promise<Response> {
-  const tenant = await env.FP_DB.prepare(`SELECT id, name FROM tenants WHERE id = ?`)
-    .bind(tenantId)
-    .first<{ id: string; name: string }>();
+  const db = getDb(env.FP_DB);
+  const tenant = await db
+    .selectFrom("tenants")
+    .select(["id", "name"])
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
   if (!tenant) return jsonError("Tenant not found", 404);
 
   const email = `impersonation+${tenantId}@o11yfleet.local`;
-  let user = await env.FP_DB.prepare(
-    `SELECT id, email, display_name, role, tenant_id
-     FROM users
-     WHERE email = ?
-     LIMIT 1`,
-  )
-    .bind(email)
-    .first<{
-      id: string;
-      email: string;
-      display_name: string;
-      role: string;
-      tenant_id: string | null;
-    }>();
+  let user = await db
+    .selectFrom("users")
+    .select(["id", "email", "display_name", "role", "tenant_id"])
+    .where("email", "=", email)
+    .limit(1)
+    .executeTakeFirst();
 
   if (!user) {
-    await env.FP_DB.prepare(
-      `INSERT OR IGNORE INTO users (id, email, password_hash, display_name, role, tenant_id)
-       VALUES (?, ?, ?, ?, 'member', ?)`,
-    )
-      .bind(
-        crypto.randomUUID(),
+    await db
+      .insertInto("users")
+      .values({
+        id: crypto.randomUUID(),
         email,
-        "impersonation:disabled",
-        `Admin view: ${tenant.name}`,
-        tenantId,
-      )
-      .run();
-    user = await env.FP_DB.prepare(
-      `SELECT id, email, display_name, role, tenant_id
-       FROM users
-       WHERE email = ?
-       LIMIT 1`,
-    )
-      .bind(email)
-      .first<{
-        id: string;
-        email: string;
-        display_name: string;
-        role: string;
-        tenant_id: string | null;
-      }>();
+        password_hash: "impersonation:disabled",
+        display_name: `Admin view: ${tenant.name}`,
+        role: "member",
+        tenant_id: tenantId,
+      })
+      .onConflict((oc) => oc.doNothing())
+      .execute();
+    user = await db
+      .selectFrom("users")
+      .select(["id", "email", "display_name", "role", "tenant_id"])
+      .where("email", "=", email)
+      .limit(1)
+      .executeTakeFirst();
     if (!user) throw new ApiError("Failed to provision impersonation user", 500);
   }
 
@@ -1114,12 +1154,16 @@ async function handleImpersonateTenant(
   // impersonator_user_id records the *real* admin so customer audit
   // logs can surface "support touched my tenant" entries with the
   // actual operator, not the synthetic impersonation+ user.
-  await env.FP_DB.prepare(
-    `INSERT INTO sessions (id, user_id, expires_at, is_impersonation, impersonator_user_id)
-     VALUES (?, ?, ?, 1, ?)`,
-  )
-    .bind(sessionId, user.id, expiresAt, adminUserId)
-    .run();
+  await db
+    .insertInto("sessions")
+    .values({
+      id: sessionId,
+      user_id: user.id,
+      expires_at: expiresAt,
+      is_impersonation: 1,
+      impersonator_user_id: adminUserId,
+    })
+    .execute();
 
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);
   return Response.json(
@@ -1150,21 +1194,22 @@ async function getTenantWithPrimaryUser(
   env: Env,
   tenantId: string,
 ): Promise<TenantWithUser | null> {
-  const tenant = await env.FP_DB.prepare(
-    `SELECT t.id, t.name, u.email
-     FROM tenants t
-     LEFT JOIN users u ON u.tenant_id = t.id
-     WHERE t.id = ?
-     LIMIT 1`,
-  )
-    .bind(tenantId)
-    .first<{ id: string; name: string; email: string }>();
+  const db = getDb(env.FP_DB);
+  const tenant = await db
+    .selectFrom("tenants as t")
+    .leftJoin("users as u", "u.tenant_id", "t.id")
+    .select(["t.id", "t.name", "u.email"])
+    .where("t.id", "=", tenantId)
+    .limit(1)
+    .executeTakeFirst();
 
   if (!tenant) return null;
 
-  const status = await env.FP_DB.prepare("SELECT status FROM tenants WHERE id = ?")
-    .bind(tenantId)
-    .first<{ status: string }>();
+  const status = await db
+    .selectFrom("tenants")
+    .select("status")
+    .where("id", "=", tenantId)
+    .executeTakeFirst();
 
   return {
     id: tenant.id,
@@ -1187,13 +1232,15 @@ async function handleApproveTenant(
   const adminId = request.headers.get("X-Admin-Id") ?? "system";
 
   if (body.action === "approve") {
-    await env.FP_DB.prepare(
-      `UPDATE tenants
-       SET status = 'active', approved_at = datetime('now'), approved_by = ?
-       WHERE id = ?`,
-    )
-      .bind(adminId, tenantId)
-      .run();
+    await getDb(env.FP_DB)
+      .updateTable("tenants")
+      .set({
+        status: "active",
+        approved_at: sql<string>`datetime('now')`,
+        approved_by: adminId,
+      })
+      .where("id", "=", tenantId)
+      .execute();
 
     // Send approval email
     const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
@@ -1208,9 +1255,11 @@ async function handleApproveTenant(
     return Response.json({ success: true, status: "active", tenantId });
   } else if (body.action === "reject") {
     // Mark as suspended (or you could delete the tenant)
-    await env.FP_DB.prepare(`UPDATE tenants SET status = 'suspended' WHERE id = ?`)
-      .bind(tenantId)
-      .run();
+    await getDb(env.FP_DB)
+      .updateTable("tenants")
+      .set({ status: "suspended" })
+      .where("id", "=", tenantId)
+      .execute();
 
     // Send rejection email
     const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
@@ -1250,13 +1299,16 @@ async function handleBulkApproveTenants(request: Request, env: Env): Promise<Res
         continue;
       }
 
-      await env.FP_DB.prepare(
-        `UPDATE tenants
-         SET status = 'active', approved_at = datetime('now'), approved_by = ?
-         WHERE id = ? AND status = 'pending'`,
-      )
-        .bind(adminId, tenantId)
-        .run();
+      await getDb(env.FP_DB)
+        .updateTable("tenants")
+        .set({
+          status: "active",
+          approved_at: sql<string>`datetime('now')`,
+          approved_by: adminId,
+        })
+        .where("id", "=", tenantId)
+        .where("status", "=", "pending")
+        .execute();
 
       // Send approval email
       const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);

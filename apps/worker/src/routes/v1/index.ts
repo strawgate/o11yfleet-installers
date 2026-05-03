@@ -39,7 +39,9 @@ import {
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
 import { validateJsonBody } from "../../shared/validation.js";
+import { sql, type RawBuilder } from "kysely";
 import { z } from "zod";
+import { getDb } from "../../db/client.js";
 import {
   countConfigsForTenant,
   findOwnedConfig,
@@ -477,6 +479,9 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
     );
   }
 
+  // Atomic batch — sessions, users, tenant must all delete or none.
+  // Kept as raw env.FP_DB.prepare() because Kysely's D1 batch isn't
+  // equivalent to D1's atomic batch().
   await env.FP_DB.batch([
     env.FP_DB.prepare(
       `DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE tenant_id = ?)`,
@@ -490,12 +495,13 @@ async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response>
 // ─── Team Handler ───────────────────────────────────────────────────
 
 async function handleGetTeam(env: Env, tenantId: string): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT id, email, display_name, role, created_at FROM users WHERE tenant_id = ? ORDER BY created_at ASC`,
-  )
-    .bind(tenantId)
-    .all();
-  return Response.json({ members: result.results });
+  const members = await getDb(env.FP_DB)
+    .selectFrom("users")
+    .select(["id", "email", "display_name", "role", "created_at"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "asc")
+    .execute();
+  return Response.json({ members });
 }
 
 // ─── Configuration Handlers ─────────────────────────────────────────
@@ -513,6 +519,11 @@ async function handleCreateConfiguration(
   const body = await validateJsonBody(request, createConfigurationRequestSchema);
 
   const id = crypto.randomUUID();
+  // Atomic create-with-quota check via INSERT ... SELECT. Kept as raw
+  // SQL because Kysely doesn't natively express the "INSERT only if
+  // (subquery COUNT) < max_configs" guard cleanly — a Kysely version
+  // would split into a SELECT-then-INSERT, which is racy under
+  // concurrent creates.
   const insertResult = await env.FP_DB.prepare(
     `INSERT INTO configurations (id, tenant_id, name, description)
      SELECT ?, t.id, ?, ?
@@ -526,9 +537,11 @@ async function handleCreateConfiguration(
     .run();
 
   if ((insertResult.meta.changes ?? 0) === 0) {
-    const tenant = await env.FP_DB.prepare(`SELECT max_configs FROM tenants WHERE id = ?`)
-      .bind(tenantId)
-      .first<{ max_configs: number }>();
+    const tenant = await getDb(env.FP_DB)
+      .selectFrom("tenants")
+      .select("max_configs")
+      .where("id", "=", tenantId)
+      .executeTakeFirst();
     if (!tenant) return { response: jsonError("Tenant not found", 404), resource_id: null };
     return {
       response: jsonError(`Configuration limit reached (${tenant.max_configs})`, 429),
@@ -566,28 +579,23 @@ async function handleUpdateConfiguration(
   if (!config) return jsonError("Configuration not found", 404);
 
   const body = await validateJsonBody(request, updateConfigurationRequestSchema);
-  const updates: string[] = [];
-  const values: unknown[] = [];
+  const set: {
+    name?: string;
+    description?: string | null;
+    updated_at: RawBuilder<string>;
+  } = {
+    updated_at: sql<string>`datetime('now')`,
+  };
+  if (body.name) set.name = body.name;
+  if (body.description !== undefined) set.description = body.description;
+  if (Object.keys(set).length === 1) return jsonError("No fields to update", 400);
 
-  if (body.name) {
-    updates.push("name = ?");
-    values.push(body.name);
-  }
-  if (body.description !== undefined) {
-    updates.push("description = ?");
-    values.push(body.description);
-  }
-  if (updates.length === 0) return jsonError("No fields to update", 400);
-
-  updates.push("updated_at = datetime('now')");
-  values.push(configId);
-  values.push(tenantId);
-
-  await env.FP_DB.prepare(
-    `UPDATE configurations SET ${updates.join(", ")} WHERE id = ? AND tenant_id = ?`,
-  )
-    .bind(...values)
-    .run();
+  await getDb(env.FP_DB)
+    .updateTable("configurations")
+    .set(set)
+    .where("id", "=", configId)
+    .where("tenant_id", "=", tenantId)
+    .execute();
 
   const updated = await getOwnedConfig(env, tenantId, configId);
   return typedJsonResponse(configurationSchema, updated as Configuration);
@@ -601,12 +609,15 @@ async function handleDeleteConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const versions = await env.FP_DB.prepare(
-    `SELECT DISTINCT r2_key FROM config_versions WHERE config_id = ?`,
-  )
-    .bind(configId)
-    .all<{ r2_key: string }>();
+  const versions = await getDb(env.FP_DB)
+    .selectFrom("config_versions")
+    .select("r2_key")
+    .distinct()
+    .where("config_id", "=", configId)
+    .execute();
 
+  // Atomic batch — kept as raw env.FP_DB.prepare() so we get D1's
+  // atomic batch semantics (Kysely's batch on D1 isn't equivalent).
   await env.FP_DB.batch([
     env.FP_DB.prepare(`DELETE FROM enrollment_tokens WHERE config_id = ?`).bind(configId),
     env.FP_DB.prepare(`DELETE FROM config_versions WHERE config_id = ?`).bind(configId),
@@ -622,7 +633,7 @@ async function handleDeleteConfiguration(
   // the number of historical versions, which on a long-lived config
   // could mean dozens of round-trips before the response finalizes.
   await Promise.all(
-    versions.results.map(({ r2_key: r2Key }) => deleteConfigContentIfUnreferenced(env, r2Key)),
+    versions.map(({ r2_key: r2Key }) => deleteConfigContentIfUnreferenced(env, r2Key)),
   );
 
   return new Response(null, { status: 204 });
@@ -672,24 +683,17 @@ async function handleListVersions(env: Env, tenantId: string, configId: string):
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const result = await env.FP_DB.prepare(
-    `SELECT id, config_id, config_hash, r2_key, size_bytes, created_by, created_at
-     FROM config_versions WHERE config_id = ? ORDER BY created_at DESC, rowid DESC`,
-  )
-    .bind(configId)
-    .all<{
-      id: string;
-      config_id: string;
-      config_hash: string;
-      r2_key: string;
-      size_bytes: number;
-      created_by: string | null;
-      created_at: string;
-    }>();
+  const rows = await getDb(env.FP_DB)
+    .selectFrom("config_versions")
+    .select(["id", "config_id", "config_hash", "r2_key", "size_bytes", "created_by", "created_at"])
+    .where("config_id", "=", configId)
+    .orderBy("created_at", "desc")
+    .orderBy(sql`rowid`, "desc")
+    .execute();
 
-  const versions = result.results.map((version, index) => ({
+  const versions = rows.map((version, index) => ({
     ...version,
-    version: result.results.length - index,
+    version: rows.length - index,
   }));
 
   return Response.json({
@@ -706,25 +710,21 @@ async function handleLatestVersionDiff(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const result = await env.FP_DB.prepare(
-    `SELECT id, config_hash, r2_key, size_bytes, created_at
-     FROM config_versions WHERE config_id = ? ORDER BY created_at DESC, rowid DESC LIMIT 2`,
-  )
-    .bind(configId)
-    .all<{
-      id: string;
-      config_hash: string;
-      r2_key: string;
-      size_bytes: number;
-      created_at: string;
-    }>();
+  const rows = await getDb(env.FP_DB)
+    .selectFrom("config_versions")
+    .select(["id", "config_hash", "r2_key", "size_bytes", "created_at"])
+    .where("config_id", "=", configId)
+    .orderBy("created_at", "desc")
+    .orderBy(sql`rowid`, "desc")
+    .limit(2)
+    .execute();
 
-  const [latest, previous] = result.results;
+  const [latest, previous] = rows;
   if (!latest || !previous) {
     return Response.json({
       available: false,
       reason: "At least two versions are required for a latest-vs-previous diff.",
-      versions_seen: result.results.length,
+      versions_seen: rows.length,
     });
   }
 
@@ -736,7 +736,7 @@ async function handleLatestVersionDiff(
     return Response.json({
       available: false,
       reason: "One or more version YAML blobs are missing from storage.",
-      versions_seen: result.results.length,
+      versions_seen: rows.length,
     });
   }
 
@@ -832,11 +832,17 @@ async function handleCreateEnrollmentToken(
   const tokenHash = await hashEnrollmentToken(rawToken);
 
   // Store in D1 as admin registry (for listing/revocation UI — NOT used on connect path)
-  await env.FP_DB.prepare(
-    `INSERT INTO enrollment_tokens (id, config_id, tenant_id, token_hash, label, expires_at) VALUES (?, ?, ?, ?, ?, ?)`,
-  )
-    .bind(id, configId, tenantId, tokenHash, body.label ?? null, expiresAt)
-    .run();
+  await getDb(env.FP_DB)
+    .insertInto("enrollment_tokens")
+    .values({
+      id,
+      config_id: configId,
+      tenant_id: tenantId,
+      token_hash: tokenHash,
+      label: body.label ?? null,
+      expires_at: expiresAt,
+    })
+    .execute();
 
   return {
     response: typedJsonResponse(
@@ -862,14 +868,14 @@ async function handleListEnrollmentTokens(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const result = await env.FP_DB.prepare(
-    `SELECT id, config_id, tenant_id, label, expires_at, revoked_at, created_at
-     FROM enrollment_tokens WHERE config_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(configId)
-    .all();
+  const tokens = await getDb(env.FP_DB)
+    .selectFrom("enrollment_tokens")
+    .select(["id", "config_id", "tenant_id", "label", "expires_at", "revoked_at", "created_at"])
+    .where("config_id", "=", configId)
+    .orderBy("created_at", "desc")
+    .execute();
 
-  return Response.json({ tokens: result.results });
+  return Response.json({ tokens });
 }
 
 async function handleRevokeEnrollmentToken(
@@ -881,17 +887,21 @@ async function handleRevokeEnrollmentToken(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const token = await env.FP_DB.prepare(
-    `SELECT * FROM enrollment_tokens WHERE id = ? AND config_id = ?`,
-  )
-    .bind(tokenId, configId)
-    .first();
+  const db = getDb(env.FP_DB);
+  const token = await db
+    .selectFrom("enrollment_tokens")
+    .selectAll()
+    .where("id", "=", tokenId)
+    .where("config_id", "=", configId)
+    .executeTakeFirst();
   if (!token) return jsonError("Enrollment token not found", 404);
-  if (token["revoked_at"]) return jsonError("Token is already revoked", 409);
+  if (token.revoked_at) return jsonError("Token is already revoked", 409);
 
-  await env.FP_DB.prepare(`UPDATE enrollment_tokens SET revoked_at = datetime('now') WHERE id = ?`)
-    .bind(tokenId)
-    .run();
+  await db
+    .updateTable("enrollment_tokens")
+    .set({ revoked_at: sql<string>`datetime('now')` })
+    .where("id", "=", tokenId)
+    .execute();
 
   return Response.json({ id: tokenId, revoked: true });
 }
@@ -1249,17 +1259,12 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
 
-  const configs = await env.FP_DB.prepare(
-    "SELECT id, tenant_id, name, current_config_hash, created_at, updated_at FROM configurations WHERE tenant_id = ? ORDER BY created_at DESC",
-  )
-    .bind(tenantId)
-    .all<{
-      id: string;
-      name: string;
-      current_config_hash: string | null;
-      created_at: string;
-      updated_at: string;
-    }>();
+  const configs = await getDb(env.FP_DB)
+    .selectFrom("configurations")
+    .select(["id", "tenant_id", "name", "current_config_hash", "created_at", "updated_at"])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .execute();
 
   let metricsSource: "analytics_engine" | "unavailable" = "unavailable";
   let metricsError: string | null = null;
@@ -1280,7 +1285,7 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     }
   }
 
-  const configStats: ConfigurationWithStats[] = configs.results.map((config) => {
+  const configStats: ConfigurationWithStats[] = configs.map((config) => {
     const snapshot = byConfig.get(config.id);
     const stats: ConfigStats = snapshot
       ? {
@@ -1306,7 +1311,7 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     total_agents: totals.totalAgents,
     connected_agents: totals.connectedAgents,
     healthy_agents: totals.healthyAgents,
-    configs_count: configs.results.length,
+    configs_count: configs.length,
     configurations: configStats,
     metrics_source: metricsSource,
     metrics_error: metricsError,
@@ -1317,32 +1322,26 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
   const body = await validateJsonBody(request, updateTenantRequestSchema);
-  const updates: string[] = [];
-  const values: unknown[] = [];
+  const set: {
+    name?: string;
+    geo_enabled?: 0 | 1;
+    updated_at: RawBuilder<string>;
+  } = { updated_at: sql<string>`datetime('now')` };
+  if (body.name !== undefined) set.name = body.name;
+  if (body.geo_enabled !== undefined) set.geo_enabled = body.geo_enabled ? 1 : 0;
 
-  if (body.name !== undefined) {
-    updates.push("name = ?");
-    values.push(body.name);
-  }
-  if (body.geo_enabled !== undefined) {
-    updates.push("geo_enabled = ?");
-    values.push(body.geo_enabled ? 1 : 0);
-  }
-
-  if (updates.length === 0) {
+  if (Object.keys(set).length === 1) {
     const tenant = await findTenantById(env, tenantId);
     if (!tenant) return jsonError("Tenant not found", 404);
     return typedJsonResponse(tenantSchema, tenant as Tenant);
   }
 
-  updates.push("updated_at = datetime('now')");
-  values.push(tenantId);
-
-  const updated = await env.FP_DB.prepare(
-    `UPDATE tenants SET ${updates.join(", ")} WHERE id = ? RETURNING *`,
-  )
-    .bind(...values)
-    .first();
+  const updated = await getDb(env.FP_DB)
+    .updateTable("tenants")
+    .set(set)
+    .where("id", "=", tenantId)
+    .returningAll()
+    .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
   return Response.json(updated);
 }
@@ -1370,13 +1369,21 @@ async function handleGetAgent(
 // ─── Pending Token Handlers ────────────────────────────────────────
 
 async function handleListPendingTokens(env: Env, tenantId: string): Promise<Response> {
-  const result = await env.FP_DB.prepare(
-    `SELECT id, tenant_id, label, target_config_id, expires_at, revoked_at, created_at
-     FROM pending_tokens WHERE tenant_id = ? ORDER BY created_at DESC`,
-  )
-    .bind(tenantId)
-    .all();
-  return Response.json({ tokens: result.results });
+  const tokens = await getDb(env.FP_DB)
+    .selectFrom("pending_tokens")
+    .select([
+      "id",
+      "tenant_id",
+      "label",
+      "target_config_id",
+      "expires_at",
+      "revoked_at",
+      "created_at",
+    ])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("created_at", "desc")
+    .execute();
+  return Response.json({ tokens });
 }
 
 // ─── API Key Handlers ─────────────────────────────────────────────
@@ -1462,11 +1469,16 @@ async function handleCreatePendingToken(
   const token = `fp_pending_${payload}.${sigB64}`;
   const tokenHash = await hashEnrollmentToken(token);
 
-  await env.FP_DB.prepare(
-    `INSERT INTO pending_tokens (id, tenant_id, token_hash, label, target_config_id) VALUES (?, ?, ?, ?, ?)`,
-  )
-    .bind(id, tenantId, tokenHash, label, targetConfigId)
-    .run();
+  await getDb(env.FP_DB)
+    .insertInto("pending_tokens")
+    .values({
+      id,
+      tenant_id: tenantId,
+      token_hash: tokenHash,
+      label,
+      target_config_id: targetConfigId,
+    })
+    .execute();
 
   return {
     response: Response.json(
@@ -1482,17 +1494,21 @@ async function handleRevokePendingToken(
   tenantId: string,
   tokenId: string,
 ): Promise<Response> {
-  const token = await env.FP_DB.prepare(
-    `SELECT * FROM pending_tokens WHERE id = ? AND tenant_id = ?`,
-  )
-    .bind(tokenId, tenantId)
-    .first();
+  const db = getDb(env.FP_DB);
+  const token = await db
+    .selectFrom("pending_tokens")
+    .selectAll()
+    .where("id", "=", tokenId)
+    .where("tenant_id", "=", tenantId)
+    .executeTakeFirst();
   if (!token) return jsonError("Pending token not found", 404);
-  if (token["revoked_at"]) return jsonError("Token is already revoked", 409);
+  if (token.revoked_at) return jsonError("Token is already revoked", 409);
 
-  await env.FP_DB.prepare(`UPDATE pending_tokens SET revoked_at = datetime('now') WHERE id = ?`)
-    .bind(tokenId)
-    .run();
+  await db
+    .updateTable("pending_tokens")
+    .set({ revoked_at: sql<string>`datetime('now')` })
+    .where("id", "=", tokenId)
+    .execute();
 
   return Response.json({ id: tokenId, revoked: true });
 }
