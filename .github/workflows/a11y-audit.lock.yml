@@ -147,7 +147,8 @@ jobs:
             .crush
             .gemini
             .opencode
-          sparse-checkout-cone-mode: true
+            !.claude/worktrees/**
+          sparse-checkout-cone-mode: false
           fetch-depth: 1
       - name: Save agent config folders for base branch restoration
         env:
