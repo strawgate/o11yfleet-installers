@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 type CheckPlan = {
   formatFiles: string[];
   runAllFast: boolean;
+  runTypeAwareLint: boolean;
   runDocsApiCheck: boolean;
   runScriptsLint: boolean;
   runWorkerTypegenCheck: boolean;
@@ -168,6 +169,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
     return {
       formatFiles: [],
       runAllFast: true,
+      runTypeAwareLint: true,
       runDocsApiCheck: true,
       runScriptsLint: true,
       runWorkerTypegenCheck: true,
@@ -182,6 +184,9 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
     .filter((file) => existsSync(file));
 
   const runAllFast = files.some(isCodeOrConfigChange);
+
+  // Run type-aware lint when TypeScript files change (catches async/void return issues)
+  const runTypeAwareLint = files.some((file) => file.endsWith(".ts") || file.endsWith(".tsx"));
 
   const runDocsApiCheck = files.some(
     (file) =>
@@ -212,6 +217,7 @@ export function buildPlan(files: string[], options: DevCheckOptions = parseOptio
   return {
     formatFiles,
     runAllFast,
+    runTypeAwareLint,
     runDocsApiCheck,
     runScriptsLint,
     runWorkerTypegenCheck,
@@ -257,6 +263,15 @@ export function buildSteps(plan: CheckPlan): CheckStep[] {
       command: "pnpm",
       args: ["turbo", "lint", "typecheck", "test"],
       reason: "code or shared config changed",
+    });
+  }
+
+  if (plan.runTypeAwareLint) {
+    steps.push({
+      id: "type-aware-lint",
+      command: "pnpm",
+      args: ["lint:type-aware"],
+      reason: "TypeScript files changed; running type-aware lint",
     });
   }
 
@@ -358,6 +373,7 @@ function printPlan(plan: CheckPlan, files: string[], options: DevCheckOptions): 
     ["worker-typegen", plan.runWorkerTypegenCheck, "worker typegen input changed"],
     ["scripts-lint", plan.runScriptsLint, "repo maintenance script changed"],
     ["fast-suite", plan.runAllFast, "code/config changed"],
+    ["type-aware-lint", plan.runTypeAwareLint, "TypeScript files changed"],
     ["api-docs", plan.runDocsApiCheck, "API docs/route changed"],
     ["worker-runtime", plan.runWorkerRuntime, "worker runtime-adjacent changed"],
   ] as const;

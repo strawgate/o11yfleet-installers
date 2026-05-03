@@ -1,39 +1,62 @@
-import type { PipelineGraph } from "@o11yfleet/core/pipeline";
-import type { BuilderEdge, BuilderNode, BuilderRole } from "../types";
+/**
+ * to-flow.ts — Schema projection from core PipelineGraph to site BuilderNode/BuilderEdge.
+ *
+ * The canonical model lives in @o11yfleet/core/pipeline. This module bridges
+ * to the site's BuilderNode/BuilderEdge types used by the canvas.
+ *
+ * The core graphToFlow() handles column layout. This module maps the result
+ * to the site's type system (BuilderNode has data.name/signals, not data.component).
+ */
+
+import { graphToFlow } from "@o11yfleet/core/pipeline";
+import type { BuilderEdge, BuilderNode } from "../types";
+import type { PipelineNode, PipelineEdge } from "@o11yfleet/core/pipeline";
 
 /**
- * PipelineGraph → xyflow nodes/edges. The canonical schema lives in core;
- * this is just a view projection.
- *
- * Connector inference: PipelineGraph today only knows three roles
- * (receiver, processor, exporter). The builder UI separately renders
- * "connector" — components flagged via the catalog. For v1 we treat
- * any component with role="processor" AND signals on both input/output
- * as a candidate, but the true connector flag will land with the
- * connector-aware schema in a follow-up. For now, role maps 1:1.
+ * PipelineGraph → site BuilderNode/BuilderEdge.
+ * Uses core's graphToFlow for layout, then maps to site types.
  */
-export function toFlow(graph: PipelineGraph): { nodes: BuilderNode[]; edges: BuilderEdge[] } {
-  const nodes: BuilderNode[] = graph.components.map((c) => {
-    const role: BuilderRole = c.role; // TODO: detect connectors via catalog
-    const layout = (c.config["_layout"] ?? null) as { x: number; y: number } | null;
-    return {
-      id: c.id,
-      type: role,
-      position: layout ?? { x: 0, y: 0 },
-      data: {
-        name: c.name || c.type,
-        signals: c.signals,
-      },
-    };
-  });
+export function toFlow(graph: Parameters<typeof graphToFlow>[0]): {
+  nodes: BuilderNode[];
+  edges: BuilderEdge[];
+} {
+  const flow = graphToFlow(graph);
 
-  const edges: BuilderEdge[] = graph.wires.map((w, i) => ({
-    id: `e-${w.from}-${w.to}-${w.signal}-${i}`,
-    source: w.from,
-    target: w.to,
-    type: "signal" as const,
-    data: { signal: w.signal },
-  }));
+  // Map core PipelineNode → site BuilderNode
+  const nodes: BuilderNode[] = flow.nodes.map(mapNode);
+
+  // Map core PipelineEdge → site BuilderEdge
+  const edges: BuilderEdge[] = flow.edges.map(mapEdge);
 
   return { nodes, edges };
+}
+
+/**
+ * Map a core PipelineNode to a site BuilderNode.
+ */
+function mapNode(node: PipelineNode): BuilderNode {
+  return {
+    id: node.id,
+    type: node.type ?? "processor",
+    position: node.position,
+    data: {
+      name: node.data.component.name,
+      signals: node.data.component.signals,
+    },
+  };
+}
+
+/**
+ * Map a core PipelineEdge to a site BuilderEdge.
+ */
+function mapEdge(edge: PipelineEdge): BuilderEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    type: edge.type,
+    data: {
+      signal: edge.data?.wire.signal ?? "metrics",
+    },
+  };
 }

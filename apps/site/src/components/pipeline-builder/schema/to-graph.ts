@@ -1,46 +1,81 @@
-import type { PipelineGraph, PipelineComponent } from "@o11yfleet/core/pipeline";
+/**
+ * to-graph.ts — Schema projection from site BuilderNode/BuilderEdge to core PipelineGraph.
+ *
+ * The canonical model lives in @o11yfleet/core/pipeline. This module bridges
+ * from the site's BuilderNode/BuilderEdge types back to the core PipelineGraph.
+ *
+ * The core flowToGraph() handles position persistence and round-tripping.
+ * This module maps from site types to core types.
+ */
+
+import { flowToGraph } from "@o11yfleet/core/pipeline";
 import type { BuilderEdge, BuilderNode } from "../types";
+import type { PipelineComponent, PipelineNode, PipelineEdge } from "@o11yfleet/core/pipeline";
 
 /**
- * xyflow nodes/edges → PipelineGraph. Inverse of toFlow. Persists the
- * node `position` into `component.config._layout` so a save+load round-trip
- * preserves the canvas placement.
+ * Site BuilderNode/BuilderEdge → PipelineGraph.
  *
- * The PipelineGraph this returns mirrors the input graph identity (id,
- * label, description) — caller passes those through.
+ * @param flow - The site's nodes and edges
+ * @param identity - Graph identity (id, label, description)
+ * @param baseline - Optional map for preserving config fields through round-trip
  */
 export function toGraph(
   flow: { nodes: BuilderNode[]; edges: BuilderEdge[] },
-  identity: Pick<PipelineGraph, "id" | "label" | "description">,
-  // Optional: original components carry preserved fields (type, config sans
-  // _layout). Without it, we synthesise minimal components.
+  identity: { id: string; label: string; description?: string },
   baseline?: Map<string, PipelineComponent>,
-): PipelineGraph {
-  const components: PipelineComponent[] = flow.nodes.map((n) => {
-    const base = baseline?.get(n.id);
-    const config = { ...(base?.config ?? {}) } as Record<string, unknown>;
-    config["_layout"] = { x: n.position.x, y: n.position.y };
-    return {
-      id: n.id,
-      role: n.type === "connector" ? "processor" : (n.type ?? "processor"),
-      type: base?.type ?? n.data.name,
-      name: n.data.name,
-      signals: n.data.signals,
-      config: config as PipelineComponent["config"],
-    };
-  });
+): ReturnType<typeof flowToGraph> {
+  // Map site BuilderNode → core PipelineNode
+  const nodes: PipelineNode[] = flow.nodes.map(mapToCoreNode);
 
-  const wires = flow.edges.map((e) => ({
-    from: e.source,
-    to: e.target,
-    signal: e.data?.signal ?? "metrics",
-  }));
+  // Map site BuilderEdge → core PipelineEdge
+  const edges: PipelineEdge[] = flow.edges.map(mapToCoreEdge);
+
+  return flowToGraph(
+    nodes,
+    edges,
+    { id: identity.id, label: identity.label, description: identity.description },
+    baseline,
+  );
+}
+
+/**
+ * Map a site BuilderNode to a core PipelineNode.
+ * Reconstructs the minimal component data needed for round-trip.
+ */
+function mapToCoreNode(node: BuilderNode): PipelineNode {
+  // The minimal component info we need for round-trip
+  const component: PipelineComponent = {
+    id: node.id,
+    role: node.type === "connector" ? "processor" : (node.type ?? "processor"),
+    type: node.data.name, // Use name as type in this direction
+    name: node.data.name,
+    signals: node.data.signals,
+    config: {},
+  };
 
   return {
-    id: identity.id,
-    label: identity.label,
-    description: identity.description,
-    components,
-    wires,
+    id: node.id,
+    type: component.role,
+    position: node.position,
+    data: { component },
+  };
+}
+
+/**
+ * Map a site BuilderEdge to a core PipelineEdge.
+ */
+function mapToCoreEdge(edge: BuilderEdge): PipelineEdge {
+  return {
+    id: edge.id,
+    source: edge.source,
+    target: edge.target,
+    type: "signal",
+    data: {
+      wire: {
+        from: edge.source,
+        to: edge.target,
+        signal: edge.data?.signal ?? "metrics",
+      },
+    },
   };
 }
