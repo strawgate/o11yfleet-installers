@@ -955,7 +955,7 @@ export default function ConfigurationDetailPage() {
           {yaml.isLoading ? (
             <LoadingSpinner />
           ) : (
-            <pre className="code-block">{yaml.data ?? "# No YAML available"}</pre>
+            <Code block>{yaml.data ?? "# No YAML available"}</Code>
           )}
         </Card>
       )}

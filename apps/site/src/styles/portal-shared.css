@@ -7,40 +7,6 @@ body::before {
   display: none;
 } /* drop marketing grain */
 
-/* ---------- Code blocks (yaml etc) ---------- */
-.code-block {
-  background: var(--bg-elev);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  padding: 14px 16px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--fg-2);
-  overflow-x: auto;
-  position: relative;
-  white-space: pre;
-}
-.code-block-wrap {
-  overflow-x: hidden;
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.token-value {
-  max-width: 100%;
-  white-space: normal;
-  overflow-wrap: anywhere;
-}
-.code-block .k {
-  color: var(--accent);
-}
-.code-block .s {
-  color: var(--fg);
-}
-.code-block .c {
-  color: var(--fg-4);
-}
-
 /* ---------- Auth pages ---------- */
 .auth-shell {
   display: flex;
@@ -243,21 +209,4 @@ body.auth {
 .detail-list dd {
   margin: 0;
   color: var(--fg);
-}
-
-/* Config viewer */
-.config-viewer {
-  background: var(--bg-elev, var(--bg-soft));
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  font-family: var(--font-mono);
-  font-size: 12px;
-  line-height: 1.65;
-  color: var(--fg-2);
-  padding: 16px 18px;
-  overflow-x: auto;
-  max-height: 600px;
-  overflow-y: auto;
-  white-space: pre;
-  margin: 0;
 }

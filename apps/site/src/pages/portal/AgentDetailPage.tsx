@@ -41,7 +41,19 @@ import {
   StatusBadge as AppStatusBadge,
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Badge, Box, Button, Card, Group, Paper, Stack, Tabs, Text, Title } from "@mantine/core";
+import {
+  Badge,
+  Box,
+  Button,
+  Card,
+  Code,
+  Group,
+  Paper,
+  Stack,
+  Tabs,
+  Text,
+  Title,
+} from "@mantine/core";
 import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -793,7 +805,9 @@ function ConfigTab({
             local configuration.
           </div>
         )}
-        <pre className="config-viewer">{effectiveConfig}</pre>
+        <Code block style={{ maxHeight: 600, overflowY: "auto" }}>
+          {effectiveConfig}
+        </Code>
       </Card>
     </div>
   );
