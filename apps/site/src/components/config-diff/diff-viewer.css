@@ -1,26 +1,55 @@
 /* Local styles for the lazy diff viewer. Loaded only when the chunk loads. */
 
-.cm-fb-diff-host {
+/* react-diff-viewer-continued styles */
+.rdiff-host {
   border: 1px solid var(--mantine-color-default-border);
   border-radius: var(--mantine-radius-md);
   overflow: hidden;
   background: var(--mantine-color-body);
 }
 
-.cm-fb-diff-host .cm-mergeView {
-  height: 100%;
+.rdiff-host .diff-container {
+  font-family:
+    "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
 }
 
-.cm-fb-diff-host .cm-mergeViewEditors {
-  height: 100%;
+.rdiff-host .diff-line {
+  font-size: 13px;
+  line-height: 1.6;
 }
 
-.cm-fb-diff-host .cm-editor {
-  height: 100%;
+/* Line numbers */
+.rdiff-host .line-number {
+  min-width: 3ch;
+  padding-right: 1ch;
+  color: var(--mantine-color-dimmed);
 }
 
-.cm-fb-comment-thread {
-  border-top: 1px solid var(--mantine-color-default-border);
-  border-bottom: 1px solid var(--mantine-color-default-border);
-  background: var(--mantine-color-default-hover);
+/* Added lines */
+.rdiff-host .added-line {
+  background: rgba(34, 197, 94, 0.15);
+}
+
+.rdiff-host .added-line .same {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+/* Removed lines */
+.rdiff-host .removed-line {
+  background: rgba(239, 68, 68, 0.15);
+}
+
+.rdiff-host .removed-line .same {
+  background: rgba(239, 68, 68, 0.25);
+}
+
+/* Changed words highlighting */
+.rdiff-host .word-level-diff {
+  background: rgba(250, 204, 21, 0.4);
+  border-radius: 2px;
+}
+
+/* Dark theme adjustments */
+[data-mantine-color-scheme="dark"] .rdiff-host {
+  background: #1e1e1e;
 }

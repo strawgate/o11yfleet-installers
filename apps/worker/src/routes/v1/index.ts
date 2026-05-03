@@ -1133,6 +1133,11 @@ function versionSummary(version: {
   };
 }
 
+/**
+ * Computes a summary of text differences between two YAML strings.
+ * Uses the `diff` package's Myers diff algorithm for accurate line-level changes.
+ * Returns line counts, byte delta, and added/removed line counts.
+ */
 function summarizeTextDiff(previous: string, latest: string) {
   // Use the `diff` package for accurate line-level diffs
   // This replaces the hand-rolled LCS algorithm which had O(N×M) worst case

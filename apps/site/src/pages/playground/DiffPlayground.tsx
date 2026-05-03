@@ -1,7 +1,5 @@
-import { Suspense, lazy, useCallback, useState } from "react";
-import { Button, Code, Container, Divider, Group, Loader, Stack, Text, Title } from "@mantine/core";
-import type { CommentThread, DiffSide } from "@/components/config-diff";
-import { nanoid } from "nanoid";
+import { Suspense, lazy } from "react";
+import { Container, Divider, Loader, Stack, Text, Title } from "@mantine/core";
 
 const ConfigDiffViewer = lazy(() => import("@/components/config-diff/ConfigDiffViewer"));
 
@@ -92,98 +90,21 @@ service:
 `;
 
 export function DiffPlayground() {
-  const [threads, setThreads] = useState<CommentThread[]>([
-    {
-      id: "thread-seed-1",
-      side: "b",
-      line: 16,
-      comments: [
-        {
-          id: "c-1",
-          author: "Alice",
-          body: "Spike limit unchanged but the new queue_size jumped 5×.\nCheck whether downstream can absorb the burst.",
-          createdAt: new Date(Date.now() - 86_400_000).toISOString(),
-        },
-      ],
-    },
-  ]);
-
-  const handleAddThread = useCallback((side: DiffSide, line: number) => {
-    setThreads((prev) => {
-      const existing = prev.find((t) => t.side === side && t.line === line);
-      if (existing) return prev;
-      return [
-        ...prev,
-        {
-          id: nanoid(),
-          side,
-          line,
-          comments: [],
-        },
-      ];
-    });
-  }, []);
-
-  const handleSubmit = useCallback((threadId: string, body: string) => {
-    setThreads((prev) =>
-      prev.map((t) =>
-        t.id === threadId
-          ? {
-              ...t,
-              comments: [
-                ...t.comments,
-                {
-                  id: nanoid(),
-                  author: "you",
-                  body,
-                  createdAt: new Date().toISOString(),
-                },
-              ],
-            }
-          : t,
-      ),
-    );
-  }, []);
-
   return (
     <Container size="xl" py="xl">
       <Stack gap="xl">
         <Stack gap={4}>
           <Title order={2}>Config diff playground</Title>
           <Text c="dimmed" size="sm">
-            Side-by-side YAML diff with line-anchored React comment widgets.
-            <strong>Alt-click</strong> any line to add a thread. Threads survive light/dark theme
-            toggle without re-mounting. Lazy-loaded — open the Network tab to confirm CM6 only loads
-            when this page does.
+            Side-by-side YAML diff using react-diff-viewer-continued. Lazy-loaded — open the Network
+            tab to confirm the chunk only loads when this page does.
           </Text>
         </Stack>
-
-        <Group justify="space-between">
-          <Text size="sm">
-            <Code>{threads.length}</Code> thread(s) ·{" "}
-            <Code>{threads.reduce((n, t) => n + t.comments.length, 0)}</Code> comment(s)
-          </Text>
-          <Button
-            size="xs"
-            variant="default"
-            onClick={() => setThreads([])}
-            disabled={threads.length === 0}
-          >
-            Clear all
-          </Button>
-        </Group>
 
         <Divider />
 
         <Suspense fallback={<Loader />}>
-          <ConfigDiffViewer
-            left={FIXTURE_LEFT}
-            right={FIXTURE_RIGHT}
-            threads={threads}
-            onAddThread={handleAddThread}
-            onSubmitComment={handleSubmit}
-            height={640}
-          />
+          <ConfigDiffViewer left={FIXTURE_LEFT} right={FIXTURE_RIGHT} height={640} />
         </Suspense>
       </Stack>
     </Container>

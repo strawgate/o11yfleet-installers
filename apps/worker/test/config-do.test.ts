@@ -815,6 +815,49 @@ describe("Duplicate UID detection", () => {
     ws1.close();
     ws2.close();
   });
+
+  it("does not count closed sockets as duplicates — only OPEN sockets matter", async () => {
+    const tenant = await createTenant("Dup Corp");
+    const config = await createConfig(tenant.id, "dup-uid-open-only");
+    const token = await createEnrollmentToken(config.id);
+
+    // First enrollment
+    const { ws: wsEnroll, enrollment } = await connectWithEnrollment(token.token);
+    const originalUid = enrollment.instance_uid;
+
+    // Close this socket — it should NOT count as a duplicate
+    wsEnroll.close();
+
+    const claim: AssignmentClaim = {
+      v: 1,
+      tenant_id: tenant.id,
+      config_id: config.id,
+      instance_uid: originalUid,
+      generation: 1,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 86400,
+    };
+
+    // Connecting after enrollment socket closed should NOT trigger duplicate UID
+    // because the enrollment socket is closed (not OPEN)
+    const ws1 = await connectWithClaim(claim);
+    const response1 = await sendHello(ws1);
+
+    // Should NOT get a new_instance_uid — no duplicate detected
+    expect(response1.agent_identification).toBeUndefined();
+    expect(response1.instance_uid).toBeDefined();
+
+    // Now connect a second OPEN socket with the same UID
+    const ws2 = await connectWithClaim(claim);
+    const dupResponse = await sendHello(ws2);
+
+    // NOW duplicate should be detected (two OPEN sockets)
+    expect(dupResponse.agent_identification).toBeDefined();
+    expect(dupResponse.agent_identification!.new_instance_uid).toBeDefined();
+
+    ws1.close();
+    ws2.close();
+  });
 });
 
 // ─── webSocketError defensive attachment parse ──────────────────────

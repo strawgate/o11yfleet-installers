@@ -343,8 +343,10 @@ export async function getAgentSummaries(
 // ─── WebSocket Connection Helpers ───────────────────────────────────
 
 /**
- * Connect a WebSocket using an enrollment token. Returns the accepted WS +
- * the enrollment response (assignment_claim, instance_uid).
+ * Connect a WebSocket using an enrollment token. Returns the accepted WS,
+ * the enrollment response (assignment_claim, instance_uid), and a DO stub
+ * that can be used with runInDurableObject to call DO methods while the
+ * WebSocket is still open.
  *
  * Per OpAMP spec, client sends first. We send an initial hello to trigger
  * the deferred enrollment flow in the DO.
@@ -352,23 +354,35 @@ export async function getAgentSummaries(
  * Note: After protobuf-only refactor (c315fc1), the server no longer sends
  * enrollment_complete text messages. Instead, we construct the assignment_claim
  * locally from the enrollment token and server response.
+ *
+ * The doStub is constructed from the enrollment token's tenant_id and config_id.
+ * The DO is awake when this function returns (after reconnect hello completes),
+ * so callers can immediately use doStub to invoke DO methods while the WebSocket
+ * is live. After the function returns, the DO may hibernate and its WebSockets
+ * may be closed (in test environments).
  */
 export async function connectWithEnrollment(
   token: string,
   opts: {
     /**
      * Optional callback invoked after the reconnect hello completes but before the
-     * DO goes to sleep. Use this to call DO methods (e.g. sendOwnMetricsOffer)
-     * while the WebSocket is still open — the DO is awake and WS tags are live.
+     * helper returns. The DO is awake from processing the reconnect hello and its
+     * WebSocket tags are valid — use this to call DO methods (e.g. sendOwnMetricsOffer)
+     * that need to find the collector's WebSocket.
      *
-     * Signature: (instanceUid: string) => Promise<void>
+     * Signature: (instanceUid: string, doStub: DurableObjectStub) => Promise<void>
      */
-    doAction?: (instanceUid: string) => Promise<void>;
+    doAction?: (
+      instanceUid: string,
+      doStub: ReturnType<typeof env.CONFIG_DO.get>,
+    ) => Promise<void>;
   } = {},
 ): Promise<{
   ws: WebSocket;
   enrollment: { type: string; assignment_claim: string; instance_uid: string };
   instanceUid: string;
+  /** DO stub for use with runInDurableObject. The DO is awake when this returns. */
+  doStub: ReturnType<typeof env.CONFIG_DO.get>;
 }> {
   const wsRes = await exports.default.fetch("http://localhost/v1/opamp", {
     headers: { Upgrade: "websocket", Authorization: `Bearer ${token}` },
@@ -383,26 +397,27 @@ export async function connectWithEnrollment(
   // ReportsRemoteConfig) which is the expected capability set for enrollment.
   ws.send(encodeFrame(buildHello()));
 
-  // Receive OpAMP binary response (server accepts enrollment and sends response)
-  // The response contains instance_uid assigned by the server.
+  // Receive OpAMP binary response (server accepts enrollment and sends response).
+  // The DO may close this socket and request reconnect via AgentIdentification.
   const msgEvent = await waitForMsg(ws);
   const buf = await msgToBuffer(msgEvent);
   const response = decodeFrame<ServerToAgent>(buf);
   expect(response.instance_uid).toBeDefined();
 
   // The DO sends AgentIdentification telling the agent to use a specific instance_uid.
-  // Use this DO-assigned UID (not the agent's self-reported UID from response.instance_uid)
-  // for the assignment claim and all subsequent API calls.
+  // Use this DO-assigned UID (not the agent's self-reported UID) for the claim and
+  // all subsequent operations, so ctx.getWebSockets(doAssignedUid) finds the socket.
   const agentIdentUid = response.agent_identification?.new_instance_uid;
   const doAssignedUid = agentIdentUid
     ? uint8ToHex(agentIdentUid)
     : uint8ToHex(response.instance_uid);
 
-  // Construct a proper assignment claim for reconnect.
-  // The enrollment token contains tenant_id and config_id, and the server
-  // response gives us instance_uid. Generation starts at 1 for new enrollments.
+  // Construct the assignment claim and DO stub from the enrollment token.
   const enrollmentClaim = await verifyEnrollmentToken(token, O11YFLEET_CLAIM_HMAC_SECRET);
-  const assignmentClaim: AssignmentClaim = {
+  const doName = `${enrollmentClaim.tenant_id}:${enrollmentClaim.config_id}`;
+  const doStub = env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName));
+
+  let finalAssignmentClaim: AssignmentClaim = {
     v: 1,
     tenant_id: enrollmentClaim.tenant_id,
     config_id: enrollmentClaim.config_id,
@@ -411,31 +426,32 @@ export async function connectWithEnrollment(
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 86400, // 24h
   };
-  const assignmentToken = await signClaim(assignmentClaim, O11YFLEET_CLAIM_HMAC_SECRET);
 
-  // The DO closes the WebSocket after enrollment (code 1000 "Reconnect with new instance_uid").
-  // If the socket is not OPEN, reconnect using the assignment claim and send hello.
+  // The DO closes the enrollment WebSocket (code 1000 "Reconnect with new instance_uid").
+  // Reconnect and send hello while the DO is still awake — this keeps WS tags valid.
   let openWs = ws;
   let adoptedUid = doAssignedUid;
   if (ws.readyState !== WebSocket.OPEN) {
-    openWs = await connectWithClaim(assignmentClaim);
+    const reconnectClaim = { ...finalAssignmentClaim };
+    openWs = await connectWithClaim(reconnectClaim);
     openWs.send(encodeFrame(buildHello()));
     const reconnectMsg = await waitForMsg(openWs);
     const reconnectBuf = await msgToBuffer(reconnectMsg);
     const reconnectResponse = decodeFrame<ServerToAgent>(reconnectBuf);
-    // The reconnect response carries the DO-assigned instance_uid (same value,
-    // but confirms the agent adopted it). Use this to be safe.
+    // Confirm the adopted UID from the reconnect response and update claim.
     adoptedUid = reconnectResponse.instance_uid
       ? uint8ToHex(reconnectResponse.instance_uid)
       : doAssignedUid;
+    // Keep claim aligned with final adopted UID.
+    finalAssignmentClaim = { ...finalAssignmentClaim, instance_uid: adoptedUid };
   }
 
-  // Invoke the optional DO action after reconnect completes (or immediately if no
-  // reconnect was needed). The DO is awake from processing the reconnect hello;
-  // its WebSocket tags are still valid. After this callback returns, the DO will
-  // hibernate and the WS will be closed by the runtime.
+  // Sign after reconnect flow so claim UID matches final adoptedUid.
+  const assignmentToken = await signClaim(finalAssignmentClaim, O11YFLEET_CLAIM_HMAC_SECRET);
+
+  // Run the DO action while the DO is awake (after reconnect hello completed).
   if (opts.doAction) {
-    await opts.doAction(adoptedUid);
+    await opts.doAction(adoptedUid, doStub);
   }
 
   return {
@@ -446,6 +462,7 @@ export async function connectWithEnrollment(
       instance_uid: adoptedUid,
     },
     instanceUid: adoptedUid,
+    doStub,
   };
 }
 
