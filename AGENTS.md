@@ -123,16 +123,17 @@ const uid2 = createUniqueUid(2);
 
 ### Skipped Tests Policy
 
-| Reason for Skip | Action |
-|----------------|--------|
-| Flaky/timeouts | Fix or mark with TODO explaining the issue |
-| Missing feature | Create GitHub issue, link in test comment |
+| Reason for Skip           | Action                                              |
+| ------------------------- | --------------------------------------------------- |
+| Flaky/timeouts            | Fix or mark with TODO explaining the issue          |
+| Missing feature           | Create GitHub issue, link in test comment           |
 | Requires external service | Use conditional skip with clear env var requirement |
-| Performance regression | Keep in `perf-audit.test.ts` with `describe.skip` |
+| Performance regression    | Keep in `perf-audit.test.ts` with `describe.skip`   |
 
 ### Property-Based Testing
 
 Use fast-check for:
+
 - Edge cases that are hard to enumerate manually
 - Invariants that must hold across all inputs
 - Round-trip encoding/decoding
@@ -142,11 +143,13 @@ import * as fc from "fast-check";
 
 // Good: testing invariants across all possible inputs
 it("uint8 → hex → uint8 is identity", () => {
-  fc.assert(fc.property(fc.uint8Array(), (bytes) => {
-    const hex = uint8ToHex(bytes);
-    const round = hexToUint8Array(hex);
-    return buffersEqual(round, bytes);
-  }));
+  fc.assert(
+    fc.property(fc.uint8Array(), (bytes) => {
+      const hex = uint8ToHex(bytes);
+      const round = hexToUint8Array(hex);
+      return buffersEqual(round, bytes);
+    }),
+  );
 });
 ```
 

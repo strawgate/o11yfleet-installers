@@ -1,7 +1,7 @@
 // Shared mocking + screenshot helpers for portal/admin audit suites.
 // Underscore prefix keeps Playwright from treating this as a test file.
 
-import type { Page, Route } from "@playwright/test";
+import type { ConsoleMessage, Page, Route } from "@playwright/test";
 
 export const API_URL = process.env.FP_URL ?? "http://127.0.0.1:8787";
 export const UI_URL = process.env.UI_URL ?? "http://127.0.0.1:3000";
@@ -319,7 +319,7 @@ export function collectRuntimeErrors(page: Page): {
 } {
   const errors: string[] = [];
   const onPageError = (err: Error) => errors.push(err.message);
-  const onConsole = (msg: import("@playwright/test").ConsoleMessage) => {
+  const onConsole = (msg: ConsoleMessage) => {
     const text = msg.text();
     if (msg.type() === "error" && !text.startsWith("Failed to load resource:")) {
       errors.push(text);

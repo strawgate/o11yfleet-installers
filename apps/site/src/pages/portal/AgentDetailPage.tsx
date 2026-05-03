@@ -233,36 +233,42 @@ export default function AgentDetailPage() {
                   ),
                   labels: { confirm: "Restart", cancel: "Cancel" },
                   confirmProps: { color: "red" },
-                  onConfirm: async () => {
-                    const toastId = notifications.show({
-                      loading: true,
-                      title: "Restarting agent…",
-                      message: hostname,
-                      autoClose: false,
-                      withCloseButton: false,
-                    });
-                    try {
-                      await restartAgent.mutateAsync(agentUid!);
-                      notifications.update({
-                        id: toastId,
-                        loading: false,
-                        color: "brand",
-                        title: "Restart sent",
-                        message: `Restart command sent to ${hostname}`,
-                        autoClose: 4000,
-                        withCloseButton: true,
+                  // Mantine's onConfirm is typed `() => void` so an `async` body
+                  // trips no-misused-promises. Wrap the awaited work in a
+                  // discarded IIFE — the modal closes synchronously, the
+                  // mutation runs in the background and updates the toast.
+                  onConfirm: () => {
+                    void (async () => {
+                      const toastId = notifications.show({
+                        loading: true,
+                        title: "Restarting agent…",
+                        message: hostname,
+                        autoClose: false,
+                        withCloseButton: false,
                       });
-                    } catch (err) {
-                      notifications.update({
-                        id: toastId,
-                        loading: false,
-                        color: "red",
-                        title: "Restart failed",
-                        message: err instanceof Error ? err.message : "Unknown error",
-                        autoClose: 6000,
-                        withCloseButton: true,
-                      });
-                    }
+                      try {
+                        await restartAgent.mutateAsync(agentUid!);
+                        notifications.update({
+                          id: toastId,
+                          loading: false,
+                          color: "brand",
+                          title: "Restart sent",
+                          message: `Restart command sent to ${hostname}`,
+                          autoClose: 4000,
+                          withCloseButton: true,
+                        });
+                      } catch (err) {
+                        notifications.update({
+                          id: toastId,
+                          loading: false,
+                          color: "red",
+                          title: "Restart failed",
+                          message: err instanceof Error ? err.message : "Unknown error",
+                          autoClose: 6000,
+                          withCloseButton: true,
+                        });
+                      }
+                    })();
                   },
                 })
               }
@@ -297,36 +303,40 @@ export default function AgentDetailPage() {
                   ),
                   labels: { confirm: "Disconnect", cancel: "Cancel" },
                   confirmProps: { color: "red" },
-                  onConfirm: async () => {
-                    const toastId = notifications.show({
-                      loading: true,
-                      title: "Disconnecting agent…",
-                      message: hostname,
-                      autoClose: false,
-                      withCloseButton: false,
-                    });
-                    try {
-                      await disconnectAgent.mutateAsync(agentUid!);
-                      notifications.update({
-                        id: toastId,
-                        loading: false,
-                        color: "brand",
-                        title: "Disconnect sent",
-                        message: `Closed WebSocket for ${hostname}; agent will reconnect automatically`,
-                        autoClose: 4000,
-                        withCloseButton: true,
+                  // See note on the Restart onConfirm above — Mantine's
+                  // sync-only signature requires us to discard the promise.
+                  onConfirm: () => {
+                    void (async () => {
+                      const toastId = notifications.show({
+                        loading: true,
+                        title: "Disconnecting agent…",
+                        message: hostname,
+                        autoClose: false,
+                        withCloseButton: false,
                       });
-                    } catch (err) {
-                      notifications.update({
-                        id: toastId,
-                        loading: false,
-                        color: "red",
-                        title: "Disconnect failed",
-                        message: err instanceof Error ? err.message : "Unknown error",
-                        autoClose: 6000,
-                        withCloseButton: true,
-                      });
-                    }
+                      try {
+                        await disconnectAgent.mutateAsync(agentUid!);
+                        notifications.update({
+                          id: toastId,
+                          loading: false,
+                          color: "brand",
+                          title: "Disconnect sent",
+                          message: `Closed WebSocket for ${hostname}; agent will reconnect automatically`,
+                          autoClose: 4000,
+                          withCloseButton: true,
+                        });
+                      } catch (err) {
+                        notifications.update({
+                          id: toastId,
+                          loading: false,
+                          color: "red",
+                          title: "Disconnect failed",
+                          message: err instanceof Error ? err.message : "Unknown error",
+                          autoClose: 6000,
+                          withCloseButton: true,
+                        });
+                      }
+                    })();
                   },
                 })
               }

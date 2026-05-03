@@ -332,42 +332,48 @@ export default function ConfigurationDetailPage() {
       ),
       labels: { confirm: "Restart", cancel: "Cancel" },
       confirmProps: { color: "red" },
-      onConfirm: async () => {
-        const toastId = notifications.show({
-          loading: true,
-          title: "Restarting collectors…",
-          message: "Sending Restart command to connected agents",
-          autoClose: false,
-          withCloseButton: false,
-        });
-        try {
-          const result = await restartFleet.mutateAsync();
-          const skippedSuffix =
-            result.skipped_no_cap > 0 ? ` (${result.skipped_no_cap} skipped — no capability)` : "";
-          // Wording note: "command sent" not "restarted" — Restart is a
-          // best-effort signal, the agent re-establishes its WebSocket on its
-          // own backoff after receiving it. Asserting "restarted" would
-          // overstate certainty; the user only knows the command left here.
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "brand",
-            title: "Restart sent",
-            message: `Restart command sent to ${result.restarted} collector(s)${skippedSuffix}`,
-            autoClose: 4000,
-            withCloseButton: true,
+      // Mantine onConfirm types as `() => void`; void IIFE discards the
+      // promise so no-misused-promises stops flagging the async body.
+      onConfirm: () => {
+        void (async () => {
+          const toastId = notifications.show({
+            loading: true,
+            title: "Restarting collectors…",
+            message: "Sending Restart command to connected agents",
+            autoClose: false,
+            withCloseButton: false,
           });
-        } catch (err) {
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "red",
-            title: "Restart failed",
-            message: err instanceof Error ? err.message : "Unknown error",
-            autoClose: 6000,
-            withCloseButton: true,
-          });
-        }
+          try {
+            const result = await restartFleet.mutateAsync();
+            const skippedSuffix =
+              result.skipped_no_cap > 0
+                ? ` (${result.skipped_no_cap} skipped — no capability)`
+                : "";
+            // Wording note: "command sent" not "restarted" — Restart is a
+            // best-effort signal, the agent re-establishes its WebSocket on its
+            // own backoff after receiving it. Asserting "restarted" would
+            // overstate certainty; the user only knows the command left here.
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "brand",
+              title: "Restart sent",
+              message: `Restart command sent to ${result.restarted} collector(s)${skippedSuffix}`,
+              autoClose: 4000,
+              withCloseButton: true,
+            });
+          } catch (err) {
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "red",
+              title: "Restart failed",
+              message: err instanceof Error ? err.message : "Unknown error",
+              autoClose: 6000,
+              withCloseButton: true,
+            });
+          }
+        })();
       },
     });
   }
@@ -390,40 +396,43 @@ export default function ConfigurationDetailPage() {
       ),
       labels: { confirm: "Disconnect", cancel: "Cancel" },
       confirmProps: { color: "red" },
-      onConfirm: async () => {
-        const toastId = notifications.show({
-          loading: true,
-          title: "Disconnecting collectors…",
-          message: "Closing OpAMP WebSockets",
-          autoClose: false,
-          withCloseButton: false,
-        });
-        try {
-          const result = await disconnectFleet.mutateAsync();
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "brand",
-            title: "Disconnect sent",
-            // The server closes the WebSocket here; the agent will
-            // reconnect on its own backoff. Phrase as "closed" not
-            // "disconnected" since the agent typically reconnects
-            // within seconds.
-            message: `Closed ${result.disconnected} collector connection(s); agents will reconnect automatically`,
-            autoClose: 4000,
-            withCloseButton: true,
+      // See note on the Restart onConfirm above.
+      onConfirm: () => {
+        void (async () => {
+          const toastId = notifications.show({
+            loading: true,
+            title: "Disconnecting collectors…",
+            message: "Closing OpAMP WebSockets",
+            autoClose: false,
+            withCloseButton: false,
           });
-        } catch (err) {
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "red",
-            title: "Disconnect failed",
-            message: err instanceof Error ? err.message : "Unknown error",
-            autoClose: 6000,
-            withCloseButton: true,
-          });
-        }
+          try {
+            const result = await disconnectFleet.mutateAsync();
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "brand",
+              title: "Disconnect sent",
+              // The server closes the WebSocket here; the agent will
+              // reconnect on its own backoff. Phrase as "closed" not
+              // "disconnected" since the agent typically reconnects
+              // within seconds.
+              message: `Closed ${result.disconnected} collector connection(s); agents will reconnect automatically`,
+              autoClose: 4000,
+              withCloseButton: true,
+            });
+          } catch (err) {
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "red",
+              title: "Disconnect failed",
+              message: err instanceof Error ? err.message : "Unknown error",
+              autoClose: 6000,
+              withCloseButton: true,
+            });
+          }
+        })();
       },
     });
   }
@@ -454,36 +463,39 @@ export default function ConfigurationDetailPage() {
         </Text>
       ),
       labels: { confirm: "Roll out now", cancel: "Cancel" },
-      onConfirm: async () => {
-        const toastId = notifications.show({
-          loading: true,
-          title: "Rolling out…",
-          message: "Setting desired config and pushing to connected collectors",
-          autoClose: false,
-          withCloseButton: false,
-        });
-        try {
-          await rollout.mutateAsync(yaml.data!);
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "brand",
-            title: "Rollout initiated",
-            message: c!.name,
-            autoClose: 4000,
-            withCloseButton: true,
+      // See note on the Restart onConfirm above.
+      onConfirm: () => {
+        void (async () => {
+          const toastId = notifications.show({
+            loading: true,
+            title: "Rolling out…",
+            message: "Setting desired config and pushing to connected collectors",
+            autoClose: false,
+            withCloseButton: false,
           });
-        } catch (err) {
-          notifications.update({
-            id: toastId,
-            loading: false,
-            color: "red",
-            title: "Rollout failed",
-            message: err instanceof Error ? err.message : "Unknown error",
-            autoClose: 6000,
-            withCloseButton: true,
-          });
-        }
+          try {
+            await rollout.mutateAsync(yaml.data!);
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "brand",
+              title: "Rollout initiated",
+              message: c!.name,
+              autoClose: 4000,
+              withCloseButton: true,
+            });
+          } catch (err) {
+            notifications.update({
+              id: toastId,
+              loading: false,
+              color: "red",
+              title: "Rollout failed",
+              message: err instanceof Error ? err.message : "Unknown error",
+              autoClose: 6000,
+              withCloseButton: true,
+            });
+          }
+        })();
       },
     });
   }
