@@ -247,7 +247,17 @@ export default function BuilderPage() {
           className="textarea pipe-yaml-input mt-4"
           value={yamlInput}
           onChange={(event) => setYamlInput(event.target.value)}
-          placeholder="receivers:\n  otlp:\n    protocols:\n      grpc: {}\nexporters:\n  debug: {}\nservice:\n  pipelines:\n    logs:\n      receivers: [otlp]\n      exporters: [debug]"
+          placeholder={`receivers:
+  otlp:
+    protocols:
+      grpc: {}
+exporters:
+  debug: {}
+service:
+  pipelines:
+    logs:
+      receivers: [otlp]
+      exporters: [debug]`}
         />
 
         <div className="pipe-import-actions mt-3">

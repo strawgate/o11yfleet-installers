@@ -4,6 +4,8 @@ dist/
 .wrangler/
 .turbo/
 coverage/
+**/reports/mutation/
+**/reports/coverage/
 .terraform/
 *.tfstate
 *.tfstate.backup

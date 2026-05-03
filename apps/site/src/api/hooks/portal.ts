@@ -340,6 +340,80 @@ export function useRolloutConfig(configId: string) {
   });
 }
 
+export interface RestartFleetResult {
+  restarted: number;
+  skipped_no_cap: number;
+}
+
+export interface DisconnectFleetResult {
+  disconnected: number;
+}
+
+export function useRestartConfiguration(configId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiPost<RestartFleetResult>(`/api/v1/configurations/${configId}/restart`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agents"] });
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "stats"] });
+    },
+  });
+}
+
+export function useDisconnectConfiguration(configId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      apiPost<DisconnectFleetResult>(`/api/v1/configurations/${configId}/disconnect`, {}),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agents"] });
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "stats"] });
+    },
+  });
+}
+
+// Agent query keys are nested under the configuration so per-config
+// invalidation can be done in one call. There are two reads of a single
+// agent — `["configuration", configId, "agent", instanceUid]` (summary,
+// line 152) and `["configuration", configId, "agent-detail", agentUid]`
+// (detail page, line 204) — both must be invalidated after a per-agent
+// command for the UI to reflect the new state.
+export function useRestartAgent(configId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceUid: string) =>
+      apiPost<{ restarted: boolean; reason?: string }>(
+        `/api/v1/configurations/${configId}/agents/${instanceUid}/restart`,
+        {},
+      ),
+    onSuccess: (_data, instanceUid) => {
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agent", instanceUid] });
+      void qc.invalidateQueries({
+        queryKey: ["configuration", configId, "agent-detail", instanceUid],
+      });
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agents"] });
+    },
+  });
+}
+
+export function useDisconnectAgent(configId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (instanceUid: string) =>
+      apiPost<{ disconnected: boolean }>(
+        `/api/v1/configurations/${configId}/agents/${instanceUid}/disconnect`,
+        {},
+      ),
+    onSuccess: (_data, instanceUid) => {
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agent", instanceUid] });
+      void qc.invalidateQueries({
+        queryKey: ["configuration", configId, "agent-detail", instanceUid],
+      });
+      void qc.invalidateQueries({ queryKey: ["configuration", configId, "agents"] });
+    },
+  });
+}
+
 export function useUpdateTenant() {
   const qc = useQueryClient();
   return useMutation({

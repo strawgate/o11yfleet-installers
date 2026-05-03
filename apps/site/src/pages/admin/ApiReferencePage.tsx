@@ -41,9 +41,9 @@ const adminEndpoints: AdminEndpoint[] = [
     use: "Bulk-approve every currently-pending tenant in one call",
   },
   {
-    method: "GET/PUT",
+    method: "GET",
     path: "/api/admin/settings",
-    use: "Read or update platform-level admin settings (e.g. auto-approve toggle)",
+    use: "Read platform-level admin settings (e.g. auto-approve toggle). Updates are controlled via environment variables — the PUT endpoint exists but currently returns a 400 directing operators to the env-var path.",
   },
   {
     method: "GET",
@@ -84,6 +84,21 @@ const adminEndpoints: AdminEndpoint[] = [
     method: "GET",
     path: "/api/admin/plans",
     use: "List built-in plan limits",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/tenants/:id/approve",
+    use: "Approve a pending tenant signup",
+  },
+  {
+    method: "POST",
+    path: "/api/admin/bulk-approve",
+    use: "Approve a batch of pending tenants in one request",
+  },
+  {
+    method: "GET",
+    path: "/api/admin/settings",
+    use: "Read platform-wide admin settings (writes are env-var controlled in production)",
   },
 ];
 

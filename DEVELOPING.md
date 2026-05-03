@@ -392,3 +392,162 @@ The route is gated by `import.meta.env.DEV` and is tree-shaken from prod.
   modifying an existing page that already uses them. New work uses Mantine.
 - Custom CSS in `portal-shared.css` etc. will shrink as the cleanup PR lands
   after the four migration PRs (#471, #472, #473, #474).
+
+### Mantine usage cheat-sheet
+
+These rules are distilled from three production references: Mantine's own
+docs site (`mantinedev/mantine`), the Mantine Analytics Dashboard
+(`design-sparx/mantine-analytics-dashboard`), and Refine's `@refinedev/mantine`.
+**Canonical reference pages in this repo:** `ConfigurationDetailPage.tsx` and
+`AgentDetailPage.tsx` — model new portal work on these.
+
+#### Layout
+
+- **Use layout props, never inline `style={{ flex }}`.** `Stack`, `Group`,
+  `Box` accept `gap`, `justify`, `align`, `wrap`, `flex`, `mt`, `mb`, `w`,
+  `maw`, `miw`. Reach for `style={{}}` only for one-off CSS variables
+  (e.g. `style={{ borderColor: "var(--mantine-color-err-6)" }}`).
+- **Page shell is `<PageShell>` → `<PageHeader>` → content.** Both are app
+  primitives in `@/components/app`; both wrap Mantine internals.
+- **Cards default to `withBorder`, no shadow.** Wired in
+  `theme.components.Card.defaultProps` — don't pass `withBorder` per call.
+
+#### Buttons
+
+- **Default size is `sm`** (set in `theme.components.Button.defaultProps`).
+  Use `size="xs"` for inline/dense toolbars (pagination, copy buttons),
+  `size="md"` for landing-page CTAs.
+- **Variants:** primary action → no `variant` (filled, brand color);
+  secondary → `variant="default"`; tertiary → `variant="subtle"`.
+- **Destructive → `color="red"` on `confirmProps`** of a confirm modal,
+  not on the trigger button. Triggers stay neutral; the confirm dialog
+  carries the danger styling.
+- **Loading state via `loading={mutation.isPending}`**, never via
+  conditional disabled + changed label text.
+
+#### Confirmation dialogs — `modals.openConfirmModal`
+
+For any yes/no destructive or consequential action. Never roll your own
+`useState`-driven modal for a simple confirm.
+
+```tsx
+modals.openConfirmModal({
+  title: "Restart all collectors",
+  centered: true,
+  children: (
+    <Stack gap="xs">
+      <Text size="sm">
+        Send Restart to <strong>N</strong> collectors?
+      </Text>
+      <Text size="xs" c="dimmed">
+        Collectors without <Code>AcceptsRestartCommand</Code> are skipped.
+      </Text>
+    </Stack>
+  ),
+  labels: { confirm: "Restart", cancel: "Cancel" },
+  confirmProps: { color: "red" },
+  onConfirm: async () => {
+    /* see notifications below */
+  },
+});
+```
+
+For typed-name confirmations (delete config) or multi-step flows, use a
+direct `<Modal>` from `@/components/common/Modal` (which is a Mantine
+wrapper) with explicit state.
+
+#### Notifications — loading → success morph
+
+For any mutation triggered by a confirm or button click, use the
+loading-toast-then-update pattern. One notification per action, never two:
+
+```tsx
+const toastId = notifications.show({
+  loading: true,
+  title: "Restarting collectors…",
+  message: "Sending command to connected agents",
+  autoClose: false,
+  withCloseButton: false,
+});
+try {
+  const result = await restartFleet.mutateAsync();
+  notifications.update({
+    id: toastId,
+    loading: false,
+    color: "brand",
+    title: "Restart sent",
+    message: `${result.restarted} collector(s) restarted`,
+    autoClose: 4000,
+    withCloseButton: true,
+  });
+} catch (err) {
+  notifications.update({
+    id: toastId,
+    loading: false,
+    color: "red",
+    title: "Restart failed",
+    message: err instanceof Error ? err.message : "Unknown error",
+    autoClose: 6000,
+    withCloseButton: true,
+  });
+}
+```
+
+- **Color convention:** `color="brand"` for success (theme primary, lime
+  green), `color="red"` for error, `color="warn"` for warnings,
+  `color="info"` for info. Don't use `color="green"` or `color="teal"` —
+  those bypass our theme.
+- **`autoClose`:** 4s for success, 6s for error, `false` for in-flight
+  loading toasts.
+
+#### Tabs
+
+`<Tabs>` for nav-only is fine — keep panels as conditional renders
+outside if it minimizes diff. Full `<Tabs.Panel>` wrapping is fine too;
+both patterns are valid. Avoid mixing approaches in the same page.
+
+#### Color tokens
+
+- **Theme palettes:** `brand` (lime), `gray`, `ok` (alias of brand),
+  `warn`, `err`, `info`. Use these on `<Button color>`, `<Badge color>`,
+  notifications.
+- **Text shorthand:** `<Text c="dimmed">` for secondary text. Avoid
+  `color="dimmed"` (long form for non-text components).
+- **Semantic shades** (`color="err.6"`, `color="brand.5"`) only when
+  you need a specific tone, e.g. icon highlights.
+
+#### Inline code & text
+
+- **`<Code>` from `@mantine/core`, never raw `<code>` HTML.** The
+  raw element doesn't pick up theme background/foreground.
+- **Code blocks (multi-line) → `<pre className="code-block">`** for
+  now; will migrate to CodeMirror 6 read-only mode in the editor PRs.
+
+#### Forms
+
+- **`@mantine/form`** for any form with > 2 fields or any validation.
+  Direct controlled `<TextInput value onChange>` is fine for single-field
+  cases (typed-name confirm).
+- **`<TextInput>` `data-autofocus` prop** for autofocus inside Modals
+  and `modals.openConfirmModal`. The bare `autoFocus` HTML attribute
+  silently fails because of Mantine's focus trap.
+
+#### Anti-patterns
+
+- **`window.confirm()`** — never. Always `modals.openConfirmModal`.
+- **Two notifications per action** (one for success, one for error
+  on a separate `try`/`catch`). Use the `notifications.update()` morph.
+- **`useState<boolean>` to drive a `<Modal>` for a simple yes/no
+  confirm.** Use `modals.openConfirmModal` instead — drops state and
+  modal markup.
+- **Mixing `className` with Mantine layout props on the same element.**
+  Pick one: either CSS module class or Mantine props. Never both.
+- **Raw color names like `color="green"` or `color="teal"`** — bypass
+  the theme. Use `brand`, `err`, etc.
+
+#### When in doubt
+
+- Read `ConfigurationDetailPage.tsx` and `AgentDetailPage.tsx` first.
+- Check `theme.ts` for what's already defaulted.
+- The Mantine docs (mantine.dev) are the authoritative source for
+  prop APIs; this cheat-sheet is the team's _opinionated subset_.

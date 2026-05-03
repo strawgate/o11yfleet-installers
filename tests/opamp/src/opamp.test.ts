@@ -25,6 +25,7 @@ import {
   ServerToAgentFlags,
   ServerErrorResponseType,
 } from "@o11yfleet/core/codec";
+import { uint8ToHex } from "@o11yfleet/core/hex";
 
 // ─── Configuration ───────────────────────────────────────────────────────────
 
@@ -1830,6 +1831,145 @@ describe("Restart Command (§5.9)", () => {
       expect(status).toBe(200);
     }
     agent.close();
+  });
+});
+
+// ─── Per-Agent Restart / Disconnect (admin command) ─────────────────────────
+
+describe("Per-Agent Restart Command", () => {
+  it("restart-agent sends Restart only to the targeted agent", async () => {
+    const { token, configId, tenantId } = await setupTenantAndConfig();
+    const profile = {
+      capabilities:
+        AgentCapabilities.ReportsStatus |
+        AgentCapabilities.AcceptsRemoteConfig |
+        AgentCapabilities.AcceptsRestartCommand,
+    };
+    const target = createAgent({ enrollmentToken: token, name: "restart-target", profile });
+    const bystander = createAgent({
+      enrollmentToken: token,
+      name: "restart-bystander",
+      profile,
+    });
+    await target.connectAndEnroll();
+    await bystander.connectAndEnroll();
+    await settle(200);
+
+    const targetUid = uint8ToHex(target.uid);
+    const { status } = await api(`/api/v1/configurations/${configId}/agents/${targetUid}/restart`, {
+      method: "POST",
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+    });
+
+    expect(status).toBe(200);
+
+    const deadline = Date.now() + 4000;
+    let targetGotRestart = false;
+    while (Date.now() < deadline && !targetGotRestart) {
+      const msg = await target.waitForMessage(Math.max(deadline - Date.now(), 100));
+      if (msg?.command?.type === 0) targetGotRestart = true;
+    }
+    expect(targetGotRestart).toBe(true);
+
+    // Bystander must NOT have received a Restart command
+    let bystanderGotRestart = false;
+    const bystanderDeadline = Date.now() + 500;
+    while (Date.now() < bystanderDeadline) {
+      const msg = await bystander.waitForMessage(Math.max(bystanderDeadline - Date.now(), 50));
+      if (msg?.command?.type === 0) bystanderGotRestart = true;
+      if (!msg) break;
+    }
+    expect(bystanderGotRestart).toBe(false);
+
+    target.close();
+    bystander.close();
+  });
+
+  it("restart-agent returns 404 when the uid is not connected", async () => {
+    const { configId, tenantId } = await setupTenantAndConfig();
+    // 32 hex chars but no agent with this uid is connected
+    const fakeUid = "00112233445566778899aabbccddeeff";
+    const { status, data } = await api<{ restarted: boolean; reason?: string }>(
+      `/api/v1/configurations/${configId}/agents/${fakeUid}/restart`,
+      {
+        method: "POST",
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+      },
+    );
+    expect(status).toBe(404);
+    expect(data.restarted).toBe(false);
+    expect(data.reason).toBe("agent_not_connected");
+  });
+
+  it("restart-agent returns 409 when the agent does not advertise the capability", async () => {
+    const { token, configId, tenantId } = await setupTenantAndConfig();
+    // Default profile does NOT include AcceptsRestartCommand
+    const agent = await enrollAgent(token, "no-restart-cap");
+    await settle(200);
+
+    const uid = uint8ToHex(agent.uid);
+    const { status, data } = await api<{ restarted: boolean; reason?: string }>(
+      `/api/v1/configurations/${configId}/agents/${uid}/restart`,
+      {
+        method: "POST",
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+      },
+    );
+    expect(status).toBe(409);
+    expect(data.restarted).toBe(false);
+    expect(data.reason).toBe("capability_not_advertised");
+
+    agent.close();
+  });
+
+  it("restart-agent returns 400 for malformed instance_uid", async () => {
+    const { configId, tenantId } = await setupTenantAndConfig();
+    const { status } = await api(
+      `/api/v1/configurations/${configId}/agents/not-a-hex-uid/restart`,
+      {
+        method: "POST",
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+      },
+    );
+    expect(status).toBe(400);
+  });
+});
+
+describe("Per-Agent Disconnect", () => {
+  it("disconnect-agent closes only the targeted socket", async () => {
+    const { token, configId, tenantId } = await setupTenantAndConfig();
+    const target = await enrollAgent(token, "disc-target");
+    const bystander = await enrollAgent(token, "disc-bystander");
+    await settle(300);
+
+    const uid = uint8ToHex(target.uid);
+    const { status } = await api(`/api/v1/configurations/${configId}/agents/${uid}/disconnect`, {
+      method: "POST",
+      headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+    });
+    expect(status).toBe(200);
+
+    await settle(2000);
+    expect(target.connected).toBe(false);
+    expect(bystander.connected).toBe(true);
+
+    target.close();
+    bystander.close();
+  });
+
+  it("disconnect-agent returns 404 when the uid is not connected", async () => {
+    const { configId, tenantId } = await setupTenantAndConfig();
+    const fakeUid = "00112233445566778899aabbccddeeff";
+    const { status, data } = await api<{ disconnected: boolean; reason?: string }>(
+      `/api/v1/configurations/${configId}/agents/${fakeUid}/disconnect`,
+      {
+        method: "POST",
+        headers: { "X-Tenant-Id": tenantId } as Record<string, string>,
+      },
+    );
+    expect(status).toBe(404);
+    expect(data.disconnected).toBe(false);
+    expect(data.reason).toBe("agent_not_connected");
   });
 });
 

@@ -216,7 +216,7 @@ function pbRemoteConfigStatusToInternal(pb: PbRemoteConfigStatus): RemoteConfigS
 function pbConfigMapToInternal(
   pb: Record<string, { body: Uint8Array; contentType: string }>,
 ): Record<string, { body: Uint8Array; content_type: string }> {
-  const result: Record<string, { body: Uint8Array; content_type: string }> = {};
+  const result: Record<string, { body: Uint8Array; content_type: string }> = Object.create(null);
   for (const [key, val] of Object.entries(pb)) {
     result[key] = { body: val.body, content_type: val.contentType };
   }
@@ -337,7 +337,10 @@ function internalAvailableComponentsToPb(ac: Record<string, unknown>): PbAvailab
 }
 
 function internalComponentHealthToPb(health: ComponentHealth): PbComponentHealth {
-  const childMap: Record<string, PbComponentHealth> = {};
+  // Object.create(null): same prototype-pollution defense as the decoder
+  // side. A user-supplied component_health_map keyed by "__proto__" would
+  // otherwise mutate Object.prototype on assignment.
+  const childMap: Record<string, PbComponentHealth> = Object.create(null);
   for (const [key, val] of Object.entries(health.component_health_map ?? {})) {
     childMap[key] = internalComponentHealthToPb(val);
   }

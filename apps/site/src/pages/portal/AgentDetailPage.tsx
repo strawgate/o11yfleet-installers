@@ -4,6 +4,8 @@ import {
   useConfiguration,
   useAgentDetail,
   useConfigurationStats,
+  useRestartAgent,
+  useDisconnectAgent,
   type AgentDetail,
   type AgentDescription,
 } from "../../api/hooks/portal";
@@ -39,9 +41,11 @@ import {
   StatusBadge as AppStatusBadge,
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Title } from "@mantine/core";
-import { Button } from "@/components/ui/button";
+import { Button, Tabs, Text, Title } from "@mantine/core";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
+import { AgentCapabilities } from "@o11yfleet/core/codec";
 
 type Tab = "overview" | "pipeline" | "config";
 
@@ -54,6 +58,8 @@ export default function AgentDetailPage() {
   const config = useConfiguration(configId);
   const agentQuery = useAgentDetail(configId, agentUid);
   const stats = useConfigurationStats(configId);
+  const restartAgent = useRestartAgent(configId ?? "");
+  const disconnectAgent = useDisconnectAgent(configId ?? "");
   const [tab, setTab] = useState<Tab>("overview");
 
   const agent = agentQuery.data ?? null;
@@ -112,6 +118,7 @@ export default function AgentDetailPage() {
     isConnected,
     hostname,
     capabilities,
+    capabilitiesBits,
     componentCounts,
     configSync,
     guidanceContext,
@@ -212,6 +219,124 @@ export default function AgentDetailPage() {
             <StatusBadge status={agent.status as string} />
             <HealthBadge healthy={healthy} />
             <ConfigBadge sync={configSync} />
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() =>
+                modals.openConfirmModal({
+                  title: "Restart agent",
+                  centered: true,
+                  children: (
+                    <Text size="sm">
+                      Send a Restart command to <strong>{hostname}</strong>?
+                    </Text>
+                  ),
+                  labels: { confirm: "Restart", cancel: "Cancel" },
+                  confirmProps: { color: "red" },
+                  onConfirm: async () => {
+                    const toastId = notifications.show({
+                      loading: true,
+                      title: "Restarting agent…",
+                      message: hostname,
+                      autoClose: false,
+                      withCloseButton: false,
+                    });
+                    try {
+                      await restartAgent.mutateAsync(agentUid!);
+                      notifications.update({
+                        id: toastId,
+                        loading: false,
+                        color: "brand",
+                        title: "Restart sent",
+                        message: `Restart command sent to ${hostname}`,
+                        autoClose: 4000,
+                        withCloseButton: true,
+                      });
+                    } catch (err) {
+                      notifications.update({
+                        id: toastId,
+                        loading: false,
+                        color: "red",
+                        title: "Restart failed",
+                        message: err instanceof Error ? err.message : "Unknown error",
+                        autoClose: 6000,
+                        withCloseButton: true,
+                      });
+                    }
+                  },
+                })
+              }
+              // Gate on the raw capability bit, not the display-name string.
+              // The names array is built from a lookup table that could rename
+              // entries; the bit is the wire-level contract from OpAMP §4.4.1.
+              disabled={
+                !isConnected || (capabilitiesBits & AgentCapabilities.AcceptsRestartCommand) === 0
+              }
+              title={
+                !isConnected
+                  ? "Agent is not connected"
+                  : (capabilitiesBits & AgentCapabilities.AcceptsRestartCommand) === 0
+                    ? "Agent does not advertise AcceptsRestartCommand"
+                    : "Send Restart command to this agent"
+              }
+            >
+              Restart
+            </Button>
+            <Button
+              variant="default"
+              size="xs"
+              onClick={() =>
+                modals.openConfirmModal({
+                  title: "Disconnect agent",
+                  centered: true,
+                  children: (
+                    <Text size="sm">
+                      Close the OpAMP WebSocket for <strong>{hostname}</strong>? The agent will
+                      reconnect automatically per its backoff policy.
+                    </Text>
+                  ),
+                  labels: { confirm: "Disconnect", cancel: "Cancel" },
+                  confirmProps: { color: "red" },
+                  onConfirm: async () => {
+                    const toastId = notifications.show({
+                      loading: true,
+                      title: "Disconnecting agent…",
+                      message: hostname,
+                      autoClose: false,
+                      withCloseButton: false,
+                    });
+                    try {
+                      await disconnectAgent.mutateAsync(agentUid!);
+                      notifications.update({
+                        id: toastId,
+                        loading: false,
+                        color: "brand",
+                        title: "Disconnect sent",
+                        message: `Closed WebSocket for ${hostname}; agent will reconnect automatically`,
+                        autoClose: 4000,
+                        withCloseButton: true,
+                      });
+                    } catch (err) {
+                      notifications.update({
+                        id: toastId,
+                        loading: false,
+                        color: "red",
+                        title: "Disconnect failed",
+                        message: err instanceof Error ? err.message : "Unknown error",
+                        autoClose: 6000,
+                        withCloseButton: true,
+                      });
+                    }
+                  },
+                })
+              }
+              disabled={!isConnected}
+              title={
+                isConnected ? "Close the OpAMP WebSocket for this agent" : "Agent is not connected"
+              }
+            >
+              Disconnect
+            </Button>
           </>
         }
       />
@@ -261,43 +386,19 @@ export default function AgentDetailPage() {
         excludeTargetKeys={["agent.health", "agent.configuration", "agent.pipeline"]}
       />
 
-      {/* Tabs */}
-      <div
-        className="mt-6 flex flex-wrap gap-2 border-b border-border"
-        role="tablist"
-        aria-label="Agent detail sections"
+      <Tabs
+        value={tab}
+        onChange={(value) => {
+          if (value) setTab(value as Tab);
+        }}
+        mt="md"
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "overview"}
-          aria-controls="agent-tab-overview"
-          className={tabClassName(tab === "overview")}
-          onClick={() => setTab("overview")}
-        >
-          Overview
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "pipeline"}
-          aria-controls="agent-tab-pipeline"
-          className={tabClassName(tab === "pipeline")}
-          onClick={() => setTab("pipeline")}
-        >
-          Pipeline
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={tab === "config"}
-          aria-controls="agent-tab-config"
-          className={tabClassName(tab === "config")}
-          onClick={() => setTab("config")}
-        >
-          Configuration
-        </button>
-      </div>
+        <Tabs.List aria-label="Agent detail sections">
+          <Tabs.Tab value="overview">Overview</Tabs.Tab>
+          <Tabs.Tab value="pipeline">Pipeline</Tabs.Tab>
+          <Tabs.Tab value="config">Configuration</Tabs.Tab>
+        </Tabs.List>
+      </Tabs>
 
       {/* Tab content */}
       {tab === "overview" && (
@@ -654,8 +755,8 @@ function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
   return (
     <Button
-      size="sm"
-      variant="secondary"
+      size="xs"
+      variant="default"
       onClick={() => {
         navigator.clipboard.writeText(text).then(
           () => {
@@ -701,14 +802,6 @@ function ConfigBadge({ sync }: { sync: ConfigSyncView }) {
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────
-
-function tabClassName(active: boolean): string {
-  return `border-b-2 px-3 py-2 text-sm font-medium ${
-    active
-      ? "border-primary text-foreground"
-      : "border-transparent text-muted-foreground hover:text-foreground"
-  }`;
-}
 
 function pipelineColumns(): ColumnDef<PipelineRow>[] {
   return [

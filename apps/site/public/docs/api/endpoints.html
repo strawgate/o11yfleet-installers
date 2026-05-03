@@ -449,6 +449,33 @@
                 </td>
                 <td style="padding: 10px 14px">Send restart command to all connected agents</td>
               </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/agents/:id/disconnect</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Disconnect a single agent by instance_uid (server-initiated close)
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/configurations/:id/agents/:id/restart</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Send restart command to a single agent by instance_uid; capability-gated
+                </td>
+              </tr>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">POST</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/api-keys</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  Create a tenant-scoped API key for programmatic access
+                </td>
+              </tr>
             </tbody>
           </table>
 
@@ -607,8 +634,9 @@
           </ul>
 
           <div class="coming-soon-banner">
-            <strong>Planned API extensions:</strong> Scoped tenant API keys, rollout strategies,
-            progress tracking, label-based targeting, and audit logs are not implemented yet.
+            <strong>Planned API extensions:</strong> Rollout strategies, progress tracking,
+            label-based targeting, and audit logs are not implemented yet. (Tenant-scoped API keys
+            are now available — see the <a href="#api-keys">API keys</a> section above.)
           </div>
 
           <div class="docs-page-nav">

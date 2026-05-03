@@ -101,7 +101,7 @@ export async function handleGitHubWebhook(request: Request, env: Env): Promise<R
 
   if (!recordDelivery(deliveryId)) {
     // Already handled this delivery in the recent past — ack without re-firing.
-    console.info({
+    console.warn({
       event: "github_webhook_replay_ignored",
       delivery_id: deliveryId,
       github_event: event,
@@ -121,7 +121,7 @@ export async function handleGitHubWebhook(request: Request, env: Env): Promise<R
     // Quietly accept events we don't subscribe to. GitHub treats any 2xx as
     // success and stops retrying, which is what we want for noise we'd
     // otherwise spend cycles deserializing.
-    console.info({
+    console.warn({
       event: "github_webhook_unsubscribed_event",
       delivery_id: deliveryId,
       github_event: event,
@@ -159,7 +159,7 @@ async function computeSignature(secret: string, body: string): Promise<string> {
 // first.
 
 function logEvent(name: string, ctx: HandlerContext, extra: Record<string, unknown>): void {
-  console.info({
+  console.warn({
     event: name,
     delivery_id: ctx.deliveryId,
     github_event: ctx.event,

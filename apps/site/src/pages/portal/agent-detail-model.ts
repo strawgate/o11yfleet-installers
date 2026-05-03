@@ -44,7 +44,13 @@ export type AgentDetailModel = {
   drift: boolean;
   isConnected: boolean | null;
   hostname: string;
+  /** Human-readable capability names for display. */
   capabilities: string[];
+  /** Raw capability bitmask. Use this for gating actions (e.g.
+   *  `(capabilitiesBits & AgentCapabilities.AcceptsRestartCommand) !== 0`)
+   *  instead of `.includes("AcceptsRestartCommand")` so a future rename
+   *  in the display-name table doesn't silently disable the action. */
+  capabilitiesBits: number;
   componentCounts: ComponentSummary;
   configSync: ConfigSyncView;
   guidanceContext: Record<string, unknown>;
@@ -144,7 +150,8 @@ export function buildAgentDetailModel({
       : false;
   const isConnected = agentConnection(agent);
   const hostname = identity.hostname ?? agent?.hostname ?? agentUid ?? "Agent";
-  const capabilities = parseCapabilities((agent?.capabilities as number | null) ?? null);
+  const capabilitiesBits = (agent?.capabilities as number | null) ?? 0;
+  const capabilities = parseCapabilities(capabilitiesBits);
   const componentCounts = componentSummary(agent, topology);
   const configSync = configSyncView({
     drift,
@@ -230,6 +237,7 @@ export function buildAgentDetailModel({
     isConnected,
     hostname,
     capabilities,
+    capabilitiesBits,
     componentCounts,
     configSync,
     guidanceContext: {
@@ -359,6 +367,8 @@ export const CAPABILITY_NAMES: Record<number, string> = {
   0x400: "AcceptsRestartCommand",
   0x800: "ReportsHealth",
   0x1000: "ReportsRemoteConfig",
+  0x2000: "ReportsHeartbeat",
+  0x4000: "ReportsAvailableComponents",
 };
 
 export function parseCapabilities(caps: number | null): string[] {

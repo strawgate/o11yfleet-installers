@@ -10,6 +10,8 @@ import {
   useCreateEnrollmentToken,
   useDeleteConfiguration,
   useRolloutConfig,
+  useRestartConfiguration,
+  useDisconnectConfiguration,
   fetchConfigurationVersionDiff,
   fetchRolloutCohortSummary,
   type Agent,
@@ -18,7 +20,6 @@ import {
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
-import { useToast } from "../../components/common/Toast";
 import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -36,9 +37,21 @@ import { useRegisterBrowserContext } from "../../ai/browser-context-react";
 import { includedFetch, pageYaml, unavailableFetch } from "../../ai/page-context";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Title } from "@mantine/core";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Code,
+  Group,
+  Stack,
+  Tabs,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { modals } from "@mantine/modals";
+import { notifications } from "@mantine/notifications";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
 import {
   buildConfigurationDetailModel,
@@ -56,7 +69,6 @@ const EMPTY_GUIDANCE_CONTEXT: Record<string, unknown> = {};
 export default function ConfigurationDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { toast } = useToast();
 
   const config = useConfiguration(id);
   const hasConfigContent = Boolean(config.data?.current_config_hash);
@@ -68,7 +80,6 @@ export default function ConfigurationDetailPage() {
   const [enrollmentToken, setEnrollmentToken] = useState<string | null>(null);
   const [enrollmentTokenError, setEnrollmentTokenError] = useState<string | null>(null);
   const [confirmName, setConfirmName] = useState("");
-  const [rolloutOpen, setRolloutOpen] = useState(false);
   const [copilotRequest, setCopilotRequest] = useState<AiGuidanceRequest | null>(null);
   const [copilotTitle, setCopilotTitle] = useState("Configuration copilot");
   const latestCopilotRunRef = useRef(0);
@@ -83,6 +94,8 @@ export default function ConfigurationDetailPage() {
   const deleteConfig = useDeleteConfiguration();
   const createEnrollmentToken = useCreateEnrollmentToken(id ?? "");
   const rollout = useRolloutConfig(id ?? "");
+  const restartFleet = useRestartConfiguration(id ?? "");
+  const disconnectFleet = useDisconnectConfiguration(id ?? "");
 
   const c = config.data;
   const agentList = useMemo(() => agents.data?.agents ?? EMPTY_AGENTS, [agents.data?.agents]);
@@ -290,25 +303,189 @@ export default function ConfigurationDetailPage() {
   async function handleDelete() {
     try {
       await deleteConfig.mutateAsync(id!);
-      toast("Configuration deleted", c!.name);
+      notifications.show({ title: "Configuration deleted", message: c!.name, color: "brand" });
       void navigate("/portal/configurations");
     } catch (err) {
-      toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Delete failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
-  async function handleRollout() {
+  function openRestartFleetConfirm() {
+    modals.openConfirmModal({
+      title: "Restart all collectors",
+      centered: true,
+      children: (
+        <Stack gap="xs">
+          <Text size="sm">
+            Send a Restart command to all{" "}
+            {typeof activeWebSockets === "number" ? activeWebSockets : ""} connected collector(s)
+            for <strong>{c!.name}</strong>?
+          </Text>
+          <Text size="xs" c="dimmed">
+            Collectors that don't advertise <Code>AcceptsRestartCommand</Code> will be skipped.
+          </Text>
+        </Stack>
+      ),
+      labels: { confirm: "Restart", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: async () => {
+        const toastId = notifications.show({
+          loading: true,
+          title: "Restarting collectors…",
+          message: "Sending Restart command to connected agents",
+          autoClose: false,
+          withCloseButton: false,
+        });
+        try {
+          const result = await restartFleet.mutateAsync();
+          const skippedSuffix =
+            result.skipped_no_cap > 0 ? ` (${result.skipped_no_cap} skipped — no capability)` : "";
+          // Wording note: "command sent" not "restarted" — Restart is a
+          // best-effort signal, the agent re-establishes its WebSocket on its
+          // own backoff after receiving it. Asserting "restarted" would
+          // overstate certainty; the user only knows the command left here.
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "brand",
+            title: "Restart sent",
+            message: `Restart command sent to ${result.restarted} collector(s)${skippedSuffix}`,
+            autoClose: 4000,
+            withCloseButton: true,
+          });
+        } catch (err) {
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "red",
+            title: "Restart failed",
+            message: err instanceof Error ? err.message : "Unknown error",
+            autoClose: 6000,
+            withCloseButton: true,
+          });
+        }
+      },
+    });
+  }
+
+  function openDisconnectFleetConfirm() {
+    modals.openConfirmModal({
+      title: "Disconnect all collectors",
+      centered: true,
+      children: (
+        <Stack gap="xs">
+          <Text size="sm">
+            Close the OpAMP WebSocket for all{" "}
+            {typeof activeWebSockets === "number" ? activeWebSockets : ""} connected collector(s)
+            for <strong>{c!.name}</strong>?
+          </Text>
+          <Text size="xs" c="dimmed">
+            Collectors will reconnect automatically per their backoff policy.
+          </Text>
+        </Stack>
+      ),
+      labels: { confirm: "Disconnect", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: async () => {
+        const toastId = notifications.show({
+          loading: true,
+          title: "Disconnecting collectors…",
+          message: "Closing OpAMP WebSockets",
+          autoClose: false,
+          withCloseButton: false,
+        });
+        try {
+          const result = await disconnectFleet.mutateAsync();
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "brand",
+            title: "Disconnect sent",
+            // The server closes the WebSocket here; the agent will
+            // reconnect on its own backoff. Phrase as "closed" not
+            // "disconnected" since the agent typically reconnects
+            // within seconds.
+            message: `Closed ${result.disconnected} collector connection(s); agents will reconnect automatically`,
+            autoClose: 4000,
+            withCloseButton: true,
+          });
+        } catch (err) {
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "red",
+            title: "Disconnect failed",
+            message: err instanceof Error ? err.message : "Unknown error",
+            autoClose: 6000,
+            withCloseButton: true,
+          });
+        }
+      },
+    });
+  }
+
+  function openRolloutConfirm() {
     if (!yaml.data || yaml.isLoading || yaml.error) {
-      toast("Rollout failed", "YAML is loading or unavailable", "err");
+      notifications.show({
+        title: "Rollout failed",
+        message: "YAML is loading or unavailable",
+        color: "red",
+      });
       return;
     }
-    try {
-      await rollout.mutateAsync(yaml.data);
-      toast("Rollout initiated", c!.name);
-      setRolloutOpen(false);
-    } catch (err) {
-      toast("Rollout failed", err instanceof Error ? err.message : "Unknown error", "err");
-    }
+    modals.openConfirmModal({
+      title: "Confirm rollout",
+      centered: true,
+      children: (
+        <Text size="sm">
+          {connectedAgents !== null ? (
+            <>
+              This will set the current YAML as desired config for{" "}
+              <strong>{connectedAgents}</strong> connected collector
+              {connectedAgents !== 1 ? "s" : ""}.
+            </>
+          ) : (
+            "This will set the current YAML as desired config for connected collectors in this configuration."
+          )}
+        </Text>
+      ),
+      labels: { confirm: "Roll out now", cancel: "Cancel" },
+      onConfirm: async () => {
+        const toastId = notifications.show({
+          loading: true,
+          title: "Rolling out…",
+          message: "Setting desired config and pushing to connected collectors",
+          autoClose: false,
+          withCloseButton: false,
+        });
+        try {
+          await rollout.mutateAsync(yaml.data!);
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "brand",
+            title: "Rollout initiated",
+            message: c!.name,
+            autoClose: 4000,
+            withCloseButton: true,
+          });
+        } catch (err) {
+          notifications.update({
+            id: toastId,
+            loading: false,
+            color: "red",
+            title: "Rollout failed",
+            message: err instanceof Error ? err.message : "Unknown error",
+            autoClose: 6000,
+            withCloseButton: true,
+          });
+        }
+      },
+    });
   }
 
   async function handleCreateEnrollmentToken() {
@@ -319,16 +496,16 @@ export default function ConfigurationDetailPage() {
         const message = "The server did not return an enrollment token.";
         setEnrollmentToken(null);
         setEnrollmentTokenError(message);
-        toast("Failed to create token", message, "err");
+        notifications.show({ title: "Failed to create token", message, color: "red" });
         return;
       }
       setEnrollmentToken(result.token);
-      toast("Enrollment token created", c!.name);
+      notifications.show({ title: "Enrollment token created", message: c!.name, color: "brand" });
     } catch (err) {
       const message = enrollmentTokenFailureMessage(err);
       setEnrollmentToken(null);
       setEnrollmentTokenError(message);
-      toast("Failed to create token", message, "err");
+      notifications.show({ title: "Failed to create token", message, color: "red" });
     }
   }
 
@@ -343,7 +520,11 @@ export default function ConfigurationDetailPage() {
     setCopilotRequest(null);
     setCopilotTitle("Configuration copilot");
     if (!c || !guidanceReady) {
-      toast("Copilot unavailable", "Configuration context is still loading.", "err");
+      notifications.show({
+        title: "Copilot unavailable",
+        message: "Configuration context is still loading.",
+        color: "red",
+      });
       return;
     }
     const lightFetches = await loadCopilotLightFetches(lightFetchMode);
@@ -527,30 +708,21 @@ export default function ConfigurationDetailPage() {
         />
       ) : null}
 
-      {/* Tabs */}
-      <div
-        className="mt-6 flex flex-wrap gap-2 border-b border-border"
-        role="tablist"
-        aria-label="Configuration sections"
+      <Tabs
+        value={activeTab}
+        onChange={(value) => {
+          if (value) setActiveTab(value as Tab);
+        }}
+        mt="md"
       >
-        {tabs.map((t) => (
-          <button
-            key={t.key}
-            type="button"
-            role="tab"
-            aria-selected={activeTab === t.key}
-            aria-controls={`configuration-tab-${t.key}`}
-            className={`border-b-2 px-3 py-2 text-sm font-medium ${
-              activeTab === t.key
-                ? "border-primary text-foreground"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            }`}
-            onClick={() => setActiveTab(t.key)}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+        <Tabs.List aria-label="Configuration sections">
+          {tabs.map((t) => (
+            <Tabs.Tab key={t.key} value={t.key}>
+              {t.label}
+            </Tabs.Tab>
+          ))}
+        </Tabs.List>
+      </Tabs>
 
       {/* Tab panels */}
       {activeTab === "agents" && (
@@ -574,7 +746,7 @@ export default function ConfigurationDetailPage() {
                     description="Create an enrollment token and run the installer on a host to attach a collector to this configuration."
                   >
                     <Button
-                      size="sm"
+                      size="xs"
                       onClick={() => {
                         setEnrollmentToken(null);
                         setEnrollmentTokenError(null);
@@ -588,38 +760,38 @@ export default function ConfigurationDetailPage() {
               />
             </>
           )}
-          <div className="flex flex-wrap items-center gap-2 border-x border-b border-border px-4 py-3 text-sm text-muted-foreground">
+          <Group gap="xs" mt="xs">
             <Button
-              variant="ghost"
-              size="sm"
+              variant="subtle"
+              size="xs"
               disabled={!agentCursor}
               onClick={() => setAgentCursor(undefined)}
             >
               First page
             </Button>
             <Button
-              variant="secondary"
-              size="sm"
+              variant="default"
+              size="xs"
               disabled={!agents.data?.pagination?.has_more}
               onClick={() => setAgentCursor(agents.data?.pagination?.next_cursor ?? undefined)}
             >
               Next page
             </Button>
-          </div>
+          </Group>
         </div>
       )}
 
       {activeTab === "versions" && (
-        <div id="configuration-tab-versions" role="tabpanel" className="mt-6">
-          <div className="flex-row justify-between mb-4">
-            <div>
-              <h3>Versions</h3>
-              <p className="meta mt-2">
+        <Stack id="configuration-tab-versions" role="tabpanel" mt="md" gap="md">
+          <Group justify="space-between" wrap="wrap" align="flex-start">
+            <Stack gap={4}>
+              <Title order={3}>Versions</Title>
+              <Text size="sm" c="dimmed">
                 Compare the latest uploaded YAML against the previous immutable version.
-              </p>
-            </div>
-            <button
-              className="btn btn-secondary"
+              </Text>
+            </Stack>
+            <Button
+              variant="default"
               onClick={() =>
                 void runCopilot(
                   "Version diff copilot",
@@ -631,8 +803,8 @@ export default function ConfigurationDetailPage() {
               disabled={versions.isLoading || versionList.length < 2 || copilot.isLoading}
             >
               Summarize latest diff
-            </button>
-          </div>
+            </Button>
+          </Group>
           <div className="dt-card">
             {versions.isLoading ? (
               <LoadingSpinner />
@@ -665,9 +837,13 @@ export default function ConfigurationDetailPage() {
                         <td className="meta">{relTime(v.created_at)}</td>
                         <td>
                           {i === 0 ? (
-                            <span className="tag tag-ok">current</span>
+                            <Badge color="brand" variant="light">
+                              current
+                            </Badge>
                           ) : (
-                            <span className="tag">previous</span>
+                            <Badge color="gray" variant="light">
+                              previous
+                            </Badge>
                           )}
                         </td>
                       </tr>
@@ -677,106 +853,67 @@ export default function ConfigurationDetailPage() {
               </table>
             )}
           </div>
-        </div>
+        </Stack>
       )}
 
       {activeTab === "rollout" && (
-        <div id="configuration-tab-rollout" role="tabpanel" className="card card-pad mt-6">
-          <h3>Rollout configuration</h3>
-          <p className="meta mt-2">
-            Rollout promotes the current version to desired config for this configuration group.
-            Collectors are in sync once their reported current hash matches desired.
-          </p>
-          <div className="banner info mt-6">
-            <div>
-              <div className="b-title">Rollout guardrails to wire next</div>
-              <div className="b-body">
-                Track actor, reason, selected version, connected target count, drift, failed apply,
-                and rollback candidate before making this a full rollout history view.
-              </div>
-            </div>
-          </div>
-          <button
-            className="btn btn-secondary mt-6"
-            onClick={() =>
-              void runCopilot(
-                "Rollout risk copilot",
-                "triage_state",
-                "Check rollout risk using the visible rollout state and explicit rollout cohort summary. Do not claim historical regression.",
-                "rollout-summary",
-              )
-            }
-            disabled={stats.isLoading || agents.isLoading || copilot.isLoading}
-          >
-            Check rollout risk
-          </button>
-          <button
-            className="btn btn-primary mt-6"
-            onClick={() => setRolloutOpen(true)}
-            disabled={
-              !hasConfigContent ||
-              !yaml.data ||
-              yaml.isLoading ||
-              Boolean(yaml.error) ||
-              rollout.isPending
-            }
-          >
-            {rollout.isPending ? "Rolling out…" : "Start rollout"}
-          </button>
-
-          <Modal
-            open={rolloutOpen}
-            onClose={() => setRolloutOpen(false)}
-            title="Confirm rollout"
-            footer={
-              <>
-                <button className="btn btn-secondary" onClick={() => setRolloutOpen(false)}>
-                  Cancel
-                </button>
-                <button
-                  className="btn btn-primary"
-                  onClick={() => void handleRollout()}
-                  disabled={
-                    !hasConfigContent ||
-                    !yaml.data ||
-                    yaml.isLoading ||
-                    Boolean(yaml.error) ||
-                    rollout.isPending
-                  }
-                >
-                  {rollout.isPending ? "Rolling out…" : "Roll out now"}
-                </button>
-              </>
-            }
-          >
-            <p>
-              {connectedAgents !== null ? (
-                <>
-                  This will set the current YAML as desired config for{" "}
-                  <strong>{connectedAgents}</strong> connected collector
-                  {connectedAgents !== 1 ? "s" : ""}.
-                </>
-              ) : (
-                "This will set the current YAML as desired config for connected collectors in this configuration."
-              )}
-            </p>
-          </Modal>
-        </div>
+        <Card withBorder mt="md" id="configuration-tab-rollout" role="tabpanel">
+          <Stack gap="sm">
+            <Title order={3}>Rollout configuration</Title>
+            <Text size="sm" c="dimmed">
+              Rollout promotes the current version to desired config for this configuration group.
+              Collectors are in sync once their reported current hash matches desired.
+            </Text>
+            <Alert color="info" variant="light" title="Rollout guardrails to wire next">
+              Track actor, reason, selected version, connected target count, drift, failed apply,
+              and rollback candidate before making this a full rollout history view.
+            </Alert>
+            <Group gap="xs">
+              <Button
+                variant="default"
+                onClick={() =>
+                  void runCopilot(
+                    "Rollout risk copilot",
+                    "triage_state",
+                    "Check rollout risk using the visible rollout state and explicit rollout cohort summary. Do not claim historical regression.",
+                    "rollout-summary",
+                  )
+                }
+                disabled={stats.isLoading || agents.isLoading || copilot.isLoading}
+              >
+                Check rollout risk
+              </Button>
+              <Button
+                onClick={openRolloutConfirm}
+                loading={rollout.isPending}
+                disabled={
+                  !hasConfigContent ||
+                  !yaml.data ||
+                  yaml.isLoading ||
+                  Boolean(yaml.error) ||
+                  rollout.isPending
+                }
+              >
+                Start rollout
+              </Button>
+            </Group>
+          </Stack>
+        </Card>
       )}
 
       {activeTab === "yaml" && (
-        <div id="configuration-tab-yaml" role="tabpanel" className="card card-pad mt-6">
-          <div className="flex-row justify-between mb-6">
-            <div>
-              <h3>Desired YAML</h3>
-              <p className="meta mt-2">
+        <Card withBorder mt="md" id="configuration-tab-yaml" role="tabpanel">
+          <Group justify="space-between" mb="md" wrap="wrap" align="flex-start">
+            <Stack gap={4}>
+              <Title order={3}>Desired YAML</Title>
+              <Text size="sm" c="dimmed">
                 Effective config is what a collector actually runs after local bootstrap and remote
                 config behavior; this page currently shows desired YAML from the control plane.
-              </p>
-            </div>
-            <div className="actions">
-              <button
-                className="btn btn-secondary"
+              </Text>
+            </Stack>
+            <Group gap="xs">
+              <Button
+                variant="default"
                 onClick={() =>
                   void runCopilot(
                     "YAML explanation copilot",
@@ -787,9 +924,9 @@ export default function ConfigurationDetailPage() {
                 disabled={!yaml.data || yaml.isLoading || Boolean(yaml.error) || copilot.isLoading}
               >
                 Explain YAML
-              </button>
-              <button
-                className="btn btn-secondary"
+              </Button>
+              <Button
+                variant="default"
                 onClick={() =>
                   void runCopilot(
                     "Draft safety copilot",
@@ -800,59 +937,108 @@ export default function ConfigurationDetailPage() {
                 disabled={!yaml.data || yaml.isLoading || Boolean(yaml.error) || copilot.isLoading}
               >
                 Check draft safety
-              </button>
+              </Button>
               <CopyButton value={yaml.data ?? ""} label="Copy YAML" />
-            </div>
-          </div>
+            </Group>
+          </Group>
           {yaml.isLoading ? (
             <LoadingSpinner />
           ) : (
             <pre className="code-block">{yaml.data ?? "# No YAML available"}</pre>
           )}
-        </div>
+        </Card>
       )}
 
       {activeTab === "settings" && (
-        <div id="configuration-tab-settings" role="tabpanel" className="mt-6">
-          <div className="card card-pad">
-            <h3>Details</h3>
-            <table className="dt mt-2">
-              <tbody>
-                <tr>
-                  <td className="meta">ID</td>
-                  <td className="mono-cell">{c.id}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Name</td>
-                  <td>{c.name}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Created</td>
-                  <td>{relTime(c.created_at)}</td>
-                </tr>
-                <tr>
-                  <td className="meta">Updated</td>
-                  <td>{relTime(c.updated_at)}</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+        <Stack id="configuration-tab-settings" role="tabpanel" mt="md" gap="md">
+          <Card withBorder>
+            <Title order={3}>Details</Title>
+            <Stack gap={6} mt="sm">
+              <Group gap="md">
+                <Text size="sm" c="dimmed" w={88}>
+                  ID
+                </Text>
+                <Text ff="monospace" size="sm">
+                  {c.id}
+                </Text>
+              </Group>
+              <Group gap="md">
+                <Text size="sm" c="dimmed" w={88}>
+                  Name
+                </Text>
+                <Text size="sm">{c.name}</Text>
+              </Group>
+              <Group gap="md">
+                <Text size="sm" c="dimmed" w={88}>
+                  Created
+                </Text>
+                <Text size="sm">{relTime(c.created_at)}</Text>
+              </Group>
+              <Group gap="md">
+                <Text size="sm" c="dimmed" w={88}>
+                  Updated
+                </Text>
+                <Text size="sm">{relTime(c.updated_at)}</Text>
+              </Group>
+            </Stack>
+          </Card>
 
-          <div className="danger-zone mt-6">
-            <div className="dz-head">Danger zone</div>
-            <div className="row">
-              <div className="desc">
-                <strong>Delete this configuration</strong>
-                <p className="meta">
+          <Card withBorder>
+            <Title order={3}>Fleet actions</Title>
+            <Stack gap="md" mt="sm">
+              <Group justify="space-between" wrap="wrap" align="flex-start" gap="md">
+                <Stack gap={4} flex="1 1 24rem">
+                  <Text fw={500}>Restart all collectors</Text>
+                  <Text size="xs" c="dimmed">
+                    Sends an OpAMP Restart command to every connected collector that advertises the{" "}
+                    <Code>AcceptsRestartCommand</Code> capability. Collectors without the capability
+                    are skipped.
+                  </Text>
+                </Stack>
+                <Button
+                  variant="default"
+                  onClick={openRestartFleetConfirm}
+                  disabled={!activeWebSockets || activeWebSockets === 0}
+                >
+                  Restart collectors
+                </Button>
+              </Group>
+              <Group justify="space-between" wrap="wrap" align="flex-start" gap="md">
+                <Stack gap={4} flex="1 1 24rem">
+                  <Text fw={500}>Disconnect all collectors</Text>
+                  <Text size="xs" c="dimmed">
+                    Closes the OpAMP WebSocket on every connected collector for this configuration.
+                    Collectors will reconnect automatically per their backoff policy.
+                  </Text>
+                </Stack>
+                <Button
+                  variant="default"
+                  onClick={openDisconnectFleetConfirm}
+                  disabled={!activeWebSockets || activeWebSockets === 0}
+                >
+                  Disconnect collectors
+                </Button>
+              </Group>
+            </Stack>
+          </Card>
+
+          <Card withBorder style={{ borderColor: "var(--mantine-color-err-6)" }}>
+            <Title order={3} c="red">
+              Danger zone
+            </Title>
+            <Group justify="space-between" mt="sm" wrap="wrap" align="flex-start" gap="md">
+              <Stack gap={4} flex="1 1 24rem">
+                <Text fw={500}>Delete this configuration</Text>
+                <Text size="xs" c="dimmed">
                   This will permanently delete the configuration and disconnect all collectors.
-                </p>
-              </div>
-              <button className="btn btn-danger" onClick={() => setDeleteOpen(true)}>
+                </Text>
+              </Stack>
+              <Button color="red" onClick={() => setDeleteOpen(true)}>
                 Delete configuration
-              </button>
-            </div>
-          </div>
-        </div>
+              </Button>
+            </Group>
+          </Card>
+        </Stack>
       )}
 
       {/* Enrollment modal */}
@@ -865,9 +1051,9 @@ export default function ConfigurationDetailPage() {
         }}
         title="Enroll agent"
         footer={
-          <>
-            <button
-              className="btn btn-secondary"
+          <Group gap="xs" justify="flex-end">
+            <Button
+              variant="default"
               onClick={() => {
                 setEnrollOpen(false);
                 setEnrollmentToken(null);
@@ -875,17 +1061,16 @@ export default function ConfigurationDetailPage() {
               }}
             >
               Close
-            </button>
+            </Button>
             {!enrollmentToken ? (
-              <button
-                className="btn btn-primary"
+              <Button
                 onClick={() => void handleCreateEnrollmentToken()}
-                disabled={createEnrollmentToken.isPending}
+                loading={createEnrollmentToken.isPending}
               >
-                {createEnrollmentToken.isPending ? "Creating…" : "Create enrollment token"}
-              </button>
+                Create enrollment token
+              </Button>
             ) : null}
-          </>
+          </Group>
         }
       >
         <EnrollmentDialogBody
@@ -902,36 +1087,38 @@ export default function ConfigurationDetailPage() {
         }}
         title="Delete configuration"
         footer={
-          <>
-            <button
-              className="btn btn-secondary"
+          <Group gap="xs" justify="flex-end">
+            <Button
+              variant="default"
               onClick={() => {
                 setDeleteOpen(false);
                 setConfirmName("");
               }}
             >
               Cancel
-            </button>
-            <button
-              className="btn btn-danger"
+            </Button>
+            <Button
+              color="red"
               onClick={() => void handleDelete()}
-              disabled={confirmName !== c.name || deleteConfig.isPending}
+              disabled={confirmName !== c.name}
+              loading={deleteConfig.isPending}
             >
-              {deleteConfig.isPending ? "Deleting…" : "Delete"}
-            </button>
-          </>
+              Delete
+            </Button>
+          </Group>
         }
       >
-        <p>
-          Type <strong>{c.name}</strong> to confirm deletion.
-        </p>
-        <Input
-          className="mt-2"
-          value={confirmName}
-          onChange={(e) => setConfirmName(e.target.value)}
-          placeholder={c.name}
-          autoFocus
-        />
+        <Stack gap="xs">
+          <Text size="sm">
+            Type <strong>{c.name}</strong> to confirm deletion.
+          </Text>
+          <TextInput
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.currentTarget.value)}
+            placeholder={c.name}
+            data-autofocus
+          />
+        </Stack>
       </Modal>
     </PageShell>
   );

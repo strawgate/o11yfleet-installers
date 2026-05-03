@@ -117,6 +117,65 @@ export function handleDisconnectAll(ctx: CommandContext): Response {
   return Response.json({ disconnected: closed, failed });
 }
 
+function findSocketByInstanceUid(ctx: CommandContext, instanceUid: string): WebSocket | null {
+  // Hex UIDs round-trip through the API in lower-case (per OpAMP convention),
+  // but the route accepts case-insensitively because users sometimes paste
+  // upper-case from log lines. Normalize both sides so an upper-case lookup
+  // doesn't false-negative against the lower-case attachment value.
+  const target = instanceUid.toLowerCase();
+  for (const ws of ctx.getWebSockets()) {
+    const attachment = parseAttachment(ws.deserializeAttachment());
+    if (!attachment) continue;
+    if (attachment.instance_uid.toLowerCase() === target) return ws;
+  }
+  return null;
+}
+
+export function handleDisconnectAgent(ctx: CommandContext, instanceUid: string): Response {
+  const ws = findSocketByInstanceUid(ctx, instanceUid);
+  if (!ws) {
+    return Response.json({ disconnected: false, reason: "agent_not_connected" }, { status: 404 });
+  }
+  try {
+    ws.close(4001, "Server-initiated disconnect");
+  } catch {
+    /* already closed */
+  }
+  return Response.json({ disconnected: true });
+}
+
+export function handleRestartAgent(ctx: CommandContext, instanceUid: string): Response {
+  const ws = findSocketByInstanceUid(ctx, instanceUid);
+  if (!ws) {
+    return Response.json({ restarted: false, reason: "agent_not_connected" }, { status: 404 });
+  }
+  const attachment = parseAttachment(ws.deserializeAttachment());
+  if (!attachment) {
+    return Response.json({ restarted: false, reason: "attachment_missing" }, { status: 500 });
+  }
+  if (
+    attachment.capabilities !== undefined &&
+    !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+  ) {
+    return Response.json(
+      { restarted: false, reason: "capability_not_advertised" },
+      { status: 409 },
+    );
+  }
+  try {
+    const msg: ServerToAgent = {
+      instance_uid: hexToUint8Array(attachment.instance_uid),
+      flags: 0,
+      capabilities: SERVER_CAPABILITIES,
+      command: { type: CommandType.Restart },
+    };
+    ws.send(encodeServerToAgent(msg));
+  } catch {
+    return Response.json({ restarted: false, reason: "send_failed" }, { status: 502 });
+  }
+  return Response.json({ restarted: true });
+}
+
 export function handleRestartCommand(ctx: CommandContext): Response {
   const sockets = ctx.getWebSockets();
   let sent = 0;

@@ -79,4 +79,20 @@ export const theme = createTheme({
   colors: { brand, gray, ok, warn, err, info },
   cursorType: "pointer",
   autoContrast: true,
+  components: {
+    // Buttons inside `<PageHeader>` actions, modal footers, and inline tables
+    // default to `size="sm"`. Override per-call with `size="xs"` for dense
+    // toolbars or `size="md"` for primary CTAs on landing pages.
+    Button: { defaultProps: { size: "sm" } },
+    // Cards default to bordered with no shadow — matches dev-doc guidance
+    // and the patterns we see across mantine.dev and the analytics dashboard.
+    Card: { defaultProps: { withBorder: true, radius: "md" } },
+    // Badges in `light` variant are the de-facto status pill across
+    // app primitives (StatusBadge etc.); make that the default everywhere.
+    Badge: { defaultProps: { variant: "light" } },
+    // Modal: centered + autofocus trap return + close-on-escape are all
+    // already Mantine defaults. The wrapper at common/Modal sets these
+    // explicitly; keep the theme aligned so direct `<Modal>` use matches.
+    Modal: { defaultProps: { centered: true } },
+  },
 });

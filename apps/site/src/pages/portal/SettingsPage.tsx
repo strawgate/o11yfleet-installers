@@ -9,6 +9,7 @@ import { Modal } from "@/components/common/Modal";
 import { useToast } from "@/components/common/Toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@mantine/core";
 
 export default function SettingsPage() {
   const tenant = useTenant();
@@ -105,12 +106,11 @@ export default function SettingsPage() {
                 Collect IP address and approximate geographic location of collectors.
               </p>
             </div>
-            <input
-              type="checkbox"
+            <Switch
               id="geo-enabled"
               checked={geoEnabled}
-              onChange={(e) => setGeoEnabled(e.target.checked)}
-              className="h-4 w-4 rounded border-input"
+              onChange={(e) => setGeoEnabled(e.currentTarget.checked)}
+              aria-label="Geo-IP collection"
             />
           </div>
         </div>

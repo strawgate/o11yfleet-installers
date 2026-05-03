@@ -25,7 +25,9 @@ import { handleDebugTables, handleDebugQuery } from "./admin-debug-handler.js";
 import {
   handleSetDesiredConfig,
   handleDisconnectAll,
+  handleDisconnectAgent,
   handleRestartCommand,
+  handleRestartAgent,
   handleSweep,
 } from "./command-handler.js";
 import type { CommandContext } from "./command-handler.js";
@@ -223,6 +225,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return handleDisconnectAll(this.commandCtx());
     if (url.pathname === "/command/restart" && request.method === "POST")
       return handleRestartCommand(this.commandCtx());
+    const disconnectAgentMatch = url.pathname.match(/^\/command\/disconnect-agent\/([^/]+)$/);
+    if (disconnectAgentMatch && request.method === "POST")
+      return handleDisconnectAgent(this.commandCtx(), disconnectAgentMatch[1]!);
+    const restartAgentMatch = url.pathname.match(/^\/command\/restart-agent\/([^/]+)$/);
+    if (restartAgentMatch && request.method === "POST")
+      return handleRestartAgent(this.commandCtx(), restartAgentMatch[1]!);
 
     // Query routes
     if (url.pathname === "/stats" && request.method === "GET")

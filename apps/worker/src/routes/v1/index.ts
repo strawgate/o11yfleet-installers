@@ -213,6 +213,25 @@ async function routeV1Request(
     return handleRestart(env, tenantId, restartMatch[1]!);
   }
 
+  const disconnectAgentMatch = path.match(
+    /^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)\/disconnect$/,
+  );
+  if (disconnectAgentMatch && method === "POST") {
+    return handleDisconnectAgentRoute(
+      env,
+      tenantId,
+      disconnectAgentMatch[1]!,
+      disconnectAgentMatch[2]!,
+    );
+  }
+
+  const restartAgentMatch = path.match(
+    /^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)\/restart$/,
+  );
+  if (restartAgentMatch && method === "POST") {
+    return handleRestartAgentRoute(env, tenantId, restartAgentMatch[1]!, restartAgentMatch[2]!);
+  }
+
   // ─── API Keys ────────────────────────────────────────────
 
   if (path === "/api/v1/api-keys" && method === "POST") {
@@ -706,6 +725,43 @@ async function handleRestart(env: Env, tenantId: string, configId: string): Prom
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/command/restart", { method: "POST" }));
+}
+
+async function handleDisconnectAgentRoute(
+  env: Env,
+  tenantId: string,
+  configId: string,
+  instanceUid: string,
+): Promise<Response> {
+  if (!isValidInstanceUid(instanceUid)) {
+    return jsonError("Invalid instance_uid", 400);
+  }
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  return stub.fetch(
+    new Request(`http://internal/command/disconnect-agent/${instanceUid}`, { method: "POST" }),
+  );
+}
+
+async function handleRestartAgentRoute(
+  env: Env,
+  tenantId: string,
+  configId: string,
+  instanceUid: string,
+): Promise<Response> {
+  if (!isValidInstanceUid(instanceUid)) {
+    return jsonError("Invalid instance_uid", 400);
+  }
+  const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
+  const stub = env.CONFIG_DO.get(doId);
+  return stub.fetch(
+    new Request(`http://internal/command/restart-agent/${instanceUid}`, { method: "POST" }),
+  );
+}
+
+function isValidInstanceUid(uid: string): boolean {
+  // OpAMP instance_uid is a 16-byte ULID, hex-encoded → 32 hex chars
+  return /^[0-9a-f]{32}$/i.test(uid);
 }
 
 async function handleRolloutCohortSummary(
