@@ -9,25 +9,25 @@ describe("pipeline connection validation (ui structure)", () => {
     id: "r1",
     type: "receiver",
     position: { x: 0, y: 0 },
-    data: { name: "otlp", signals: ["metrics"] },
+    data: { name: "otlp", type: "otlp", signals: ["metrics"] },
   };
   const rLogs: BuilderNode = {
     id: "r2",
     type: "receiver",
     position: { x: 0, y: 0 },
-    data: { name: "filelog", signals: ["logs"] },
+    data: { name: "filelog", type: "filelog", signals: ["logs"] },
   };
   const pMetrics: BuilderNode = {
     id: "p1",
     type: "processor",
     position: { x: 0, y: 0 },
-    data: { name: "batch", signals: ["metrics"] },
+    data: { name: "batch", type: "batch", signals: ["metrics"] },
   };
   const xMetrics: BuilderNode = {
     id: "x1",
     type: "exporter",
     position: { x: 0, y: 0 },
-    data: { name: "debug", signals: ["metrics"] },
+    data: { name: "debug", type: "debug", signals: ["metrics"] },
   };
 
   test("validates connections correctly via core rules", () => {

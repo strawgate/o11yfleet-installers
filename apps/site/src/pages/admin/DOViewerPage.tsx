@@ -69,14 +69,26 @@ export default function DOViewerPage() {
     }
   }
 
-  function selectTable(tableName: string) {
+  async function selectTable(tableName: string) {
     const escapedName = tableName.replace(/"/g, '""');
     const tableSql = `SELECT * FROM "${escapedName}" LIMIT ${TABLE_QUERY_LIMIT}`;
     setSql(tableSql);
     setParamsText("[]");
     setSelectedTable(tableName);
-    void queryMutation.reset();
-    void queryMutation.mutateAsync({ sql: tableSql, params: [] });
+    queryMutation.reset();
+    // Surface mutation errors via notifications — the same pattern runQuery
+    // uses. Previously the call was unawaited and silently swallowed errors
+    // (a bad row in the SELECT * preview would just leave the user with no
+    // result and no explanation).
+    try {
+      await queryMutation.mutateAsync({ sql: tableSql, params: [] });
+    } catch (error) {
+      notifications.show({
+        title: "Failed to query table",
+        message: error instanceof Error ? error.message : String(error),
+        color: "red",
+      });
+    }
   }
 
   const isQuerying = queryMutation.isPending;
@@ -125,7 +137,7 @@ export default function DOViewerPage() {
                     key={table}
                     size="xs"
                     variant={selectedTable === table ? "filled" : "default"}
-                    onClick={() => selectTable(table)}
+                    onClick={() => void selectTable(table)}
                   >
                     {table}
                   </Button>

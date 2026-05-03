@@ -13,8 +13,13 @@ import { queryClient } from "./query-client";
  * Provider stack.
  *
  * Order (outer → inner):
- *   QueryClient → Mantine → Modals → Notifications (aria-live region) →
- *   BrowserRouter → ErrorBoundary
+ *   QueryClient → Mantine → Modals → BrowserRouter → Notifications (aria-live)
+ *   → BrowserContextProvider → ErrorBoundary
+ *
+ * `<Notifications>` lives INSIDE `<BrowserRouter>` so future notification
+ * actions (e.g. an inline "Go to settings" button) can call `useNavigate`
+ * without throwing. Notifications themselves don't navigate today, but the
+ * ordering keeps that option open without a future provider-tree refactor.
  *
  * `<Notifications>` extends ElementProps<'div'>, so the aria-live attribute
  * applies to the rendered notifications container. Without aria-live the
@@ -26,15 +31,15 @@ export function AppProviders({ children }: { children: ReactNode }) {
     <QueryClientProvider client={queryClient}>
       <MantineProvider theme={theme} defaultColorScheme="dark">
         <ModalsProvider>
-          <Notifications
-            position="top-right"
-            autoClose={4000}
-            role="region"
-            aria-label="Notifications"
-            aria-live="polite"
-            aria-atomic="false"
-          />
           <BrowserRouter>
+            <Notifications
+              position="top-right"
+              autoClose={4000}
+              role="region"
+              aria-label="Notifications"
+              aria-live="polite"
+              aria-atomic="false"
+            />
             <BrowserContextProvider>
               <ErrorBoundary>{children}</ErrorBoundary>
             </BrowserContextProvider>

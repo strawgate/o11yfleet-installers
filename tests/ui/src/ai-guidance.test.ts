@@ -578,7 +578,11 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("button", { name: "Open command menu" }).click();
     await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
 
-    await page.getByRole("option", { name: /Ask AI about this page/ }).click();
+    // Mantine Spotlight renders actions as <button>, not role="option".
+    await page
+      .getByRole("dialog", { name: "Command menu" })
+      .getByRole("button", { name: /Ask AI about this page/ })
+      .click();
     await expect.poll(() => chatRequests.length).toBe(1);
     expect(chatRequests[0]).toMatchObject({
       context: {
@@ -599,7 +603,10 @@ test.describe("AI guidance surfaces", () => {
 
     await page.getByRole("button", { name: "Close" }).click();
     await page.getByRole("button", { name: "Open command menu" }).click();
-    await page.getByRole("option", { name: /Ask AI about this page/ }).click();
+    await page
+      .getByRole("dialog", { name: "Command menu" })
+      .getByRole("button", { name: /Ask AI about this page/ })
+      .click();
     await expect.poll(() => chatRequests.length).toBe(2);
     expect(chatRequests[1]).toMatchObject({
       context: {
@@ -613,8 +620,11 @@ test.describe("AI guidance surfaces", () => {
     await page.getByRole("button", { name: "Close" }).click();
 
     await page.getByRole("button", { name: "Open command menu" }).click();
-    await page.getByRole("combobox", { name: "Search collectors, configs, pages..." }).fill("age");
-    await page.getByRole("option", { name: /Agents Workspace/ }).click();
+    await page.getByRole("textbox", { name: "Search collectors, configs, pages..." }).fill("age");
+    await page
+      .getByRole("dialog", { name: "Command menu" })
+      .getByRole("button", { name: /Agents Workspace/ })
+      .click();
     await expect(page).toHaveURL(/\/portal\/agents/);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
@@ -670,11 +680,15 @@ test.describe("AI guidance surfaces", () => {
     await expect(page.getByRole("link", { name: "Agents" })).toBeVisible();
     await page.locator(".sidebar-backdrop").click();
     await page.getByRole("button", { name: "Open command menu" }).click();
+    // Mantine Spotlight renders the search as role="textbox" (the
+    // textbox-as-combobox-without-explicit-role pattern is valid ARIA).
+    // Action items render as <button>, not role="option".
     await expect(page.getByRole("dialog", { name: "Command menu" })).toBeVisible();
+    await page.getByRole("textbox", { name: "Search collectors, configs, pages..." }).fill("agent");
     await page
-      .getByRole("combobox", { name: "Search collectors, configs, pages..." })
-      .fill("agent");
-    await page.getByRole("option", { name: /Agents Workspace/ }).click();
+      .getByRole("dialog", { name: "Command menu" })
+      .getByRole("button", { name: /Agents Workspace/ })
+      .click();
     await expect(page).toHaveURL(/\/portal\/agents/);
     runtime.dispose();
     expect(runtime.errors).toEqual([]);

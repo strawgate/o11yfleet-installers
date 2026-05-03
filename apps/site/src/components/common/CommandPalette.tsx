@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Modal, Stack, Text, TextInput, UnstyledButton } from "@mantine/core";
+import { Spotlight } from "@mantine/spotlight";
+import "@mantine/spotlight/styles.css";
+import { Bot, ArrowRight } from "lucide-react";
 import { inferAiSurface } from "@/ai/browser-context";
 import {
   PageCopilotDrawer,
@@ -23,44 +25,33 @@ interface CommandPaletteProps {
   placeholder: string;
 }
 
-interface PaletteEntry {
-  key: string;
-  label: string;
-  detail: string;
-  group: "AI" | "Navigate";
-  searchTerms: string;
-  disabled: boolean;
-  trailing?: string;
-  onSelect: () => void;
-}
-
-function matches(entry: PaletteEntry, query: string): boolean {
-  if (!query) return true;
-  const q = query.toLowerCase();
-  return entry.searchTerms.toLowerCase().includes(q) || entry.label.toLowerCase().includes(q);
-}
-
-const LISTBOX_ID = "command-palette-listbox";
-
+/**
+ * Cmd-K palette built on @mantine/spotlight. Spotlight ships keyboard
+ * navigation (ArrowUp/Down, Enter, Escape), search filtering, and ARIA
+ * combobox/listbox/option semantics out of the box, so this component just
+ * shapes the actions list and bridges Spotlight's store with the parent
+ * layouts' controlled `open`/`onClose` API.
+ *
+ * We render with a per-instance store via `createSpotlightStore()` rather
+ * than the singleton so the portal and admin layouts can each mount their
+ * own palette without colliding.
+ */
 export function CommandPalette({ open, onClose, items, placeholder }: CommandPaletteProps) {
   const navigate = useNavigate();
   const location = useLocation();
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [copilotPrompt, setCopilotPrompt] = useState<PageCopilotPrompt | null>(null);
-  const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
   const supportsAi = inferAiSurface(location.pathname) !== null;
 
-  function handleClose() {
-    setQuery("");
-    setActiveIndex(0);
-    onClose();
-  }
+  // Use Spotlight's `forceOpened` prop to drive open state from the
+  // parent's controlled `open`. This sidesteps Spotlight's internal store
+  // and lets the layouts' existing useState/setOpen pattern keep working
+  // without a separate store bridge.
 
   function activate(item: CommandItem) {
     if (item.disabled) return;
     void navigate(item.href);
-    handleClose();
+    onClose();
   }
 
   function openCopilot(action: (typeof pageCopilotActions)[number]) {
@@ -70,226 +61,66 @@ export function CommandPalette({ open, onClose, items, placeholder }: CommandPal
       intent: action.intent,
     });
     setCopilotOpen(true);
-    handleClose();
+    onClose();
   }
 
-  const entries = useMemo<PaletteEntry[]>(() => {
-    const aiEntries: PaletteEntry[] = pageCopilotActions.map((action) => ({
-      key: `ai:${action.id}`,
-      label: action.label,
-      detail: "Opens a streaming page copilot",
+  // Build the action groups for Spotlight. AI actions first, then nav
+  // entries grouped by their section label (matches the prior layout's
+  // intent — "AI" group on top, nav entries in their own group).
+  const actions = useMemo(() => {
+    const aiGroup = {
       group: "AI",
-      searchTerms: `${action.label} ai ${action.prompt}`,
-      disabled: !supportsAi,
-      trailing: !supportsAi ? "Soon" : undefined,
-      onSelect: () => openCopilot(action),
-    }));
-    const navEntries: PaletteEntry[] = items.map((item) => ({
-      key: `nav:${item.id}`,
-      label: item.label,
-      detail: item.section ?? "",
+      actions: pageCopilotActions.map((action) => ({
+        id: `ai:${action.id}`,
+        label: action.label,
+        description: supportsAi ? "Opens a streaming page copilot" : "Not available on this page",
+        leftSection: <Bot size={16} />,
+        keywords: [action.prompt],
+        disabled: !supportsAi,
+        onClick: () => openCopilot(action),
+      })),
+    };
+    const navGroup = {
       group: "Navigate",
-      searchTerms: `${item.section ?? ""} ${item.label}`,
-      disabled: Boolean(item.disabled),
-      trailing: item.disabled ? "Soon" : undefined,
-      onSelect: () => activate(item),
-    }));
-    return [...aiEntries, ...navEntries];
+      actions: items.map((item) => ({
+        id: `nav:${item.id}`,
+        label: item.label,
+        description: item.section,
+        leftSection: <ArrowRight size={16} />,
+        keywords: item.section ? [item.section] : [],
+        disabled: Boolean(item.disabled),
+        onClick: () => activate(item),
+      })),
+    };
+    return [aiGroup, navGroup];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items, supportsAi]);
 
-  const filtered = useMemo(
-    () => entries.filter((entry) => matches(entry, query)),
-    [entries, query],
-  );
-  // Indices of selectable (non-disabled) items in `filtered`. Arrow keys
-  // skip disabled rows so users can't land on a no-op.
-  const selectableIndices = useMemo(
-    () => filtered.map((entry, index) => (entry.disabled ? -1 : index)).filter((i) => i >= 0),
-    [filtered],
-  );
-
-  // Reset active index whenever the visible list changes so we don't point
-  // off the end after a filter narrows the results.
-  useEffect(() => {
-    if (selectableIndices.length === 0) {
-      setActiveIndex(0);
-      return;
-    }
-    if (!selectableIndices.includes(activeIndex)) {
-      setActiveIndex(selectableIndices[0]!);
-    }
-  }, [selectableIndices, activeIndex]);
-
-  function moveActive(delta: 1 | -1) {
-    if (selectableIndices.length === 0) return;
-    const currentPos = selectableIndices.indexOf(activeIndex);
-    const nextPos =
-      currentPos === -1
-        ? 0
-        : (currentPos + delta + selectableIndices.length) % selectableIndices.length;
-    setActiveIndex(selectableIndices[nextPos]!);
-  }
-
-  function handleInputKeyDown(event: React.KeyboardEvent<HTMLInputElement>) {
-    if (event.key === "ArrowDown") {
-      event.preventDefault();
-      moveActive(1);
-    } else if (event.key === "ArrowUp") {
-      event.preventDefault();
-      moveActive(-1);
-    } else if (event.key === "Enter") {
-      event.preventDefault();
-      const target = filtered[activeIndex];
-      if (target && !target.disabled) target.onSelect();
-    }
-  }
-
-  const aiVisible = filtered.filter((entry) => entry.group === "AI");
-  const navVisible = filtered.filter((entry) => entry.group === "Navigate");
-
   return (
     <>
-      <Modal
-        opened={open}
-        onClose={handleClose}
+      <Spotlight
+        actions={actions}
+        nothingFound="No commands found."
+        searchProps={{ placeholder, "aria-label": placeholder }}
+        forceOpened={open}
+        onSpotlightClose={onClose}
+        // Spotlight extends ModalProps; setting `title` gives the dialog
+        // an accessible name via aria-labelledby (Mantine renders the
+        // title as a heading). The e2e tests assert role="dialog" with
+        // name="Command menu".
         title="Command menu"
-        size="lg"
-        padding={0}
-        styles={{ body: { padding: 0 } }}
-      >
-        <TextInput
-          role="combobox"
-          aria-label={placeholder}
-          aria-expanded
-          aria-controls={LISTBOX_ID}
-          aria-activedescendant={filtered[activeIndex]?.key ?? undefined}
-          aria-autocomplete="list"
-          placeholder={placeholder}
-          value={query}
-          onChange={(event) => setQuery(event.currentTarget.value)}
-          onKeyDown={handleInputKeyDown}
-          variant="unstyled"
-          px="md"
-          py="sm"
-          autoFocus
-          styles={{
-            input: { fontSize: 15 },
-            wrapper: { borderBottom: "1px solid var(--mantine-color-default-border)" },
-          }}
-        />
-        <Stack
-          gap={0}
-          p="xs"
-          mah={400}
-          style={{ overflowY: "auto" }}
-          role="listbox"
-          id={LISTBOX_ID}
-        >
-          {filtered.length === 0 ? (
-            <Text size="sm" c="dimmed" ta="center" p="md">
-              No commands found.
-            </Text>
-          ) : (
-            <>
-              {aiVisible.length > 0 ? (
-                <PaletteGroup
-                  heading="AI"
-                  entries={aiVisible}
-                  filtered={filtered}
-                  activeIndex={activeIndex}
-                  onHover={setActiveIndex}
-                />
-              ) : null}
-              {navVisible.length > 0 ? (
-                <PaletteGroup
-                  heading="Navigate"
-                  entries={navVisible}
-                  filtered={filtered}
-                  activeIndex={activeIndex}
-                  onHover={setActiveIndex}
-                />
-              ) : null}
-            </>
-          )}
-        </Stack>
-      </Modal>
+        // Cmd-K is already wired by the layout (it calls onOpen on a
+        // SearchBar button). Disable Spotlight's own shortcut to avoid
+        // double-binding; the layout's binding wins.
+        shortcut={null}
+        scrollable
+        maxHeight={400}
+      />
       <PageCopilotDrawer
         open={copilotOpen}
         onClose={() => setCopilotOpen(false)}
         initialPrompt={copilotPrompt}
       />
     </>
-  );
-}
-
-function PaletteGroup({
-  heading,
-  entries,
-  filtered,
-  activeIndex,
-  onHover,
-}: {
-  heading: string;
-  entries: PaletteEntry[];
-  filtered: PaletteEntry[];
-  activeIndex: number;
-  onHover: (index: number) => void;
-}) {
-  return (
-    <Stack gap={0}>
-      <Text size="xs" c="dimmed" tt="uppercase" fw={600} px="sm" pt="xs" pb={4}>
-        {heading}
-      </Text>
-      {entries.map((entry) => {
-        const flatIndex = filtered.indexOf(entry);
-        const isActive = flatIndex === activeIndex;
-        return (
-          <UnstyledButton
-            key={entry.key}
-            id={entry.key}
-            role="option"
-            aria-selected={isActive}
-            aria-disabled={entry.disabled}
-            data-active={isActive || undefined}
-            disabled={entry.disabled}
-            onClick={entry.onSelect}
-            onMouseEnter={() => {
-              if (!entry.disabled) onHover(flatIndex);
-            }}
-            px="sm"
-            py="xs"
-            style={{
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              gap: 12,
-              opacity: entry.disabled ? 0.5 : 1,
-              cursor: entry.disabled ? "not-allowed" : "pointer",
-              borderRadius: "var(--mantine-radius-sm)",
-              background: isActive ? "var(--mantine-color-default-hover)" : undefined,
-            }}
-          >
-            <Stack gap={1} style={{ minWidth: 0, flex: 1 }}>
-              <Text size="sm">{entry.label}</Text>
-              {entry.detail ? (
-                <Text
-                  size="xs"
-                  c="dimmed"
-                  ff={entry.group === "Navigate" ? "monospace" : undefined}
-                >
-                  {entry.detail}
-                </Text>
-              ) : null}
-            </Stack>
-            {entry.trailing ? (
-              <Text size="xs" c="dimmed">
-                {entry.trailing}
-              </Text>
-            ) : null}
-          </UnstyledButton>
-        );
-      })}
-    </Stack>
   );
 }
