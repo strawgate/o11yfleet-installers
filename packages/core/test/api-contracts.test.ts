@@ -100,6 +100,31 @@ describe("API contract schemas", () => {
     );
   });
 
+  it("accepts enrollment token with label field", () => {
+    expect(createEnrollmentTokenRequestSchema.safeParse({ label: "my-token" }).success).toBe(true);
+    expect(createEnrollmentTokenRequestSchema.safeParse({}).success).toBe(true);
+    expect(
+      createEnrollmentTokenRequestSchema.safeParse({ label: "tok", expires_in_hours: 24 }).success,
+    ).toBe(true);
+  });
+
+  it("rejects enrollment token with 'name' instead of 'label' (strict mode)", () => {
+    const result = createEnrollmentTokenRequestSchema.safeParse({ name: "my-token" });
+    expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(result.error.issues[0]?.code).toBe("unrecognized_keys");
+    }
+  });
+
+  it("rejects enrollment token with label exceeding max length", () => {
+    expect(createEnrollmentTokenRequestSchema.safeParse({ label: "a".repeat(256) }).success).toBe(
+      false,
+    );
+    expect(createEnrollmentTokenRequestSchema.safeParse({ label: "a".repeat(255) }).success).toBe(
+      true,
+    );
+  });
+
   it("defines reusable response contracts for callers", () => {
     expect(
       authLoginResponseSchema.parse({
