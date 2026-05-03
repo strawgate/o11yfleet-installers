@@ -6,7 +6,6 @@ import { ModalsProvider } from "@mantine/modals";
 import { Notifications } from "@mantine/notifications";
 import { BrowserContextProvider } from "@/ai/browser-context-react";
 import { ErrorBoundary } from "@/components/common/ErrorBoundary";
-import { TooltipProvider } from "@/components/ui/tooltip";
 import { theme } from "@/theme/theme";
 import { queryClient } from "./query-client";
 
@@ -15,16 +14,12 @@ import { queryClient } from "./query-client";
  *
  * Order (outer → inner):
  *   QueryClient → Mantine → Modals → Notifications (aria-live region) →
- *   Tooltip (legacy, used by ai-elements) → Router → ErrorBoundary
+ *   BrowserRouter → ErrorBoundary
  *
  * `<Notifications>` extends ElementProps<'div'>, so the aria-live attribute
  * applies to the rendered notifications container. Without aria-live the
  * toasts mount silently for screen-reader users — same C4 a11y guarantee
- * the legacy ToastProvider provided.
- *
- * `TooltipProvider` is the last surviving shadcn/Radix provider; it stays
- * because the AI copilot's ai-elements primitives import shadcn Tooltip.
- * Removing it requires migrating ai-elements off shadcn first.
+ * the legacy ToastProvider provided via its .toaster div.
  */
 export function AppProviders({ children }: { children: ReactNode }) {
   return (
@@ -39,13 +34,11 @@ export function AppProviders({ children }: { children: ReactNode }) {
             aria-live="polite"
             aria-atomic="false"
           />
-          <TooltipProvider>
-            <BrowserRouter>
-              <BrowserContextProvider>
-                <ErrorBoundary>{children}</ErrorBoundary>
-              </BrowserContextProvider>
-            </BrowserRouter>
-          </TooltipProvider>
+          <BrowserRouter>
+            <BrowserContextProvider>
+              <ErrorBoundary>{children}</ErrorBoundary>
+            </BrowserContextProvider>
+          </BrowserRouter>
         </ModalsProvider>
       </MantineProvider>
     </QueryClientProvider>

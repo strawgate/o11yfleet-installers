@@ -131,37 +131,6 @@
   font-size: 11px;
 }
 
-.page-copilot {
-  display: flex;
-  min-height: calc(100vh - 92px);
-  flex-direction: column;
-  gap: 14px;
-}
-
-.page-copilot-conversation {
-  min-height: 0;
-  flex: 1;
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
-  background: var(--bg);
-}
-
-.page-copilot-messages {
-  min-height: 100%;
-  gap: 16px;
-  padding: 16px;
-}
-
-.page-copilot-input {
-  flex-shrink: 0;
-}
-
-.page-copilot-error {
-  margin: 0;
-  color: var(--err);
-  font-size: 13px;
-}
-
 @media (max-width: 720px) {
   .ai-panel-head {
     align-items: stretch;

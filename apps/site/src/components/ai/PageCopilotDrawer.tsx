@@ -2,7 +2,22 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useLocation } from "react-router-dom";
 import { useChat } from "@ai-sdk/react";
 import { DefaultChatTransport, type UIMessage } from "ai";
-import { Bot, Sparkles } from "lucide-react";
+import { Bot, Sparkles, ArrowDown, Send, Square } from "lucide-react";
+import {
+  ActionIcon,
+  Alert,
+  Box,
+  Button,
+  Drawer,
+  Group,
+  Paper,
+  Stack,
+  Text,
+  Textarea,
+  Title,
+} from "@mantine/core";
+import { Streamdown } from "streamdown";
+import { StickToBottom, useStickToBottomContext } from "use-stick-to-bottom";
 import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
 import {
   MAX_BROWSER_CONTEXT_LIGHT_FETCHES,
@@ -13,23 +28,6 @@ import {
 import { useBrowserContextRegistry } from "@/ai/browser-context-react";
 import { includedFetch, unavailableFetch } from "@/ai/page-context";
 import { apiBase } from "@/api/client";
-import {
-  Conversation,
-  ConversationContent,
-  ConversationEmptyState,
-  ConversationScrollButton,
-} from "@/components/ai-elements/conversation";
-import { Message, MessageContent, MessageResponse } from "@/components/ai-elements/message";
-import {
-  PromptInput,
-  PromptInputBody,
-  PromptInputFooter,
-  PromptInputSubmit,
-  PromptInputTextarea,
-  PromptInputTools,
-} from "@/components/ai-elements/prompt-input";
-import { Button } from "@/components/ui/button";
-import { Sheet } from "@/components/common/Sheet";
 
 export type PageCopilotPrompt = {
   id: string;
@@ -149,83 +147,208 @@ export function PageCopilotDrawer({ open, onClose, initialPrompt }: PageCopilotD
   }, [initialPrompt, open]);
 
   return (
-    <Sheet open={open} onClose={onClose} title="Page copilot">
-      <div className="page-copilot">
-        <Conversation className="page-copilot-conversation">
-          <ConversationContent className="page-copilot-messages">
-            {messages.length === 0 ? (
-              <ConversationEmptyState
-                icon={<Sparkles className="size-5" />}
-                title={supportsAi ? "Ask about this page" : "AI is not available here"}
-                description={
-                  supportsAi
-                    ? "The copilot uses the visible browser context for this page."
-                    : "Open an overview, configuration, agent, builder, or tenant page."
-                }
-              />
-            ) : (
-              messages.map((message) => <CopilotMessage key={message.id} message={message} />)
-            )}
-          </ConversationContent>
-          <ConversationScrollButton />
-        </Conversation>
+    <Drawer
+      opened={open}
+      onClose={onClose}
+      title="Page copilot"
+      position="right"
+      size="md"
+      withCloseButton
+      closeButtonProps={{ "aria-label": "Close" }}
+      // The drawer body needs to fill the remaining height under the header
+      // so the inner scroll area + prompt-form layout work. Mantine's body
+      // is `flex: 1 1 auto` by default; setting display:flex + h:100% on
+      // its inner Stack lets the conversation stream grow and the prompt
+      // pin to the bottom without hard-coding the header offset.
+      styles={{ body: { display: "flex", flexDirection: "column", height: "100%" } }}
+    >
+      <Stack gap={0} h="100%" style={{ display: "flex", flexDirection: "column", flex: 1 }}>
+        <ConversationStream messages={messages} supportsAi={supportsAi} />
 
-        {error ? <p className="page-copilot-error">{error.message}</p> : null}
+        {error ? (
+          <Alert color="red" variant="light" m="sm">
+            {error.message}
+          </Alert>
+        ) : null}
 
-        <PromptInput
-          className="page-copilot-input"
-          onSubmit={({ text }) => {
+        <PromptForm
+          supportsAi={supportsAi}
+          isBusy={isBusy}
+          status={status}
+          onStop={() => void stop()}
+          onSubmit={(text) => {
             const prompt = text.trim();
-            if (prompt.length > 0) {
-              void sendPrompt(prompt);
-            }
+            if (prompt.length > 0) void sendPrompt(prompt);
           }}
-        >
-          <PromptInputBody>
-            <PromptInputTextarea
-              disabled={!supportsAi || isBusy}
-              placeholder={
-                supportsAi ? "Ask what matters on this page..." : "AI is not available here"
-              }
-            />
-          </PromptInputBody>
-          <PromptInputFooter>
-            <PromptInputTools>
-              <Button
-                type="button"
-                variant="ghost"
-                size="xs"
-                disabled={!supportsAi || isBusy}
-                onClick={() =>
-                  void sendPrompt(
-                    "Suggest the highest-value next action from the visible page context.",
-                    "suggest_next_action",
-                  )
-                }
-              >
-                <Bot className="size-3" />
-                Next step
-              </Button>
-            </PromptInputTools>
-            <PromptInputSubmit disabled={!supportsAi} status={status} onStop={() => void stop()} />
-          </PromptInputFooter>
-        </PromptInput>
-      </div>
-    </Sheet>
+          onNextStep={() =>
+            void sendPrompt(
+              "Suggest the highest-value next action from the visible page context.",
+              "suggest_next_action",
+            )
+          }
+        />
+      </Stack>
+    </Drawer>
+  );
+}
+
+function ConversationStream({
+  messages,
+  supportsAi,
+}: {
+  messages: UIMessage[];
+  supportsAi: boolean;
+}) {
+  return (
+    <StickToBottom
+      role="log"
+      initial="smooth"
+      resize="smooth"
+      style={{ flex: 1, position: "relative", overflowY: "hidden" }}
+    >
+      <StickToBottom.Content
+        style={{ display: "flex", flexDirection: "column", gap: 16, padding: 16 }}
+      >
+        {messages.length === 0 ? (
+          <EmptyState supportsAi={supportsAi} />
+        ) : (
+          messages.map((message) => <CopilotMessage key={message.id} message={message} />)
+        )}
+      </StickToBottom.Content>
+      <ScrollToBottomButton />
+    </StickToBottom>
+  );
+}
+
+function ScrollToBottomButton() {
+  const { isAtBottom, scrollToBottom } = useStickToBottomContext();
+  if (isAtBottom) return null;
+  return (
+    <ActionIcon
+      onClick={() => void scrollToBottom()}
+      variant="default"
+      size="lg"
+      radius="xl"
+      aria-label="Scroll to latest message"
+      style={{
+        position: "absolute",
+        bottom: 16,
+        left: "50%",
+        transform: "translateX(-50%)",
+      }}
+    >
+      <ArrowDown size={16} />
+    </ActionIcon>
+  );
+}
+
+function EmptyState({ supportsAi }: { supportsAi: boolean }) {
+  return (
+    <Stack align="center" justify="center" gap="xs" h="100%" p="xl" ta="center">
+      <Sparkles size={20} color="var(--mantine-color-dimmed)" />
+      <Title order={4} size="sm" fw={500}>
+        {supportsAi ? "Ask about this page" : "AI is not available here"}
+      </Title>
+      <Text size="sm" c="dimmed">
+        {supportsAi
+          ? "The copilot uses the visible browser context for this page."
+          : "Open an overview, configuration, agent, builder, or tenant page."}
+      </Text>
+    </Stack>
   );
 }
 
 function CopilotMessage({ message }: { message: UIMessage }) {
   const text = messageText(message);
-
   if (!text) return null;
+  const isAssistant = message.role === "assistant";
+  return (
+    <Box style={{ display: "flex", justifyContent: isAssistant ? "flex-start" : "flex-end" }}>
+      <Paper
+        withBorder={isAssistant}
+        bg={isAssistant ? undefined : "var(--mantine-primary-color-light)"}
+        p="sm"
+        radius="md"
+        style={{ maxWidth: "85%" }}
+      >
+        {isAssistant ? <Streamdown>{text}</Streamdown> : <Text size="sm">{text}</Text>}
+      </Paper>
+    </Box>
+  );
+}
+
+interface PromptFormProps {
+  supportsAi: boolean;
+  isBusy: boolean;
+  status: ReturnType<typeof useChat>["status"];
+  onStop: () => void;
+  onSubmit: (text: string) => void;
+  onNextStep: () => void;
+}
+
+function PromptForm({ supportsAi, isBusy, status, onStop, onSubmit, onNextStep }: PromptFormProps) {
+  const textRef = useRef<HTMLTextAreaElement>(null);
+
+  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const text = textRef.current?.value ?? "";
+    onSubmit(text);
+    if (textRef.current) textRef.current.value = "";
+  }
+
+  function handleKeyDown(event: React.KeyboardEvent<HTMLTextAreaElement>) {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      const form = event.currentTarget.form;
+      if (form) form.requestSubmit();
+    }
+  }
 
   return (
-    <Message from={message.role}>
-      <MessageContent>
-        {message.role === "assistant" ? <MessageResponse>{text}</MessageResponse> : text}
-      </MessageContent>
-    </Message>
+    <Box
+      component="form"
+      onSubmit={handleSubmit}
+      p="sm"
+      style={{ borderTop: "1px solid var(--mantine-color-default-border)" }}
+    >
+      <Textarea
+        ref={textRef}
+        placeholder={supportsAi ? "Ask what matters on this page..." : "AI is not available here"}
+        disabled={!supportsAi || isBusy}
+        autosize
+        minRows={2}
+        maxRows={6}
+        onKeyDown={handleKeyDown}
+      />
+      <Group justify="space-between" mt="xs">
+        <Button
+          type="button"
+          variant="subtle"
+          size="xs"
+          leftSection={<Bot size={12} />}
+          disabled={!supportsAi || isBusy}
+          onClick={onNextStep}
+        >
+          Next step
+        </Button>
+        {isBusy ? (
+          <Button
+            type="button"
+            color="red"
+            variant="light"
+            size="xs"
+            leftSection={<Square size={12} />}
+            onClick={onStop}
+          >
+            {status === "streaming" ? "Stop streaming" : "Cancel"}
+          </Button>
+        ) : (
+          <Button type="submit" size="xs" leftSection={<Send size={12} />} disabled={!supportsAi}>
+            Send
+          </Button>
+        )}
+      </Group>
+    </Box>
   );
 }
 
