@@ -1,5 +1,5 @@
 name: Smoke test site targets
-description: Smoke test one or more static site URLs.
+description: Smoke test one or more static site URLs using a headless browser.
 
 inputs:
   smoke-targets:
@@ -9,6 +9,12 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Install Playwright chromium
+      shell: bash
+      run: |
+        npm install --no-save playwright@1.52.0
+        npx playwright install --with-deps chromium
+
     - name: Smoke test site targets
       shell: bash
       env:
@@ -16,58 +22,74 @@ runs:
       run: |
         set -euo pipefail
         sleep 5
-        targets_file="$(mktemp)"
-        response_file="$(mktemp)"
-        trap 'rm -f "$targets_file" "$response_file"' EXIT
-        printf '%s\n' "$SMOKE_TARGETS" > "$targets_file"
 
-        while IFS= read -r target; do
-          target="${target%$'\r'}"
-          [ -n "$target" ] || continue
-          if [[ "$target" != *"|"* ]]; then
-            echo "Malformed smoke target line; expected label|url: $target"
-            exit 1
-          fi
-          surface="${target%%|*}"
-          url="${target#*|}"
-          if [ -z "$surface" ] || [ -z "$url" ]; then
-            echo "Malformed smoke target line; label and url must both be non-empty: $target"
-            exit 1
-          fi
-          case "$url" in
-            http://* | https://*) ;;
-            *)
-              echo "Malformed smoke target URL for $surface: $url"
-              exit 1
-              ;;
-          esac
-          STATUS=""
-          : > "$response_file"
+        node --input-type=module <<'SMOKE_SCRIPT'
+        import { chromium } from "playwright";
 
-          for attempt in 1 2 3 4 5; do
-            STATUS=$(curl -sS --connect-timeout 5 --max-time 20 \
-              -A "Mozilla/5.0 (compatible; o11yfleet-smoke/1.0; +https://o11yfleet.com)" \
-              -o "$response_file" -w "%{http_code}" "$url" || true)
-            [ "$STATUS" = "200" ] && break
-            echo "$surface smoke attempt $attempt failed with status ${STATUS:-curl-error}; retrying..."
-            sleep 3
-          done
+        const targets = process.env.SMOKE_TARGETS.trim().split("\n").filter(Boolean);
+        const browser = await chromium.launch();
 
-          if [ "$STATUS" != "200" ]; then
-            echo "$surface smoke failed: $STATUS"
-            [ ! -s "$response_file" ] || cat "$response_file"
-            exit 1
-          fi
+        try {
+          for (const line of targets) {
+            const trimmed = line.replace(/\r$/, "");
+            if (!trimmed.includes("|")) {
+              console.error(`Malformed smoke target line; expected label|url: ${trimmed}`);
+              process.exit(1);
+            }
+            const [surface, ...urlParts] = trimmed.split("|");
+            const url = urlParts.join("|");
+            if (!surface || !url) {
+              console.error(`Malformed smoke target; label and url must both be non-empty: ${trimmed}`);
+              process.exit(1);
+            }
+            if (!url.startsWith("http://") && !url.startsWith("https://")) {
+              console.error(`Malformed smoke target URL for ${surface}: ${url}`);
+              process.exit(1);
+            }
 
-          if ! grep 'id="root"' "$response_file" >/dev/null; then
-            echo "$surface route did not include the React root marker"
-            head -c 500 "$response_file"
-            exit 1
-          fi
-          if grep -E 'Prototype|AI-powered insights are coming soon|portal-shared\.css' "$response_file" >/dev/null; then
-            echo "$surface route served stale prototype HTML"
-            exit 1
-          fi
-        done < "$targets_file"
+            console.log(`Testing ${surface}: ${url}`);
+            const page = await browser.newPage();
+            let lastError;
 
-        echo "Site targets responding"
+            for (let attempt = 1; attempt <= 5; attempt++) {
+              try {
+                const response = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30000 });
+                const status = response?.status() ?? 0;
+                if (status !== 200) {
+                  throw new Error(`HTTP ${status}`);
+                }
+
+                const root = await page.locator("#root").count();
+                if (root === 0) {
+                  const snippet = (await page.content()).slice(0, 500);
+                  throw new Error(`Missing #root element. Page snippet: ${snippet}`);
+                }
+
+                const stale = await page.locator("text=/Prototype|AI-powered insights are coming soon/").count();
+                const staleCSS = await page.locator("link[href*='portal-shared.css']").count();
+                if (stale > 0 || staleCSS > 0) {
+                  throw new Error(`${surface} served stale prototype HTML`);
+                }
+
+                console.log(`  ✓ ${surface} OK (attempt ${attempt})`);
+                lastError = null;
+                break;
+              } catch (err) {
+                lastError = err;
+                console.log(`  ${surface} attempt ${attempt} failed: ${err.message}`);
+                if (attempt < 5) await new Promise(r => setTimeout(r, 3000));
+              }
+            }
+
+            await page.close();
+            if (lastError) {
+              console.error(`${surface} smoke failed after 5 attempts: ${lastError.message}`);
+              process.exit(1);
+            }
+          }
+
+          console.log("Site targets responding");
+        } finally {
+          await browser.close();
+        }
+        SMOKE_SCRIPT
