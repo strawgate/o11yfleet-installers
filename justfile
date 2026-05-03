@@ -1221,21 +1221,27 @@ tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
         deployment_args+=(--env "$WRANGLER_ENV")
         version_args+=(--env "$WRANGLER_ENV")
     fi
+    # Capture stderr separately so wrangler warnings don't corrupt JSON output.
+    deploy_stderr="$(mktemp)"
+    trap 'rm -f "$deploy_stderr"' EXIT
     set +e
-    deployments_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${deployment_args[@]}" 2>&1)"
+    deployments_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${deployment_args[@]}" 2>"$deploy_stderr")"
     deployments_status=$?
     set -e
     if [ "$deployments_status" -ne 0 ]; then
-        if printf '%s\n' "$deployments_json" | grep -Eiq 'no deployments|no versions|not found|does not exist|not been deployed|404'; then
+        stderr_text="$(cat "$deploy_stderr")"
+        if printf '%s\n' "$stderr_text" | grep -Eiq 'no deployments|no versions|not found|does not exist|not been deployed|404'; then
             deployments_json="[]"
         else
-            printf 'Failed to inspect existing Cloudflare Worker deployments:\n%s\n' "$deployments_json" >&2
+            printf 'Failed to inspect existing Cloudflare Worker deployments:\n%s\n' "$stderr_text" >&2
             exit "$deployments_status"
         fi
     fi
     current_version_id="$(node -e 'let deployments = []; try { deployments = JSON.parse(process.argv[1] || "[]"); } catch {} const latest = deployments.slice().sort((a, b) => String(a.created_on || "").localeCompare(String(b.created_on || ""))).at(-1); const active = latest?.versions?.find((version) => Number(version.percentage) > 0) || latest?.versions?.[0]; process.stdout.write(active?.version_id || "");' "$deployments_json")"
     if [ -n "$current_version_id" ]; then
-        version_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${version_args[@]}" "$current_version_id" --json)"
+        version_stderr="$(mktemp)"
+        trap 'rm -f "$deploy_stderr" "$version_stderr"' EXIT
+        version_json="$(pnpm --filter @o11yfleet/worker exec wrangler "${version_args[@]}" "$current_version_id" --json 2>"$version_stderr")"
         if node -e 'const version = JSON.parse(process.argv[1] || "{}"); const runtime = version.resources?.script_runtime || {}; const migrations = runtime.migrations || {}; const tag = runtime.migration_tag || migrations.new_tag; process.exit(typeof tag === "string" && tag.length > 0 ? 0 : 1);' "$version_json"; then
             echo "Current Cloudflare Worker deployment already has a Durable Object migration tag; skipping Durable Object migration bootstrap"
             exit 0
