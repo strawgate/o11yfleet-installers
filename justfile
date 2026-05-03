@@ -1143,8 +1143,9 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
             if ! terraform state show "$address" >/dev/null 2>&1; then
                 set +e
                 output="$(terraform import -var-file=envs/{{env}}.tfvars "$address" "${CLOUDFLARE_ZONE_ID}/${route_id}" 2>&1)"
+                import_status=$?
                 set -e
-                if [ $? -eq 0 ] || printf '%s\n' "$output" | grep -q 'Already managed'; then
+                if [ "$import_status" -eq 0 ]; then
                     printf 'Imported existing route %s into %s\n' "${api_domain}/*" "$address"
                 else
                     printf 'Warning: failed to import route %s: %s\n' "${api_domain}/*" "$output" >&2
@@ -1164,8 +1165,9 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
             if ! terraform state show "$address" >/dev/null 2>&1; then
                 set +e
                 output="$(terraform import -var-file=envs/{{env}}.tfvars "$address" "${CLOUDFLARE_ZONE_ID}/${route_id}" 2>&1)"
+                import_status=$?
                 set -e
-                if [ $? -eq 0 ] || printf '%s\n' "$output" | grep -q 'Already managed'; then
+                if [ "$import_status" -eq 0 ]; then
                     printf 'Imported existing route %s into %s\n' "${domain}/*" "$address"
                 else
                     printf 'Warning: failed to import route %s: %s\n' "${domain}/*" "$output" >&2
