@@ -7,6 +7,7 @@ import type {
   AgentDetail,
   AgentPage,
   AgentDescriptionResponse as AgentDescription,
+  AuditLogListResponse,
   ConfigStats,
   Tenant,
 } from "@o11yfleet/core/api";
@@ -99,6 +100,30 @@ function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
 /* ------------------------------------------------------------------ */
 /*  Query hooks                                                       */
 /* ------------------------------------------------------------------ */
+
+export interface AuditLogFilters {
+  actor_user_id?: string;
+  resource_type?: string;
+  resource_id?: string;
+  action?: string;
+  from?: string;
+  to?: string;
+  cursor?: string;
+  limit?: number;
+}
+
+export function useAuditLogs(filters: AuditLogFilters = {}, enabled = true) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value !== undefined && value !== "") params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return useQuery({
+    queryKey: ["audit-logs", filters],
+    queryFn: () => apiGet<AuditLogListResponse>(`/api/v1/audit-logs${qs ? `?${qs}` : ""}`),
+    enabled,
+  });
+}
 
 export function useOverview() {
   return useQuery({

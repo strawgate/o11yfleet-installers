@@ -3,6 +3,13 @@
 
 import type { Env } from "../../index.js";
 import {
+  recordMutation,
+  type AuditContext,
+  type AuditCreateDescriptor,
+  type AuditDescriptor,
+} from "../../audit/recorder.js";
+import { handleListAuditLogs } from "./audit-logs.js";
+import {
   createConfigurationRequestSchema,
   createEnrollmentTokenRequestSchema,
   updateConfigurationRequestSchema,
@@ -50,9 +57,10 @@ export async function handleV1Request(
   env: Env,
   url: URL,
   tenantId: string,
+  audit?: AuditContext,
 ): Promise<Response> {
   try {
-    return await routeV1Request(request, env, url, tenantId);
+    return await routeV1Request(request, env, url, tenantId, audit);
   } catch (err) {
     if (err instanceof ApiError) {
       return jsonApiError(err);
@@ -65,11 +73,64 @@ export async function handleV1Request(
   }
 }
 
+/**
+ * Wrap a mutating handler so the response is also written to the audit
+ * log. Read-only routes don't need this. The wrapper is intentionally
+ * thin so coverage is grep-able: each mutating route has exactly one
+ * `withAudit(...)` call adjacent to the handler.
+ */
+export async function withAudit(
+  audit: AuditContext | undefined,
+  desc: AuditDescriptor | AuditCreateDescriptor,
+  fn: () => Promise<Response>,
+): Promise<Response> {
+  try {
+    const response = await fn();
+    if (audit) {
+      const resolved = await resolveDescriptor(desc, response);
+      recordMutation(audit, response, resolved);
+    }
+    return response;
+  } catch (err) {
+    if (audit) {
+      const status =
+        err instanceof ApiError ? err.status : err instanceof AiApiError ? err.status : 500;
+      recordMutation(audit, new Response(null, { status }), desc);
+    }
+    throw err;
+  }
+}
+
+/** When the descriptor declares `resource_id_from_response`, clone the
+ * response on a 2xx and read the named field. The original response
+ * stays untouched so the caller pipes the same body to the user. If the
+ * extraction fails (parse error, missing field, non-string value) we
+ * keep the descriptor's literal `resource_id` so the event still
+ * records — losing the id field is preferable to losing the event. */
+export async function resolveDescriptor(
+  desc: AuditDescriptor | AuditCreateDescriptor,
+  response: Response,
+): Promise<AuditDescriptor> {
+  const field = "resource_id_from_response" in desc ? desc.resource_id_from_response : undefined;
+  if (!field || response.status < 200 || response.status >= 300) return desc;
+  try {
+    const body = (await response.clone().json()) as Record<string, unknown>;
+    const value = body[field];
+    if (typeof value === "string" && value.length > 0) {
+      return { ...desc, resource_id: value };
+    }
+  } catch {
+    // Fall through: keep original descriptor.
+  }
+  return desc;
+}
+
 async function routeV1Request(
   request: Request,
   env: Env,
   url: URL,
   tenantId: string,
+  audit?: AuditContext,
 ): Promise<Response> {
   const path = url.pathname;
   const method = request.method;
@@ -80,10 +141,23 @@ async function routeV1Request(
     return handleGetTenant(env, tenantId);
   }
   if (path === "/api/v1/tenant" && method === "PUT") {
-    return handleUpdateTenant(request, env, tenantId);
+    return withAudit(
+      audit,
+      { action: "tenant.update", resource_type: "tenant", resource_id: tenantId },
+      () => handleUpdateTenant(request, env, tenantId),
+    );
   }
   if (path === "/api/v1/tenant" && method === "DELETE") {
-    return handleDeleteTenant(env, tenantId);
+    return withAudit(
+      audit,
+      { action: "tenant.delete", resource_type: "tenant", resource_id: tenantId },
+      () => handleDeleteTenant(env, tenantId),
+    );
+  }
+
+  // ─── Audit Logs (enterprise-gated) ───────────────────────────
+  if (path === "/api/v1/audit-logs" && method === "GET") {
+    return handleListAuditLogs(env, url, tenantId);
   }
 
   // ─── Team ───────────────────────────────────────────────────
@@ -113,21 +187,53 @@ async function routeV1Request(
     return handleListConfigurations(env, tenantId);
   }
   if (path === "/api/v1/configurations" && method === "POST") {
-    return handleCreateConfiguration(request, env, tenantId);
+    return withAudit(
+      audit,
+      {
+        action: "configuration.create",
+        resource_type: "configuration",
+        resource_id: null,
+        resource_id_from_response: "id",
+      },
+      () => handleCreateConfiguration(request, env, tenantId),
+    );
   }
 
   const configMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)$/);
   if (configMatch) {
     const configId = configMatch[1]!;
     if (method === "GET") return handleGetConfiguration(env, tenantId, configId);
-    if (method === "PUT") return handleUpdateConfiguration(request, env, tenantId, configId);
-    if (method === "DELETE") return handleDeleteConfiguration(env, tenantId, configId);
+    if (method === "PUT") {
+      return withAudit(
+        audit,
+        { action: "configuration.update", resource_type: "configuration", resource_id: configId },
+        () => handleUpdateConfiguration(request, env, tenantId, configId),
+      );
+    }
+    if (method === "DELETE") {
+      return withAudit(
+        audit,
+        { action: "configuration.delete", resource_type: "configuration", resource_id: configId },
+        () => handleDeleteConfiguration(env, tenantId, configId),
+      );
+    }
   }
 
   // POST /api/v1/configurations/:id/versions
   const versionsPostMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/versions$/);
   if (versionsPostMatch && method === "POST") {
-    return handleUploadVersion(request, env, tenantId, versionsPostMatch[1]!);
+    const configId = versionsPostMatch[1]!;
+    return withAudit(
+      audit,
+      {
+        action: "config_version.publish",
+        resource_type: "config_version",
+        resource_id: null,
+        resource_id_from_response: "id",
+        metadata: { config_id: configId },
+      },
+      () => handleUploadVersion(request, env, tenantId, configId),
+    );
   }
 
   // GET /api/v1/configurations/:id/versions
@@ -154,7 +260,21 @@ async function routeV1Request(
 
   const enrollMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/enrollment-token$/);
   if (enrollMatch && method === "POST") {
-    return handleCreateEnrollmentToken(request, env, tenantId, enrollMatch[1]!);
+    const configId = enrollMatch[1]!;
+    return withAudit(
+      audit,
+      {
+        action: "enrollment_token.create",
+        resource_type: "enrollment_token",
+        // The token id (jti) is generated inside the handler, so we can't
+        // know it up front. Read it back from the success response so
+        // audit-log filtering by token id works for create + revoke alike.
+        resource_id: null,
+        resource_id_from_response: "id",
+        metadata: { config_id: configId },
+      },
+      () => handleCreateEnrollmentToken(request, env, tenantId, configId),
+    );
   }
 
   const tokensListMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/enrollment-tokens$/);
@@ -166,7 +286,18 @@ async function routeV1Request(
     /^\/api\/v1\/configurations\/([^/]+)\/enrollment-tokens\/([^/]+)$/,
   );
   if (tokenDeleteMatch && method === "DELETE") {
-    return handleRevokeEnrollmentToken(env, tenantId, tokenDeleteMatch[1]!, tokenDeleteMatch[2]!);
+    const configId = tokenDeleteMatch[1]!;
+    const tokenId = tokenDeleteMatch[2]!;
+    return withAudit(
+      audit,
+      {
+        action: "enrollment_token.revoke",
+        resource_type: "enrollment_token",
+        resource_id: tokenId,
+        metadata: { config_id: configId },
+      },
+      () => handleRevokeEnrollmentToken(env, tenantId, configId, tokenId),
+    );
   }
 
   // ─── Agents & Stats (from DO) ──────────────────────────────
@@ -197,7 +328,12 @@ async function routeV1Request(
 
   const rolloutMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/rollout$/);
   if (rolloutMatch && method === "POST") {
-    return handleRollout(request, env, tenantId, rolloutMatch[1]!);
+    const configId = rolloutMatch[1]!;
+    return withAudit(
+      audit,
+      { action: "rollout.start", resource_type: "rollout", resource_id: configId },
+      () => handleRollout(request, env, tenantId, configId),
+    );
   }
 
   // ─── Admin Commands ────────────────────────────────────────
@@ -205,23 +341,39 @@ async function routeV1Request(
   // Add admin-role authorization when RBAC is implemented.
   const disconnectMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/disconnect$/);
   if (disconnectMatch && method === "POST") {
-    return handleDisconnect(env, tenantId, disconnectMatch[1]!);
+    const configId = disconnectMatch[1]!;
+    return withAudit(
+      audit,
+      { action: "agents.disconnect", resource_type: "configuration", resource_id: configId },
+      () => handleDisconnect(env, tenantId, configId),
+    );
   }
 
   const restartMatch = path.match(/^\/api\/v1\/configurations\/([^/]+)\/restart$/);
   if (restartMatch && method === "POST") {
-    return handleRestart(env, tenantId, restartMatch[1]!);
+    const configId = restartMatch[1]!;
+    return withAudit(
+      audit,
+      { action: "agents.restart", resource_type: "configuration", resource_id: configId },
+      () => handleRestart(env, tenantId, configId),
+    );
   }
 
   const disconnectAgentMatch = path.match(
     /^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)\/disconnect$/,
   );
   if (disconnectAgentMatch && method === "POST") {
-    return handleDisconnectAgentRoute(
-      env,
-      tenantId,
-      disconnectAgentMatch[1]!,
-      disconnectAgentMatch[2]!,
+    const configId = disconnectAgentMatch[1]!;
+    const instanceUid = disconnectAgentMatch[2]!;
+    return withAudit(
+      audit,
+      {
+        action: "agent.disconnect",
+        resource_type: "agent",
+        resource_id: instanceUid,
+        metadata: { config_id: configId },
+      },
+      () => handleDisconnectAgentRoute(env, tenantId, configId, instanceUid),
     );
   }
 
@@ -229,13 +381,33 @@ async function routeV1Request(
     /^\/api\/v1\/configurations\/([^/]+)\/agents\/([^/]+)\/restart$/,
   );
   if (restartAgentMatch && method === "POST") {
-    return handleRestartAgentRoute(env, tenantId, restartAgentMatch[1]!, restartAgentMatch[2]!);
+    const configId = restartAgentMatch[1]!;
+    const instanceUid = restartAgentMatch[2]!;
+    return withAudit(
+      audit,
+      {
+        action: "agent.restart",
+        resource_type: "agent",
+        resource_id: instanceUid,
+        metadata: { config_id: configId },
+      },
+      () => handleRestartAgentRoute(env, tenantId, configId, instanceUid),
+    );
   }
 
   // ─── API Keys ────────────────────────────────────────────
 
   if (path === "/api/v1/api-keys" && method === "POST") {
-    return handleCreateApiKey(request, env, tenantId);
+    return withAudit(
+      audit,
+      {
+        action: "api_key.create",
+        resource_type: "api_key",
+        resource_id: null,
+        resource_id_from_response: "jti",
+      },
+      () => handleCreateApiKey(request, env, tenantId),
+    );
   }
 
   // ─── Pending Tokens ───────────────────────────────────────
@@ -244,12 +416,26 @@ async function routeV1Request(
     return handleListPendingTokens(env, tenantId);
   }
   if (path === "/api/v1/pending-tokens" && method === "POST") {
-    return handleCreatePendingToken(request, env, tenantId);
+    return withAudit(
+      audit,
+      {
+        action: "pending_token.create",
+        resource_type: "pending_token",
+        resource_id: null,
+        resource_id_from_response: "id",
+      },
+      () => handleCreatePendingToken(request, env, tenantId),
+    );
   }
 
   const pendingTokenDeleteMatch = path.match(/^\/api\/v1\/pending-tokens\/([^/]+)$/);
   if (pendingTokenDeleteMatch && method === "DELETE") {
-    return handleRevokePendingToken(env, tenantId, pendingTokenDeleteMatch[1]!);
+    const tokenId = pendingTokenDeleteMatch[1]!;
+    return withAudit(
+      audit,
+      { action: "pending_token.revoke", resource_type: "pending_token", resource_id: tokenId },
+      () => handleRevokePendingToken(env, tenantId, tokenId),
+    );
   }
 
   // ─── Pending Devices ──────────────────────────────────────
@@ -260,7 +446,12 @@ async function routeV1Request(
 
   const pendingAssignMatch = path.match(/^\/api\/v1\/pending-devices\/([^/]+)\/assign$/);
   if (pendingAssignMatch && method === "POST") {
-    return handleAssignPendingDevice(request, env, tenantId, pendingAssignMatch[1]!);
+    const deviceUid = pendingAssignMatch[1]!;
+    return withAudit(
+      audit,
+      { action: "pending_device.assign", resource_type: "pending_device", resource_id: deviceUid },
+      () => handleAssignPendingDevice(request, env, tenantId, deviceUid),
+    );
   }
 
   return jsonError("Not found", 404);
@@ -475,7 +666,18 @@ async function handleUploadVersion(
   if (yamlError) return jsonError(`Invalid YAML: ${yamlError}`, 400);
 
   const result = await uploadConfigVersion(env, tenantId, configId, yaml);
-  return Response.json(result, { status: 201 });
+  // Expose `id` so audit logging can link the event to the version row,
+  // and so clients can reference the version without re-querying.
+  return Response.json(
+    {
+      id: result.versionId,
+      hash: result.hash,
+      r2Key: result.r2Key,
+      sizeBytes: result.sizeBytes,
+      deduplicated: result.deduplicated,
+    },
+    { status: 201 },
+  );
 }
 
 async function handleListVersions(env: Env, tenantId: string, configId: string): Promise<Response> {
@@ -716,12 +918,16 @@ async function handleGetStats(env: Env, tenantId: string, configId: string): Pro
 }
 
 async function handleDisconnect(env: Env, tenantId: string, configId: string): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/command/disconnect", { method: "POST" }));
 }
 
 async function handleRestart(env: Env, tenantId: string, configId: string): Promise<Response> {
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(new Request("http://internal/command/restart", { method: "POST" }));
@@ -736,6 +942,8 @@ async function handleDisconnectAgentRoute(
   if (!isValidInstanceUid(instanceUid)) {
     return jsonError("Invalid instance_uid", 400);
   }
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(
@@ -752,6 +960,8 @@ async function handleRestartAgentRoute(
   if (!isValidInstanceUid(instanceUid)) {
     return jsonError("Invalid instance_uid", 400);
   }
+  const config = await getOwnedConfig(env, tenantId, configId);
+  if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
   return stub.fetch(

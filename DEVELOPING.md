@@ -421,6 +421,59 @@ The route is gated by `import.meta.env.DEV` and is tree-shaken from prod.
 - Custom CSS in `portal-shared.css` etc. will shrink as the cleanup PR lands
   after the four migration PRs (#471, #472, #473, #474).
 
+## Audit log
+
+Every mutating user action (v1 + admin routes, login/logout) is recorded
+to the `audit_logs` D1 table. Reads are gated to enterprise-plan tenants
+via `GET /api/v1/audit-logs`.
+
+### Wire format
+
+- Producer: handlers call `recordMutation(audit, response, { action, resource_type, resource_id })`
+  via route-level wrappers — `withAudit(...)` for v1 routes, `withAdminAudit(...)`
+  for admin routes. Coverage is grep-able: every `withAudit(` in
+  `routes/v1/*` and every `withAdminAudit(` in `routes/admin/*`
+  corresponds to one audited mutation.
+- Transport: `env.AUDIT_QUEUE` (`o11yfleet-audit-logs`). Consumer-side
+  D1 errors are retried (`max_retries: 5`) before landing in the DLQ.
+- DLQ: `o11yfleet-audit-logs-dlq`. The same Worker consumes it and logs
+  each event to `console.error` so depth>0 is visible in Workers Logs.
+- Failure classification: 2xx/3xx → success; 404/405 → skipped (not a
+  real signal); other 4xx and all 5xx → failure. See
+  `classifyAuditStatus` in `packages/core/src/audit.ts`.
+
+### Investigating dropped events
+
+If you see `[audit-dlq]` lines in Workers Logs:
+
+```bash
+# Inspect the DLQ size and pause/resume delivery for triage
+pnpm wrangler queues info o11yfleet-audit-logs-dlq
+pnpm wrangler queues pause-delivery o11yfleet-audit-logs-dlq
+pnpm wrangler queues resume-delivery o11yfleet-audit-logs-dlq
+```
+
+Each DLQ message is a JSON `AuditEvent` already logged via
+`console.error`. Wrangler doesn't expose a CLI to re-publish a single
+message — to replay, copy the event from logs, then either re-POST
+through the producer (a small admin-only script) or use the dashboard's
+queue producer UI after verifying D1 is healthy. The audit consumer is
+idempotent (`ON CONFLICT(id) DO NOTHING`), so accidental duplicates are
+safe.
+
+### Adding audit coverage for a new route
+
+1. For v1 routes, add `withAudit(audit, { action, resource_type, resource_id }, () => handler())`
+   at the route call site. For admin routes, use `withAdminAudit(...)`
+   instead. That's it — no central table to update.
+2. For admin actions targeting a customer tenant, pass the customer
+   tenant id as the fourth `withAdminAudit(...)` arg so the customer's
+   audit log surfaces the action too.
+
+The migration plan to swap the consumer to WorkOS Audit Logs (mapping
+table, open questions, acceptance checklist) lives in
+[issue #520](https://github.com/strawgate/o11yfleet/issues/520).
+
 ### Mantine usage cheat-sheet
 
 These rules are distilled from three production references: Mantine's own

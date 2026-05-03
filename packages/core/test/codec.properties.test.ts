@@ -185,7 +185,13 @@ describe("property: AgentToServer round-trip", () => {
     // round-trip through proto3 string fields. The property under test is
     // "the codec preserves the shape", not "every Unicode codepoint
     // round-trips" — the latter is a TextEncoder concern, not a codec one.
-    const safeStringArb = fc.stringMatching(/^[a-zA-Z0-9._-]{1,16}$/);
+    // Exclude prototype-pollution keys so bracket access on the decoded
+    // record doesn't reach `Object.prototype` and produce a TypeError on
+    // the next nested access. This is a test-side guard, not a codec
+    // concern — proto3 round-trips strings as bytes regardless of value.
+    const safeStringArb = fc
+      .stringMatching(/^[a-zA-Z0-9._-]{1,16}$/)
+      .filter((s) => s !== "__proto__" && s !== "constructor" && s !== "prototype");
     const safeValueArb = fc.stringMatching(/^[a-zA-Z0-9._: -]{0,32}$/);
     const hashArb = fc.uint8Array({ minLength: 8, maxLength: 32 });
     fc.assert(

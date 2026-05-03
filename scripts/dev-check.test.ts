@@ -99,7 +99,7 @@ test("builds ordered check steps with human reasons", () => {
 
   assert.deepEqual(
     steps.map((step) => step.id),
-    ["format-1", "scripts-lint", "fast-suite", "api-docs", "worker-runtime"],
+    ["format-1", "scripts-lint", "fast-suite", "type-aware-lint", "api-docs", "worker-runtime"],
   );
   assert.match(steps[0]?.reason ?? "", /2 changed files/);
 });

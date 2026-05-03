@@ -43,6 +43,33 @@
       },
     ],
   },
+  // Audit log delivery: producer enqueues AuditEvent; consumer batch-inserts
+  // into D1. Consumer-side D1 errors are retried with backoff, then land in
+  // the DLQ which the same Worker also consumes (logs via console.error so
+  // depth>0 is visible in Workers Logs / OTel). See DEVELOPING.md → Audit log.
+  "queues": {
+    "producers": [
+      {
+        "queue": "o11yfleet-audit-logs",
+        "binding": "AUDIT_QUEUE",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "o11yfleet-audit-logs",
+        "max_batch_size": 100,
+        "max_batch_timeout": 5,
+        "max_retries": 5,
+        "dead_letter_queue": "o11yfleet-audit-logs-dlq",
+      },
+      {
+        "queue": "o11yfleet-audit-logs-dlq",
+        "max_batch_size": 100,
+        "max_batch_timeout": 30,
+        "max_retries": 0,
+      },
+    ],
+  },
   // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
   // reconciliation fallback at 03:17 UTC.
   "triggers": {
@@ -101,6 +128,29 @@
           {
             "name": "CONFIG_DO",
             "class_name": "ConfigDurableObject",
+          },
+        ],
+      },
+      "queues": {
+        "producers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "binding": "AUDIT_QUEUE",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "o11yfleet-audit-logs-dlq",
+          },
+          {
+            "queue": "o11yfleet-audit-logs-dlq",
+            "max_batch_size": 100,
+            "max_batch_timeout": 30,
+            "max_retries": 0,
           },
         ],
       },
@@ -164,6 +214,29 @@
           },
         ],
       },
+      "queues": {
+        "producers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "binding": "AUDIT_QUEUE",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "o11yfleet-audit-logs-dlq",
+          },
+          {
+            "queue": "o11yfleet-audit-logs-dlq",
+            "max_batch_size": 100,
+            "max_batch_timeout": 30,
+            "max_retries": 0,
+          },
+        ],
+      },
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
@@ -214,6 +287,29 @@
           {
             "name": "CONFIG_DO",
             "class_name": "ConfigDurableObject",
+          },
+        ],
+      },
+      "queues": {
+        "producers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "binding": "AUDIT_QUEUE",
+          },
+        ],
+        "consumers": [
+          {
+            "queue": "o11yfleet-audit-logs",
+            "max_batch_size": 100,
+            "max_batch_timeout": 5,
+            "max_retries": 5,
+            "dead_letter_queue": "o11yfleet-audit-logs-dlq",
+          },
+          {
+            "queue": "o11yfleet-audit-logs-dlq",
+            "max_batch_size": 100,
+            "max_batch_timeout": 30,
+            "max_retries": 0,
           },
         ],
       },

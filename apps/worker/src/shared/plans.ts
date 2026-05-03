@@ -22,6 +22,8 @@ export interface PlanDefinition {
   supports_sso: boolean;
   stateful_operations: boolean;
   supports_direct_enrollment: boolean;
+  /** Whether the customer can read their own audit log via API + UI. */
+  audit_log_access: boolean;
   features: string[];
 }
 
@@ -47,6 +49,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_sso: false,
     stateful_operations: false,
     supports_direct_enrollment: false,
+    audit_log_access: false,
     features: ["Live collector inventory", "1 policy", "Manual config deployment"],
   },
   pro: {
@@ -68,6 +71,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_sso: false,
     stateful_operations: true,
     supports_direct_enrollment: false,
+    audit_log_access: false,
     features: ["3 policies", "7-day history", "Version history, diff, and rollback"],
   },
   starter: {
@@ -89,6 +93,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_sso: false,
     stateful_operations: false,
     supports_direct_enrollment: true,
+    audit_log_access: false,
     features: ["1,000 collectors", "1 policy", "Shared team inventory"],
   },
   growth: {
@@ -110,13 +115,14 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_sso: false,
     stateful_operations: true,
     supports_direct_enrollment: true,
+    audit_log_access: false,
     features: [
       "10 policies",
       "30-day history",
       "Progressive and canary rollouts",
       "Unlimited API keys and 10 repositories",
       "Basic RBAC",
-      "Webhooks and audit log",
+      "Webhooks",
     ],
   },
   enterprise: {
@@ -138,6 +144,7 @@ export const PLAN_DEFINITIONS: Record<PlanId, PlanDefinition> = {
     supports_sso: true,
     stateful_operations: true,
     supports_direct_enrollment: true,
+    audit_log_access: true,
     features: [
       "Custom managed config and repo limits",
       "SSO / SAML / OIDC",

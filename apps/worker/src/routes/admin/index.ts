@@ -3,6 +3,12 @@
 
 import type { Env } from "../../index.js";
 import {
+  recordEvent,
+  recordMutation,
+  type AuditContext,
+  type AuditDescriptor,
+} from "../../audit/recorder.js";
+import {
   adminCreateTenantRequestSchema,
   adminDoQueryRequestSchema,
   adminUpdateTenantRequestSchema,
@@ -41,9 +47,14 @@ function generateSessionId(): string {
 
 // ─── Router ─────────────────────────────────────────────────────────
 
-export async function handleAdminRequest(request: Request, env: Env, url: URL): Promise<Response> {
+export async function handleAdminRequest(
+  request: Request,
+  env: Env,
+  url: URL,
+  audit?: AuditContext,
+): Promise<Response> {
   try {
-    return await routeAdminRequest(request, env, url);
+    return await routeAdminRequest(request, env, url, audit);
   } catch (err) {
     if (err instanceof ApiError) {
       return jsonApiError(err);
@@ -56,7 +67,66 @@ export async function handleAdminRequest(request: Request, env: Env, url: URL): 
   }
 }
 
-async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<Response> {
+/**
+ * Wrap a mutating admin handler so the response is also written to the
+ * audit log. The admin event is always recorded against the platform
+ * (admin) audit scope. For actions targeting a specific customer tenant,
+ * pass `customerTenantId` to also mirror an entry into that tenant's
+ * stream so customers can see when support touched their tenant.
+ */
+async function withAdminAudit(
+  audit: AuditContext | undefined,
+  desc: AuditDescriptor,
+  fn: () => Promise<Response>,
+  customerTenantId?: string,
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fn();
+  } catch (err) {
+    if (audit) {
+      const status =
+        err instanceof ApiError ? err.status : err instanceof AiApiError ? err.status : 500;
+      const errResp = new Response(null, { status });
+      recordOnAdminAndCustomer(audit, desc, errResp, customerTenantId);
+    }
+    throw err;
+  }
+  if (audit) recordOnAdminAndCustomer(audit, desc, response, customerTenantId);
+  return response;
+}
+
+function recordOnAdminAndCustomer(
+  audit: AuditContext,
+  desc: AuditDescriptor,
+  response: Response,
+  customerTenantId: string | undefined,
+): void {
+  recordMutation(audit, response, desc);
+  if (!customerTenantId) return;
+  // Mirror to the customer's audit log so they can see admin activity
+  // on their tenant. For user actors we set impersonator_user_id to
+  // the admin's id so customers can distinguish "support touched my
+  // tenant" from ordinary tenant-actor entries. System actors (e.g. an
+  // OIDC-authenticated CI workflow) carry forward unchanged — there's
+  // no "support operator" to credit.
+  const customerAudit: AuditContext = {
+    ...audit,
+    scope: { kind: "tenant", tenant_id: customerTenantId },
+    actor:
+      audit.actor.kind === "user"
+        ? { ...audit.actor, impersonator_user_id: audit.actor.user_id }
+        : audit.actor,
+  };
+  recordMutation(customerAudit, response, desc);
+}
+
+async function routeAdminRequest(
+  request: Request,
+  env: Env,
+  url: URL,
+  audit?: AuditContext,
+): Promise<Response> {
   const path = url.pathname;
   const method = request.method;
 
@@ -78,7 +148,11 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
   // ─── Tenants ────────────────────────────────────────────────
 
   if (path === "/api/admin/tenants" && method === "POST") {
-    return handleCreateTenant(request, env);
+    return withAdminAudit(
+      audit,
+      { action: "admin.tenant.create", resource_type: "tenant", resource_id: null },
+      () => handleCreateTenant(request, env),
+    );
   }
   if (path === "/api/admin/tenants" && method === "GET") {
     return handleListTenants(env, url);
@@ -86,9 +160,24 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   const tenantIdMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)$/);
   if (tenantIdMatch) {
-    if (method === "GET") return handleGetTenant(env, tenantIdMatch[1]!);
-    if (method === "PUT") return handleUpdateTenant(request, env, tenantIdMatch[1]!);
-    if (method === "DELETE") return handleDeleteTenant(env, tenantIdMatch[1]!);
+    const targetId = tenantIdMatch[1]!;
+    if (method === "GET") return handleGetTenant(env, targetId);
+    if (method === "PUT") {
+      return withAdminAudit(
+        audit,
+        { action: "admin.tenant.update", resource_type: "tenant", resource_id: targetId },
+        () => handleUpdateTenant(request, env, targetId),
+        targetId,
+      );
+    }
+    if (method === "DELETE") {
+      return withAdminAudit(
+        audit,
+        { action: "admin.tenant.delete", resource_type: "tenant", resource_id: targetId },
+        () => handleDeleteTenant(env, targetId),
+        targetId,
+      );
+    }
   }
 
   // GET /api/admin/tenants/:id/configurations — admin view of all configs
@@ -105,18 +194,82 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   const tenantImpersonateMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/impersonate$/);
   if (tenantImpersonateMatch && method === "POST") {
-    return handleImpersonateTenant(request, env, tenantImpersonateMatch[1]!);
+    const targetId = tenantImpersonateMatch[1]!;
+    // Only user-actor admins can start an impersonation; system actors
+    // (OIDC bootstrap path) shouldn't be able to mint impersonation
+    // sessions, so adminUserId is null in that case.
+    const adminUserId = audit?.actor.kind === "user" ? audit.actor.user_id : null;
+    return withAdminAudit(
+      audit,
+      {
+        action: "admin.tenant.impersonate_start",
+        resource_type: "tenant",
+        resource_id: targetId,
+      },
+      () => handleImpersonateTenant(request, env, targetId, adminUserId),
+      targetId,
+    );
   }
 
   // POST /api/admin/tenants/:id/approve — approve or reject a tenant
   const tenantApproveMatch = path.match(/^\/api\/admin\/tenants\/([^/]+)\/approve$/);
   if (tenantApproveMatch && method === "POST") {
-    return handleApproveTenant(request, env, tenantApproveMatch[1]!);
+    const targetId = tenantApproveMatch[1]!;
+    return withAdminAudit(
+      audit,
+      { action: "admin.tenant.approve", resource_type: "tenant", resource_id: targetId },
+      () => handleApproveTenant(request, env, targetId),
+      targetId,
+    );
   }
 
   // POST /api/admin/bulk-approve — bulk approve pending tenants
   if (path === "/api/admin/bulk-approve" && method === "POST") {
-    return handleBulkApproveTenants(request, env);
+    const resp = await withAdminAudit(
+      audit,
+      { action: "admin.tenant.bulk_approve", resource_type: "tenant", resource_id: null },
+      () => handleBulkApproveTenants(request, env),
+    );
+    // Mirror an `admin.tenant.approve` event into each approved tenant's
+    // own audit log so customers see the action under their tenant. The
+    // wrapper records the admin-stream event; we add the per-tenant
+    // mirrors here because the approved set is only known post-response.
+    if (audit && resp.ok) {
+      const cloned = resp.clone();
+      try {
+        const body = (await cloned.json()) as { approved?: unknown };
+        // Defensive: only treat entries as tenant ids if they're plain
+        // non-empty strings. A malformed handler response or future
+        // shape change shouldn't write audit rows under arbitrary
+        // tenant ids.
+        const approvedIds: string[] = Array.isArray(body.approved)
+          ? body.approved.filter((id): id is string => typeof id === "string" && id.length > 0)
+          : [];
+        for (const customerTenantId of approvedIds) {
+          const customerAudit: AuditContext = {
+            ...audit,
+            scope: { kind: "tenant", tenant_id: customerTenantId },
+            actor:
+              audit.actor.kind === "user"
+                ? { ...audit.actor, impersonator_user_id: audit.actor.user_id }
+                : audit.actor,
+          };
+          recordEvent(
+            customerAudit,
+            {
+              action: "admin.tenant.approve",
+              resource_type: "tenant",
+              resource_id: customerTenantId,
+            },
+            "success",
+            200,
+          );
+        }
+      } catch {
+        // Body wasn't JSON or didn't contain approved[]; skip per-tenant mirroring.
+      }
+    }
+    return resp;
   }
 
   // GET /api/admin/settings — get admin settings
@@ -126,7 +279,11 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   // PUT /api/admin/settings — update admin settings (e.g., auto-approve)
   if (path === "/api/admin/settings" && method === "PUT") {
-    return handleUpdateSettings(request, env);
+    return withAdminAudit(
+      audit,
+      { action: "admin.settings.update", resource_type: "settings", resource_id: null },
+      () => handleUpdateSettings(request, env),
+    );
   }
 
   const configDOTablesMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/tables$/);
@@ -136,7 +293,16 @@ async function routeAdminRequest(request: Request, env: Env, url: URL): Promise<
 
   const configDOQueryMatch = path.match(/^\/api\/admin\/configurations\/([^/]+)\/do\/query$/);
   if (configDOQueryMatch && method === "POST") {
-    return handleDoQuery(request, env, configDOQueryMatch[1]!);
+    const configId = configDOQueryMatch[1]!;
+    const owner = await env.FP_DB.prepare(`SELECT tenant_id FROM configurations WHERE id = ?`)
+      .bind(configId)
+      .first<{ tenant_id: string }>();
+    return withAdminAudit(
+      audit,
+      { action: "admin.do.query", resource_type: "configuration", resource_id: configId },
+      () => handleDoQuery(request, env, configId),
+      owner?.tenant_id,
+    );
   }
 
   // ─── Health ─────────────────────────────────────────────────
@@ -854,6 +1020,7 @@ async function handleImpersonateTenant(
   request: Request,
   env: Env,
   tenantId: string,
+  adminUserId: string | null,
 ): Promise<Response> {
   const tenant = await env.FP_DB.prepare(`SELECT id, name FROM tenants WHERE id = ?`)
     .bind(tenantId)
@@ -908,10 +1075,14 @@ async function handleImpersonateTenant(
 
   const sessionId = generateSessionId();
   const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
+  // impersonator_user_id records the *real* admin so customer audit
+  // logs can surface "support touched my tenant" entries with the
+  // actual operator, not the synthetic impersonation+ user.
   await env.FP_DB.prepare(
-    "INSERT INTO sessions (id, user_id, expires_at, is_impersonation) VALUES (?, ?, ?, 1)",
+    `INSERT INTO sessions (id, user_id, expires_at, is_impersonation, impersonator_user_id)
+     VALUES (?, ?, ?, 1, ?)`,
   )
-    .bind(sessionId, user.id, expiresAt)
+    .bind(sessionId, user.id, expiresAt, adminUserId)
     .run();
 
   const maxAge = Math.floor(SESSION_TTL_MS / 1000);

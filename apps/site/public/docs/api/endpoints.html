@@ -590,6 +590,41 @@
             </tbody>
           </table>
 
+          <h2 id="audit-logs">Audit logs</h2>
+          <p>
+            Tenant audit history includes mutating tenant actions, relevant admin actions against
+            the tenant, and auth events such as login, login failure, and logout. Read access via
+            this API requires the Enterprise plan; other plans receive
+            <code>403 upgrade_required</code>.
+          </p>
+          <table
+            class="table"
+            style="width: 100%; margin: 24px 0; border-collapse: collapse; font-size: 14px"
+          >
+            <thead>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Method</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Path</th>
+                <th style="text-align: left; padding: 10px 14px; color: var(--fg-3)">Use</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom: 1px solid var(--line)">
+                <td style="padding: 10px 14px">GET</td>
+                <td style="padding: 10px 14px">
+                  <code class="mono">/api/v1/audit-logs</code>
+                </td>
+                <td style="padding: 10px 14px">
+                  List audit events for the tenant. Supports filters
+                  <code>action</code>, <code>resource_type</code>, <code>resource_id</code>,
+                  <code>actor_user_id</code>, <code>from</code>, <code>to</code> (ISO-8601/RFC3339
+                  timestamps), plus cursor-based pagination via <code>cursor</code> and
+                  <code>limit</code> (max 200).
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
           <h2 id="opamp-route">OpAMP route</h2>
           <table
             class="table"
@@ -634,9 +669,9 @@
           </ul>
 
           <div class="coming-soon-banner">
-            <strong>Planned API extensions:</strong> Rollout strategies, progress tracking,
-            label-based targeting, and audit logs are not implemented yet. (Tenant-scoped API keys
-            are now available — see the <a href="#api-keys">API keys</a> section above.)
+            <strong>Planned API extensions:</strong> Rollout strategies, progress tracking, and
+            label-based targeting are not implemented yet. (Tenant-scoped API keys are now available
+            — see the <a href="#api-keys">API keys</a> section above.)
           </div>
 
           <div class="docs-page-nav">

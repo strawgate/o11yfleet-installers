@@ -66,6 +66,9 @@ export interface Session {
   user_id: string;
   expires_at: string;
   is_impersonation: boolean;
+  /** Set when this session was created via admin impersonation; the
+   * value is the real admin's user id (not the synthetic tenant user). */
+  impersonator_user_id: string | null;
   created_at: string;
 }
 
@@ -89,6 +92,25 @@ export interface AuthIdentity {
   provider_email: string | null;
   created_at: string;
   updated_at: string;
+}
+
+export interface AuditLog {
+  id: string;
+  tenant_id: string | null;
+  actor_user_id: string | null;
+  actor_api_key_id: string | null;
+  actor_email: string | null;
+  actor_ip: string | null;
+  actor_user_agent: string | null;
+  impersonator_user_id: string | null;
+  action: string;
+  resource_type: string;
+  resource_id: string | null;
+  status: "success" | "failure";
+  status_code: number | null;
+  metadata: string | null;
+  request_id: string | null;
+  created_at: string;
 }
 
 export interface PendingToken {

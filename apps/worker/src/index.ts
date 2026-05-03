@@ -8,12 +8,15 @@ import { timingSafeEqual } from "./utils/crypto.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
 import { verifyClaim, verifyEnrollmentToken, isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
 import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
+import type { AuditEvent } from "@o11yfleet/core/audit";
 
 export interface Env {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
   CONFIG_DO: DurableObjectNamespace;
   FP_ANALYTICS?: AnalyticsEngineDataset;
+  /** Audit log queue. Producer: each mutating handler. Consumer: queue() in this Worker. */
+  AUDIT_QUEUE?: Queue<AuditEvent>;
   O11YFLEET_CLAIM_HMAC_SECRET: string;
   O11YFLEET_API_BEARER_SECRET?: string;
   ENVIRONMENT?: "staging" | "dev" | "production";
@@ -198,9 +201,9 @@ function isTrustedOrigin(request: Request, env: Env): boolean {
 }
 
 export default {
-  async fetch(request: Request, env: Env, _ctx: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     try {
-      return await handleRequest(request, env);
+      return await handleRequest(request, env, ctx);
     } catch (err) {
       console.error("Unhandled error:", new URL(request.url).pathname, err);
       const corsHeaders = getCorsHeaders(request, env);
@@ -211,6 +214,26 @@ export default {
         }),
       );
     }
+  },
+
+  /**
+   * Queue consumer dispatch.
+   *
+   * - `o11yfleet-audit-logs`     → batch-insert to D1; failures retried by runtime
+   * - `o11yfleet-audit-logs-dlq` → log to console.error so depth>0 is visible
+   */
+  async queue(batch: MessageBatch<AuditEvent>, env: Env, _ctx: ExecutionContext): Promise<void> {
+    if (batch.queue === "o11yfleet-audit-logs-dlq") {
+      const { consumeAuditDlq } = await import("./audit/dlq-consumer.js");
+      await consumeAuditDlq(batch, env);
+      return;
+    }
+    if (batch.queue === "o11yfleet-audit-logs") {
+      const { consumeAuditBatch } = await import("./audit/consumer.js");
+      await consumeAuditBatch(batch, env);
+      return;
+    }
+    console.error("[queue] unknown queue:", batch.queue);
   },
 
   /** Daily stale-agent audit. This is rare reconciliation for missed close/error events. */
@@ -295,7 +318,7 @@ async function emitProductMetrics(env: Env): Promise<void> {
   }
 }
 
-async function handleRequest(request: Request, env: Env): Promise<Response> {
+async function handleRequest(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
   const url = new URL(request.url);
 
   // Health check
@@ -329,7 +352,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
   // Auth routes — no auth required (they handle their own)
   if (url.pathname.startsWith("/auth/")) {
-    const resp = await handleAuthRequest(request, env, url);
+    const resp = await handleAuthRequest(request, env, url, ctx);
     return addSecurityHeaders(addCorsHeaders(resp, request, env));
   }
 
@@ -340,6 +363,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
     let hasApiSecretBearer = false;
     let oidcClaims: GitHubOIDCClaims | null = null;
     let apiKeyTenantId: string | null = null;
+    let apiKeyJti: string | null = null;
 
     const auth = request.headers.get("Authorization");
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -353,6 +377,7 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
         try {
           const claim = await verifyApiKey(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
           apiKeyTenantId = claim.tenant_id;
+          apiKeyJti = claim.jti;
         } catch (err) {
           return addSecurityHeaders(
             addCorsHeaders(
@@ -397,12 +422,17 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
 
     // Admin routes — /api/admin/*
     if (url.pathname.startsWith("/api/admin/")) {
+      const { adminAuditContext, systemActor, userActor } = await import("./audit/recorder.js");
+      const adminActor = sessionAuth
+        ? userActor(request, { user_id: sessionAuth.userId, email: sessionAuth.email })
+        : systemActor(request);
+      const adminAudit = adminAuditContext({ ctx, env, request, actor: adminActor });
       // OIDC "provision" scope: only allows POST /api/admin/tenants (tenant creation).
       // This enables CI workflows to provision test infrastructure without full admin access.
       if (oidcClaims && request.method === "POST" && url.pathname === "/api/admin/tenants") {
-        resp = await handleAdminRequest(request, env, url);
+        resp = await handleAdminRequest(request, env, url, adminAudit);
       } else if (sessionAuth?.role === "admin") {
-        resp = await handleAdminRequest(request, env, url);
+        resp = await handleAdminRequest(request, env, url, adminAudit);
       } else {
         const body = hasApiSecretBearer
           ? { error: "Admin session required", code: "admin_session_required" }
@@ -434,7 +464,39 @@ async function handleRequest(request: Request, env: Env): Promise<Response> {
           ),
         );
       }
-      resp = await handleV1Request(request, env, url, tenantId);
+      // Pick the actor kind based on which credential authenticated the
+      // request. The discriminated union prevents mixing user + API-key
+      // fields and maps cleanly to WorkOS's actor.type enum at the
+      // consumer boundary.
+      const { apiKeyActor, systemActor, tenantAuditContext, userActor } =
+        await import("./audit/recorder.js");
+      let v1Actor;
+      if (sessionAuth) {
+        v1Actor = userActor(request, {
+          user_id: sessionAuth.userId,
+          email: sessionAuth.email,
+          // Impersonation sessions carry the real admin id alongside
+          // the synthetic tenant user; record it so customer audit logs
+          // can attribute the action to the actual support operator.
+          impersonator_user_id: sessionAuth.isImpersonation
+            ? (sessionAuth.impersonatorUserId ?? null)
+            : null,
+        });
+      } else if (apiKeyJti) {
+        v1Actor = apiKeyActor(request, { api_key_id: apiKeyJti });
+      } else {
+        // hasApiSecretBearer + X-Tenant-Id path. No identity beyond
+        // "the bootstrap secret"; recorded as system.
+        v1Actor = systemActor(request);
+      }
+      const v1Audit = tenantAuditContext({
+        ctx,
+        env,
+        request,
+        tenant_id: tenantId,
+        actor: v1Actor,
+      });
+      resp = await handleV1Request(request, env, url, tenantId, v1Audit);
     }
     // Unknown API routes
     else {

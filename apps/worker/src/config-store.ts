@@ -10,6 +10,10 @@ export interface ConfigStoreEnv {
 }
 
 export interface UploadResult {
+  /** D1 row id of the inserted config_versions row. Surfaces back to
+   * callers so the audit log can record the published version id (not
+   * the configuration id) under config_version.publish. */
+  versionId: string;
   hash: string;
   r2Key: string;
   sizeBytes: number;
@@ -66,20 +70,52 @@ export async function uploadConfigVersion(
     });
   }
 
-  // Generate a version ID
-  const versionId = crypto.randomUUID();
+  const candidateVersionId = crypto.randomUUID();
 
-  // Atomically insert version record and update current hash
+  // Atomically insert version record (skip on conflict) and update
+  // current hash. On conflict the UPDATE still runs, so the
+  // configuration's current_config_hash is set even when the version
+  // row already existed from a prior upload.
   await env.FP_DB.batch([
     env.FP_DB.prepare(
       `INSERT INTO config_versions (id, config_id, tenant_id, config_hash, r2_key, size_bytes, created_by, created_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'))
        ON CONFLICT(config_id, config_hash) DO NOTHING`,
-    ).bind(versionId, configId, tenantId, hash, r2Key, yamlBytes.byteLength, createdBy ?? null),
+    ).bind(
+      candidateVersionId,
+      configId,
+      tenantId,
+      hash,
+      r2Key,
+      yamlBytes.byteLength,
+      createdBy ?? null,
+    ),
     env.FP_DB.prepare(
       `UPDATE configurations SET current_config_hash = ?, updated_at = datetime('now') WHERE id = ? AND tenant_id = ?`,
     ).bind(hash, configId, tenantId),
   ]);
+
+  // Confirm the canonical id that was actually persisted. `ON CONFLICT
+  // DO NOTHING` silently skips the INSERT when a row for this
+  // (config_id, config_hash) already exists — either because we
+  // re-uploaded identical YAML or because a concurrent caller won the
+  // race. The audit log uses this id as `resource_id`, so it must
+  // always reference a row that actually lives in `config_versions`.
+  const canonical = await env.FP_DB.prepare(
+    `SELECT id FROM config_versions WHERE config_id = ? AND config_hash = ?`,
+  )
+    .bind(configId, hash)
+    .first<{ id: string }>();
+  if (!canonical) {
+    // The row should always exist post-batch — either our INSERT
+    // landed it, or a prior call did. Falling back to candidateVersionId
+    // would risk handing a phantom id to the audit log; surface the
+    // anomaly instead so it lands in the request error path.
+    throw new Error(
+      `config_versions row not found after upsert (config_id=${configId}, hash=${hash})`,
+    );
+  }
+  const versionId = canonical.id;
 
   // Note: an earlier version of this function did a second
   // `FP_CONFIGS.put` here in the `deduplicated` branch. That was
@@ -88,6 +124,7 @@ export async function uploadConfigVersion(
   // dedup path was wasted bandwidth + a needless write op per upload.
 
   return {
+    versionId,
     hash,
     r2Key,
     sizeBytes: yamlBytes.byteLength,

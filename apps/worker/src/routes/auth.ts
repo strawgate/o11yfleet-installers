@@ -12,6 +12,13 @@ import { isAllowedSiteOrigin, primarySiteOriginForEnvironment } from "../shared/
 import { renderGitHubAppManifest } from "../github/manifest.js";
 import { isAutoApproveEnabled } from "../shared/email.js";
 import { handleGitHubWebhook } from "../github/webhook.js";
+import {
+  adminAuditContext,
+  recordEvent,
+  tenantAuditContext,
+  userActor,
+  type AuditContext,
+} from "../audit/recorder.js";
 
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
@@ -285,6 +292,8 @@ export interface AuthContext {
   tenantStatus: TenantApprovalStatus;
   role: "member" | "admin";
   isImpersonation: boolean;
+  /** When `isImpersonation` is true, the real admin user id who started the session. */
+  impersonatorUserId: string | null;
 }
 
 export async function authenticate(request: Request, env: Env): Promise<AuthContext | null> {
@@ -292,7 +301,8 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
   if (!sessionId) return null;
 
   const row = await env.FP_DB.prepare(
-    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role, s.is_impersonation,
+    `SELECT u.id as user_id, u.email, u.display_name, u.tenant_id, u.role,
+            s.is_impersonation, s.impersonator_user_id,
             t.status as tenant_status
      FROM sessions s
      JOIN users u ON s.user_id = u.id
@@ -307,6 +317,7 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
       tenant_id: string | null;
       role: string;
       is_impersonation: number;
+      impersonator_user_id: string | null;
       tenant_status: string | null;
     }>();
 
@@ -319,18 +330,24 @@ export async function authenticate(request: Request, env: Env): Promise<AuthCont
     tenantStatus: (row.tenant_status as TenantApprovalStatus) ?? "pending",
     role: row.role as "member" | "admin",
     isImpersonation: row.is_impersonation === 1,
+    impersonatorUserId: row.impersonator_user_id,
   };
 }
 
 // ─── Route handler ──────────────────────────────────────────────────
 
-export async function handleAuthRequest(request: Request, env: Env, url: URL): Promise<Response> {
+export async function handleAuthRequest(
+  request: Request,
+  env: Env,
+  url: URL,
+  ctx?: ExecutionContext,
+): Promise<Response> {
   try {
     const path = url.pathname;
     const method = request.method;
 
-    if (path === "/auth/login" && method === "POST") return await handleLogin(request, env);
-    if (path === "/auth/logout" && method === "POST") return await handleLogout(request, env);
+    if (path === "/auth/login" && method === "POST") return await handleLogin(request, env, ctx);
+    if (path === "/auth/logout" && method === "POST") return await handleLogout(request, env, ctx);
     if (path === "/auth/me" && method === "GET") return await handleMe(request, env);
     if (path === "/auth/github/start" && method === "GET")
       return await handleGitHubStart(request, env);
@@ -371,7 +388,7 @@ export async function handleAuthRequest(request: Request, env: Env, url: URL): P
 
 // ─── POST /auth/login ───────────────────────────────────────────────
 
-async function handleLogin(request: Request, env: Env): Promise<Response> {
+async function handleLogin(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const body = await validateJsonBody(request, authLoginRequestSchema);
 
   const email = body.email;
@@ -400,12 +417,17 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
       password,
       "pbkdf2:100000:00000000000000000000000000000000:0000000000000000000000000000000000000000000000000000000000000000",
     );
+    // Unknown email — no tenant to scope the audit event to. Drop.
     return jsonError("Invalid email or password", 401);
   }
 
   const valid = await verifyPassword(password, user.password_hash);
-  if (!valid) return jsonError("Invalid email or password", 401);
+  if (!valid) {
+    recordAuthEvent(ctx, env, request, user.tenant_id, user.role, user.id, user.email, false);
+    return jsonError("Invalid email or password", 401);
+  }
 
+  recordAuthEvent(ctx, env, request, user.tenant_id, user.role, user.id, user.email, true);
   return createSessionResponse(request, env, {
     id: user.id,
     email: user.email,
@@ -418,15 +440,97 @@ async function handleLogin(request: Request, env: Env): Promise<Response> {
 
 // ─── POST /auth/logout ──────────────────────────────────────────────
 
-async function handleLogout(request: Request, env: Env): Promise<Response> {
+async function handleLogout(request: Request, env: Env, ctx?: ExecutionContext): Promise<Response> {
   const sessionId = getCookie(request, "fp_session");
+  let session: {
+    user_id: string;
+    tenant_id: string | null;
+    email: string;
+    role: string;
+  } | null = null;
   if (sessionId) {
+    session = await env.FP_DB.prepare(
+      `SELECT u.id as user_id, u.tenant_id, u.email, u.role
+       FROM sessions s JOIN users u ON s.user_id = u.id
+       WHERE s.id = ?`,
+    )
+      .bind(sessionId)
+      .first<{ user_id: string; tenant_id: string | null; email: string; role: string }>();
     await env.FP_DB.prepare("DELETE FROM sessions WHERE id = ?").bind(sessionId).run();
+  }
+  if (session && ctx) {
+    const audit = buildAuthAuditContext(
+      ctx,
+      env,
+      request,
+      session.tenant_id,
+      session.role,
+      session.user_id,
+      session.email,
+    );
+    if (audit) {
+      recordEvent(
+        audit,
+        { action: "auth.logout", resource_type: "session", resource_id: null },
+        "success",
+        200,
+      );
+    }
   }
   return Response.json(
     { ok: true },
     { headers: { "Set-Cookie": clearSessionCookie(env, request) } },
   );
+}
+
+function recordAuthEvent(
+  ctx: ExecutionContext | undefined,
+  env: Env,
+  request: Request,
+  tenantId: string | null,
+  role: string,
+  userId: string,
+  email: string,
+  success: boolean,
+): void {
+  const audit = buildAuthAuditContext(ctx, env, request, tenantId, role, userId, email);
+  if (!audit) return;
+  recordEvent(
+    audit,
+    {
+      action: success ? "auth.login" : "auth.login_failed",
+      resource_type: "session",
+      resource_id: null,
+    },
+    success ? "success" : "failure",
+    success ? 200 : 401,
+  );
+}
+
+/**
+ * Build the AuditContext for an auth event. Customers see events under
+ * their tenant; admins (no tenant binding) get the platform-scoped admin
+ * audit log. Users with neither a tenant nor admin role are silently
+ * dropped — there's nowhere to attribute the event to.
+ */
+function buildAuthAuditContext(
+  ctx: ExecutionContext | undefined,
+  env: Env,
+  request: Request,
+  tenantId: string | null,
+  role: string,
+  userId: string,
+  email: string,
+): AuditContext | null {
+  if (!ctx) return null;
+  const actor = userActor(request, { user_id: userId, email });
+  if (tenantId) {
+    return tenantAuditContext({ ctx, env, request, tenant_id: tenantId, actor });
+  }
+  if (role === "admin") {
+    return adminAuditContext({ ctx, env, request, actor });
+  }
+  return null;
 }
 
 // ─── GET /auth/me ───────────────────────────────────────────────────

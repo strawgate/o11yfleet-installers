@@ -389,6 +389,39 @@ export const agentDetailSchema = agentSchema.extend({
 });
 export type AgentDetail = z.infer<typeof agentDetailSchema>;
 
+// ─── Audit Logs ─────────────────────────────────────────────────────
+
+export const auditLogActorSchema = z.object({
+  user_id: z.string().nullable(),
+  api_key_id: z.string().nullable(),
+  email: z.string().nullable(),
+  ip: z.string().nullable(),
+  user_agent: z.string().nullable(),
+  impersonator_user_id: z.string().nullable(),
+});
+export type AuditLogActor = z.infer<typeof auditLogActorSchema>;
+
+export const auditLogEntrySchema = z.object({
+  id: z.string(),
+  tenant_id: z.string(),
+  actor: auditLogActorSchema,
+  action: z.string(),
+  resource_type: z.string(),
+  resource_id: z.string().nullable(),
+  status: z.enum(["success", "failure"]),
+  status_code: z.number().int().min(100).max(599).nullable(),
+  metadata: z.record(z.string(), z.unknown()).nullable(),
+  request_id: z.string().nullable(),
+  created_at: z.string(),
+});
+export type AuditLogEntry = z.infer<typeof auditLogEntrySchema>;
+
+export const auditLogListResponseSchema = z.object({
+  entries: z.array(auditLogEntrySchema),
+  next_cursor: z.string().nullable(),
+});
+export type AuditLogListResponse = z.infer<typeof auditLogListResponseSchema>;
+
 /** Paginated agent list response. */
 export const agentPageSchema = z.object({
   agents: z.array(agentSchema),
