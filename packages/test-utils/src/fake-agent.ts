@@ -349,9 +349,9 @@ export class FakeOpampAgent {
     // Real otelcol-contrib sends a second health report ~1s after startup (seq=1),
     // also all StatusOK. Send it now so the server sees a proper post-startup health frame.
     // Note: Some DO implementations (e.g., our Config DO) close the WebSocket after
-    // enrollment with code 1000 ("Reconnect with new instance_uid"). If the socket was
-    // closed, reconnect using the assignment claim before sending the health report.
-    if (this.ws && this.ws.readyState === WebSocket.CLOSED) {
+    // enrollment with code 1000 ("Reconnect with new instance_uid"). If the socket is
+    // not OPEN, reconnect using the assignment claim before sending the health report.
+    if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
       await this.connect(); // Reconnect with assignment claim
       await this.sendHello(); // Send hello on new connection
     }

@@ -414,10 +414,10 @@ export async function connectWithEnrollment(
   const assignmentToken = await signClaim(assignmentClaim, O11YFLEET_CLAIM_HMAC_SECRET);
 
   // The DO closes the WebSocket after enrollment (code 1000 "Reconnect with new instance_uid").
-  // If the socket is closed, reconnect using the assignment claim and send hello.
+  // If the socket is not OPEN, reconnect using the assignment claim and send hello.
   let openWs = ws;
   let adoptedUid = doAssignedUid;
-  if (ws.readyState === WebSocket.CLOSED) {
+  if (ws.readyState !== WebSocket.OPEN) {
     openWs = await connectWithClaim(assignmentClaim);
     openWs.send(encodeFrame(buildHello()));
     const reconnectMsg = await waitForMsg(openWs);
