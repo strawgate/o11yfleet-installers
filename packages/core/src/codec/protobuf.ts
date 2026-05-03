@@ -109,19 +109,11 @@ function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
     result.available_components = pbAvailableComponentsToInternal(pb.availableComponents);
   }
   if (pb.connectionSettingsStatus) {
-    const statusMap: Record<number, ConnectionSettingsStatuses> = {
-      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET]:
-        ConnectionSettingsStatuses.UNSET,
-      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED]:
-        ConnectionSettingsStatuses.APPLIED,
-      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING]:
-        ConnectionSettingsStatuses.APPLYING,
-      [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED]:
-        ConnectionSettingsStatuses.FAILED,
-    };
     result.connection_settings_status = {
       last_connection_settings_hash: pb.connectionSettingsStatus.lastConnectionSettingsHash,
-      status: statusMap[pb.connectionSettingsStatus.status] ?? ConnectionSettingsStatuses.UNSET,
+      status:
+        CONN_SETTINGS_STATUS_DECODE_MAP[pb.connectionSettingsStatus.status] ??
+        ConnectionSettingsStatuses.UNSET,
       // Don't coerce empty string to undefined. Same pattern as the
       // destination_endpoint / heartbeat_interval_seconds fixes —
       // an explicitly-empty string is valid and must round-trip.
@@ -199,19 +191,48 @@ function pbHealthToInternal(pb: PbComponentHealth): ComponentHealth {
   };
 }
 
+// Hoisted to module scope to avoid allocating a new object on every decode/encode call.
+const CONN_SETTINGS_STATUS_DECODE_MAP: Record<number, ConnectionSettingsStatuses> = {
+  [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET]: ConnectionSettingsStatuses.UNSET,
+  [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED]:
+    ConnectionSettingsStatuses.APPLIED,
+  [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING]:
+    ConnectionSettingsStatuses.APPLYING,
+  [PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED]:
+    ConnectionSettingsStatuses.FAILED,
+};
+
 function pbRemoteConfigStatusToInternal(pb: PbRemoteConfigStatus): RemoteConfigStatus {
-  const statusMap: Record<number, RemoteConfigStatuses> = {
-    [PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET]: RemoteConfigStatuses.UNSET,
-    [PbRemoteConfigStatuses.RemoteConfigStatuses_APPLIED]: RemoteConfigStatuses.APPLIED,
-    [PbRemoteConfigStatuses.RemoteConfigStatuses_APPLYING]: RemoteConfigStatuses.APPLYING,
-    [PbRemoteConfigStatuses.RemoteConfigStatuses_FAILED]: RemoteConfigStatuses.FAILED,
-  };
   return {
     last_remote_config_hash: pb.lastRemoteConfigHash,
-    status: statusMap[pb.status] ?? RemoteConfigStatuses.UNSET,
+    status: REMOTE_CONFIG_STATUS_DECODE_MAP[pb.status] ?? RemoteConfigStatuses.UNSET,
     error_message: pb.errorMessage,
   };
 }
+
+const REMOTE_CONFIG_STATUS_DECODE_MAP: Record<number, RemoteConfigStatuses> = {
+  [PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET]: RemoteConfigStatuses.UNSET,
+  [PbRemoteConfigStatuses.RemoteConfigStatuses_APPLIED]: RemoteConfigStatuses.APPLIED,
+  [PbRemoteConfigStatuses.RemoteConfigStatuses_APPLYING]: RemoteConfigStatuses.APPLYING,
+  [PbRemoteConfigStatuses.RemoteConfigStatuses_FAILED]: RemoteConfigStatuses.FAILED,
+};
+
+const REMOTE_CONFIG_STATUS_ENCODE_MAP: Record<number, PbRemoteConfigStatuses> = {
+  [RemoteConfigStatuses.UNSET]: PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
+  [RemoteConfigStatuses.APPLIED]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLIED,
+  [RemoteConfigStatuses.APPLYING]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLYING,
+  [RemoteConfigStatuses.FAILED]: PbRemoteConfigStatuses.RemoteConfigStatuses_FAILED,
+};
+
+const CONN_SETTINGS_STATUS_ENCODE_MAP: Record<number, PbConnectionSettingsStatuses> = {
+  [ConnectionSettingsStatuses.UNSET]: PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET,
+  [ConnectionSettingsStatuses.APPLIED]:
+    PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED,
+  [ConnectionSettingsStatuses.APPLYING]:
+    PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING,
+  [ConnectionSettingsStatuses.FAILED]:
+    PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED,
+};
 
 function pbConfigMapToInternal(
   pb: Record<string, { body: Uint8Array; contentType: string }>,
@@ -606,17 +627,11 @@ export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
     }) as unknown as PbEffectiveConfig;
   }
   if (msg.remote_config_status) {
-    const statusMap: Record<number, PbRemoteConfigStatuses> = {
-      [RemoteConfigStatuses.UNSET]: PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
-      [RemoteConfigStatuses.APPLIED]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLIED,
-      [RemoteConfigStatuses.APPLYING]: PbRemoteConfigStatuses.RemoteConfigStatuses_APPLYING,
-      [RemoteConfigStatuses.FAILED]: PbRemoteConfigStatuses.RemoteConfigStatuses_FAILED,
-    };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     pb.remoteConfigStatus = create(RemoteConfigStatusSchema as any, {
       lastRemoteConfigHash: msg.remote_config_status.last_remote_config_hash,
       status:
-        statusMap[msg.remote_config_status.status] ??
+        REMOTE_CONFIG_STATUS_ENCODE_MAP[msg.remote_config_status.status] ??
         PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
       errorMessage: msg.remote_config_status.error_message,
     }) as unknown as PbRemoteConfigStatus;
@@ -635,20 +650,10 @@ export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
     // so any test or in-process caller round-tripping a message with
     // this field set silently lost it. Property-test
     // `codec.properties.test.ts` regression-guards the round-trip.
-    const statusMap: Record<number, PbConnectionSettingsStatuses> = {
-      [ConnectionSettingsStatuses.UNSET]:
-        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET,
-      [ConnectionSettingsStatuses.APPLIED]:
-        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLIED,
-      [ConnectionSettingsStatuses.APPLYING]:
-        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_APPLYING,
-      [ConnectionSettingsStatuses.FAILED]:
-        PbConnectionSettingsStatuses.ConnectionSettingsStatuses_FAILED,
-    };
     pb.connectionSettingsStatus = create(ConnectionSettingsStatusSchema, {
       lastConnectionSettingsHash: msg.connection_settings_status.last_connection_settings_hash,
       status:
-        statusMap[msg.connection_settings_status.status] ??
+        CONN_SETTINGS_STATUS_ENCODE_MAP[msg.connection_settings_status.status] ??
         PbConnectionSettingsStatuses.ConnectionSettingsStatuses_UNSET,
       errorMessage: msg.connection_settings_status.error_message ?? "",
     });

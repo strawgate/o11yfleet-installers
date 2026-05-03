@@ -62,20 +62,26 @@ export interface ProcessContext {
   sha256: (input: BufferSource | string) => Promise<string>;
 }
 
+// Stateless functions shared across all ProcessContext instances to avoid
+// allocating new closures on every heartbeat (~500/min at 30K agents).
+const _randomUid = () => crypto.getRandomValues(new Uint8Array(16));
+const _randomId = () => crypto.randomUUID();
+const _sha256 = async (input: BufferSource | string): Promise<string> => {
+  const data = typeof input === "string" ? new TextEncoder().encode(input) : input;
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = new Uint8Array(hashBuffer);
+  return Array.from(hashArray)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+};
+
 /** Default production context using platform crypto.subtle for hardware-accelerated SHA-256. */
 export function defaultProcessContext(): ProcessContext {
   return {
     now: Date.now(),
-    randomUid: () => crypto.getRandomValues(new Uint8Array(16)),
-    randomId: () => crypto.randomUUID(),
-    sha256: async (input: BufferSource | string): Promise<string> => {
-      const data = typeof input === "string" ? new TextEncoder().encode(input) : input;
-      const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-      const hashArray = new Uint8Array(hashBuffer);
-      return Array.from(hashArray)
-        .map((b) => b.toString(16).padStart(2, "0"))
-        .join("");
-    },
+    randomUid: _randomUid,
+    randomId: _randomId,
+    sha256: _sha256,
   };
 }
 

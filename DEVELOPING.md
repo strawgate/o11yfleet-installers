@@ -278,6 +278,34 @@ modules that ship untested (the natural source of bugs like
 `upsertPendingDevice`, which had broken SQL and zero tests when it
 landed in #403).
 
+### Load Testing & Benchmarks
+
+The `tests/load/` directory contains harnesses for performance testing against a
+running worker (local or staging).
+
+| Command                                                 | What it does                                                                                                                        | When to use                                                |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `just bench`                                            | Scaling benchmark: opens connections at tiers (500→15K), probes heartbeat RTT at each, then stress-tests SQLite with 30K agent rows | Validating O(1) per-message cost after DO hot-path changes |
+| `pnpm --filter @o11yfleet/load-test load -- --agents=N` | Full load test with enrollment, heartbeats, config pushes, and mixed profiles                                                       | Soak testing at target concurrency (2K–30K agents)         |
+| `just smoke-staging`                                    | Quick health check against staging                                                                                                  | After deploy, before promoting                             |
+
+All load harnesses use `FakeOpampAgent` from `@o11yfleet/test-utils`. Run with
+`scripts/with-local-env.ts` to inject `FP_API_KEY` and `FP_URL` from
+`.dev.vars`:
+
+```bash
+# Local scaling benchmark
+FP_TENANT_ID=seed-dev pnpm tsx scripts/with-local-env.ts -- pnpm --filter @o11yfleet/load-test bench
+
+# Staging 10K load test (6 workers, realistic mix)
+FP_URL=https://staging.example.com FP_API_KEY=... FP_TENANT_ID=... \
+  pnpm --filter @o11yfleet/load-test load -- --agents=10000 --workers=6
+```
+
+**Local workerd ceiling:** ~14–15K connections (no WebSocket Hibernation locally;
+each connection costs ~93KB in the workerd process). For 30K+ testing, deploy to
+staging where true hibernation reduces per-connection cost to ~200 bytes.
+
 ### AI Guidance Live Check
 
 The manual **AI Guidance Live Check** workflow starts a local seeded

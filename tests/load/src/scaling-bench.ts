@@ -31,7 +31,10 @@ const WS_URL = BASE_URL.replace(/^http/, "ws") + "/v1/opamp";
 const API_KEY = process.env["FP_API_KEY"] ?? "test-api-secret-for-dev-only-32chars";
 
 // Connection tiers to test (each tier adds connections to reach the target)
-const TIERS = [500, 1_000, 2_000, 5_000, 10_000, 15_000];
+const TIERS_DEFAULT = [500, 1_000, 2_000, 5_000, 10_000, 15_000];
+const TIERS_STAGING = [500, 1_000, 2_000, 5_000, 10_000, 15_000, 20_000, 25_000, 30_000];
+const TIERS =
+  BASE_URL.includes("localhost") || BASE_URL.includes("127.0.0.1") ? TIERS_DEFAULT : TIERS_STAGING;
 const PROBES_PER_TIER = 200; // Number of measured heartbeat round-trips per tier
 const PROBE_CONCURRENCY = 50; // Parallel heartbeat probes
 const ENROLLMENT_CONCURRENCY = 100;

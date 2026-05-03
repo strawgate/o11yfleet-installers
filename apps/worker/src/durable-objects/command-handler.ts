@@ -18,6 +18,8 @@ export interface CommandContext {
   identity: { tenant_id: string; config_id: string };
   getWebSockets: () => WebSocket[];
   ensureAlarm: () => Promise<void>;
+  /** Invalidate the DO-level desired config cache after a write. */
+  invalidateDesiredConfigCache: () => void;
   analytics?: AnalyticsEngineDataset;
 }
 
@@ -44,6 +46,7 @@ export async function handleSetDesiredConfig(
   const body = parsed.data;
 
   ctx.repo.saveDesiredConfig(body.config_hash, body.config_content ?? null);
+  ctx.invalidateDesiredConfigCache();
 
   const sockets = ctx.getWebSockets();
   const desiredHashBytes = hexToUint8Array(body.config_hash);

@@ -88,6 +88,10 @@ function extractDisplayName(identifyingAttributes: {
 export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   private repo: AgentStateRepository;
   private initialized = false;
+  /** Cached desired config — invalidated on set-desired-config. The config
+   *  changes only on explicit admin action, so caching eliminates 1 SQL
+   *  read per WebSocket message (~500/min at 30K agents). */
+  private cachedDesiredConfig: DesiredConfig | null = null;
 
   constructor(ctx: DurableObjectState, env: ConfigDOEnv) {
     super(ctx, env);
@@ -142,10 +146,14 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
    * row.
    */
   private getDesiredConfig(): DesiredConfig {
+    if (this.cachedDesiredConfig) return this.cachedDesiredConfig;
     const config = this.repo.loadDesiredConfig();
     if (config.bytes === null && config.content !== null) {
-      return { ...config, bytes: new TextEncoder().encode(config.content) };
+      const result = { ...config, bytes: new TextEncoder().encode(config.content) };
+      this.cachedDesiredConfig = result;
+      return result;
     }
+    this.cachedDesiredConfig = config;
     return config;
   }
 
@@ -177,6 +185,9 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       identity: this.getMyIdentity(),
       getWebSockets: () => this.ctx.getWebSockets(),
       ensureAlarm: () => this.ensureAlarm(),
+      invalidateDesiredConfigCache: () => {
+        this.cachedDesiredConfig = null;
+      },
       analytics: this.env.FP_ANALYTICS,
     };
   }
@@ -655,6 +666,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         attachment.sequence_num,
       );
       if (state.status === "disconnected") {
+        // processFrame already handled the disconnect and scheduled the alarm.
+        // Skip ensureAlarm() — getAlarm()/setAlarm() are billed storage ops.
         return;
       }
       await this.ensureAlarm();

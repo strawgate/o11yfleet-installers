@@ -192,6 +192,22 @@ Example: 10K agents, 1 heartbeat/hr, 3 indexes, current (6 writes):
   Total: $43.27/month (720× more expensive)
 ```
 
+## Command Response Fields
+
+The command handler (`command-handler.ts`) exposes admin actions via
+`POST /command/*` endpoints. Each returns JSON with observability counters:
+
+| Command            | Endpoint                      | Response fields                                     |
+| ------------------ | ----------------------------- | --------------------------------------------------- |
+| Set desired config | `/command/set-desired-config` | `pushed`, `failed`, `skipped_no_cap`, `config_hash` |
+| Disconnect all     | `/command/disconnect-all`     | `disconnected`, `failed`                            |
+| Restart            | `/command/restart`            | `restarted`, `failed`, `skipped_no_cap`             |
+| Sweep stale        | `/command/sweep`              | `swept`, `active_websockets`, `duration_ms`         |
+
+- `failed` — send/close threw (socket already closing, buffer full)
+- `skipped_no_cap` — agent lacks the required capability (e.g., `AcceptsRemoteConfig` or `AcceptsRestartCommand`)
+- Broadcast loop yields every 1,000 sends to allow GC and buffer flushing
+
 ## File Map
 
 | File                         | Hot path?  | What to watch                                          |
