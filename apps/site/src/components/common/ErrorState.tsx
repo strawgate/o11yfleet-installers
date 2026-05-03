@@ -1,3 +1,6 @@
+import { Button, Center, Stack, Text } from "@mantine/core";
+import { CircleAlert } from "lucide-react";
+
 interface ErrorStateProps {
   error: Error | null;
   retry?: () => void;
@@ -5,37 +8,23 @@ interface ErrorStateProps {
 
 export function ErrorState({ error, retry }: ErrorStateProps) {
   return (
-    <div
-      style={{
-        display: "flex",
-        flexDirection: "column",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "64px 24px",
-        gap: "16px",
-        color: "var(--fg-3)",
-        textAlign: "center",
-      }}
-    >
-      <svg
-        viewBox="0 0 16 16"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        width="32"
-        height="32"
-        style={{ color: "var(--err)" }}
-      >
-        <circle cx="8" cy="8" r="6" />
-        <path d="M8 5v3.5M8 11v.01" strokeLinecap="round" />
-      </svg>
-      <p style={{ fontSize: "14px", fontWeight: 500, color: "var(--fg)" }}>Something went wrong</p>
-      {error && <p style={{ fontSize: "13px", maxWidth: "44ch" }}>{error.message}</p>}
-      {retry && (
-        <button className="btn btn-ghost btn-sm" onClick={retry}>
-          Try again
-        </button>
-      )}
-    </div>
+    <Center py={64} px="md">
+      <Stack align="center" gap="md" maw={420}>
+        <CircleAlert size={32} color="var(--mantine-color-red-6)" aria-hidden />
+        <Text size="sm" fw={500}>
+          Something went wrong
+        </Text>
+        {error ? (
+          <Text size="sm" c="dimmed" ta="center">
+            {error.message}
+          </Text>
+        ) : null}
+        {retry ? (
+          <Button size="xs" variant="default" onClick={retry}>
+            Try again
+          </Button>
+        ) : null}
+      </Stack>
+    </Center>
   );
 }
