@@ -1060,6 +1060,10 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
     #!/usr/bin/env bash
     set -euo pipefail
     : "${CLOUDFLARE_ACCOUNT_ID:?Set CLOUDFLARE_ACCOUNT_ID to the Cloudflare account ID}"
+    # Resolve zone ID from env or from the tfvars file.
+    if [ -z "${CLOUDFLARE_ZONE_ID:-}" ]; then
+        CLOUDFLARE_ZONE_ID="$(grep -oP 'cloudflare_zone_id\s*=\s*"\K[^"]+' "infra/terraform/envs/{{env}}.tfvars" || true)"
+    fi
     case "{{env}}" in
       prod|production)
         worker_name="o11yfleet-worker"
@@ -1076,6 +1080,8 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
     esac
 
     cd infra/terraform
+
+    # --- Import Worker script identities ---
     for spec in "cloudflare_worker.fleet:${worker_name}" "cloudflare_worker.site:${site_worker_name}"; do
         address="${spec%%:*}"
         name="${spec#*:}"
@@ -1097,6 +1103,78 @@ tf-import-existing-workers env="prod": (tf-init-remote env)
             exit "$status"
         fi
     done
+
+    # --- Import existing Workers routes ---
+    # Query the CF API for existing routes and import any that match
+    # Terraform-managed resources but aren't yet in state.
+    api_token="${CLOUDFLARE_API_TOKEN:-${CLOUDFLARE_DEPLOY_API_TOKEN:-}}"
+    if [ -z "$api_token" ] || [ -z "${CLOUDFLARE_ZONE_ID:-}" ]; then
+        printf 'Skipping route import: need CLOUDFLARE_API_TOKEN and CLOUDFLARE_ZONE_ID\n'
+    else
+        routes_json="$(curl -sf "https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/workers/routes" \
+            -H "Authorization: Bearer ${api_token}" | node -e '
+            const data = JSON.parse(require("fs").readFileSync("/dev/stdin","utf8"));
+            const map = {};
+            for (const r of (data.result || [])) map[r.pattern] = r.id;
+            process.stdout.write(JSON.stringify(map));
+        ')" || routes_json="{}"
+
+        # Compute expected domain patterns from tfvars.
+        zone_name="$(grep -oP 'zone_name\s*=\s*"\K[^"]+' "infra/terraform/envs/{{env}}.tfvars" 2>/dev/null || echo "o11yfleet.com")"
+        case "{{env}}" in
+            prod|production)
+                api_domain="api.${zone_name}"
+                site_domain="${zone_name}"
+                app_domain="app.${zone_name}"
+                admin_domain="admin.${zone_name}"
+                ;;
+            *)
+                api_domain="{{env}}-api.${zone_name}"
+                site_domain="{{env}}.${zone_name}"
+                app_domain="{{env}}-app.${zone_name}"
+                admin_domain="{{env}}-admin.${zone_name}"
+                ;;
+        esac
+
+        # Import API route
+        route_id="$(node -e "const m=JSON.parse(process.argv[1]||'{}'); process.stdout.write(m[process.argv[2]]||'');" "$routes_json" "${api_domain}/*")"
+        if [ -n "$route_id" ]; then
+            address='cloudflare_workers_route.api'
+            if ! terraform state show "$address" >/dev/null 2>&1; then
+                set +e
+                output="$(terraform import -var-file=envs/{{env}}.tfvars "$address" "${CLOUDFLARE_ZONE_ID}/${route_id}" 2>&1)"
+                set -e
+                if [ $? -eq 0 ] || printf '%s\n' "$output" | grep -q 'Already managed'; then
+                    printf 'Imported existing route %s into %s\n' "${api_domain}/*" "$address"
+                else
+                    printf 'Warning: failed to import route %s: %s\n' "${api_domain}/*" "$output" >&2
+                fi
+            else
+                printf 'Terraform state already has %s\n' "$address"
+            fi
+        fi
+
+        # Import site routes (site, app, admin)
+        for key_domain in "site:${site_domain}" "app:${app_domain}" "admin:${admin_domain}"; do
+            key="${key_domain%%:*}"
+            domain="${key_domain#*:}"
+            route_id="$(node -e "const m=JSON.parse(process.argv[1]||'{}'); process.stdout.write(m[process.argv[2]]||'');" "$routes_json" "${domain}/*")"
+            if [ -z "$route_id" ]; then continue; fi
+            address="cloudflare_workers_route.site[\"${key}\"]"
+            if ! terraform state show "$address" >/dev/null 2>&1; then
+                set +e
+                output="$(terraform import -var-file=envs/{{env}}.tfvars "$address" "${CLOUDFLARE_ZONE_ID}/${route_id}" 2>&1)"
+                set -e
+                if [ $? -eq 0 ] || printf '%s\n' "$output" | grep -q 'Already managed'; then
+                    printf 'Imported existing route %s into %s\n' "${domain}/*" "$address"
+                else
+                    printf 'Warning: failed to import route %s: %s\n' "${domain}/*" "$output" >&2
+                fi
+            else
+                printf 'Terraform state already has %s\n' "$address"
+            fi
+        done
+    fi
 
 # Terraform apply for long-lived control-plane resources only. Deployment
 # resources are intentionally handled by tf-apply-worker and tf-apply-site.
@@ -1210,8 +1288,13 @@ tf-apply-worker-do-migration-if-needed env="prod": (tf-init-remote env)
         ;;
     esac
     cd infra/terraform
-    if terraform state list | grep -Fx 'cloudflare_workers_deployment.fleet[0]' >/dev/null 2>&1; then
-        echo "Terraform state already has cloudflare_workers_deployment.fleet[0]; skipping Durable Object migration bootstrap"
+    # tf-apply-control-plane only creates cloudflare_worker.fleet (not the
+    # cloudflare_workers_deployment resource). cloudflare_worker_version.fleet,
+    # on the other hand, IS created by tf-apply-worker on a successful prior
+    # deploy and persists in state. Use it as the gate to avoid re-running
+    # wrangler deploy (which collides with existing DO instances).
+    if terraform state list | grep -Fx 'cloudflare_worker_version.fleet' >/dev/null 2>&1; then
+        echo "Terraform state already has cloudflare_worker_version.fleet; skipping Durable Object migration bootstrap"
         exit 0
     fi
     cd ../..
