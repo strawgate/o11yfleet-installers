@@ -1,15 +1,31 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
+  Alert,
+  Box,
+  Button,
+  Card,
+  Code,
+  Group,
+  Indicator,
+  Select,
+  Stack,
+  Stepper,
+  Tabs,
+  Text,
+  Title,
+} from "@mantine/core";
+import { notifications } from "@mantine/notifications";
+import {
   useConfigurations,
   useCreateEnrollmentToken,
   useConfigurationStats,
 } from "../../api/hooks/portal";
-import { useToast } from "../../components/common/Toast";
 import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "../../components/common/EmptyState";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
+import { PageHeader, PageShell } from "@/components/app";
 import { configurationAgentMetrics } from "../../utils/config-stats";
 import installScriptSource from "../../../install.sh?raw";
 
@@ -24,35 +40,30 @@ chmod +x install.sh
 const INSTALL_PS1 = (token: string) =>
   `irm https://o11yfleet.com/install.ps1 -OutFile install.ps1; .\\install.ps1 -Token "${token}"`;
 
-type Step = 1 | 2 | 3 | 4;
+type InstallTab = "quick" | "download" | "script" | "windows" | "manual";
 
 export default function GettingStartedPage() {
   const { data: configs, isLoading, error, refetch } = useConfigurations();
-  const { toast } = useToast();
 
-  const [step, setStep] = useState<Step>(1);
+  const [step, setStep] = useState(0);
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [token, setToken] = useState<string>("");
-  const [installTab, setInstallTab] = useState<
-    "quick" | "download" | "script" | "windows" | "manual"
-  >("quick");
+  const [installTab, setInstallTab] = useState<InstallTab>("quick");
   const [connected, setConnected] = useState(false);
 
   const tokenConfigId = selectedConfigId || "__none__";
   const createToken = useCreateEnrollmentToken(tokenConfigId);
-  const stats = useConfigurationStats(step >= 4 ? selectedConfigId : undefined);
+  const stats = useConfigurationStats(step >= 3 ? selectedConfigId : undefined);
   const agentMetrics = useMemo(() => configurationAgentMetrics(stats.data, [], null), [stats.data]);
 
-  // Auto-select first config
   useEffect(() => {
     if (configs && configs.length > 0 && !selectedConfigId) {
       setSelectedConfigId(configs[0]!.id);
     }
   }, [configs, selectedConfigId]);
 
-  // Poll for agent connection in step 4
   useEffect(() => {
-    if (step !== 4 || !stats.data) return;
+    if (step !== 3 || !stats.data) return;
     if (agentMetrics.connectedAgents > 0) {
       setConnected(true);
     }
@@ -63,7 +74,7 @@ export default function GettingStartedPage() {
   }, [stats]);
 
   useEffect(() => {
-    if (step !== 4 || connected) return;
+    if (step !== 3 || connected) return;
     const interval = setInterval(refetchStats, 5000);
     return () => clearInterval(interval);
   }, [step, connected, refetchStats]);
@@ -72,6 +83,7 @@ export default function GettingStartedPage() {
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;
 
   const cfgList = configs ?? [];
+  const configOptions = cfgList.map((c) => ({ value: c.id, label: c.name }));
 
   async function handleGenerateToken() {
     if (!selectedConfigId) return;
@@ -79,192 +91,129 @@ export default function GettingStartedPage() {
       const result = await createToken.mutateAsync({ name: "getting-started" });
       if (result.token) {
         setToken(result.token);
-        setStep(3);
+        setStep(2);
       }
     } catch (err) {
-      toast(
-        "Failed to generate token",
-        err instanceof Error ? err.message : "Unknown error",
-        "err",
-      );
+      notifications.show({
+        title: "Failed to generate token",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
   return (
-    <div className="main-narrow">
-      <div className="page-head">
-        <div>
-          <h1>Getting started</h1>
-          <p className="meta">
-            First success means a collector enrolls, connects, and reports state. Generating a token
-            is only the bootstrap step.
-          </p>
-        </div>
-      </div>
+    <PageShell width="narrow">
+      <PageHeader
+        title="Getting started"
+        description="First success means a collector enrolls, connects, and reports state. Generating a token is only the bootstrap step."
+      />
 
-      {/* Steps indicator */}
-      <div className="steps mb-6">
-        {[1, 2, 3, 4].map((s) => (
-          <div key={s} className={`step${s < step ? " done" : ""}${s === step ? " active" : ""}`}>
-            <span className="n">{s}</span>
-            <span>
-              {s === 1 && "Choose group"}
-              {s === 2 && "Get token"}
-              {s === 3 && "Install"}
-              {s === 4 && "First success"}
-            </span>
-            {s < 4 && <span className="line" />}
-          </div>
-        ))}
-      </div>
+      <Stepper active={step} onStepClick={setStep} mb="lg" allowNextStepsSelect={false}>
+        <Stepper.Step label="Choose group" />
+        <Stepper.Step label="Get token" />
+        <Stepper.Step label="Install" />
+        <Stepper.Step label="First success" />
+      </Stepper>
 
-      {/* Step 1: Choose configuration */}
-      {step === 1 && (
-        <div className="card card-pad">
-          <h3>Choose a configuration group</h3>
-          <p className="meta mt-2">
+      {step === 0 && (
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Choose a configuration group
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
             A configuration group is the assignment boundary. Collectors enrolled with its token
             should converge to the group&apos;s desired config.
-          </p>
+          </Text>
           {cfgList.length === 0 ? (
             <EmptyState
               icon="file"
               title="No configurations found"
               description="Create a configuration before generating an enrollment token."
             >
-              <Link to="/portal/configurations" className="btn btn-primary btn-sm">
+              <Button component={Link} to="/portal/configurations" size="sm">
                 Create configuration
-              </Link>
+              </Button>
             </EmptyState>
           ) : (
-            <>
-              <select
-                className="select mt-6"
+            <Stack gap="md" mt="md">
+              <Select
+                label="Configuration"
                 value={selectedConfigId}
-                onChange={(e) => setSelectedConfigId(e.target.value)}
-              >
-                {cfgList.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-              <button
-                className="btn btn-primary mt-6"
-                onClick={() => setStep(2)}
-                disabled={!selectedConfigId}
-              >
-                Continue
-              </button>
-            </>
+                onChange={(v) => setSelectedConfigId(v ?? "")}
+                data={configOptions}
+                allowDeselect={false}
+              />
+              <Group>
+                <Button onClick={() => setStep(1)} disabled={!selectedConfigId}>
+                  Continue
+                </Button>
+              </Group>
+            </Stack>
           )}
-        </div>
+        </Card>
       )}
 
-      {/* Step 2: Generate enrollment token */}
-      {step === 2 && (
-        <div className="card card-pad">
-          <h3>Enrollment token</h3>
-          <p className="meta mt-2">
+      {step === 1 && (
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Enrollment token
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
             Generate a bootstrap token for first enrollment. After enrollment, the collector uses a
             scoped assignment claim for management traffic.
-          </p>
-          <button
-            className="btn btn-primary mt-6"
-            onClick={() => void handleGenerateToken()}
-            disabled={createToken.isPending}
-          >
-            {createToken.isPending ? "Generating…" : "Generate token"}
-          </button>
-        </div>
+          </Text>
+          <Group mt="md">
+            <Button onClick={() => void handleGenerateToken()} loading={createToken.isPending}>
+              Generate token
+            </Button>
+          </Group>
+        </Card>
       )}
 
-      {/* Step 3: Install collector */}
-      {step === 3 && (
-        <div className="card card-pad">
-          <h3>Install &amp; connect</h3>
-          <p className="meta mt-2">
+      {step === 2 && (
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Install &amp; connect
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
             Run one of the commands below to install the OpenTelemetry Collector on your host and
             point it at O11yFleet OpAMP management.
-          </p>
+          </Text>
 
           {token && (
-            <div className="banner info mt-6">
-              <div className="b-title">Your enrollment token</div>
-              <div className="b-body">
-                <div className="flex-row gap-sm mt-2">
-                  <code className="mono-cell token-value">{token}</code>
-                  <CopyButton value={token} />
-                </div>
-              </div>
-            </div>
+            <Alert mt="md" color="blue" variant="light" title="Your enrollment token">
+              <Group gap="xs" mt="xs" wrap="nowrap">
+                <Code style={{ flex: "1 1 auto", overflowX: "auto" }}>{token}</Code>
+                <CopyButton value={token} />
+              </Group>
+            </Alert>
           )}
 
-          <div className="tabs mt-6">
-            <button
-              className={`tab${installTab === "quick" ? " active" : ""}`}
-              onClick={() => setInstallTab("quick")}
-            >
-              Pipe to bash
-            </button>
-            <button
-              className={`tab${installTab === "download" ? " active" : ""}`}
-              onClick={() => setInstallTab("download")}
-            >
-              Download script
-            </button>
-            <button
-              className={`tab${installTab === "script" ? " active" : ""}`}
-              onClick={() => setInstallTab("script")}
-            >
-              install.sh
-            </button>
-            <button
-              className={`tab${installTab === "windows" ? " active" : ""}`}
-              onClick={() => setInstallTab("windows")}
-            >
-              Windows
-            </button>
-            <button
-              className={`tab${installTab === "manual" ? " active" : ""}`}
-              onClick={() => setInstallTab("manual")}
-            >
-              Manual
-            </button>
-          </div>
+          <Tabs value={installTab} onChange={(v) => v && setInstallTab(v as InstallTab)} mt="md">
+            <Tabs.List>
+              <Tabs.Tab value="quick">Pipe to bash</Tabs.Tab>
+              <Tabs.Tab value="download">Download script</Tabs.Tab>
+              <Tabs.Tab value="script">install.sh</Tabs.Tab>
+              <Tabs.Tab value="windows">Windows</Tabs.Tab>
+              <Tabs.Tab value="manual">Manual</Tabs.Tab>
+            </Tabs.List>
 
-          {installTab === "quick" && (
-            <div className="command-panel mt-2">
-              <pre className="code-block code-block-wrap">{INSTALL_SH(token)}</pre>
-              <CopyButton value={INSTALL_SH(token)} label="Copy command" />
-            </div>
-          )}
-
-          {installTab === "download" && (
-            <div className="command-panel mt-2">
-              <pre className="code-block code-block-wrap">{DOWNLOAD_INSTALL_SH(token)}</pre>
-              <CopyButton value={DOWNLOAD_INSTALL_SH(token)} label="Copy command" />
-            </div>
-          )}
-
-          {installTab === "script" && (
-            <div className="command-panel mt-2">
-              <pre className="code-block code-block-wrap">{installScriptSource}</pre>
-              <CopyButton value={installScriptSource} label="Copy install.sh" />
-            </div>
-          )}
-
-          {installTab === "windows" && (
-            <div className="command-panel mt-2">
-              <pre className="code-block code-block-wrap">{INSTALL_PS1(token)}</pre>
-              <CopyButton value={INSTALL_PS1(token)} label="Copy command" />
-            </div>
-          )}
-
-          {installTab === "manual" && (
-            <div className="command-panel mt-2">
-              <pre className="code-block code-block-wrap">
-                {`# 1. Download the collector binary for your platform
+            <Tabs.Panel value="quick" pt="md">
+              <CommandBlock value={INSTALL_SH(token)} label="Copy command" />
+            </Tabs.Panel>
+            <Tabs.Panel value="download" pt="md">
+              <CommandBlock value={DOWNLOAD_INSTALL_SH(token)} label="Copy command" />
+            </Tabs.Panel>
+            <Tabs.Panel value="script" pt="md">
+              <CommandBlock value={installScriptSource} label="Copy install.sh" />
+            </Tabs.Panel>
+            <Tabs.Panel value="windows" pt="md">
+              <CommandBlock value={INSTALL_PS1(token)} label="Copy command" />
+            </Tabs.Panel>
+            <Tabs.Panel value="manual" pt="md">
+              <CommandBlock
+                value={`# 1. Download the collector binary for your platform
 # 2. Create the configuration file:
 #    /etc/o11yfleet/config.yaml
 #
@@ -273,63 +222,74 @@ export default function GettingStartedPage() {
 #
 # 4. Start the collector:
 #    o11yfleet-collector --config /etc/o11yfleet/config.yaml`}
-              </pre>
-              <CopyButton
-                value={`export O11YFLEET_TOKEN="${token}"
-o11yfleet-collector --config /etc/o11yfleet/config.yaml`}
                 label="Copy commands"
               />
-            </div>
-          )}
+            </Tabs.Panel>
+          </Tabs>
 
-          <button className="btn btn-primary mt-6" onClick={() => setStep(4)}>
-            I&apos;ve installed the collector
-          </button>
-        </div>
+          <Group mt="md">
+            <Button onClick={() => setStep(3)}>I&apos;ve installed the collector</Button>
+          </Group>
+        </Card>
       )}
 
-      {/* Step 4: Verify connection */}
-      {step === 4 && (
-        <div className="card card-pad">
-          <h3>Confirm first successful connection</h3>
+      {step === 3 && (
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Confirm first successful connection
+          </Title>
           {connected ? (
-            <>
-              <div className="flex-row gap-sm mt-6">
-                <span className="dot dot-ok" />
-                <span>Collector connected and reporting.</span>
-              </div>
-              <div className="flex-row gap-sm mt-6">
-                <Link to="/portal/overview" className="btn btn-primary">
+            <Stack gap="md" mt="md">
+              <Group gap="xs">
+                <Indicator color="green" size={10} />
+                <Text size="sm">Collector connected and reporting.</Text>
+              </Group>
+              <Group gap="xs">
+                <Button component={Link} to="/portal/overview">
                   Go to overview
-                </Link>
-                <Link to="/portal/agents" className="btn btn-secondary">
+                </Button>
+                <Button component={Link} to="/portal/agents" variant="default">
                   View agents
-                </Link>
-              </div>
-            </>
+                </Button>
+              </Group>
+            </Stack>
           ) : (
-            <>
-              <div className="flex-row gap-sm mt-6">
-                <span className="dot dot-warn dot-pulse" />
-                <span className="meta">Waiting for first collector heartbeat…</span>
-              </div>
-              <p className="meta mt-2 text-sm">This page polls automatically every 5 seconds.</p>
-              <div className="banner warn mt-6">
-                <div>
-                  <div className="b-title">No connection yet?</div>
-                  <div className="b-body">
-                    Check that the token was copied without quotes, the host can reach the OpAMP
-                    endpoint, and the collector process is running.
-                  </div>
-                </div>
-              </div>
-              <Link to="/portal/overview" className="btn btn-ghost btn-sm mt-6">
-                Skip — go to overview
-              </Link>
-            </>
+            <Stack gap="md" mt="md">
+              <Group gap="xs">
+                <Indicator color="yellow" processing size={10} />
+                <Text size="sm" c="dimmed">
+                  Waiting for first collector heartbeat…
+                </Text>
+              </Group>
+              <Text size="sm" c="dimmed">
+                This page polls automatically every 5 seconds.
+              </Text>
+              <Alert color="yellow" variant="light" title="No connection yet?">
+                Check that the token was copied without quotes, the host can reach the OpAMP
+                endpoint, and the collector process is running.
+              </Alert>
+              <Group>
+                <Button component={Link} to="/portal/overview" variant="subtle" size="sm">
+                  Skip — go to overview
+                </Button>
+              </Group>
+            </Stack>
           )}
-        </div>
+        </Card>
       )}
-    </div>
+    </PageShell>
+  );
+}
+
+function CommandBlock({ value, label }: { value: string; label: string }) {
+  return (
+    <Box>
+      <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+        {value}
+      </Code>
+      <Group mt="xs">
+        <CopyButton value={value} label={label} />
+      </Group>
+    </Box>
   );
 }

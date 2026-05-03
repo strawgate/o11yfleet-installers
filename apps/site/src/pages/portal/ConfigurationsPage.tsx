@@ -1,28 +1,35 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
+import { ActionIcon, Badge, Button, Group, Modal, Stack, Textarea, TextInput } from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import { useCreateConfiguration, useOverview, type Configuration } from "@/api/hooks/portal";
 import { normalizeFleetOverview } from "@/api/models/fleet-overview";
-import { useToast } from "@/components/common/Toast";
-import { Modal } from "@/components/common/Modal";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { relTime, trunc } from "@/utils/format";
 import { configurationAgentMetrics } from "@/utils/config-stats";
 
+interface CreateConfigForm {
+  name: string;
+  description: string;
+}
+
 export default function ConfigurationsPage() {
   const overview = useOverview();
   const createConfig = useCreateConfiguration();
-  const { toast } = useToast();
   const navigate = useNavigate();
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
+  const form = useForm<CreateConfigForm>({
+    initialValues: { name: "", description: "" },
+    validate: {
+      name: (value) => (value.trim().length === 0 ? "Name is required" : null),
+    },
+  });
   const columns = useMemo(() => configurationColumns(), []);
 
   if (overview.isLoading) return <LoadingSpinner />;
@@ -32,24 +39,22 @@ export default function ConfigurationsPage() {
   const view = overview.data ? normalizeFleetOverview(overview.data) : null;
   const cfgList = view?.configurations.rows ?? [];
 
-  async function handleCreate() {
-    if (!name.trim()) return;
+  async function handleCreate(values: CreateConfigForm) {
     try {
       const result = await createConfig.mutateAsync({
-        name: name.trim(),
-        description: description.trim(),
+        name: values.name.trim(),
+        description: values.description.trim(),
       });
-      toast("Configuration created", name);
+      notifications.show({ title: "Configuration created", message: values.name, color: "green" });
       setModalOpen(false);
-      setName("");
-      setDescription("");
+      form.reset();
       void navigate(`/portal/configurations/${result.id}`);
     } catch (err) {
-      toast(
-        "Failed to create configuration",
-        err instanceof Error ? err.message : "Unknown error",
-        "err",
-      );
+      notifications.show({
+        title: "Failed to create configuration",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
@@ -78,46 +83,32 @@ export default function ConfigurationsPage() {
         }
       />
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title="New configuration"
-        footer={
-          <>
-            <Button variant="secondary" onClick={() => setModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => void handleCreate()}
-              disabled={!name.trim() || createConfig.isPending}
-            >
-              {createConfig.isPending ? "Creating..." : "Create configuration"}
-            </Button>
-          </>
-        }
-      >
-        <div className="field">
-          <label htmlFor="config-name">Name</label>
-          <input
-            id="config-name"
-            className="input mono"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-            placeholder="my-config"
-            autoFocus
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="config-description">Description</label>
-          <textarea
-            id="config-description"
-            className="textarea"
-            value={description}
-            onChange={(event) => setDescription(event.target.value)}
-            placeholder="Optional description"
-            rows={3}
-          />
-        </div>
+      <Modal opened={modalOpen} onClose={() => setModalOpen(false)} title="New configuration">
+        <form onSubmit={form.onSubmit(handleCreate)}>
+          <Stack gap="md">
+            <TextInput
+              label="Name"
+              placeholder="my-config"
+              autoFocus
+              styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+              {...form.getInputProps("name")}
+            />
+            <Textarea
+              label="Description"
+              placeholder="Optional description"
+              rows={3}
+              {...form.getInputProps("description")}
+            />
+            <Group justify="flex-end" gap="xs">
+              <Button variant="default" onClick={() => setModalOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" loading={createConfig.isPending}>
+                Create configuration
+              </Button>
+            </Group>
+          </Stack>
+        </form>
       </Modal>
     </PageShell>
   );
@@ -169,11 +160,15 @@ function configurationColumns(): ColumnDef<Configuration>[] {
       id: "open",
       header: () => <span className="sr-only">Open</span>,
       cell: ({ row }) => (
-        <Button asChild variant="ghost" size="icon-xs">
-          <Link aria-label="Open configuration" to={configurationPath(row.original)}>
-            <ArrowRight className="size-3" />
-          </Link>
-        </Button>
+        <ActionIcon
+          component={Link}
+          to={configurationPath(row.original)}
+          variant="subtle"
+          size="sm"
+          aria-label="Open configuration"
+        >
+          <ArrowRight className="size-3" />
+        </ActionIcon>
       ),
     },
   ];
@@ -190,17 +185,14 @@ function CollectorCount({ config }: { config: Configuration }) {
 
   if (!hasSnapshot) {
     return (
-      <Badge
-        variant="outline"
-        className="border-transparent bg-[color:var(--warn)]/15 text-[color:var(--warn)]"
-      >
+      <Badge color="yellow" variant="light">
         Metrics unavailable
       </Badge>
     );
   }
 
   return (
-    <Badge variant="outline">
+    <Badge variant="default">
       {metrics.connectedAgents} / {metrics.totalAgents} connected
     </Badge>
   );

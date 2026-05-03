@@ -1,36 +1,59 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import {
+  Alert,
+  Badge,
+  Button,
+  Card,
+  Group,
+  Modal,
+  Stack,
+  Switch,
+  Text,
+  TextInput,
+  Title,
+} from "@mantine/core";
+import { useForm } from "@mantine/form";
+import { notifications } from "@mantine/notifications";
 import { useAuth } from "@/api/hooks/auth";
 import { useDeleteTenant, useTenant, useUpdateTenant } from "@/api/hooks/portal";
 import { PageHeader, PageShell } from "@/components/app";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { Modal } from "@/components/common/Modal";
-import { useToast } from "@/components/common/Toast";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Switch } from "@mantine/core";
+
+interface TenantFormValues {
+  name: string;
+  geoEnabled: boolean;
+}
 
 export default function SettingsPage() {
   const tenant = useTenant();
   const updateTenant = useUpdateTenant();
   const deleteTenant = useDeleteTenant();
   const { user } = useAuth();
-  const { toast } = useToast();
   const navigate = useNavigate();
+  const seededTenantId = useRef<string | null>(null);
 
-  const [name, setName] = useState("");
-  const [geoEnabled, setGeoEnabled] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const seededTenantId = useRef<string | null>(null);
+
+  const form = useForm<TenantFormValues>({
+    initialValues: { name: "", geoEnabled: false },
+    validate: {
+      name: (value) => (value.trim().length === 0 ? "Workspace name is required" : null),
+    },
+  });
 
   useEffect(() => {
     if (tenant.data && tenant.data.id !== seededTenantId.current) {
       seededTenantId.current = tenant.data.id;
-      setName(tenant.data.name);
-      setGeoEnabled(Boolean(tenant.data["geo_enabled"]));
+      form.setInitialValues({
+        name: tenant.data.name,
+        geoEnabled: Boolean(tenant.data["geo_enabled"]),
+      });
+      form.reset();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tenant.data]);
 
   if (tenant.isLoading) return <LoadingSpinner />;
@@ -38,25 +61,35 @@ export default function SettingsPage() {
 
   const t = tenant.data;
 
-  async function handleSave() {
+  async function handleSave(values: TenantFormValues) {
     try {
       await updateTenant.mutateAsync({
-        name: name.trim(),
-        geo_enabled: geoEnabled,
+        name: values.name.trim(),
+        geo_enabled: values.geoEnabled,
       });
-      toast("Settings saved");
+      notifications.show({ message: "Settings saved", color: "green" });
+      form.resetDirty();
     } catch (err) {
-      toast("Failed to save", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Failed to save",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
   async function handleDelete() {
     try {
       await deleteTenant.mutateAsync();
-      toast("Workspace deleted");
+      notifications.show({ message: "Workspace deleted", color: "green" });
+      setDeleteOpen(false);
       void navigate("/");
     } catch (err) {
-      toast("Delete failed", err instanceof Error ? err.message : "Unknown error", "err");
+      notifications.show({
+        title: "Delete failed",
+        message: err instanceof Error ? err.message : "Unknown error",
+        color: "red",
+      });
     }
   }
 
@@ -65,109 +98,107 @@ export default function SettingsPage() {
       <PageHeader title="Settings" />
 
       {user ? (
-        <div className="mb-6 flex flex-wrap items-center gap-2 rounded-md border border-border bg-card px-4 py-3 text-sm">
-          <span className="size-2 rounded-full bg-primary" />
-          <span className="text-muted-foreground">Signed in as</span>
-          <span className="font-medium text-foreground">{user.name ?? user.email}</span>
-        </div>
+        <Card mb="md">
+          <Group gap="xs">
+            <Badge size="sm" variant="dot" color="green">
+              Signed in
+            </Badge>
+            <Text size="sm" c="dimmed">
+              as
+            </Text>
+            <Text size="sm" fw={500}>
+              {user.name ?? user.email}
+            </Text>
+          </Group>
+        </Card>
       ) : null}
 
-      <section className="rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium text-foreground">General</h3>
-
-        <div className="mt-6 grid gap-2">
-          <label className="text-sm font-medium text-foreground" htmlFor="workspace-name">
-            Workspace name
-          </label>
-          <Input
-            id="workspace-name"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </div>
-
-        <div className="mt-6 grid gap-2">
-          <label className="text-sm font-medium text-foreground" htmlFor="workspace-tenant-id">
-            Tenant ID
-          </label>
-          <Input id="workspace-tenant-id" className="font-mono" value={t?.id ?? ""} readOnly />
-          <span className="text-xs text-muted-foreground">
-            Read-only identifier for your workspace.
-          </span>
-        </div>
-
-        <div className="mt-6 grid gap-2">
-          <div className="flex items-center justify-between">
-            <div>
-              <label className="text-sm font-medium text-foreground" htmlFor="geo-enabled">
-                Geo-IP collection
-              </label>
-              <p className="text-xs text-muted-foreground">
-                Collect IP address and approximate geographic location of collectors.
-              </p>
-            </div>
-            <Switch
-              id="geo-enabled"
-              checked={geoEnabled}
-              onChange={(e) => setGeoEnabled(e.currentTarget.checked)}
-              aria-label="Geo-IP collection"
+      <Card>
+        <Title order={3} size="sm" fw={500} mb="md">
+          General
+        </Title>
+        <form onSubmit={form.onSubmit(handleSave)}>
+          <Stack gap="md">
+            <TextInput label="Workspace name" {...form.getInputProps("name")} />
+            <TextInput
+              label="Tenant ID"
+              description="Read-only identifier for your workspace."
+              styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
+              value={t?.id ?? ""}
+              readOnly
             />
-          </div>
-        </div>
+            <Switch
+              label="Geo-IP collection"
+              description="Collect IP address and approximate geographic location of collectors."
+              {...form.getInputProps("geoEnabled", { type: "checkbox" })}
+            />
+            <Group>
+              <Button type="submit" loading={updateTenant.isPending} disabled={!form.isDirty()}>
+                Save changes
+              </Button>
+            </Group>
+          </Stack>
+        </form>
+      </Card>
 
-        <Button
-          className="mt-6"
-          onClick={() => void handleSave()}
-          disabled={
-            updateTenant.isPending ||
-            (name.trim() === (t?.name ?? "") && geoEnabled === Boolean(t?.["geo_enabled"]))
-          }
-        >
-          {updateTenant.isPending ? "Saving..." : "Save changes"}
-        </Button>
-      </section>
-
-      <section className="mt-6 rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium text-foreground">Remote config authority</h3>
-        <p className="mt-2 text-sm text-muted-foreground">
+      <Card mt="md">
+        <Title order={3} size="sm" fw={500}>
+          Remote config authority
+        </Title>
+        <Text size="sm" c="dimmed" mt="xs">
           This workspace can assign desired config to enrolled collectors. Enrollment tokens are
           bootstrap-only secrets; future API tokens should be scoped separately for automation.
-        </p>
-        <div className="mt-6 rounded-md border border-[color:var(--info)]/30 bg-[color:var(--info)]/10 p-4">
-          <div className="text-sm font-medium text-foreground">Governance model to wire</div>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Role checks, plan gates, API-token scopes, and audit events must agree with backend
-            authorization before remote-config mutation controls become broadly available.
-          </p>
-        </div>
-      </section>
+        </Text>
+        <Alert mt="md" title="Governance model to wire" color="blue" variant="light">
+          Role checks, plan gates, API-token scopes, and audit events must agree with backend
+          authorization before remote-config mutation controls become broadly available.
+        </Alert>
+      </Card>
 
-      <section className="mt-6 rounded-md border border-destructive/40 bg-card p-4">
-        <div className="text-sm font-medium text-destructive">Danger zone</div>
-        <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="min-w-0 flex-1">
-            <div className="font-medium text-foreground">Delete workspace</div>
-            <p className="mt-1 text-sm text-muted-foreground">
+      <Card mt="md" withBorder style={{ borderColor: "var(--mantine-color-red-7)" }}>
+        <Title order={3} size="sm" fw={500} c="red">
+          Danger zone
+        </Title>
+        <Group justify="space-between" align="flex-start" mt="md" wrap="wrap">
+          <Stack gap={4} style={{ flex: "1 1 16rem" }}>
+            <Text size="sm" fw={500}>
+              Delete workspace
+            </Text>
+            <Text size="sm" c="dimmed">
               Permanently delete this workspace and all its data. This action cannot be undone.
-            </p>
-          </div>
-          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+            </Text>
+          </Stack>
+          <Button color="red" onClick={() => setDeleteOpen(true)}>
             Delete workspace
           </Button>
-        </div>
-      </section>
+        </Group>
+      </Card>
 
       <Modal
-        open={deleteOpen}
+        opened={deleteOpen}
         onClose={() => {
           setDeleteOpen(false);
           setConfirmText("");
         }}
         title="Delete workspace"
-        footer={
-          <>
+      >
+        <Stack gap="md">
+          <Text size="sm" c="dimmed">
+            Type{" "}
+            <Text span fw={600} c="bright">
+              delete
+            </Text>{" "}
+            to confirm.
+          </Text>
+          <TextInput
+            value={confirmText}
+            onChange={(event) => setConfirmText(event.currentTarget.value)}
+            placeholder="delete"
+            autoFocus
+          />
+          <Group justify="flex-end" gap="xs">
             <Button
-              variant="secondary"
+              variant="default"
               onClick={() => {
                 setDeleteOpen(false);
                 setConfirmText("");
@@ -176,26 +207,15 @@ export default function SettingsPage() {
               Cancel
             </Button>
             <Button
-              variant="destructive"
+              color="red"
               onClick={() => void handleDelete()}
-              disabled={confirmText !== "delete" || deleteTenant.isPending}
+              disabled={confirmText !== "delete"}
+              loading={deleteTenant.isPending}
             >
-              {deleteTenant.isPending ? "Deleting..." : "Delete permanently"}
+              Delete permanently
             </Button>
-          </>
-        }
-      >
-        <div className="grid gap-2">
-          <p className="text-sm text-muted-foreground">
-            Type <strong className="text-foreground">delete</strong> to confirm.
-          </p>
-          <Input
-            value={confirmText}
-            onChange={(event) => setConfirmText(event.target.value)}
-            placeholder="delete"
-            autoFocus
-          />
-        </div>
+          </Group>
+        </Stack>
       </Modal>
     </PageShell>
   );

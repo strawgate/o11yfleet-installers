@@ -6,10 +6,9 @@ import { usePortalGuidance } from "@/api/hooks/ai";
 import { normalizeFleetOverview } from "@/api/models/fleet-overview";
 import type { Observed } from "@/api/models/observed";
 import { GuidancePanel, GuidanceSlot } from "@/components/ai";
-import { Button } from "@/components/ui/button";
+import { ActionIcon, Box, Button, Group, Title } from "@mantine/core";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Box, Group, Title } from "@mantine/core";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { ErrorState } from "@/components/common/ErrorState";
 import { relTime } from "@/utils/format";
@@ -136,8 +135,8 @@ export default function OverviewPage() {
         title="Fleet overview"
         description="Collector status, health, and drift are separate signals. A collector can be connected and still report unhealthy runtime state."
         actions={
-          <Button asChild>
-            <Link to="/portal/getting-started">Getting started</Link>
+          <Button component={Link} to="/portal/getting-started">
+            Getting started
           </Button>
         }
       />
@@ -186,8 +185,8 @@ export default function OverviewPage() {
           <Title order={3} size="sm" fw={500}>
             Recent configurations
           </Title>
-          <Button asChild variant="ghost" size="sm">
-            <Link to="/portal/configurations">View all</Link>
+          <Button component={Link} to="/portal/configurations" variant="subtle" size="sm">
+            View all
           </Button>
         </Group>
         <DataTable
@@ -201,8 +200,8 @@ export default function OverviewPage() {
               title="No configurations yet"
               description="Create a configuration to start managing collectors and rollouts."
             >
-              <Button asChild size="sm">
-                <Link to="/portal/getting-started">Get started</Link>
+              <Button component={Link} to="/portal/getting-started" size="sm">
+                Get started
               </Button>
             </EmptyState>
           }
@@ -251,11 +250,15 @@ function recentConfigurationColumns(): ColumnDef<Configuration>[] {
       id: "open",
       header: () => <span className="sr-only">Open</span>,
       cell: ({ row }) => (
-        <Button asChild variant="ghost" size="icon-xs">
-          <Link aria-label="Open configuration" to={configurationPath(row.original)}>
-            <ArrowRight className="size-3" />
-          </Link>
-        </Button>
+        <ActionIcon
+          component={Link}
+          to={configurationPath(row.original)}
+          variant="subtle"
+          size="sm"
+          aria-label="Open configuration"
+        >
+          <ArrowRight className="size-3" />
+        </ActionIcon>
       ),
     },
   ];

@@ -15,10 +15,9 @@ import { relTime } from "../../utils/format";
 import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
+import { Button, Group, TextInput } from "@mantine/core";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
 import { buildAgentSectionModel } from "./agents-page-model";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -158,21 +157,19 @@ function AgentSection({
           <h3 className="text-sm font-medium text-foreground">{config.name}</h3>
           <p className="mt-1 text-xs text-muted-foreground">{summaryText}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <Group gap="xs" wrap="wrap">
           {expanded ? (
-            <label className="grid gap-1">
-              <span className="sr-only">Filter agents for {config.name}</span>
-              <Input
-                id={filterId}
-                aria-label={`Filter agents for ${config.name}`}
-                placeholder="Filter agents…"
-                value={filter}
-                onChange={(e) => setFilterAndResetCursor(e.target.value)}
-              />
-            </label>
+            <TextInput
+              id={filterId}
+              aria-label={`Filter agents for ${config.name}`}
+              placeholder="Filter agents…"
+              value={filter}
+              onChange={(e) => setFilterAndResetCursor(e.currentTarget.value)}
+              size="sm"
+            />
           ) : null}
           <Button
-            variant={expanded ? "ghost" : "secondary"}
+            variant={expanded ? "subtle" : "default"}
             size="sm"
             aria-expanded={expanded}
             aria-controls={sectionId}
@@ -180,7 +177,7 @@ function AgentSection({
           >
             {expanded ? "Hide collectors" : "View collectors"}
           </Button>
-        </div>
+        </Group>
       </div>
 
       {!expanded ? (
@@ -249,8 +246,8 @@ function AgentSection({
                 }
               >
                 {!filter ? (
-                  <Button asChild size="sm">
-                    <Link to={`/portal/configurations/${config.id}`}>Enroll agent</Link>
+                  <Button component={Link} to={`/portal/configurations/${config.id}`} size="sm">
+                    Enroll agent
                   </Button>
                 ) : null}
               </EmptyState>
@@ -349,11 +346,11 @@ export default function AgentsPage() {
             title="No configurations yet"
             description="Create a configuration first, then enroll collectors into it."
           >
-            <Button asChild size="sm">
-              <Link to="/portal/configurations">Create configuration</Link>
+            <Button component={Link} to="/portal/configurations" size="sm">
+              Create configuration
             </Button>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/portal/getting-started">Guided setup</Link>
+            <Button component={Link} to="/portal/getting-started" variant="subtle" size="sm">
+              Guided setup
             </Button>
           </EmptyState>
         </section>

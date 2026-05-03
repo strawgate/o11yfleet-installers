@@ -20,7 +20,6 @@ import {
 } from "../../api/hooks/portal";
 import { usePortalGuidance } from "../../api/hooks/ai";
 import { GuidancePanel, GuidanceSlot } from "../../components/ai";
-import { Modal } from "../../components/common/Modal";
 import { CopyButton } from "../../components/common/CopyButton";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
@@ -44,6 +43,7 @@ import {
   Card,
   Code,
   Group,
+  Modal,
   Stack,
   Tabs,
   Text,
@@ -1055,14 +1055,19 @@ export default function ConfigurationDetailPage() {
 
       {/* Enrollment modal */}
       <Modal
-        open={enrollOpen}
+        opened={enrollOpen}
         onClose={() => {
           setEnrollOpen(false);
           setEnrollmentToken(null);
           setEnrollmentTokenError(null);
         }}
         title="Enroll agent"
-        footer={
+      >
+        <Stack gap="md">
+          <EnrollmentDialogBody
+            enrollmentToken={enrollmentToken}
+            enrollmentTokenError={enrollmentTokenError}
+          />
           <Group gap="xs" justify="flex-end">
             <Button
               variant="default"
@@ -1083,22 +1088,27 @@ export default function ConfigurationDetailPage() {
               </Button>
             ) : null}
           </Group>
-        }
-      >
-        <EnrollmentDialogBody
-          enrollmentToken={enrollmentToken}
-          enrollmentTokenError={enrollmentTokenError}
-        />
+        </Stack>
       </Modal>
 
       <Modal
-        open={deleteOpen}
+        opened={deleteOpen}
         onClose={() => {
           setDeleteOpen(false);
           setConfirmName("");
         }}
         title="Delete configuration"
-        footer={
+      >
+        <Stack gap="md">
+          <Text size="sm">
+            Type <strong>{c.name}</strong> to confirm deletion.
+          </Text>
+          <TextInput
+            value={confirmName}
+            onChange={(e) => setConfirmName(e.currentTarget.value)}
+            placeholder={c.name}
+            data-autofocus
+          />
           <Group gap="xs" justify="flex-end">
             <Button
               variant="default"
@@ -1118,18 +1128,6 @@ export default function ConfigurationDetailPage() {
               Delete
             </Button>
           </Group>
-        }
-      >
-        <Stack gap="xs">
-          <Text size="sm">
-            Type <strong>{c.name}</strong> to confirm deletion.
-          </Text>
-          <TextInput
-            value={confirmName}
-            onChange={(e) => setConfirmName(e.currentTarget.value)}
-            placeholder={c.name}
-            data-autofocus
-          />
         </Stack>
       </Modal>
     </PageShell>

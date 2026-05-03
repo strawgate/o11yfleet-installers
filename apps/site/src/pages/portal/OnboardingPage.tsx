@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
+import { Button, Card, Stack, Text, Title } from "@mantine/core";
 import { PageHeader, PageShell } from "@/components/app";
 import { PrototypeBanner } from "@/components/common/PrototypeBanner";
-import { Button } from "@/components/ui/button";
 
 export default function OnboardingPage() {
   return (
@@ -10,27 +10,29 @@ export default function OnboardingPage() {
 
       <PageHeader className="mt-6" title="Onboarding" />
 
-      <section className="rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium text-foreground">Welcome to o11yfleet</h3>
-        <div className="mt-3 grid gap-2 text-sm text-muted-foreground">
-          <p>
+      <Card>
+        <Title order={3} size="sm" fw={500}>
+          Welcome to o11yfleet
+        </Title>
+        <Stack gap="xs" mt="xs">
+          <Text size="sm" c="dimmed">
             The onboarding wizard will guide you through the core model: workspace, configuration
             group, enrollment token, collector install, and first successful connection.
-          </p>
-          <p>
+          </Text>
+          <Text size="sm" c="dimmed">
             Your workspace is the isolation boundary. A configuration group is the desired state
             target for collectors. An enrollment token is only the bootstrap secret that places a
             collector into that group.
-          </p>
-          <p>
+          </Text>
+          <Text size="sm" c="dimmed">
             In the meantime, you can use the getting started guide to set up your first
             configuration and connect a collector.
-          </p>
-        </div>
-        <Button asChild className="mt-6">
-          <Link to="/portal/getting-started">Go to getting started</Link>
+          </Text>
+        </Stack>
+        <Button component={Link} to="/portal/getting-started" mt="md">
+          Go to getting started
         </Button>
-      </section>
+      </Card>
     </PageShell>
   );
 }

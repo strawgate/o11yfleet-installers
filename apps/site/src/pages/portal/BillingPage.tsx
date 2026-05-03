@@ -1,9 +1,9 @@
 import { Link } from "react-router-dom";
+import { Button, Card, Group, Progress, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { useOverview, useTenant } from "@/api/hooks/portal";
 import { PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
-import { Button } from "@/components/ui/button";
 import { buildBillingView } from "./billing-model";
 
 export default function BillingPage() {
@@ -21,65 +21,67 @@ export default function BillingPage() {
     <PageShell width="wide">
       <PageHeader title="Billing" />
 
-      <div className="grid gap-6 lg:grid-cols-2">
-        <section className="rounded-md border border-border bg-card p-4">
-          <h3 className="text-sm font-medium text-foreground">Current plan</h3>
-          <div className="mt-5">
+      <SimpleGrid cols={{ base: 1, lg: 2 }} spacing="md">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Current plan
+          </Title>
+          <Group mt="md">
             <StatusBadge tone="info">{view.planLabel}</StatusBadge>
-          </div>
+          </Group>
 
-          <div className="mt-6">
-            <div className="flex items-center justify-between gap-3 text-sm text-foreground">
-              <span>Policies</span>
-              <span className="font-mono text-muted-foreground">
+          <Stack gap={6} mt="lg">
+            <Group justify="space-between" gap="xs">
+              <Text size="sm">Policies</Text>
+              <Text size="sm" c="dimmed" ff="monospace">
                 {view.usedConfigs} / {view.maxConfigsLabel}
-              </span>
-            </div>
-            <div
-              className="mt-2 h-2 overflow-hidden rounded-full bg-muted"
-              role="progressbar"
-              aria-valuenow={view.configPct}
-              aria-valuemin={0}
-              aria-valuemax={100}
+              </Text>
+            </Group>
+            <Progress
+              value={view.configPct}
               aria-label={`${view.usedConfigs} of ${view.maxConfigsLabel} policies used`}
-            >
-              <span className="block h-full bg-primary" style={{ width: `${view.configPct}%` }} />
-            </div>
-          </div>
+            />
+          </Stack>
 
-          <div className="mt-6 flex items-center justify-between gap-3 text-sm text-foreground">
-            <span>Collectors</span>
-            <span className="font-mono text-muted-foreground">{view.totalAgents}</span>
-          </div>
+          <Group justify="space-between" gap="xs" mt="lg">
+            <Text size="sm">Collectors</Text>
+            <Text size="sm" c="dimmed" ff="monospace">
+              {view.totalAgents}
+            </Text>
+          </Group>
 
-          <div className="mt-6">
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/pricing">Compare plans</Link>
+          <Group mt="lg">
+            <Button component={Link} to="/pricing" variant="subtle" size="sm">
+              Compare plans
             </Button>
-          </div>
-        </section>
+          </Group>
+        </Card>
 
-        <section className="rounded-md border border-border bg-card p-4">
-          <h3 className="text-sm font-medium text-foreground">Control mode</h3>
-          <p className="mt-4 text-sm text-muted-foreground">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Control mode
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
             Plans gate quotas and control-plane behavior: retained history, rollback, rollout
             safety, automation, team roles, audit export, and governance controls.
-          </p>
-          <div className="mt-5">
+          </Text>
+          <Group mt="md">
             <StatusBadge tone={view.stateful ? "ok" : "warn"}>
               {view.stateful ? "stateful operations enabled" : "stateless fleet management"}
             </StatusBadge>
-          </div>
-        </section>
+          </Group>
+        </Card>
 
-        <section className="rounded-md border border-border bg-card p-4">
-          <h3 className="text-sm font-medium text-foreground">Billing information</h3>
-          <p className="mt-4 text-sm text-muted-foreground">
+        <Card>
+          <Title order={3} size="sm" fw={500}>
+            Billing information
+          </Title>
+          <Text size="sm" c="dimmed" mt="xs">
             Billing management is not yet available. Contact support to update your plan or payment
             details.
-          </p>
-        </section>
-      </div>
+          </Text>
+        </Card>
+      </SimpleGrid>
     </PageShell>
   );
 }

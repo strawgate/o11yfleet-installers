@@ -3,6 +3,7 @@ import { test } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
+import { MantineProvider } from "@mantine/core";
 import {
   EnrollmentDialogBody,
   enrollmentTokenFailureMessage,
@@ -10,14 +11,20 @@ import {
 
 void React;
 
+function render(node: React.ReactNode): string {
+  return renderToStaticMarkup(
+    <MantineProvider>
+      <MemoryRouter>{node}</MemoryRouter>
+    </MantineProvider>,
+  );
+}
+
 test("enrollment dialog renders inline token creation failures", () => {
-  const html = renderToStaticMarkup(
-    <MemoryRouter>
-      <EnrollmentDialogBody
-        enrollmentToken={null}
-        enrollmentTokenError="HTTP 400: configuration cannot accept enrollment tokens"
-      />
-    </MemoryRouter>,
+  const html = render(
+    <EnrollmentDialogBody
+      enrollmentToken={null}
+      enrollmentTokenError="HTTP 400: configuration cannot accept enrollment tokens"
+    />,
   );
 
   assert.match(html, /role="alert"/);
@@ -27,10 +34,8 @@ test("enrollment dialog renders inline token creation failures", () => {
 });
 
 test("enrollment dialog prioritizes the created token state", () => {
-  const html = renderToStaticMarkup(
-    <MemoryRouter>
-      <EnrollmentDialogBody enrollmentToken="oft_enroll_test" enrollmentTokenError="HTTP 400" />
-    </MemoryRouter>,
+  const html = render(
+    <EnrollmentDialogBody enrollmentToken="oft_enroll_test" enrollmentTokenError="HTTP 400" />,
   );
 
   assert.match(html, /Enrollment token created/);

@@ -1,4 +1,20 @@
 import { useEffect, useMemo, useState } from "react";
+import {
+  Alert,
+  Badge,
+  Box,
+  Button,
+  Card,
+  Code,
+  Group,
+  SegmentedControl,
+  Select,
+  SimpleGrid,
+  Stack,
+  Text,
+  Textarea,
+  Title,
+} from "@mantine/core";
 import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
@@ -24,15 +40,15 @@ import {
   type BuilderEdge,
   type BuilderNode,
 } from "@/components/pipeline-builder";
-import "../../styles/portal-pipeline.css";
+import { PageHeader, PageShell } from "@/components/app";
 
 type BuilderMode = "visual" | "split" | "yaml";
 
-const MODE_LABELS: Record<BuilderMode, string> = {
-  visual: "Visual",
-  split: "Split",
-  yaml: "YAML",
-};
+const MODE_OPTIONS: { value: BuilderMode; label: string }[] = [
+  { value: "visual", label: "Visual" },
+  { value: "split", label: "Split" },
+  { value: "yaml", label: "YAML" },
+];
 
 const ROLES: PipelineComponentRole[] = ["receiver", "processor", "exporter"];
 const DEFAULT_EXAMPLE_ID = "edge-gateway";
@@ -92,10 +108,6 @@ export default function BuilderPage() {
     return byRole;
   }, [graph]);
 
-  // Project the canonical PipelineGraph into xyflow nodes/edges, then run
-  // dagre LR auto-layout so the graph renders as a left-to-right flow on
-  // first paint. Read-only for now — the canvas's onChange is a no-op
-  // because draft persistence (#236) hasn't landed yet.
   const flow = useMemo(() => {
     const next = toFlow(graph);
     return { nodes: layoutLR(next.nodes, next.edges), edges: next.edges };
@@ -104,8 +116,6 @@ export default function BuilderPage() {
     nodes: BuilderNode[];
     edges: BuilderEdge[];
   }>(flow);
-  // When the underlying graph changes (example switch, YAML import), reset
-  // the canvas to the freshly laid out nodes.
   useEffect(() => {
     setCanvasState(flow);
   }, [flow]);
@@ -162,7 +172,8 @@ export default function BuilderPage() {
     setMode("split");
   }
 
-  function handleExampleChange(nextExampleId: string) {
+  function handleExampleChange(nextExampleId: string | null) {
+    if (!nextExampleId) return;
     setExampleId(nextExampleId);
     if (importResult) {
       setYamlInput("");
@@ -175,79 +186,12 @@ export default function BuilderPage() {
     setYamlInput("");
   }
 
-  return (
-    <div className="main-wide pipeline-builder-page">
-      <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
+  const exampleOptions =
+    exampleEntries.length === 0
+      ? [{ value: EMPTY_PIPELINE_GRAPH.id, label: "No examples configured" }]
+      : exampleEntries.map(([id, example]) => ({ value: id, label: example.label }));
 
-      <div className="page-head mt-6">
-        <div>
-          <h1>Pipeline builder</h1>
-          <p className="meta mt-2">
-            Review Collector graph shape, generated YAML, and graph validation before draft saving
-            is available.
-          </p>
-        </div>
-      </div>
-
-      <div className="pipe-controls mt-6">
-        <div className="pipe-segmented" role="group" aria-label="Builder view">
-          {(Object.keys(MODE_LABELS) as BuilderMode[]).map((nextMode) => (
-            <button
-              key={nextMode}
-              type="button"
-              aria-pressed={mode === nextMode}
-              className="btn btn-ghost"
-              onClick={() => setMode(nextMode)}
-            >
-              {MODE_LABELS[nextMode]}
-            </button>
-          ))}
-        </div>
-
-        <div className="pipe-select-row">
-          <label htmlFor="builder-example">Scenario</label>
-          <select
-            id="builder-example"
-            className="input"
-            value={selectedExampleId}
-            onChange={(event) => handleExampleChange(event.target.value)}
-          >
-            {exampleEntries.length === 0 ? (
-              <option value={EMPTY_PIPELINE_GRAPH.id}>No examples configured</option>
-            ) : null}
-            {exampleEntries.map(([id, example]) => (
-              <option key={id} value={id}>
-                {example.label}
-              </option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <section className="card card-pad mt-6 pipe-import-panel">
-        <div className="pipe-panel-head">
-          <div>
-            <h3>Paste Collector YAML</h3>
-            <p className="meta mt-2">
-              Import a Collector config into the visual model and review anything that stays raw.
-            </p>
-          </div>
-          {importResult ? (
-            <span
-              className={`tag ${importResult.confidence === "complete" ? "tag-ok" : "tag-warn"}`}
-            >
-              {importResult.confidence}
-            </span>
-          ) : (
-            <span className="tag">optional</span>
-          )}
-        </div>
-
-        <textarea
-          className="textarea pipe-yaml-input mt-4"
-          value={yamlInput}
-          onChange={(event) => setYamlInput(event.target.value)}
-          placeholder={`receivers:
+  const yamlPlaceholder = `receivers:
   otlp:
     protocols:
       grpc: {}
@@ -257,72 +201,121 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      exporters: [debug]`}
+      exporters: [debug]`;
+
+  return (
+    <PageShell width="wide">
+      <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
+
+      <PageHeader
+        className="mt-6"
+        title="Pipeline builder"
+        description="Review Collector graph shape, generated YAML, and graph validation before draft saving is available."
+      />
+
+      <Group mt="md" gap="md" wrap="wrap" align="flex-end">
+        <SegmentedControl
+          value={mode}
+          onChange={(value) => setMode(value as BuilderMode)}
+          data={MODE_OPTIONS}
+        />
+        <Select
+          label="Scenario"
+          value={selectedExampleId}
+          onChange={handleExampleChange}
+          data={exampleOptions}
+          allowDeselect={false}
+        />
+      </Group>
+
+      <Card mt="md">
+        <Group justify="space-between" align="flex-start">
+          <Stack gap={4} style={{ flex: 1 }}>
+            <Title order={3} size="sm" fw={500}>
+              Paste Collector YAML
+            </Title>
+            <Text size="sm" c="dimmed">
+              Import a Collector config into the visual model and review anything that stays raw.
+            </Text>
+          </Stack>
+          {importResult ? (
+            <Badge color={importResult.confidence === "complete" ? "green" : "yellow"}>
+              {importResult.confidence}
+            </Badge>
+          ) : (
+            <Badge variant="default">optional</Badge>
+          )}
+        </Group>
+
+        <Textarea
+          mt="md"
+          minRows={6}
+          autosize
+          value={yamlInput}
+          onChange={(event) => setYamlInput(event.currentTarget.value)}
+          placeholder={yamlPlaceholder}
+          styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
         />
 
-        <div className="pipe-import-actions mt-3">
-          <button
-            type="button"
-            className="btn"
-            onClick={handleImportYaml}
-            disabled={yamlInput.trim().length === 0}
-          >
+        <Group mt="sm" gap="xs">
+          <Button onClick={handleImportYaml} disabled={yamlInput.trim().length === 0}>
             Import YAML
-          </button>
+          </Button>
           {importResult ? (
-            <button type="button" className="btn btn-ghost" onClick={handleBackToExample}>
+            <Button variant="subtle" onClick={handleBackToExample}>
               Back to selected example
-            </button>
+            </Button>
           ) : null}
-        </div>
+        </Group>
 
         {importResult ? (
-          <div className="pipe-import-summary mt-4">
+          <Stack mt="md" gap="xs">
             {importResult.warnings.length === 0 ? (
-              <div className="banner ok">
-                <div>
-                  <div className="b-title">Import is fully visualized</div>
-                  <div className="b-body">Every imported section is represented in the graph.</div>
-                </div>
-              </div>
+              <Alert color="green" variant="light" title="Import is fully visualized">
+                Every imported section is represented in the graph.
+              </Alert>
             ) : (
               importResult.warnings.map((warning, index) => (
-                <div key={`import-warning-${index}-${warning.code}`} className="banner warn mt-2">
-                  <div>
-                    <div className="b-title">Import warning: {warning.code}</div>
-                    <div className="b-body">
-                      {warning.path ? `${warning.path}: ` : ""}
-                      {warning.message}
-                    </div>
-                  </div>
-                </div>
+                <Alert
+                  key={`import-warning-${index}-${warning.code}`}
+                  color="yellow"
+                  variant="light"
+                  title={`Import warning: ${warning.code}`}
+                >
+                  {warning.path ? `${warning.path}: ` : ""}
+                  {warning.message}
+                </Alert>
               ))
             )}
 
             {rawSectionEntries.length > 0 ? (
-              <details className="pipe-raw-sections mt-3">
+              <details>
                 <summary>Preserved raw sections ({rawSectionEntries.length})</summary>
-                <pre className="code-block mt-3">
+                <Code block mt="xs">
                   {JSON.stringify(importResult.rawSections, null, 2)}
-                </pre>
+                </Code>
               </details>
             ) : null}
-          </div>
+          </Stack>
         ) : null}
-      </section>
+      </Card>
 
-      <div className="pipe-layout mt-6" data-mode={mode}>
+      <SimpleGrid mt="md" cols={mode === "split" ? { base: 1, lg: 2 } : 1} spacing="md">
         {mode !== "yaml" ? (
-          <section className="card card-pad pipe-panel">
-            <div className="pipe-panel-head">
-              <h3>Visual graph</h3>
-              <span className={`tag ${validation.ok ? "tag-ok" : "tag-err"}`}>
+          <Card>
+            <Group justify="space-between" align="center">
+              <Title order={3} size="sm" fw={500}>
+                Visual graph
+              </Title>
+              <Badge color={validation.ok ? "green" : "red"}>
                 {validation.ok ? "graph valid" : "graph issues"}
-              </span>
-            </div>
-            <p className="meta mt-2">{summarizePipelineGraph(graph)}</p>
+              </Badge>
+            </Group>
+            <Text size="sm" c="dimmed" mt="xs">
+              {summarizePipelineGraph(graph)}
+            </Text>
 
-            <div className="mt-4">
+            <Box mt="md">
               <Canvas
                 nodes={canvasState.nodes}
                 edges={canvasState.edges}
@@ -330,88 +323,89 @@ service:
                 readOnly
                 height={520}
               />
-            </div>
+            </Box>
 
-            <div className="pipe-role-summary mt-4" aria-label="Component counts by role">
+            <Group mt="md" gap="xs" aria-label="Component counts by role">
               {ROLES.map((role) => (
-                <span key={role} className="tag">
+                <Badge key={role} variant="default">
                   {roleLabel(role)} ({componentsByRole[role].length})
-                </span>
+                </Badge>
               ))}
-            </div>
-          </section>
+            </Group>
+          </Card>
         ) : null}
 
         {mode !== "visual" ? (
-          <section className="card card-pad pipe-panel">
-            <div className="pipe-panel-head">
-              <h3>Generated YAML</h3>
-              <div className="pipe-panel-actions">
-                <span className="tag">artifact preview</span>
+          <Card>
+            <Group justify="space-between" align="center">
+              <Title order={3} size="sm" fw={500}>
+                Generated YAML
+              </Title>
+              <Group gap="xs">
+                <Badge variant="default">artifact preview</Badge>
                 {yamlPreview ? <CopyButton value={yamlPreview} label="copy YAML" /> : null}
-              </div>
-            </div>
+              </Group>
+            </Group>
             {yamlPreviewError !== null ? (
-              <div className="banner warn mt-4">
-                <div>
-                  <div className="b-title">YAML preview unavailable</div>
-                  <div className="b-body">{yamlPreviewError}</div>
-                </div>
-              </div>
+              <Alert mt="md" color="yellow" variant="light" title="YAML preview unavailable">
+                {yamlPreviewError}
+              </Alert>
             ) : (
-              <pre className="code-block mt-4 pipe-yaml">{yamlPreview}</pre>
+              <Code block mt="md">
+                {yamlPreview}
+              </Code>
             )}
-          </section>
+          </Card>
         ) : null}
-      </div>
+      </SimpleGrid>
 
-      <section className="card card-pad mt-6 pipe-validation-strip">
-        <h3>Validation and rollout readiness</h3>
-        <p className="meta mt-2">
+      <Card mt="md">
+        <Title order={3} size="sm" fw={500}>
+          Validation and rollout readiness
+        </Title>
+        <Text size="sm" c="dimmed" mt="xs">
           Graph checks run locally from the model. Collector runtime validation and rollout gates
           are separate backend contracts.
-        </p>
+        </Text>
 
-        <div className="pipe-issues mt-4">
+        <Stack mt="md" gap="xs">
           {yamlPreviewError !== null ? (
-            <div className="banner err mt-2">
-              <div>
-                <div className="b-title">YAML preview unavailable</div>
-                <div className="b-body">{yamlPreviewError}</div>
-              </div>
-            </div>
+            <Alert color="red" variant="light" title="YAML preview unavailable">
+              {yamlPreviewError}
+            </Alert>
           ) : null}
 
           {yamlPreviewError === null &&
           validation.errors.length === 0 &&
           validation.warnings.length === 0 ? (
-            <div className="banner ok">
-              <div>
-                <div className="b-title">No graph issues detected</div>
-                <div className="b-body">Review the generated YAML before creating a version.</div>
-              </div>
-            </div>
+            <Alert color="green" variant="light" title="No graph issues detected">
+              Review the generated YAML before creating a version.
+            </Alert>
           ) : null}
 
           {validation.errors.map((issue, index) => (
-            <div key={`error-${index}-${issue.code}`} className="banner err mt-2">
-              <div>
-                <div className="b-title">Error: {issue.code}</div>
-                <div className="b-body">{issue.message}</div>
-              </div>
-            </div>
+            <Alert
+              key={`error-${index}-${issue.code}`}
+              color="red"
+              variant="light"
+              title={`Error: ${issue.code}`}
+            >
+              {issue.message}
+            </Alert>
           ))}
 
           {validation.warnings.map((issue, index) => (
-            <div key={`warning-${index}-${issue.code}`} className="banner warn mt-2">
-              <div>
-                <div className="b-title">Warning: {issue.code}</div>
-                <div className="b-body">{issue.message}</div>
-              </div>
-            </div>
+            <Alert
+              key={`warning-${index}-${issue.code}`}
+              color="yellow"
+              variant="light"
+              title={`Warning: ${issue.code}`}
+            >
+              {issue.message}
+            </Alert>
           ))}
-        </div>
-      </section>
+        </Stack>
+      </Card>
 
       <GuidancePanel
         title="Builder next steps"
@@ -420,6 +414,6 @@ service:
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
       />
-    </div>
+    </PageShell>
   );
 }

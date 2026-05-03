@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { Alert, Button, Code, Group, Stack } from "@mantine/core";
 import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "../../components/common/EmptyState";
 
@@ -31,43 +32,43 @@ export function EnrollmentDialogBody({
 }: EnrollmentDialogBodyProps) {
   if (enrollmentToken) {
     return (
-      <div className="command-panel">
-        <div className="banner info">
-          <div>
-            <div className="b-title">Enrollment token created</div>
-            <div className="b-body">
+      <Stack gap="md">
+        <Alert color="blue" variant="light" title="Enrollment token created">
+          <Stack gap="xs">
+            <span>
               This token will not be shown again. Copy it now or use the install command below.
-              <div className="flex-row gap-sm mt-2">
-                <code className="mono-cell token-value">{enrollmentToken}</code>
-                <CopyButton value={enrollmentToken} />
-              </div>
-            </div>
-          </div>
-        </div>
-        <pre className="code-block code-block-wrap">{INSTALL_COMMAND(enrollmentToken)}</pre>
-        <CopyButton value={INSTALL_COMMAND(enrollmentToken)} label="Copy command" />
-        <Link to="/portal/getting-started" className="btn btn-ghost btn-sm">
-          Open guided setup
-        </Link>
-      </div>
+            </span>
+            <Group gap="xs" wrap="nowrap">
+              <Code style={{ flex: "1 1 auto", overflowX: "auto" }}>{enrollmentToken}</Code>
+              <CopyButton value={enrollmentToken} />
+            </Group>
+          </Stack>
+        </Alert>
+        <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+          {INSTALL_COMMAND(enrollmentToken)}
+        </Code>
+        <Group gap="xs">
+          <CopyButton value={INSTALL_COMMAND(enrollmentToken)} label="Copy command" />
+          <Button component={Link} to="/portal/getting-started" variant="subtle" size="sm">
+            Open guided setup
+          </Button>
+        </Group>
+      </Stack>
     );
   }
 
   return (
-    <>
+    <Stack gap="md">
       {enrollmentTokenError ? (
-        <div className="banner err mb-4" role="alert">
-          <div>
-            <div className="b-title">Could not create enrollment token</div>
-            <div className="b-body">{enrollmentTokenError}</div>
-          </div>
-        </div>
+        <Alert color="red" variant="light" title="Could not create enrollment token" role="alert">
+          {enrollmentTokenError}
+        </Alert>
       ) : null}
       <EmptyState
         icon="plug"
         title="Connect a collector"
         description="Create a one-time enrollment token for this configuration, then run the installer on the host you want to manage."
       />
-    </>
+    </Stack>
   );
 }
