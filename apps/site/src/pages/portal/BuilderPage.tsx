@@ -1,29 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import {
-  Alert,
-  Badge,
-  Box,
-  Button,
-  Card,
-  Code,
-  Group,
-  SegmentedControl,
-  Select,
-  Modal,
-  SimpleGrid,
-  Stack,
-  Text,
-  Title,
-} from "@mantine/core";
-import CodeMirror from "@uiw/react-codemirror";
-import { yaml as codemirrorYaml } from "@codemirror/lang-yaml";
-import { linter, lintGutter } from "@codemirror/lint";
-import { parseDocument } from "yaml";
-import { notifications } from "@mantine/notifications";
 import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
-import { useSavePipeline } from "../../api/hooks/portal";
 import { GuidancePanel } from "../../components/ai";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -41,20 +19,21 @@ import type {
 } from "@o11yfleet/core/pipeline";
 import {
   Canvas,
+  ValidationStrip,
   layoutLR,
   toFlow,
   type BuilderEdge,
   type BuilderNode,
 } from "@/components/pipeline-builder";
-import { PageHeader, PageShell } from "@/components/app";
+import "../../styles/portal-pipeline.css";
 
 type BuilderMode = "visual" | "split" | "yaml";
 
-const MODE_OPTIONS: { value: BuilderMode; label: string }[] = [
-  { value: "visual", label: "Visual" },
-  { value: "split", label: "Split" },
-  { value: "yaml", label: "YAML" },
-];
+const MODE_LABELS: Record<BuilderMode, string> = {
+  visual: "Visual",
+  split: "Split",
+  yaml: "YAML",
+};
 
 const ROLES: PipelineComponentRole[] = ["receiver", "processor", "exporter"];
 const DEFAULT_EXAMPLE_ID = "edge-gateway";
@@ -79,8 +58,6 @@ export default function BuilderPage() {
   const [yamlInput, setYamlInput] = useState("");
   const [importResult, setImportResult] = useState<CollectorYamlImportResult | null>(null);
   const [yamlPreviewError, setYamlPreviewError] = useState<string | null>(null);
-  const [saveModalOpen, setSaveModalOpen] = useState(false);
-  const savePipeline = useSavePipeline();
 
   const insightSurface = insightSurfaces.portalBuilder;
   const exampleEntries = Object.entries(PIPELINE_EXAMPLES);
@@ -93,7 +70,16 @@ export default function BuilderPage() {
     () => (importResult ? Object.entries(importResult.rawSections) : []),
     [importResult],
   );
-  const validation = useMemo(() => validatePipelineGraph(graph), [graph]);
+  const validationResult = useMemo(() => validatePipelineGraph(graph), [graph]);
+  const validation = useMemo(
+    () => ({
+      ok: validationResult.ok,
+      canSave: validationResult.ok,
+      errors: validationResult.errors,
+      warnings: validationResult.warnings,
+    }),
+    [validationResult],
+  );
   const [yamlPreview, setYamlPreview] = useState<string>("");
   useEffect(() => {
     setYamlPreviewError(null);
@@ -116,6 +102,10 @@ export default function BuilderPage() {
     return byRole;
   }, [graph]);
 
+  // Project the canonical PipelineGraph into xyflow nodes/edges, then run
+  // dagre LR auto-layout so the graph renders as a left-to-right flow on
+  // first paint. Read-only for now — the canvas's onChange is a no-op
+  // because draft persistence (#236) hasn't landed yet.
   const flow = useMemo(() => {
     const next = toFlow(graph);
     return { nodes: layoutLR(next.nodes, next.edges), edges: next.edges };
@@ -124,6 +114,8 @@ export default function BuilderPage() {
     nodes: BuilderNode[];
     edges: BuilderEdge[];
   }>(flow);
+  // When the underlying graph changes (example switch, YAML import), reset
+  // the canvas to the freshly laid out nodes.
   useEffect(() => {
     setCanvasState(flow);
   }, [flow]);
@@ -180,8 +172,7 @@ export default function BuilderPage() {
     setMode("split");
   }
 
-  function handleExampleChange(nextExampleId: string | null) {
-    if (!nextExampleId) return;
+  function handleExampleChange(nextExampleId: string) {
     setExampleId(nextExampleId);
     if (importResult) {
       setYamlInput("");
@@ -194,35 +185,79 @@ export default function BuilderPage() {
     setYamlInput("");
   }
 
-  function handleDiscardChanges() {
-    handleBackToExample();
-  }
+  return (
+    <div className="main-wide pipeline-builder-page">
+      <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
 
-  async function handleSavePipeline() {
-    if (!yamlPreview) return;
-    try {
-      await savePipeline.mutateAsync(yamlPreview);
-      setSaveModalOpen(false);
-      notifications.show({
-        title: "Pipeline saved",
-        message: "Pipeline saved successfully.",
-        color: "green",
-      });
-    } catch (error) {
-      notifications.show({
-        title: "Failed to save pipeline",
-        message: error instanceof Error ? error.message : "Unknown error",
-        color: "red",
-      });
-    }
-  }
+      <div className="page-head mt-6">
+        <div>
+          <h1>Pipeline builder</h1>
+          <p className="meta mt-2">
+            Review Collector graph shape, generated YAML, and graph validation before draft saving
+            is available.
+          </p>
+        </div>
+      </div>
 
-  const exampleOptions =
-    exampleEntries.length === 0
-      ? [{ value: EMPTY_PIPELINE_GRAPH.id, label: "No examples configured" }]
-      : exampleEntries.map(([id, example]) => ({ value: id, label: example.label }));
+      <div className="pipe-controls mt-6">
+        <div className="pipe-segmented" role="group" aria-label="Builder view">
+          {(Object.keys(MODE_LABELS) as BuilderMode[]).map((nextMode) => (
+            <button
+              key={nextMode}
+              type="button"
+              aria-pressed={mode === nextMode}
+              className="btn btn-ghost"
+              onClick={() => setMode(nextMode)}
+            >
+              {MODE_LABELS[nextMode]}
+            </button>
+          ))}
+        </div>
 
-  const yamlPlaceholder = `receivers:
+        <div className="pipe-select-row">
+          <label htmlFor="builder-example">Scenario</label>
+          <select
+            id="builder-example"
+            className="input"
+            value={selectedExampleId}
+            onChange={(event) => handleExampleChange(event.target.value)}
+          >
+            {exampleEntries.length === 0 ? (
+              <option value={EMPTY_PIPELINE_GRAPH.id}>No examples configured</option>
+            ) : null}
+            {exampleEntries.map(([id, example]) => (
+              <option key={id} value={id}>
+                {example.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <section className="card card-pad mt-6 pipe-import-panel">
+        <div className="pipe-panel-head">
+          <div>
+            <h3>Paste Collector YAML</h3>
+            <p className="meta mt-2">
+              Import a Collector config into the visual model and review anything that stays raw.
+            </p>
+          </div>
+          {importResult ? (
+            <span
+              className={`tag ${importResult.confidence === "complete" ? "tag-ok" : "tag-warn"}`}
+            >
+              {importResult.confidence}
+            </span>
+          ) : (
+            <span className="tag">optional</span>
+          )}
+        </div>
+
+        <textarea
+          className="textarea pipe-yaml-input mt-4"
+          value={yamlInput}
+          onChange={(event) => setYamlInput(event.target.value)}
+          placeholder={`receivers:
   otlp:
     protocols:
       grpc: {}
@@ -232,187 +267,72 @@ service:
   pipelines:
     logs:
       receivers: [otlp]
-      exporters: [debug]`;
-
-  const yamlLinter = linter((view) => {
-    const docText = view.state.doc.toString();
-    if (!docText.trim()) return [];
-
-    const doc = parseDocument(docText);
-    if (!doc.errors || doc.errors.length === 0) return [];
-
-    return doc.errors.map((error) => {
-      const from = error.pos[0];
-      const to = error.pos[1];
-      return {
-        from,
-        to: to > from ? to : from + 1,
-        severity: "error",
-        message: error.message,
-      };
-    });
-  });
-
-  function handleFormatYaml() {
-    if (!yamlInput.trim()) return;
-    try {
-      const doc = parseDocument(yamlInput);
-      if (doc.errors && doc.errors.length > 0) {
-        return; // Don't format if there are syntax errors
-      }
-      setYamlInput(doc.toString());
-    } catch {
-      // Ignore formatting errors
-    }
-  }
-
-  return (
-    <PageShell width="wide">
-      <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
-
-      <PageHeader
-        className="mt-6"
-        title="Pipeline builder"
-        description="Review Collector graph shape, generated YAML, and graph validation before draft saving is available."
-        actions={
-          <>
-            <Button variant="default" onClick={handleDiscardChanges}>
-              Discard changes
-            </Button>
-            <Button
-              onClick={() => setSaveModalOpen(true)}
-              disabled={!validation.ok || yamlPreviewError !== null}
-            >
-              Save pipeline
-            </Button>
-          </>
-        }
-      />
-
-      <Group mt="md" gap="md" wrap="wrap" align="flex-end">
-        <SegmentedControl
-          value={mode}
-          onChange={(value) => setMode(value as BuilderMode)}
-          data={MODE_OPTIONS}
+      exporters: [debug]`}
         />
-        <Select
-          label="Scenario"
-          value={selectedExampleId}
-          onChange={handleExampleChange}
-          data={exampleOptions}
-          allowDeselect={false}
-        />
-      </Group>
 
-      <Card mt="md">
-        <Group justify="space-between" align="flex-start">
-          <Stack gap={4} style={{ flex: 1 }}>
-            <Title order={3} size="sm" fw={500}>
-              Paste Collector YAML
-            </Title>
-            <Text size="sm" c="dimmed">
-              Import a Collector config into the visual model and review anything that stays raw.
-            </Text>
-          </Stack>
-          {importResult ? (
-            <Badge color={importResult.confidence === "complete" ? "green" : "yellow"}>
-              {importResult.confidence}
-            </Badge>
-          ) : (
-            <Badge variant="default">optional</Badge>
-          )}
-        </Group>
-
-        <Box
-          mt="md"
-          style={{
-            border: "1px solid var(--mantine-color-default-border)",
-            borderRadius: "var(--mantine-radius-sm)",
-            overflow: "hidden",
-          }}
-        >
-          <CodeMirror
-            value={yamlInput}
-            height="300px"
-            extensions={[codemirrorYaml(), lintGutter(), yamlLinter]}
-            onChange={(value) => setYamlInput(value)}
-            placeholder={yamlPlaceholder}
-            basicSetup={{
-              lineNumbers: true,
-              tabSize: 2,
-            }}
-          />
-        </Box>
-
-        <Group mt="sm" gap="xs">
-          <Button onClick={handleImportYaml} disabled={yamlInput.trim().length === 0}>
-            Import YAML
-          </Button>
-          <Button
-            variant="default"
-            onClick={handleFormatYaml}
+        <div className="pipe-import-actions mt-3">
+          <button
+            type="button"
+            className="btn"
+            onClick={handleImportYaml}
             disabled={yamlInput.trim().length === 0}
           >
-            Format YAML
-          </Button>
-          {yamlInput.trim().length > 0 && (
-            <CopyButton value={yamlInput} label="Copy to clipboard" />
-          )}
+            Import YAML
+          </button>
           {importResult ? (
-            <Button variant="subtle" onClick={handleBackToExample}>
+            <button type="button" className="btn btn-ghost" onClick={handleBackToExample}>
               Back to selected example
-            </Button>
+            </button>
           ) : null}
-        </Group>
+        </div>
 
         {importResult ? (
-          <Stack mt="md" gap="xs">
+          <div className="pipe-import-summary mt-4">
             {importResult.warnings.length === 0 ? (
-              <Alert color="green" variant="light" title="Import is fully visualized">
-                Every imported section is represented in the graph.
-              </Alert>
+              <div className="banner ok">
+                <div>
+                  <div className="b-title">Import is fully visualized</div>
+                  <div className="b-body">Every imported section is represented in the graph.</div>
+                </div>
+              </div>
             ) : (
               importResult.warnings.map((warning, index) => (
-                <Alert
-                  key={`import-warning-${index}-${warning.code}`}
-                  color="yellow"
-                  variant="light"
-                  title={`Import warning: ${warning.code}`}
-                >
-                  {warning.path ? `${warning.path}: ` : ""}
-                  {warning.message}
-                </Alert>
+                <div key={`import-warning-${index}-${warning.code}`} className="banner warn mt-2">
+                  <div>
+                    <div className="b-title">Import warning: {warning.code}</div>
+                    <div className="b-body">
+                      {warning.path ? `${warning.path}: ` : ""}
+                      {warning.message}
+                    </div>
+                  </div>
+                </div>
               ))
             )}
 
             {rawSectionEntries.length > 0 ? (
-              <details>
+              <details className="pipe-raw-sections mt-3">
                 <summary>Preserved raw sections ({rawSectionEntries.length})</summary>
-                <Code block mt="xs">
+                <pre className="code-block mt-3">
                   {JSON.stringify(importResult.rawSections, null, 2)}
-                </Code>
+                </pre>
               </details>
             ) : null}
-          </Stack>
+          </div>
         ) : null}
-      </Card>
+      </section>
 
-      <SimpleGrid mt="md" cols={mode === "split" ? { base: 1, lg: 2 } : 1} spacing="md">
+      <div className="pipe-layout mt-6" data-mode={mode}>
         {mode !== "yaml" ? (
-          <Card>
-            <Group justify="space-between" align="center">
-              <Title order={3} size="sm" fw={500}>
-                Visual graph
-              </Title>
-              <Badge color={validation.ok ? "green" : "red"}>
+          <section className="card card-pad pipe-panel">
+            <div className="pipe-panel-head">
+              <h3>Visual graph</h3>
+              <span className={`tag ${validation.ok ? "tag-ok" : "tag-err"}`}>
                 {validation.ok ? "graph valid" : "graph issues"}
-              </Badge>
-            </Group>
-            <Text size="sm" c="dimmed" mt="xs">
-              {summarizePipelineGraph(graph)}
-            </Text>
+              </span>
+            </div>
+            <p className="meta mt-2">{summarizePipelineGraph(graph)}</p>
 
-            <Box mt="md">
+            <div className="mt-4">
               <Canvas
                 nodes={canvasState.nodes}
                 edges={canvasState.edges}
@@ -420,89 +340,42 @@ service:
                 readOnly
                 height={520}
               />
-            </Box>
+            </div>
 
-            <Group mt="md" gap="xs" aria-label="Component counts by role">
+            <div className="pipe-role-summary mt-4" aria-label="Component counts by role">
               {ROLES.map((role) => (
-                <Badge key={role} variant="default">
+                <span key={role} className="tag">
                   {roleLabel(role)} ({componentsByRole[role].length})
-                </Badge>
+                </span>
               ))}
-            </Group>
-          </Card>
+            </div>
+          </section>
         ) : null}
 
         {mode !== "visual" ? (
-          <Card>
-            <Group justify="space-between" align="center">
-              <Title order={3} size="sm" fw={500}>
-                Generated YAML
-              </Title>
-              <Group gap="xs">
-                <Badge variant="default">artifact preview</Badge>
+          <section className="card card-pad pipe-panel">
+            <div className="pipe-panel-head">
+              <h3>Generated YAML</h3>
+              <div className="pipe-panel-actions">
+                <span className="tag">artifact preview</span>
                 {yamlPreview ? <CopyButton value={yamlPreview} label="copy YAML" /> : null}
-              </Group>
-            </Group>
+              </div>
+            </div>
             {yamlPreviewError !== null ? (
-              <Alert mt="md" color="yellow" variant="light" title="YAML preview unavailable">
-                {yamlPreviewError}
-              </Alert>
+              <div className="banner warn mt-4">
+                <div>
+                  <div className="b-title">YAML preview unavailable</div>
+                  <div className="b-body">{yamlPreviewError}</div>
+                </div>
+              </div>
             ) : (
-              <Code block mt="md">
-                {yamlPreview}
-              </Code>
+              <pre className="code-block mt-4 pipe-yaml">{yamlPreview}</pre>
             )}
-          </Card>
+          </section>
         ) : null}
-      </SimpleGrid>
+      </div>
 
-      <Card mt="md">
-        <Title order={3} size="sm" fw={500}>
-          Validation and rollout readiness
-        </Title>
-        <Text size="sm" c="dimmed" mt="xs">
-          Graph checks run locally from the model. Collector runtime validation and rollout gates
-          are separate backend contracts.
-        </Text>
-
-        <Stack mt="md" gap="xs">
-          {yamlPreviewError !== null ? (
-            <Alert color="red" variant="light" title="YAML preview unavailable">
-              {yamlPreviewError}
-            </Alert>
-          ) : null}
-
-          {yamlPreviewError === null &&
-          validation.errors.length === 0 &&
-          validation.warnings.length === 0 ? (
-            <Alert color="green" variant="light" title="No graph issues detected">
-              Review the generated YAML before creating a version.
-            </Alert>
-          ) : null}
-
-          {validation.errors.map((issue, index) => (
-            <Alert
-              key={`error-${index}-${issue.code}`}
-              color="red"
-              variant="light"
-              title={`Error: ${issue.code}`}
-            >
-              {issue.message}
-            </Alert>
-          ))}
-
-          {validation.warnings.map((issue, index) => (
-            <Alert
-              key={`warning-${index}-${issue.code}`}
-              color="yellow"
-              variant="light"
-              title={`Warning: ${issue.code}`}
-            >
-              {issue.message}
-            </Alert>
-          ))}
-        </Stack>
-      </Card>
+      <ValidationStrip validation={validation} yamlPreviewError={yamlPreviewError} />
 
       <GuidancePanel
         title="Builder next steps"
@@ -511,23 +384,6 @@ service:
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
       />
-
-      <Modal opened={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Save pipeline">
-        <Stack gap="md">
-          <Text size="sm">
-            Are you sure you want to save this pipeline? This will create a new version of the
-            pipeline.
-          </Text>
-          <Group gap="xs" justify="flex-end">
-            <Button variant="default" onClick={() => setSaveModalOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={() => void handleSavePipeline()} loading={savePipeline.isPending}>
-              Save
-            </Button>
-          </Group>
-        </Stack>
-      </Modal>
-    </PageShell>
+    </div>
   );
 }

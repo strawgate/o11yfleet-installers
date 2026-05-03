@@ -6,6 +6,7 @@
  */
 
 export { Canvas, type CanvasProps } from "./Canvas";
+export { ValidationStrip, type ValidationStripProps } from "./ValidationStrip";
 export { toFlow } from "./schema/to-flow";
 export { toGraph } from "./schema/to-graph";
 export { layoutLR } from "./layout/dagre-layout";
