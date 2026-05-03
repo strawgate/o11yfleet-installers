@@ -87,7 +87,7 @@ export async function processFrame(
   // The trade-off is documented here because it surprised us once
   // (fast-check counterexample: state.seq=0, msg.seq=2, agent_disconnect
   // set — hit the gap path before reaching the disconnect handler).
-  // See `packages/core/test/state-machine.properties.test.ts` for the
+  // See `packages/core/test/state-machine.purity.test.ts` for the
   // property test that pins the documented behavior.
   const expectedSeq = state.sequence_num + 1;
   if (msg.sequence_num !== 0 && msg.sequence_num !== expectedSeq) {

@@ -16,7 +16,7 @@ export default defineConfig({
       "test/protobuf-codec.test.ts",
       "test/codec.properties.test.ts",
       "test/state-machine.test.ts",
-      "test/state-machine.properties.test.ts",
+      "test/state-machine.purity.test.ts",
     ],
   },
 });

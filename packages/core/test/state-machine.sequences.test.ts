@@ -1,6 +1,13 @@
 // Property-based tests for the OpAMP state machine (processFrame).
 // Uses fast-check to generate random message sequences and verify
 // that invariants always hold — no matter what the agent sends.
+//
+// CONSOLIDATION NOTE:
+// This file contains stateful sequence-based property tests (event invariants,
+// sequence handling, connected_at immutability, etc.).
+// The companion file state-machine.purity.test.ts contains stateless
+// property tests (purity, determinism, dirtyFields validation).
+// Both are intentionally kept separate because they test fundamentally different aspects.
 
 import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";

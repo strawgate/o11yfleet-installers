@@ -189,7 +189,7 @@ describe("Config Durable Object", () => {
     expect(response.status).toBe(400);
   });
 
-  it("GET /unknown returns 404", async () => {
+  it("DO fetch to unknown route returns 404", async () => {
     const id = env.CONFIG_DO.idFromName("tenant-1:config-1");
     const stub = env.CONFIG_DO.get(id);
     const response = await stub.fetch("http://internal/unknown");

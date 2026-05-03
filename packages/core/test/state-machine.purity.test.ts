@@ -1,6 +1,14 @@
 // Property-based tests for the OpAMP state machine. processFrame is the
 // heart of the protocol; these properties pin invariants that must hold
 // across the entire input space.
+//
+// CONSOLIDATION NOTE:
+// This file contains stateless property-based tests (purity, determinism, etc.).
+// The companion file state-machine.sequences.test.ts contains stateful
+// sequence-based property tests. Both are intentionally kept separate because
+// they test fundamentally different aspects:
+//   - This file: pure functions, stateless properties
+//   - state-machine.sequences.test.ts: stateful sequences, event invariants
 
 import { describe, it } from "vitest";
 import * as fc from "fast-check";

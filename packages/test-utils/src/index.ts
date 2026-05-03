@@ -34,6 +34,8 @@ export type {
   ReceiverFailureOptions,
   HealthRecoveredOptions,
 } from "./opamp-messages.js";
+
+// ─── Test Scenarios ─────────────────────────────────────────────────────────
 export {
   AGENT_SCENARIOS,
   SERVER_SCENARIOS,
@@ -44,3 +46,32 @@ export {
   serverScenario,
 } from "./scenarios.js";
 export type { AgentScenario, ServerScenario } from "./scenarios.js";
+
+// ─── Test Fixtures ───────────────────────────────────────────────────────────
+export {
+  createTestAgentState,
+  createConnectedAgentState,
+  createHealthyAgentState,
+  createUnhealthyAgentState,
+  createDisconnectedAgentState,
+  createAgentStateSequence,
+  createUniqueUid,
+  DEFAULT_TEST_CAPABILITIES,
+  MINIMAL_TEST_CAPABILITIES,
+  resetFixtureCounters,
+  nextTenantName,
+  nextConfigName,
+  nextTokenId,
+  createTenantRequest,
+  createConfigRequest,
+  createEnrollmentTokenResponse,
+  createConfigStatsResponse,
+  createAgentSummary,
+  createHealthCheckResponse,
+  type TenantFixtures,
+  type ConfigFixtures,
+  type EnrollmentTokenResponse,
+  type ConfigStatsResponse,
+  type AgentSummaryResponse,
+  type HealthCheckResponse,
+} from "./fixtures/index.js";
