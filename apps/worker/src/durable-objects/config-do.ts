@@ -622,9 +622,13 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         );
       }
 
-      // Duplicate UID detection (OpAMP spec §3.2.1.2) — O(1) via WebSocket tags
+      // Duplicate UID detection (OpAMP spec §3.2.1.2) — O(1) via WebSocket tags.
+      // Only consider OPEN sockets — closed sockets (from prior enrollment/reconnect
+      // cycles) don't count as active duplicates.
       if (agentMsg.sequence_num === 0) {
-        const existing = this.ctx.getWebSockets(attachment.instance_uid);
+        const existing = this.ctx
+          .getWebSockets(attachment.instance_uid)
+          .filter((s) => s.readyState === WebSocket.OPEN);
         const isDuplicate = existing.length > 1 || (existing.length === 1 && existing[0] !== ws);
         if (isDuplicate) {
           const newUid = new Uint8Array(16);

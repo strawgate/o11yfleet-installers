@@ -1,8 +1,11 @@
 /**
  * E2E test for OpAMP own_metrics/own_traces/own_logs offers.
  *
- * These tests verify that the DO methods work correctly and the codec
- * round-trips correctly. WebSocket delivery is tested manually with wrangler dev.
+ * WebSocket delivery requires the DO to be awake when sendOwnMetricsOffer runs.
+ * We use the `doAction` callback to invoke the method inside the same DO execution
+ * context as the reconnect hello — before the DO hibernates and closes the WS.
+ *
+ * For codec correctness, we test protobuf round-trips separately.
  */
 
 import { describe, it, expect, beforeAll } from "vitest";
@@ -35,74 +38,78 @@ describe("OpAMP own_metrics offers", () => {
   });
 
   it("sendOwnMetricsOffer sends metrics offer without error", async () => {
-    const { ws, instanceUid } = await connectWithEnrollment(enrollmentToken);
-    try {
-      await runInDurableObject(
-        env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName)),
-        async (instance: InstanceType<typeof ConfigDurableObject>) => {
-          await instance.sendOwnMetricsOffer(
-            instanceUid,
-            "http://collector.internal/otlp/v1/metrics",
-            "test-token-metrics",
-            "metrics",
-          );
-        },
-      );
-    } finally {
-      ws.close();
-    }
+    const doStub = env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName));
+    const { ws } = await connectWithEnrollment(enrollmentToken, {
+      doAction: async (instanceUid) => {
+        await runInDurableObject(
+          doStub,
+          async (instance: InstanceType<typeof ConfigDurableObject>) => {
+            await instance.sendOwnMetricsOffer(
+              instanceUid,
+              "http://collector.internal/otlp/v1/metrics",
+              "test-token-metrics",
+              "metrics",
+            );
+          },
+        );
+      },
+    });
+    ws.close();
   });
 
   it("sendOwnMetricsOffer sends traces offer without error", async () => {
-    const { ws, instanceUid } = await connectWithEnrollment(enrollmentToken);
-    try {
-      await runInDurableObject(
-        env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName)),
-        async (instance: InstanceType<typeof ConfigDurableObject>) => {
-          await instance.sendOwnMetricsOffer(
-            instanceUid,
-            "http://collector.internal/otlp/v1/traces",
-            "test-token-traces",
-            "traces",
-          );
-        },
-      );
-    } finally {
-      ws.close();
-    }
+    const doStub = env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName));
+    const { ws } = await connectWithEnrollment(enrollmentToken, {
+      doAction: async (instanceUid) => {
+        await runInDurableObject(
+          doStub,
+          async (instance: InstanceType<typeof ConfigDurableObject>) => {
+            await instance.sendOwnMetricsOffer(
+              instanceUid,
+              "http://collector.internal/otlp/v1/traces",
+              "test-token-traces",
+              "traces",
+            );
+          },
+        );
+      },
+    });
+    ws.close();
   });
 
   it("sendOwnMetricsOffer sends logs offer without error", async () => {
-    const { ws, instanceUid } = await connectWithEnrollment(enrollmentToken);
-    try {
-      await runInDurableObject(
-        env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName)),
-        async (instance: InstanceType<typeof ConfigDurableObject>) => {
-          await instance.sendOwnMetricsOffer(
-            instanceUid,
-            "http://collector.internal/otlp/v1/logs",
-            "test-token-logs",
-            "logs",
-          );
-        },
-      );
-    } finally {
-      ws.close();
-    }
+    const doStub = env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName));
+    const { ws } = await connectWithEnrollment(enrollmentToken, {
+      doAction: async (instanceUid) => {
+        await runInDurableObject(
+          doStub,
+          async (instance: InstanceType<typeof ConfigDurableObject>) => {
+            await instance.sendOwnMetricsOffer(
+              instanceUid,
+              "http://collector.internal/otlp/v1/logs",
+              "test-token-logs",
+              "logs",
+            );
+          },
+        );
+      },
+    });
+    ws.close();
   });
 
   it("revokeOwnMetricsOffers sends without error", async () => {
-    const { ws, instanceUid } = await connectWithEnrollment(enrollmentToken);
-    try {
-      await runInDurableObject(
-        env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName)),
-        async (instance: InstanceType<typeof ConfigDurableObject>) => {
-          await instance.revokeOwnMetricsOffers(instanceUid);
-        },
-      );
-    } finally {
-      ws.close();
-    }
+    const doStub = env.CONFIG_DO.get(env.CONFIG_DO.idFromName(doName));
+    const { ws } = await connectWithEnrollment(enrollmentToken, {
+      doAction: async (instanceUid) => {
+        await runInDurableObject(
+          doStub,
+          async (instance: InstanceType<typeof ConfigDurableObject>) => {
+            await instance.revokeOwnMetricsOffers(instanceUid);
+          },
+        );
+      },
+    });
+    ws.close();
   });
 
   it("codec round-trips own_metrics correctly", () => {

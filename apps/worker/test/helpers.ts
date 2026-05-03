@@ -361,7 +361,19 @@ export async function getAgentSummaries(
  * enrollment_complete text messages. Instead, we construct the assignment_claim
  * locally from the enrollment token and server response.
  */
-export async function connectWithEnrollment(token: string): Promise<{
+export async function connectWithEnrollment(
+  token: string,
+  opts: {
+    /**
+     * Optional callback invoked after the reconnect hello completes but before the
+     * DO goes to sleep. Use this to call DO methods (e.g. sendOwnMetricsOffer)
+     * while the WebSocket is still open — the DO is awake and WS tags are live.
+     *
+     * Signature: (instanceUid: string) => Promise<void>
+     */
+    doAction?: (instanceUid: string) => Promise<void>;
+  } = {},
+): Promise<{
   ws: WebSocket;
   enrollment: { type: string; assignment_claim: string; instance_uid: string };
   instanceUid: string;
@@ -386,7 +398,13 @@ export async function connectWithEnrollment(token: string): Promise<{
   const response = decodeFrame<ServerToAgent>(buf);
   expect(response.instance_uid).toBeDefined();
 
-  const instanceUid = uint8ToHex(response.instance_uid);
+  // The DO sends AgentIdentification telling the agent to use a specific instance_uid.
+  // Use this DO-assigned UID (not the agent's self-reported UID from response.instance_uid)
+  // for the assignment claim and all subsequent API calls.
+  const agentIdentUid = response.agent_identification?.new_instance_uid;
+  const doAssignedUid = agentIdentUid
+    ? uint8ToHex(agentIdentUid)
+    : uint8ToHex(response.instance_uid);
 
   // Construct a proper assignment claim for reconnect.
   // The enrollment token contains tenant_id and config_id, and the server
@@ -396,7 +414,7 @@ export async function connectWithEnrollment(token: string): Promise<{
     v: 1,
     tenant_id: enrollmentClaim.tenant_id,
     config_id: enrollmentClaim.config_id,
-    instance_uid: instanceUid,
+    instance_uid: doAssignedUid,
     generation: 1,
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 86400, // 24h
@@ -406,10 +424,26 @@ export async function connectWithEnrollment(token: string): Promise<{
   // The DO closes the WebSocket after enrollment (code 1000 "Reconnect with new instance_uid").
   // If the socket is closed, reconnect using the assignment claim and send hello.
   let openWs = ws;
+  let adoptedUid = doAssignedUid;
   if (ws.readyState === WebSocket.CLOSED) {
     openWs = await connectWithClaim(assignmentClaim);
     openWs.send(encodeFrame(buildHello()));
-    await waitForMsg(openWs);
+    const reconnectMsg = await waitForMsg(openWs);
+    const reconnectBuf = await msgToBuffer(reconnectMsg);
+    const reconnectResponse = decodeFrame<ServerToAgent>(reconnectBuf);
+    // The reconnect response carries the DO-assigned instance_uid (same value,
+    // but confirms the agent adopted it). Use this to be safe.
+    adoptedUid = reconnectResponse.instance_uid
+      ? uint8ToHex(reconnectResponse.instance_uid)
+      : doAssignedUid;
+  }
+
+  // Invoke the optional DO action after reconnect completes (or immediately if no
+  // reconnect was needed). The DO is awake from processing the reconnect hello;
+  // its WebSocket tags are still valid. After this callback returns, the DO will
+  // hibernate and the WS will be closed by the runtime.
+  if (opts.doAction) {
+    await opts.doAction(adoptedUid);
   }
 
   return {
@@ -417,9 +451,9 @@ export async function connectWithEnrollment(token: string): Promise<{
     enrollment: {
       type: "enrollment_complete",
       assignment_claim: assignmentToken,
-      instance_uid: instanceUid,
+      instance_uid: adoptedUid,
     },
-    instanceUid,
+    instanceUid: adoptedUid,
   };
 }
 
