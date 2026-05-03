@@ -1,9 +1,30 @@
 # Developer Loop
 
-The shortest local loop is:
+## Quick Start
 
 ```bash
-just check
+just dev-up          # Starts BOTH Worker + Site with migrations and seed data
+```
+
+That's it. `just dev-up` starts everything you need:
+
+- Worker at http://localhost:8787 (API + OpAMP)
+- Site at http://127.0.0.1:3000 (Portal + Admin UI)
+- Applies D1 migrations automatically
+- Seeds local data (tenant, config, enrollment token)
+
+Then run tests in another terminal:
+
+```bash
+just test-ui          # Playwright browser tests
+```
+
+## The Dev Loop
+
+```bash
+just dev-up          # Start everything (do this once)
+just check           # Run checks affected by your changes
+just dev-reset      # Reset seed data if things get weird
 ```
 
 `just check` runs `scripts/dev-check.ts`, which compares the current worktree to
@@ -11,25 +32,39 @@ just check
 affected by those files. Use `just check-staged` for the pre-commit gate and
 `just check-json` when an editor or agent needs the plan without executing it.
 
-## Local App Loop
+## Common Commands
+
+### Starting the dev stack
+
+| Command             | What it does                                   |
+| ------------------- | ---------------------------------------------- |
+| `just dev-up`       | Start Worker + Site, run migrations, seed data |
+| `just dev-up-reset` | Fresh seed (destroys local data)               |
+| `just dev`          | Worker only (port 8787)                        |
+| `just ui`           | Site only (port 3000) — frontend only, no API  |
+
+> **Important:** `pnpm dev` or `pnpm dev -r` is frontend-only. Use `just dev-up` for full-stack development.
+
+### Testing
+
+| Command            | What it does                    | Needs running server?     |
+| ------------------ | ------------------------------- | ------------------------- |
+| `just test`        | Fast unit tests (Core + Worker) | No                        |
+| `just test-ui`     | Playwright browser tests        | No (starts its own)       |
+| `just smoke-local` | API + OpAMP smoke test          | Yes (`just dev-up` first) |
+
+One-time Playwright setup:
 
 ```bash
-just dev-up
+just playwright-install
 ```
 
-`dev-up` starts the Worker and apps/site, waits for `/healthz`, applies local D1
-migrations, seeds local data, and then keeps both dev servers attached to the
-terminal. Use `just dev-up-reset` to force a fresh seed.
-
-If the servers are already running:
+### Pre-commit / Pre-push
 
 ```bash
-just dev-reset
-just smoke-local
+just check-staged    # Run checks on staged files (pre-commit hook)
+just ci-fast         # Full lint + typecheck + test (before pushing)
 ```
-
-`smoke-local` runs the API + OpAMP lifecycle smoke test with secrets loaded from
-`apps/worker/.dev.vars`.
 
 ## GitHub Check Mapping
 
@@ -67,3 +102,38 @@ pnpm tsx scripts/dev-check.ts --json
 
 The normal text output explains which checks are skipped or run and prints
 per-step timings. The JSON output is plan-only and does not run commands.
+
+## Troubleshooting
+
+### Environment setup
+
+```bash
+just doctor          # Check if your environment is ready
+```
+
+If `just doctor` fails:
+
+- Missing `.dev.vars`: `cp apps/worker/.dev.vars.example apps/worker/.dev.vars`
+- Cloudflare not authenticated: `npx wrangler login`
+- Missing secrets: `just ensure-dev-secrets`
+
+### Common issues
+
+| Problem                 | Solution                               |
+| ----------------------- | -------------------------------------- |
+| `just dev-up` hangs     | Check if ports 8787 or 3000 are in use |
+| Tests fail after pull   | `just dev-reset` to re-seed data       |
+| `just test-ui` fails    | Run `just playwright-install` first    |
+| Formatting errors in CI | Run `just fmt` before committing       |
+| Type errors in CI       | Run `just typecheck` locally           |
+
+### Formatting
+
+Always run before committing:
+
+```bash
+just fmt              # Format all files
+just check-staged     # Check what will be committed
+```
+
+This runs `prettier --write` on all files. For CI, formatting is checked automatically.

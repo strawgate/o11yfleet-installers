@@ -254,15 +254,86 @@ just docs-api-check # Check API docs after route changes
 
 ### Test Suites
 
-| Suite                             | Command                   | Notes                                                |
-| --------------------------------- | ------------------------- | ---------------------------------------------------- |
-| Core (codec, auth, state machine) | `just test-core`          | Fast, no CF runtime needed                           |
-| Worker (runtime + node)           | `just test-worker`        | Runs in workerd pool                                 |
-| OpAMP compliance                  | `just test-opamp`         | Requires a **live** worker (`just dev` first)        |
-| E2E collector                     | `just test-e2e-collector` | Requires Docker for real OTel Collectors             |
-| UI (Playwright)                   | `just test-ui`            | Browser tests (first run: `just playwright-install`) |
-| All fast tests                    | `just test`               | Core + worker (no live server needed)                |
-| Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/`        |
+| Suite                             | Command                   | When to use                             |
+| --------------------------------- | ------------------------- | --------------------------------------- |
+| Core (codec, auth, state machine) | `just test-core`          | After changing `packages/core/`         |
+| Worker (runtime + node)           | `just test-worker`        | After changing `apps/worker/src/`       |
+| **UI (Playwright)**               | `just test-ui`            | **After changing any UI component**     |
+| OpAMP compliance                  | `just test-opamp`         | Requires `just dev-up` running          |
+| E2E collector                     | `just test-e2e-collector` | Requires Docker                         |
+| All fast tests                    | `just test`               | Before pushing (no server needed)       |
+| Full CI                           | `just ci-fast`            | Pre-push gate (lint + typecheck + test) |
+| Coverage                          | `just coverage`           | Reports under `reports/coverage/`       |
+
+> **Always run `just test-ui` for UI changes.** Browser tests validate that React components actually render and interact correctly. Unit tests alone are not sufficient for UI work.
+
+One-time Playwright setup: `just playwright-install`
+
+### Writing Playwright Tests
+
+UI tests live in `tests/ui/src/`. Add a new test file:
+
+```typescript
+// tests/ui/src/my-feature.test.ts
+import { test, expect } from "@playwright/test";
+
+test("my feature works", async ({ page }) => {
+  await page.goto("/my-page");
+  await expect(page.getByRole("heading", { name: "My Page" })).toBeVisible();
+  // ... more assertions
+});
+```
+
+Run tests:
+
+```bash
+just test-ui                    # Run all UI tests
+pnpm --filter @o11yfleet/ui-tests exec playwright test src/my-feature.test.ts  # Run single file
+```
+
+### Test Utilities (`@o11yfleet/test-utils`)
+
+Use shared fixtures instead of duplicating test data:
+
+```typescript
+import {
+  createTestAgentState,
+  createConnectedAgentState,
+  createHealthyAgentState,
+  createUnhealthyAgentState,
+  createUniqueUid,
+  createEnrollmentTokenResponse,
+} from "@o11yfleet/test-utils";
+
+// Agent state fixtures
+const agent = createConnectedAgentState({ tenant_id: "my-tenant" });
+```
+
+### Test Naming Conventions
+
+| Type              | Pattern                   | Example                                          |
+| ----------------- | ------------------------- | ------------------------------------------------ |
+| Unit tests        | `describe("unit")`        | `describe("hexToUint8Array")`                    |
+| Property tests    | `property:` prefix        | `describe("property: hex round-trip")`           |
+| Integration tests | `describe("interaction")` | `describe("WebSocket enrollment flow")`          |
+| E2E tests         | `test("scenario")`        | `test("complete lifecycle: enrollment → claim")` |
+
+### Property-Based Testing
+
+Use fast-check for edge cases, invariants, and round-trip encoding:
+
+```typescript
+import * as fc from "fast-check";
+
+it("uint8 → hex → uint8 is identity", () => {
+  fc.assert(
+    fc.property(fc.uint8Array(), (bytes) => {
+      const hex = uint8ToHex(bytes);
+      return buffersEqual(hexToUint8Array(hex), bytes);
+    }),
+  );
+});
+```
 
 ### Coverage
 
