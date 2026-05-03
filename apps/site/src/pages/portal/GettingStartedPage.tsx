@@ -184,7 +184,9 @@ export default function GettingStartedPage() {
           {token && (
             <Alert mt="md" color="blue" variant="light" title="Your enrollment token">
               <Group gap="xs" mt="xs" wrap="nowrap">
-                <Code style={{ flex: "1 1 auto", overflowX: "auto" }}>{token}</Code>
+                <Code className="token-value" style={{ flex: "1 1 auto", overflowX: "auto" }}>
+                  {token}
+                </Code>
                 <CopyButton value={token} />
               </Group>
             </Alert>
@@ -284,7 +286,11 @@ export default function GettingStartedPage() {
 function CommandBlock({ value, label }: { value: string; label: string }) {
   return (
     <Box>
-      <Code block style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}>
+      <Code
+        block
+        className="code-block-wrap"
+        style={{ whiteSpace: "pre-wrap", wordBreak: "break-word" }}
+      >
         {value}
       </Code>
       <Group mt="xs">

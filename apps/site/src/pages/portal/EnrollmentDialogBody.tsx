@@ -39,7 +39,9 @@ export function EnrollmentDialogBody({
               This token will not be shown again. Copy it now or use the install command below.
             </span>
             <Group gap="xs" wrap="nowrap">
-              <Code style={{ flex: "1 1 auto", overflowX: "auto" }}>{enrollmentToken}</Code>
+              <Code className="token-value" style={{ flex: "1 1 auto", overflowX: "auto" }}>
+                {enrollmentToken}
+              </Code>
               <CopyButton value={enrollmentToken} />
             </Group>
           </Stack>

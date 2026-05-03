@@ -193,7 +193,18 @@ async function fetchJWKS(): Promise<JWK[]> {
     return jwksCache.keys;
   }
 
-  const res = await fetch(GITHUB_JWKS_URL);
+  // Network/TLS failure path: fetch can throw (e.g. workerd TLS handshake
+  // rejection, DNS, connection reset). Treat any failure the same as a
+  // non-2xx response — fall back to cached keys if any, else empty. This
+  // makes the verify-then-find-kid flow downgrade to a clean "Unknown
+  // signing key" 403 instead of bubbling as a 500 from /api/admin/*.
+  let res: Response;
+  try {
+    res = await fetch(GITHUB_JWKS_URL);
+  } catch (err) {
+    console.warn("JWKS fetch failed:", err instanceof Error ? err.message : String(err));
+    return jwksCache?.keys ?? [];
+  }
   if (!res.ok) {
     console.warn(`JWKS fetch failed: HTTP ${res.status}`);
     return jwksCache?.keys ?? [];
