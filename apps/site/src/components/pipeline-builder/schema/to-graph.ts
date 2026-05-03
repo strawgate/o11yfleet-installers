@@ -42,7 +42,7 @@ export function toGraph(
  * Map a site BuilderNode to a core PipelineNode.
  * Reconstructs the minimal component data needed for round-trip.
  */
-function mapToCoreNode(node: BuilderNode): PipelineNode {
+export function mapToCoreNode(node: BuilderNode): PipelineNode {
   // The minimal component info we need for round-trip
   const component: PipelineComponent = {
     id: node.id,

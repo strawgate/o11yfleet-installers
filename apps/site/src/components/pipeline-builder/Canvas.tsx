@@ -17,8 +17,10 @@ import { useComputedColorScheme } from "@mantine/core";
 import { nanoid } from "nanoid";
 import { nodeTypes } from "./nodes/nodeTypes";
 import { edgeTypes } from "./edges/edgeTypes";
-import { useValidConnection } from "./hooks/useValidConnection";
+import { usePipelineConnectionValidation } from "./hooks/usePipelineConnectionValidation";
+import { determineConnectionSignal } from "@o11yfleet/core/pipeline";
 import type { BuilderEdge, BuilderNode } from "./types";
+import { mapToCoreNode } from "./schema/to-graph";
 
 export type CanvasProps = {
   nodes: BuilderNode[];
@@ -50,7 +52,7 @@ function CanvasInner({ nodes, edges, onChange, readOnly, height = 600 }: CanvasP
     return m;
   }, [nodes]);
 
-  const isValidConnection = useValidConnection(nodeMap);
+  const isValidConnection = usePipelineConnectionValidation(nodeMap);
 
   const onNodesChange = useCallback(
     (changes: NodeChange<BuilderNode>[]) => {
@@ -68,12 +70,12 @@ function CanvasInner({ nodes, edges, onChange, readOnly, height = 600 }: CanvasP
 
   const onConnect = useCallback(
     (c: Connection) => {
-      // Determine signal: prefer overlap of source and target signals,
-      // otherwise fall back to the source's first signal.
       const src = nodeMap.get(c.source);
       const tgt = nodeMap.get(c.target);
-      const overlap = src?.data.signals.find((s) => tgt?.data.signals.includes(s));
-      const signal = overlap ?? src?.data.signals[0] ?? "metrics";
+      if (!src || !tgt) return;
+
+      const signal = determineConnectionSignal(mapToCoreNode(src), mapToCoreNode(tgt));
+
       const newEdge: BuilderEdge = {
         id: `e-${nanoid(6)}`,
         source: c.source,

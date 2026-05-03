@@ -3,7 +3,6 @@ import { test } from "node:test";
 import type { PipelineGraph } from "../../../packages/core/src/pipeline/types";
 import { toFlow } from "../src/components/pipeline-builder/schema/to-flow";
 import { toGraph } from "../src/components/pipeline-builder/schema/to-graph";
-import { ROLE_MATRIX } from "../src/components/pipeline-builder/hooks/useValidConnection";
 import { layoutLR } from "../src/components/pipeline-builder/layout/dagre-layout";
 
 const FIXTURE: PipelineGraph = {
@@ -63,18 +62,6 @@ test("toGraph: persists positions into config._layout", () => {
   );
   const layout = out.components[0]?.config["_layout"] as { x: number; y: number };
   assert.deepEqual(layout, { x: 123, y: 456 });
-});
-
-test("ROLE_MATRIX: receivers can target processor, exporter, connector", () => {
-  assert.deepEqual(new Set(ROLE_MATRIX.receiver), new Set(["processor", "exporter", "connector"]));
-});
-
-test("ROLE_MATRIX: exporters are sinks (empty out-edges)", () => {
-  assert.deepEqual(ROLE_MATRIX.exporter, []);
-});
-
-test("ROLE_MATRIX: connectors can fan to processor, exporter, connector", () => {
-  assert.deepEqual(new Set(ROLE_MATRIX.connector), new Set(["processor", "exporter", "connector"]));
 });
 
 test("layoutLR: produces left-to-right positions for a linear pipeline", () => {

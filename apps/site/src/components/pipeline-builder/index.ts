@@ -9,7 +9,6 @@ export { Canvas, type CanvasProps } from "./Canvas";
 export { toFlow } from "./schema/to-flow";
 export { toGraph } from "./schema/to-graph";
 export { layoutLR } from "./layout/dagre-layout";
-export { ROLE_MATRIX } from "./hooks/useValidConnection";
 
 export type {
   BuilderNode,
