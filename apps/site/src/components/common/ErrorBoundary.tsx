@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from "react";
+import { Button, Stack, Text, Title } from "@mantine/core";
 
 interface Props {
   children: ReactNode;
@@ -21,21 +22,20 @@ export class ErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         this.props.fallback ?? (
-          <div style={{ padding: "2rem", textAlign: "center" }}>
-            <h2>Something went wrong</h2>
-            <p style={{ color: "var(--muted)", margin: "0.5rem 0" }}>
-              {this.state.error?.message ?? "An unexpected error occurred"}
-            </p>
-            <button
-              className="btn btn-sm"
+          <Stack align="center" gap="sm" p="xl" ta="center">
+            <Title order={2}>Something went wrong</Title>
+            <Text c="dimmed">{this.state.error?.message ?? "An unexpected error occurred"}</Text>
+            <Button
+              size="xs"
+              variant="default"
               onClick={() => {
                 this.setState({ hasError: false, error: null });
                 window.location.reload();
               }}
             >
               Reload page
-            </button>
-          </div>
+            </Button>
+          </Stack>
         )
       );
     }

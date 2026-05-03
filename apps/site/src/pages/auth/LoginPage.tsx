@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { apiUrl, login as apiLogin } from "@/api/client";
 import { GitHubMark } from "@/components/common/GitHubMark";
 import { Logo } from "@/components/common/Logo";
@@ -9,6 +10,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
   const githubUrl = apiUrl(
     `/auth/github/start?mode=login&site_origin=${encodeURIComponent(window.location.origin)}&return_to=${encodeURIComponent("/portal/overview")}`,
@@ -17,12 +19,14 @@ export default function LoginPage() {
   async function handlePasswordLogin(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setSubmitting(true);
     try {
       await apiLogin(email, password);
-      // Redirect to portal on success
       window.location.href = "/portal/overview";
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Login failed");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -53,48 +57,34 @@ export default function LoginPage() {
           </>
         ) : (
           <>
-            {error && (
-              <div
-                style={{
-                  background: "var(--err-soft, #fef2f2)",
-                  border: "1px solid var(--err-line, #fecaca)",
-                  color: "var(--err, #dc2626)",
-                  padding: "10px 14px",
-                  borderRadius: "8px",
-                  fontSize: "13px",
-                }}
-              >
-                {error}
-              </div>
-            )}
             <form onSubmit={(e) => void handlePasswordLogin(e)}>
-              <div className="field">
-                <label htmlFor="login-email">Email</label>
-                <input
+              <Stack gap="md">
+                {error ? (
+                  <Alert color="red" variant="light">
+                    {error}
+                  </Alert>
+                ) : null}
+                <TextInput
                   id="login-email"
-                  className="input"
+                  label="Email"
                   type="email"
                   required
                   autoComplete="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.currentTarget.value)}
                 />
-              </div>
-              <div className="field">
-                <label htmlFor="login-password">Password</label>
-                <input
+                <PasswordInput
                   id="login-password"
-                  className="input"
-                  type="password"
+                  label="Password"
                   required
                   autoComplete="current-password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
+                  onChange={(e) => setPassword(e.currentTarget.value)}
                 />
-              </div>
-              <button className="btn btn-primary" type="submit">
-                Sign in
-              </button>
+                <Button type="submit" loading={submitting}>
+                  Sign in
+                </Button>
+              </Stack>
             </form>
             <p className="auth-alt-link">
               <button type="button" onClick={() => setShowPasswordLogin(false)}>
@@ -105,11 +95,16 @@ export default function LoginPage() {
         )}
 
         <p className="foot">
-          Don&rsquo;t have a workspace? <Link to="/signup">Create one</Link>
+          Don&rsquo;t have a workspace?{" "}
+          <Anchor component={Link} to="/signup">
+            Create one
+          </Anchor>
         </p>
         <div className="auth-switch">
           <span>O11yFleet employee?</span>
-          <Link to="/admin/login">Employee login</Link>
+          <Anchor component={Link} to="/admin/login">
+            Employee login
+          </Anchor>
         </div>
       </div>
     </div>

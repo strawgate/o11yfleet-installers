@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
+import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { useLogin } from "../../api/hooks/auth";
 import { Logo } from "@/components/common/Logo";
 
@@ -45,55 +46,41 @@ export default function AdminLoginPage() {
           workspace sign-in page.
         </aside>
 
-        {error && (
-          <div
-            style={{
-              background: "var(--err-soft, #fef2f2)",
-              border: "1px solid var(--err-line, #fecaca)",
-              color: "var(--err, #dc2626)",
-              padding: "10px 14px",
-              borderRadius: "var(--radius, 8px)",
-              fontSize: "13px",
-            }}
-          >
-            {error}
-          </div>
-        )}
-
         <form onSubmit={(event) => void handleSubmit(event)}>
-          <div className="field">
-            <label htmlFor="admin-email">Email</label>
-            <input
+          <Stack gap="md">
+            {error ? (
+              <Alert color="red" variant="light">
+                {error}
+              </Alert>
+            ) : null}
+            <TextInput
               id="admin-email"
-              className="input"
+              label="Email"
               type="email"
               required
               autoComplete="email"
               value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.currentTarget.value)}
             />
-          </div>
-
-          <div className="field">
-            <label htmlFor="admin-password">Password</label>
-            <input
+            <PasswordInput
               id="admin-password"
-              className="input"
-              type="password"
+              label="Password"
               required
               autoComplete="current-password"
               value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.currentTarget.value)}
             />
-          </div>
-
-          <button className="btn btn-primary" type="submit" disabled={login.isPending}>
-            {login.isPending ? "Signing in\u2026" : "Sign in to admin console"}
-          </button>
+            <Button type="submit" loading={login.isPending}>
+              Sign in to admin console
+            </Button>
+          </Stack>
         </form>
 
         <p className="foot">
-          Not an O11yFleet employee? <Link to="/login">Workspace login</Link>
+          Not an O11yFleet employee?{" "}
+          <Anchor component={Link} to="/login">
+            Workspace login
+          </Anchor>
         </p>
       </div>
     </div>
