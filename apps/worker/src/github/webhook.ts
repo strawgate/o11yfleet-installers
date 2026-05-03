@@ -406,7 +406,7 @@ async function kickValidationWorkflow(ctx: HandlerContext, args: KickArgs): Prom
         ...(args.prNumber !== undefined ? { pr_number: args.prNumber } : {}),
       },
     });
-    console.info({
+    console.warn({
       event: "github_workflow_created",
       delivery_id: ctx.deliveryId,
       workflow_id: id,
@@ -417,7 +417,7 @@ async function kickValidationWorkflow(ctx: HandlerContext, args: KickArgs): Prom
     // for the same SHA, so log at info, not error.
     const message = err instanceof Error ? err.message : String(err);
     if (/already exists|duplicate/i.test(message)) {
-      console.info({
+      console.warn({
         event: "github_workflow_already_running",
         delivery_id: ctx.deliveryId,
         workflow_id: id,

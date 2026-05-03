@@ -9,15 +9,18 @@ import {
   Group,
   SegmentedControl,
   Select,
+  Modal,
   SimpleGrid,
   Stack,
   Text,
   Textarea,
   Title,
 } from "@mantine/core";
+import { notifications } from "@mantine/notifications";
 import { CopyButton } from "../../components/common/CopyButton";
 import { PrototypeBanner } from "../../components/common/PrototypeBanner";
 import { usePortalGuidance } from "../../api/hooks/ai";
+import { useSavePipeline } from "../../api/hooks/portal";
 import { GuidancePanel } from "../../components/ai";
 import { buildInsightRequest, insightSurfaces, insightTarget } from "../../ai/insight-registry";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
@@ -73,6 +76,8 @@ export default function BuilderPage() {
   const [yamlInput, setYamlInput] = useState("");
   const [importResult, setImportResult] = useState<CollectorYamlImportResult | null>(null);
   const [yamlPreviewError, setYamlPreviewError] = useState<string | null>(null);
+  const [saveModalOpen, setSaveModalOpen] = useState(false);
+  const savePipeline = useSavePipeline();
 
   const insightSurface = insightSurfaces.portalBuilder;
   const exampleEntries = Object.entries(PIPELINE_EXAMPLES);
@@ -186,6 +191,29 @@ export default function BuilderPage() {
     setYamlInput("");
   }
 
+  function handleDiscardChanges() {
+    handleBackToExample();
+  }
+
+  async function handleSavePipeline() {
+    if (!yamlPreview) return;
+    try {
+      await savePipeline.mutateAsync(yamlPreview);
+      setSaveModalOpen(false);
+      notifications.show({
+        title: "Pipeline saved",
+        message: "Pipeline saved successfully.",
+        color: "green",
+      });
+    } catch (error) {
+      notifications.show({
+        title: "Failed to save pipeline",
+        message: error instanceof Error ? error.message : "Unknown error",
+        color: "red",
+      });
+    }
+  }
+
   const exampleOptions =
     exampleEntries.length === 0
       ? [{ value: EMPTY_PIPELINE_GRAPH.id, label: "No examples configured" }]
@@ -211,6 +239,19 @@ service:
         className="mt-6"
         title="Pipeline builder"
         description="Review Collector graph shape, generated YAML, and graph validation before draft saving is available."
+        actions={
+          <>
+            <Button variant="default" onClick={handleDiscardChanges}>
+              Discard changes
+            </Button>
+            <Button
+              onClick={() => setSaveModalOpen(true)}
+              disabled={!validation.ok || yamlPreviewError !== null}
+            >
+              Save pipeline
+            </Button>
+          </>
+        }
       />
 
       <Group mt="md" gap="md" wrap="wrap" align="flex-end">
@@ -414,6 +455,23 @@ service:
         error={guidance.error}
         onRefresh={() => void guidance.refetch()}
       />
+
+      <Modal opened={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Save pipeline">
+        <Stack gap="md">
+          <Text size="sm">
+            Are you sure you want to save this pipeline? This will create a new version of the
+            pipeline.
+          </Text>
+          <Group gap="xs" justify="flex-end">
+            <Button variant="default" onClick={() => setSaveModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={() => void handleSavePipeline()} loading={savePipeline.isPending}>
+              Save
+            </Button>
+          </Group>
+        </Stack>
+      </Modal>
     </PageShell>
   );
 }

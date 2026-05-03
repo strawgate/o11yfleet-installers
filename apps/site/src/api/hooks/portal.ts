@@ -507,6 +507,25 @@ export function usePendingTokens() {
   });
 }
 
+export function useSavePipeline() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (yaml: string) => {
+      // simulate API delay
+      await new Promise<void>((resolve) => {
+        setTimeout(resolve, 500);
+      });
+      if (!yaml) {
+        throw new Error("YAML content is required");
+      }
+      return { success: true, size: yaml.length };
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["pipeline"] });
+    },
+  });
+}
+
 export function useCreatePendingToken() {
   const qc = useQueryClient();
   return useMutation({
