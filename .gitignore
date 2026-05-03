@@ -47,3 +47,6 @@ reports/mutation/
 
 # Vitest coverage artifacts (run with `just coverage` or `pnpm coverage` per package)
 reports/coverage/
+
+# AI agent worktrees and session state
+.claude/
