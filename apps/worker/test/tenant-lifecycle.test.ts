@@ -121,7 +121,7 @@ describe("Tenant Lifecycle State Machine", () => {
 describe("Mock Email Service", () => {
   it("can be used for testing email sending", async () => {
     // Import the mock from the email service
-    const { MockEmailService } = await import("../src/shared/resend-service.js");
+    const { MockEmailService } = await import("../src/shared/email-mock.js");
 
     const mockService = new MockEmailService();
 

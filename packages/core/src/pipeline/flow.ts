@@ -130,62 +130,70 @@ function getLayoutPosition(component: PipelineComponent): { x: number; y: number
  * Preserves existing positions from component.config._layout if available.
  */
 function graphToNodes(graph: PipelineGraph): PipelineNode[] {
-  // Group components by role for column layout
-  const byRole = new Map<PipelineComponentRole, PipelineComponent[]>();
-  for (const component of graph.components) {
-    const existing = byRole.get(component.role) ?? [];
-    existing.push(component);
-    byRole.set(component.role, existing);
-  }
+  const byRole = groupByRole(graph.components, (c) => c.role);
+
+  // Column heights are sized for components that need a fresh position;
+  // components with persisted `_layout` are not stacked into the column flow.
+  const startYByRole = computeColumnStartY(
+    new Map(
+      [...byRole.entries()].map(([role, components]) => [
+        role,
+        components.filter((c) => !getLayoutPosition(c)).length,
+      ]),
+    ),
+  );
 
   const nodes: PipelineNode[] = [];
-
-  // Calculate y-offsets per column based on max column height
-  const columnHeights = new Map<PipelineComponentRole, number>();
+  const stepY = NODE_HEIGHT + NODE_GAP_Y;
   for (const [role, components] of byRole) {
-    // Only count components without existing positions for height calculation
-    const componentsWithoutLayout = components.filter((c) => !getLayoutPosition(c));
-    const height = calculateColumnHeight(componentsWithoutLayout.length);
-    columnHeights.set(role, height);
+    let positionIndex = 0;
+    for (const component of components) {
+      const existingPosition = getLayoutPosition(component);
+      const position = existingPosition ?? {
+        x: COLUMN_X[role],
+        y: startYByRole.get(role)! + positionIndex++ * stepY,
+      };
+      nodes.push({ id: component.id, type: role, position, data: { component } });
+    }
+  }
+  return nodes;
+}
+
+function groupByRole<T>(
+  items: T[],
+  getRole: (item: T) => PipelineComponentRole,
+): Map<PipelineComponentRole, T[]> {
+  const byRole = new Map<PipelineComponentRole, T[]>();
+  for (const item of items) {
+    const role = getRole(item);
+    const existing = byRole.get(role) ?? [];
+    existing.push(item);
+    byRole.set(role, existing);
+  }
+  return byRole;
+}
+
+/** Given the count of items in each column, return the starting y-coordinate
+ *  that vertically centers each column within the canvas. */
+function computeColumnStartY(
+  countByRole: Map<PipelineComponentRole, number>,
+): Map<PipelineComponentRole, number> {
+  const columnHeights = new Map<PipelineComponentRole, number>();
+  for (const [role, count] of countByRole) {
+    columnHeights.set(role, calculateColumnHeight(count));
   }
   const maxColumnHeight = Math.max(...columnHeights.values(), 0);
   const totalHeight = maxColumnHeight + COLUMN_LABEL_HEIGHT + CANVAS_PADDING * 2;
-
-  for (const [role, components] of byRole) {
-    const startY =
+  const startYByRole = new Map<PipelineComponentRole, number>();
+  for (const [role] of countByRole) {
+    startYByRole.set(
+      role,
       CANVAS_PADDING +
-      COLUMN_LABEL_HEIGHT +
-      (totalHeight - COLUMN_LABEL_HEIGHT - columnHeights.get(role)!) / 2;
-    const stepY = NODE_HEIGHT + NODE_GAP_Y;
-
-    // Track position index for components that need layout calculation
-    let positionIndex = 0;
-
-    components.forEach((component) => {
-      // Use existing position if available, otherwise calculate
-      const existingPosition = getLayoutPosition(component);
-      let position: { x: number; y: number };
-
-      if (existingPosition) {
-        position = existingPosition;
-      } else {
-        position = {
-          x: COLUMN_X[role],
-          y: startY + positionIndex * stepY,
-        };
-        positionIndex++;
-      }
-
-      nodes.push({
-        id: component.id,
-        type: role,
-        position,
-        data: { component },
-      });
-    });
+        COLUMN_LABEL_HEIGHT +
+        (totalHeight - COLUMN_LABEL_HEIGHT - columnHeights.get(role)!) / 2,
+    );
   }
-
-  return nodes;
+  return startYByRole;
 }
 
 /**
@@ -300,43 +308,20 @@ function edgesToWires(edges: PipelineEdge[]): PipelineWire[] {
  * @returns Nodes with updated positions
  */
 export function relayoutNodes(nodes: PipelineNode[]): PipelineNode[] {
-  // Group by role
-  const byRole = new Map<PipelineComponentRole, PipelineNode[]>();
-  for (const node of nodes) {
-    const role = node.type ?? "processor";
-    const existing = byRole.get(role) ?? [];
-    existing.push(node);
-    byRole.set(role, existing);
-  }
-
-  // Calculate heights
-  const columnHeights = new Map<PipelineComponentRole, number>();
-  for (const [role, roleNodes] of byRole) {
-    columnHeights.set(role, calculateColumnHeight(roleNodes.length));
-  }
-  const maxColumnHeight = Math.max(...columnHeights.values(), 0);
-  const totalHeight = maxColumnHeight + COLUMN_LABEL_HEIGHT + CANVAS_PADDING * 2;
-
-  // Update positions
+  const byRole = groupByRole(nodes, (n) => n.type ?? "processor");
+  const startYByRole = computeColumnStartY(
+    new Map([...byRole.entries()].map(([role, items]) => [role, items.length])),
+  );
+  const stepY = NODE_HEIGHT + NODE_GAP_Y;
   const result: PipelineNode[] = [];
   for (const [role, roleNodes] of byRole) {
-    const startY =
-      CANVAS_PADDING +
-      COLUMN_LABEL_HEIGHT +
-      (totalHeight - COLUMN_LABEL_HEIGHT - columnHeights.get(role)!) / 2;
-    const stepY = NODE_HEIGHT + NODE_GAP_Y;
-
     roleNodes.forEach((node, index) => {
       result.push({
         ...node,
-        position: {
-          x: COLUMN_X[role],
-          y: startY + index * stepY,
-        },
+        position: { x: COLUMN_X[role], y: startYByRole.get(role)! + index * stepY },
       });
     });
   }
-
   return result;
 }
 

@@ -1,5 +1,8 @@
-// Mock Email Service for Testing
-// Use this in tests instead of the real Cloudflare Email Service
+// In-memory email service for tests. The real production path is
+// `sendEmail` in `./email.ts`, which talks to the Cloudflare Email
+// Service binding directly — there's no `EmailService` instance in
+// production. This mock implements the same interface so tests can
+// assert on what would have been sent.
 
 import type { EmailService, EmailOptions, EmailResult } from "./email.js";
 
