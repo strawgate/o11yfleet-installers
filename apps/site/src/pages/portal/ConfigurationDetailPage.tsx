@@ -37,7 +37,6 @@ import { includedFetch, pageYaml, unavailableFetch } from "../../ai/page-context
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -869,10 +868,6 @@ export default function ConfigurationDetailPage() {
               Rollout promotes the current version to desired config for this configuration group.
               Collectors are in sync once their reported current hash matches desired.
             </Text>
-            <Alert color="info" variant="light" title="Rollout guardrails to wire next">
-              Track actor, reason, selected version, connected target count, drift, failed apply,
-              and rollback candidate before making this a full rollout history view.
-            </Alert>
             <Group gap="xs">
               <Button
                 variant="default"

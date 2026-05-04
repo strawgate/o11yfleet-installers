@@ -1,14 +1,11 @@
 import { Link } from "react-router-dom";
 import { Button, Card, Stack, Text, Title } from "@mantine/core";
 import { PageHeader, PageShell } from "@/components/app";
-import { PrototypeBanner } from "@/components/common/PrototypeBanner";
 
 export default function OnboardingPage() {
   return (
     <PageShell width="narrow">
-      <PrototypeBanner message="Onboarding wizard is under development." />
-
-      <PageHeader className="mt-6" title="Onboarding" />
+      <PageHeader title="Onboarding" />
 
       <Card>
         <Title order={3} size="sm" fw={500}>

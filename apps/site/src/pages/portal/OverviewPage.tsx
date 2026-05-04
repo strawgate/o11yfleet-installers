@@ -163,12 +163,13 @@ export default function OverviewPage() {
           observation={view?.agents.healthy.observation}
           tone={fleetHealthTone(totalAgents, healthyAgents)}
         />
-        <MetricCard
-          label="Active rollouts"
-          value={formatMetric(view?.rollouts.active)}
-          observation={view?.rollouts.active.observation}
-          detail={activeRollouts === null ? "Not exposed by API yet" : undefined}
-        />
+        {activeRollouts !== null ? (
+          <MetricCard
+            label="Active rollouts"
+            value={formatMetric(view?.rollouts.active)}
+            observation={view?.rollouts.active.observation}
+          />
+        ) : null}
       </div>
 
       <GuidancePanel

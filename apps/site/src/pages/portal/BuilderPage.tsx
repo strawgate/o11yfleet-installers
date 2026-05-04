@@ -250,7 +250,7 @@ export default function BuilderPage() {
 
   return (
     <PageShell width="wide">
-      <PrototypeBanner message="Edits are in-memory only and YAML output is generated from the selected graph." />
+      <PrototypeBanner message="Beta — your changes are not saved between sessions yet." />
 
       <PageHeader
         className="mt-6"

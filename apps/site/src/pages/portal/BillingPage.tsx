@@ -71,16 +71,6 @@ export default function BillingPage() {
             </StatusBadge>
           </Group>
         </Card>
-
-        <Card>
-          <Title order={3} size="sm" fw={500}>
-            Billing information
-          </Title>
-          <Text size="sm" c="dimmed" mt="xs">
-            Billing management is not yet available. Contact support to update your plan or payment
-            details.
-          </Text>
-        </Card>
       </SimpleGrid>
     </PageShell>
   );

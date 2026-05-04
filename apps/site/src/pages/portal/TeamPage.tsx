@@ -1,38 +1,11 @@
 import { useMemo } from "react";
 import { useTeam, type TeamMember } from "@/api/hooks/portal";
-import { EmptyState, PageHeader, PageShell, StatusBadge, type StatusTone } from "@/components/app";
+import { EmptyState, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { relTime } from "@/utils/format";
 import { initials, memberDisplayName, roleTone } from "./team-model";
-
-const roleCards: Array<{
-  role: string;
-  tone: StatusTone;
-  description: string;
-}> = [
-  {
-    role: "owner",
-    tone: "warn",
-    description: "Workspace deletion, billing authority, and highest-risk admin delegation.",
-  },
-  {
-    role: "admin",
-    tone: "info",
-    description: "Team, billing, enrollment policy, and destructive workspace actions.",
-  },
-  {
-    role: "operator",
-    tone: "ok",
-    description: "Configuration versions, rollout operations, and enrollment tokens.",
-  },
-  {
-    role: "viewer",
-    tone: "neutral",
-    description: "Read fleet state, versions, rollouts, and audit history.",
-  },
-];
 
 export default function TeamPage() {
   const { data: members, isLoading, error, refetch } = useTeam();
@@ -49,18 +22,6 @@ export default function TeamPage() {
         title="Team"
         description="Roles separate read-only fleet visibility from remote-config mutation and workspace administration."
       />
-
-      <section className="mb-6 rounded-md border border-border bg-card p-4">
-        <h3 className="text-sm font-medium text-foreground">Target role model</h3>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {roleCards.map((item) => (
-            <div key={item.role} className="grid content-start gap-2">
-              <StatusBadge tone={item.tone}>{item.role}</StatusBadge>
-              <p className="text-sm text-muted-foreground">{item.description}</p>
-            </div>
-          ))}
-        </div>
-      </section>
 
       <DataTable
         columns={columns}

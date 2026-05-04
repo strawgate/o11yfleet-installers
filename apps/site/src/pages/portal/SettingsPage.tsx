@@ -1,7 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import {
-  Alert,
   Badge,
   Button,
   Card,
@@ -144,10 +143,6 @@ export default function SettingsPage() {
           This workspace can assign desired config to enrolled collectors. Enrollment tokens are
           bootstrap-only secrets; future API tokens should be scoped separately for automation.
         </Text>
-        <Alert mt="md" title="Governance model to wire" color="blue" variant="light">
-          Role checks, plan gates, API-token scopes, and audit events must agree with backend
-          authorization before remote-config mutation controls become broadly available.
-        </Alert>
       </Card>
 
       <Card mt="md" withBorder style={{ borderColor: "var(--mantine-color-red-7)" }}>
