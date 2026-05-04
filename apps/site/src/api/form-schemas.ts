@@ -25,14 +25,6 @@ const trimmedRequired = (label: string, max = 100) =>
     .min(1, `${label} is required`)
     .max(max, `${label} must be ${max} characters or fewer`);
 
-const optionalLabel = (max = 50) =>
-  z
-    .string()
-    .trim()
-    .max(max, `Label must be ${max} characters or fewer`)
-    .optional()
-    .or(z.literal(""));
-
 const planId = z.string().min(1, "Plan is required");
 
 /**
@@ -71,28 +63,3 @@ export const createConfigurationSchema = z.object({
   description: z.string().trim().max(500, "Description too long").optional().or(z.literal("")),
 });
 export type CreateConfigurationValues = z.infer<typeof createConfigurationSchema>;
-
-/**
- * Portal: enrollment-token create modal.
- */
-export const createEnrollmentTokenSchema = z.object({
-  label: optionalLabel(),
-});
-export type CreateEnrollmentTokenValues = z.infer<typeof createEnrollmentTokenSchema>;
-
-/**
- * Admin: pending-token create modal.
- */
-export const createPendingTokenSchema = z.object({
-  label: optionalLabel(),
-  targetConfigId: z.string().nullable(),
-});
-export type CreatePendingTokenValues = z.infer<typeof createPendingTokenSchema>;
-
-/**
- * Admin: assign pending device modal.
- */
-export const assignPendingDeviceSchema = z.object({
-  targetConfigId: z.string().min(1, "Select a configuration"),
-});
-export type AssignPendingDeviceValues = z.infer<typeof assignPendingDeviceSchema>;

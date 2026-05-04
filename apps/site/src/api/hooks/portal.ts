@@ -124,20 +124,6 @@ export function useConfigurationYaml(id: string | undefined, enabled = true) {
   });
 }
 
-export function useConfigurationAgent(
-  configId: string | undefined,
-  instanceUid: string | undefined,
-) {
-  return useQuery({
-    queryKey: ["configuration", configId, "agent", instanceUid],
-    queryFn: () =>
-      apiGet<AgentDetail>(
-        `/api/v1/configurations/${configId}/agents/${encodeURIComponent(instanceUid ?? "")}`,
-      ),
-    enabled: !!configId && !!instanceUid,
-  });
-}
-
 // Cheap for one active Config DO, very expensive when called once per config. Use only when
 // rendering a visible single-config agents table/page, never to calculate summary counts.
 export function useConfigurationAgents(

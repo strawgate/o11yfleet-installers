@@ -1,14 +1,11 @@
 // Admin API routes — full tenant management, system health, impersonation
 //
 // This file is the thin orchestration layer that mounts domain-specific
-// sub-routers and keeps the deprecated handleAdminRequest shim for runtime
-// test compatibility.
+// sub-routers. The Hono migration in #724 consolidated the admin entrypoint
+// into apps/worker/src/hono-admin-app.ts; the legacy `handleAdminRequest`
+// shim was removed in the dead-code sweep.
 
 import { Hono } from "hono";
-import type { Env } from "../../index.js";
-import type { AuditContext } from "../../audit/recorder.js";
-import { AiApiError } from "../../ai/guidance.js";
-import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
 import type { AdminEnv } from "./shared.js";
 
 // Re-export shared helpers for backward compatibility
@@ -33,46 +30,3 @@ adminRouter.route("/", healthRoutes);
 adminRouter.route("/", doDebugRoutes);
 adminRouter.route("/", plansRoutes);
 adminRouter.route("/", aiRoutes);
-
-// ─── Legacy compat shim ────────────────────────────────────────────
-// Some runtime tests still call handleAdminRequest directly.
-// This shim builds a one-shot Hono app that delegates to adminRouter.
-// @deprecated — prefer adminApp (hono-admin-app.ts) for new code.
-
-export async function handleAdminRequest(
-  request: Request,
-  env: Env,
-  url: URL,
-  audit?: AuditContext,
-): Promise<Response> {
-  try {
-    return await routeAdminRequest(request, env, url, audit);
-  } catch (err) {
-    if (err instanceof ApiError) {
-      return jsonApiError(err);
-    }
-    if (err instanceof AiApiError) {
-      return jsonError(err.message, err.status);
-    }
-    console.error("Admin API error:", url.pathname, err);
-    return jsonError("Internal server error", 500);
-  }
-}
-
-async function routeAdminRequest(
-  request: Request,
-  env: Env,
-  _url: URL,
-  audit?: AuditContext,
-): Promise<Response> {
-  // Build a one-shot Hono app that injects audit into context
-  // then delegates to the composed adminRouter.
-  const app = new Hono<AdminEnv>();
-  app.use("*", async (c, next) => {
-    c.set("audit", audit as AuditContext);
-    await next();
-  });
-  app.route("/api/admin", adminRouter);
-
-  return app.fetch(request, env);
-}

@@ -17,5 +17,4 @@ export type {
   BuilderNodeData,
   BuilderEdgeData,
   BuilderRole,
-  ComponentLayout,
 } from "./types";

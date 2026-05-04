@@ -150,13 +150,6 @@ export async function uploadConfigVersion(
   };
 }
 
-export async function getConfigContent(env: ConfigStoreEnv, hash: string): Promise<string | null> {
-  const r2Key = `configs/sha256/${hash}.yaml`;
-  const obj = await env.FP_CONFIGS.get(r2Key);
-  if (!obj) return null;
-  return obj.text();
-}
-
 export async function deleteConfigContentIfUnreferenced(
   env: ConfigStoreEnv,
   r2Key: string,

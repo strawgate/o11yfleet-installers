@@ -1,14 +1,6 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 
-export interface ComponentInventory {
-  receivers: string[];
-  processors: string[];
-  exporters: string[];
-  extensions: string[];
-  connectors: string[];
-}
-
 export interface FleetComponentGroup {
   availableComponents: string;
   agentCount: number;

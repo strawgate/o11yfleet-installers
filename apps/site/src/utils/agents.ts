@@ -29,10 +29,6 @@ export function agentLastSeen(agent: Agent): string | undefined {
   return normalizeTimestamp(agent.last_seen_at);
 }
 
-export function agentConnectedAt(agent: Agent): string | undefined {
-  return normalizeTimestamp(agent.connected_at);
-}
-
 export function agentCurrentHash(agent: Agent): string | undefined {
   return agent.current_config_hash ?? undefined;
 }

@@ -35,9 +35,3 @@ export type BuilderEdgeData = {
 };
 
 export type BuilderEdge = Edge<BuilderEdgeData, "signal">;
-
-/** Layout metadata persisted alongside PipelineGraph components on save. */
-export type ComponentLayout = {
-  x: number;
-  y: number;
-};

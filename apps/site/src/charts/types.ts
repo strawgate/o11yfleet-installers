@@ -35,15 +35,6 @@ export type Series = {
  */
 export type ObservationStatus = "ok" | "partial" | "missing" | "unavailable" | "error";
 
-export type Observed<T> = {
-  value: T | null;
-  status: ObservationStatus;
-  observed_at?: number;
-  /** 0..1; how much of the requested range has data behind it. */
-  coverage?: number;
-  warnings?: string[];
-};
-
 export type Marker = {
   ts: number;
   label: string;

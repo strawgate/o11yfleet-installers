@@ -101,8 +101,3 @@ export function isSuspended(tenant: { status?: TenantStatus | null }): boolean {
 export function requiresApproval(tenant: { status?: TenantStatus | null }): boolean {
   return tenant.status === "pending";
 }
-
-// SQL fragments for D1 queries
-export const TENANT_STATUS_CHECK = "status = 'active'";
-export const TENANT_NOT_SUSPENDED_CHECK = "status != 'suspended'";
-export const TENANT_PENDING_CHECK = "status = 'pending'";

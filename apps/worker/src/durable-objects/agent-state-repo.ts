@@ -10,7 +10,6 @@ import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { assertNever } from "@o11yfleet/core/assert-never";
 import type {
-  ComponentInventory,
   FleetComponentGroup,
   DesiredConfig,
   DoPolicy,
@@ -230,34 +229,6 @@ function migrateSchema(sql: SqlStorage): void {
 }
 
 // ─── Component Inventory ────────────────────────────────────────────
-
-export function extractComponentInventory(
-  row: { available_components: string | null } | null,
-): ComponentInventory | null {
-  if (!row?.available_components) return null;
-  try {
-    const raw = JSON.parse(row.available_components) as Record<string, unknown>;
-    const components = raw["components"] as Record<string, unknown> | undefined;
-    if (!components || typeof components !== "object") return null;
-    const extractNames = (section: unknown): string[] => {
-      if (!section || typeof section !== "object") return [];
-      const subMap = (section as Record<string, unknown>)["sub_component_map"] as
-        | Record<string, unknown>
-        | undefined;
-      if (!subMap || typeof subMap !== "object") return [];
-      return Object.keys(subMap);
-    };
-    return {
-      receivers: extractNames(components["receivers"]),
-      processors: extractNames(components["processors"]),
-      exporters: extractNames(components["exporters"]),
-      extensions: extractNames(components["extensions"]),
-      connectors: extractNames(components["connectors"]),
-    };
-  } catch {
-    return null;
-  }
-}
 
 export function getFleetComponentInventory(
   sql: SqlStorage,

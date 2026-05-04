@@ -1,16 +1,9 @@
 // Re-export the canonical health-payload types from @o11yfleet/core/api
 // so admin pages can keep their existing imports from support-model.
 import type { z } from "zod";
-import type {
-  adminHealthCheckSchema,
-  adminHealthDataSourceSchema,
-  adminHealthMetricsSchema,
-  AdminHealth,
-} from "@o11yfleet/core/api";
+import type { adminHealthMetricsSchema, AdminHealth } from "@o11yfleet/core/api";
 
-export type HealthCheck = z.infer<typeof adminHealthCheckSchema>;
 export type HealthMetrics = z.infer<typeof adminHealthMetricsSchema>;
-export type HealthDataSource = z.infer<typeof adminHealthDataSourceSchema>;
 export type AdminHealthPayload = AdminHealth;
 
 export interface SupportTenant {
@@ -119,10 +112,6 @@ export const SYMPTOMS: SupportSymptom[] = [
     ],
   },
 ];
-
-export function normalize(value: string): string {
-  return value.trim().toLowerCase();
-}
 
 export function healthTone(status: string | undefined): "ok" | "warn" | "err" {
   if (!status) return "warn";

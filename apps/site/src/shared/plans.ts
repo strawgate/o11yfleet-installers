@@ -31,10 +31,6 @@ export function planLabel(plan: string): string {
   return PLAN_LABELS.get(normalized) ?? normalized.replaceAll("_", " ");
 }
 
-export function isKnownPlanId(plan: string): boolean {
-  return PLAN_IDS.has(normalizePlanId(plan));
-}
-
 export function isPremiumPlan(plan: string): boolean {
   return STATEFUL_PLAN_IDS.has(normalizePlanId(plan));
 }

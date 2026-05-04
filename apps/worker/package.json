@@ -41,7 +41,6 @@
     "@o11yfleet/test-utils": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@types/diff": "^8.0.0",
     "@types/node": "^25.6.0",
     "fast-check": "^4.7.0",
     "typescript": "^6.0.3",

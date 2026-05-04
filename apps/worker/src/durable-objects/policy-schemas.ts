@@ -42,9 +42,6 @@ export const syncPolicyBodySchema = z
   })
   .strip();
 
-export type InitBody = z.output<typeof initBodySchema>;
-export type SyncPolicyBody = z.output<typeof syncPolicyBodySchema>;
-
 /** A `Result<T, E>` for body parsing — pure, no exceptions. */
 export type ParseBodyResult<T> =
   | { ok: true; value: T }

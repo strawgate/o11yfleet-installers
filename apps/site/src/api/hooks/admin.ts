@@ -10,7 +10,6 @@ import {
   type User,
 } from "../client";
 import {
-  adminApproveTenantResponseSchema,
   adminBulkApproveResponseSchema,
   adminDoQueryResponseSchema,
   adminHealthSchema,
@@ -96,17 +95,6 @@ export function useAdminTenantsPage(params?: {
   return useQuery<AdminTenantsPage>({
     queryKey: ["admin", "tenants", params ?? {}],
     queryFn: () => apiGetTyped(adminTenantsPageSchema, path),
-    refetchInterval: 10_000,
-  });
-}
-
-export function useAdminTenants() {
-  return useQuery<AdminTenant[]>({
-    queryKey: ["admin", "tenants", "legacy"],
-    queryFn: async () => {
-      const payload = await apiGetTyped(adminTenantsPageSchema, "/api/admin/tenants?limit=500");
-      return payload.tenants;
-    },
     refetchInterval: 10_000,
   });
 }
@@ -229,22 +217,6 @@ export function useImpersonateTenant(id: string) {
     mutationFn: async (): Promise<{ user: User }> => {
       const response = await apiPost<{ user: AuthUser }>(`/api/admin/tenants/${id}/impersonate`);
       return { user: normalizeUser(response.user) };
-    },
-  });
-}
-
-export function useApproveTenant(id: string) {
-  const qc = useQueryClient();
-  return useMutation<
-    AdminApproveTenantResponse,
-    Error,
-    { action: "approve" | "reject"; reason?: string }
-  >({
-    mutationFn: (body) =>
-      apiPostTyped(adminApproveTenantResponseSchema, `/api/admin/tenants/${id}/approve`, body),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
-      void qc.invalidateQueries({ queryKey: ["admin", "tenant", id] });
     },
   });
 }

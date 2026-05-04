@@ -8,13 +8,6 @@ export { ChartShell, type ChartShellProps } from "./ChartShell";
 export { TimeSeriesChart, type TimeSeriesChartProps } from "./TimeSeriesChart";
 export { TimeRangePicker, type TimeRangePickerProps } from "./TimeRangePicker";
 
-export {
-  useMetricSeries,
-  type MetricFetcher,
-  type MetricQuery,
-  type UseMetricSeriesOptions,
-} from "./useMetricSeries";
-
 export { selectResolution, resolutionToSeconds, bucketCount, rangeMs } from "./selectResolution";
 export { resolveTimeRange, RELATIVE_PRESETS, presetLabel, presetSpan } from "./resolveTimeRange";
 
@@ -23,7 +16,6 @@ export { toAlignedData } from "./toAlignedData";
 
 export type {
   Marker,
-  Observed,
   ObservationStatus,
   RelativePreset,
   Resolution,
