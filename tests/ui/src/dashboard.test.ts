@@ -208,13 +208,13 @@ test.describe("portal smoke coverage", () => {
 
     await page.goto(`${UI_URL}/portal/agents?api=${encodeURIComponent(API_URL)}`);
 
-    await expect(page.getByRole("heading", { name: "Collectors", exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
     await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
     await expect(page.getByRole("group", { name: "Total" }).getByText("4")).toBeVisible();
     await expect(page.getByText("Collector rows load only when you open")).toBeVisible();
     expect(agentRequests).toBe(0);
 
-    await page.getByRole("button", { name: "View collectors" }).click();
+    await page.getByRole("button", { name: "View agents" }).click();
 
     await expect(
       page.getByRole("textbox", { name: "Filter agents for prod-collectors" }),

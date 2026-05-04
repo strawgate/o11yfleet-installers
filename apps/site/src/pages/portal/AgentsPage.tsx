@@ -178,7 +178,7 @@ function AgentSection({
             aria-controls={sectionId}
             onClick={onToggle}
           >
-            {expanded ? "Hide collectors" : "View collectors"}
+            {expanded ? "Hide agents" : "View agents"}
           </Button>
         </Group>
       </Group>
@@ -342,7 +342,7 @@ export default function AgentsPage() {
   return (
     <PageShell width="wide">
       <PageHeader
-        title="Collectors"
+        title="Agents"
         description="Each row is one managed OpAMP agent identity for a running OpenTelemetry Collector. Status is connectivity; health is collector runtime state; drift is config hash mismatch."
       />
 

@@ -79,7 +79,7 @@ const PAGE_CONTRACTS: PageContract[] = [
     id: "portal-agents",
     role: "portal",
     path: "/portal/agents",
-    heading: "Collectors",
+    heading: "Agents",
     endpoint: "/api/v1/ai/guidance",
     expectedSurface: "portal.agents",
     notes:

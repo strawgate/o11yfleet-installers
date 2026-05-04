@@ -29,7 +29,7 @@ const AUDIT_PAGES: Array<{
   {
     name: "04-agents",
     path: "/portal/agents",
-    expectVisible: [{ role: "heading", name: "Collectors", level: 1 }],
+    expectVisible: [{ role: "heading", name: "Agents", level: 1 }],
   },
   {
     name: "05-agent-detail",
