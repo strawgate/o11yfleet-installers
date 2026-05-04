@@ -21,9 +21,19 @@ export interface AgentMetricsInput {
   last_seen_at: number;
 }
 
+/**
+ * Compute fleet-summary metrics for one config's agent map.
+ *
+ * The optional `now` parameter exists so callers can pin the staleness
+ * reference point — important for snapshot/property tests of this function,
+ * and for callers that want all metrics in a batch to reference the same
+ * wall-clock instant. Defaults to `Date.now()` so production behavior is
+ * unchanged.
+ */
 export function computeConfigMetrics(
   agents: Map<string, AgentMetricsInput>,
   desiredConfigHash: string | null,
+  now: number = Date.now(),
 ): ConfigMetrics {
   let connected = 0,
     disconnected = 0;
@@ -35,7 +45,6 @@ export function computeConfigMetrics(
   let agents_with_errors = 0,
     agents_stale = 0;
 
-  const now = Date.now();
   const STALE_THRESHOLD_MS = 90_000;
 
   for (const agent of agents.values()) {
@@ -63,7 +72,13 @@ export function computeConfigMetrics(
       } else {
         config_pending++;
       }
-    } else if (!desiredConfigHash) {
+    } else {
+      // No desired config to compare against — every agent is trivially
+      // "up to date" because there's nothing to be behind on. NB: this
+      // semantic ("disconnected agents are also up-to-date when no desired
+      // config exists") is preserved for backwards compatibility with
+      // existing dashboards; the audit (#652 item 3) flagged it as
+      // potentially misleading and left the call to a future PR.
       config_up_to_date++;
     }
 

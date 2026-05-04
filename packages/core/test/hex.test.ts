@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import { hexToUint8Array, uint8ToHex, InvalidHexError } from "@o11yfleet/core/hex";
 
 describe("hexToUint8Array", () => {
   it("converts empty string to empty array", () => {
@@ -16,11 +16,29 @@ describe("hexToUint8Array", () => {
     expect(result).toEqual(new Uint8Array([0x0a, 0xbc]));
   });
 
-  it("treats invalid hex characters as 0", () => {
-    const result = hexToUint8Array("zzzz");
-    expect(result).toEqual(new Uint8Array([0, 0]));
-    const result2 = hexToUint8Array("abgh");
-    expect(result2).toEqual(new Uint8Array([0xab, 0]));
+  it("throws InvalidHexError on non-hex characters", () => {
+    // Regression: previously silently coerced to 0, which can alias garbage
+    // input to the all-zero UID/hash and route messages to the wrong agent.
+    expect(() => hexToUint8Array("zzzz")).toThrow(InvalidHexError);
+    expect(() => hexToUint8Array("abgh")).toThrow(InvalidHexError);
+    expect(() => hexToUint8Array("ZZ")).toThrow(InvalidHexError);
+  });
+
+  it("InvalidHexError reports the offending offset and pair", () => {
+    let caught: unknown;
+    try {
+      hexToUint8Array("ab!!cd");
+    } catch (err) {
+      caught = err;
+    }
+    expect(caught).toBeInstanceOf(InvalidHexError);
+    const msg = (caught as Error).message;
+    expect(msg).toContain("offset 2");
+    expect(msg).toContain('"!!"');
+  });
+
+  it("accepts uppercase hex", () => {
+    expect(hexToUint8Array("DEADBEEF")).toEqual(new Uint8Array([0xde, 0xad, 0xbe, 0xef]));
   });
 
   it("handles all zeros", () => {

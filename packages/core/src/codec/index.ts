@@ -1,4 +1,10 @@
-export { decodeAgentToServer, encodeServerToAgent, prepareBroadcastMessage } from "./decoder.js";
+export {
+  decodeAgentToServer,
+  encodeServerToAgent,
+  prepareBroadcastMessage,
+  prepareBroadcastMessageWithMeta,
+} from "./decoder.js";
+export type { PrepareBroadcastMessageMeta } from "./decoder.js";
 export {
   decodeAgentToServerProto,
   decodeServerToAgentProto,

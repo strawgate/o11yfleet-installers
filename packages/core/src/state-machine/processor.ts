@@ -287,16 +287,35 @@ export async function processFrame(
     const hash = msg.remote_config_status.last_remote_config_hash;
     const hashHex = hash ? uint8ToHex(hash) : "";
     if (msg.remote_config_status.status === RemoteConfigStatuses.APPLIED) {
+      // Successful application clears any stuck retry-suppression state for
+      // this agent. The OpAMP spec says collectors *should* echo the applied
+      // config_hash, but it's not strictly required, so we don't gate the
+      // fail-count reset on hash being present — otherwise a non-conforming
+      // collector that reports APPLIED without a hash strands the server in
+      // permanent retry-suppression for that agent.
+      if (state.config_fail_count > 0) {
+        newState.config_fail_count = 0;
+        newState.config_last_failed_hash = null;
+        dirtyFields.add("config_fail_count");
+        dirtyFields.add("config_last_failed_hash");
+        shouldPersist = true;
+      }
+
+      // We deliberately do NOT infer current_config_hash from
+      // desired_config_hash on hash-less APPLIED. Doing so would be
+      // incorrect under a rollout-flip race: if desired flips from A to
+      // B while a hash-less APPLIED for A is in flight, marking
+      // current=B suppresses the next offer of B forever (the agent
+      // stays on A). The cost of NOT inferring is that a
+      // spec-violating collector loops in apply→re-offer→apply (constant
+      // work, no exponential growth) until either it starts echoing the
+      // hash or an operator intervenes. That's a more recoverable
+      // failure mode than silently marking the wrong config as applied.
+      // A future fix could add a persisted `last_offered_hash` field to
+      // AgentState and infer from that.
       const hashChanged = !arraysEqual(state.current_config_hash, hash ?? null);
       if (hash && hashChanged) {
         newState.current_config_hash = hash;
-        // Successful application clears any stuck state for this agent.
-        if (state.config_fail_count > 0) {
-          newState.config_fail_count = 0;
-          newState.config_last_failed_hash = null;
-          dirtyFields.add("config_fail_count");
-          dirtyFields.add("config_last_failed_hash");
-        }
         shouldPersist = true;
         dirtyFields.add("current_config_hash");
         events.push(

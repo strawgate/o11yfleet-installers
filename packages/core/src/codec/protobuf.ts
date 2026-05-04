@@ -42,8 +42,6 @@ import type {
   AgentDescription as PbAgentDescription,
   ComponentHealth as PbComponentHealth,
   RemoteConfigStatus as PbRemoteConfigStatus,
-  EffectiveConfig as PbEffectiveConfig,
-  AgentDisconnect as PbAgentDisconnect,
   AvailableComponents as PbAvailableComponents,
   ComponentDetails as PbComponentDetails,
 } from "./gen/opamp_pb.js";
@@ -688,24 +686,21 @@ export function encodeAgentToServerProto(msg: AgentToServer): ArrayBuffer {
         contentType: val.content_type,
       });
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pb.effectiveConfig = create(EffectiveConfigSchema as any, {
+    pb.effectiveConfig = create(EffectiveConfigSchema, {
       configMap: create(AgentConfigMapSchema, { configMap }),
-    }) as unknown as PbEffectiveConfig;
+    });
   }
   if (msg.remote_config_status) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pb.remoteConfigStatus = create(RemoteConfigStatusSchema as any, {
+    pb.remoteConfigStatus = create(RemoteConfigStatusSchema, {
       lastRemoteConfigHash: msg.remote_config_status.last_remote_config_hash,
       status:
         REMOTE_CONFIG_STATUS_ENCODE_MAP[msg.remote_config_status.status] ??
         PbRemoteConfigStatuses.RemoteConfigStatuses_UNSET,
       errorMessage: msg.remote_config_status.error_message,
-    }) as unknown as PbRemoteConfigStatus;
+    });
   }
   if (msg.agent_disconnect) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    pb.agentDisconnect = create(AgentDisconnectSchema as any, {}) as unknown as PbAgentDisconnect;
+    pb.agentDisconnect = create(AgentDisconnectSchema, {});
   }
   if (msg.available_components) {
     pb.availableComponents = internalAvailableComponentsToPb(msg.available_components);

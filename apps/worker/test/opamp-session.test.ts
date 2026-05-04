@@ -50,7 +50,11 @@ describe("handleFirstMessage", () => {
   const HMAC_SECRET = "test-secret-key-32-characters!!";
   const TENANT_ID = "test-tenant";
   const CONFIG_ID = "test-config";
-  const DO_ASSIGNED_UID = "test-do-assigned-uid-16b";
+  // 16-byte UID, hex-encoded (32 chars). Must be valid hex now that
+  // `hexToUint8Array` rejects non-hex characters; the previous placeholder
+  // "test-do-assigned-uid-16b" relied on the old silent-coerce-to-zero
+  // behavior.
+  const DO_ASSIGNED_UID = "00112233445566778899aabbccddeeff";
   const AGENT_REPORTED_UID = new Uint8Array(16);
 
   // Fill with test data

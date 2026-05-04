@@ -4,9 +4,9 @@
 // translate between protobuf bytes and SQL strings. Round-trip and
 // lossless properties are exactly what fast-check is good at.
 
-import { describe, it } from "vitest";
+import { describe, it, expect } from "vitest";
 import * as fc from "fast-check";
-import { hexToUint8Array, uint8ToHex } from "../src/hex.js";
+import { hexToUint8Array, uint8ToHex, InvalidHexError } from "../src/hex.js";
 
 const byteArb = fc.uint8Array({ minLength: 0, maxLength: 64 });
 
@@ -59,19 +59,14 @@ describe("property: hexToUint8Array invariants", () => {
     fc.assert(fc.property(evenHexArb, (hex) => uint8ToHex(hexToUint8Array(hex)) === hex));
   });
 
-  it("never throws on arbitrary string input (treats invalid chars as 0)", () => {
-    fc.assert(
-      fc.property(fc.string(), (s) => {
-        hexToUint8Array(s);
-        return true;
-      }),
-    );
-  });
+  // Strict-input contract: non-hex characters must throw, not coerce. The
+  // previous silent-zero behavior could alias garbage input to a valid
+  // all-zero UID/hash and route messages to the wrong agent. See `hex.ts`.
 
-  it("every output byte is in [0, 255]", () => {
+  it("every output byte is in [0, 255] for valid hex input", () => {
     fc.assert(
-      fc.property(fc.string(), (s) => {
-        const bytes = hexToUint8Array(s);
+      fc.property(evenHexArb, (hex) => {
+        const bytes = hexToUint8Array(hex);
         for (const b of bytes) {
           if (b < 0 || b > 255 || !Number.isInteger(b)) return false;
         }
@@ -80,16 +75,13 @@ describe("property: hexToUint8Array invariants", () => {
     );
   });
 
-  // Documented behavior: invalid hex characters produce zero bytes
-  // rather than throwing or producing NaN. Non-hex inputs round-trip
-  // to all-zero bytes; the *length* still depends on the input string
-  // length (after odd-length padding).
-  it("treats invalid hex characters as 0", () => {
+  it("throws InvalidHexError on any string containing a non-hex character", () => {
     fc.assert(
       fc.property(
         fc
-          .string({ minLength: 0, maxLength: 32 })
-          // Force at least one non-hex character per pair so every byte position is invalid.
+          .string({ minLength: 1, maxLength: 32 })
+          // Replace any hex chars with a definitely-non-hex sentinel so we
+          // guarantee at least one invalid character per generated string.
           .map((s) =>
             s
               .split("")
@@ -97,11 +89,25 @@ describe("property: hexToUint8Array invariants", () => {
               .join(""),
           ),
         (badHex) => {
-          const bytes = hexToUint8Array(badHex);
-          for (const b of bytes) if (b !== 0) return false;
-          return true;
+          let threw = false;
+          try {
+            hexToUint8Array(badHex);
+          } catch (err) {
+            threw = err instanceof InvalidHexError;
+          }
+          return threw;
         },
       ),
+    );
+  });
+
+  it("does not throw when every character is a valid hex digit", () => {
+    fc.assert(
+      fc.property(fc.stringMatching(/^[0-9a-fA-F]*$/), (hex) => {
+        // Only assertion: this should not raise.
+        expect(() => hexToUint8Array(hex)).not.toThrow();
+        return true;
+      }),
     );
   });
 

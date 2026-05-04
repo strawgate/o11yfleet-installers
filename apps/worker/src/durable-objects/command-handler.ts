@@ -5,7 +5,7 @@ import {
   AgentCapabilities,
 } from "@o11yfleet/core/codec";
 import type { ServerToAgent } from "@o11yfleet/core/codec";
-import { hexToUint8Array } from "@o11yfleet/core/hex";
+import { hexToUint8Array, InvalidHexError } from "@o11yfleet/core/hex";
 import { setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
 import type { AgentStateRepository } from "./agent-state-repo-interface.js";
 import { parseAttachment } from "./ws-attachment.js";
@@ -55,11 +55,25 @@ export async function handleSetDesiredConfig(
   }
   const body = parsed.data;
 
+  // Decode the hex hash before any persistence work — the existing Zod schema
+  // validates length/non-empty but not hex chars, so a non-hex string would
+  // previously silently broadcast all-zero bytes (since hexToUint8Array used
+  // to coerce invalid pairs to 0). Now hex.ts throws on bad input; surface as
+  // 400 so the caller can fix their request.
+  let desiredHashBytes: Uint8Array;
+  try {
+    desiredHashBytes = hexToUint8Array(body.config_hash);
+  } catch (err) {
+    if (err instanceof InvalidHexError) {
+      return Response.json({ error: "config_hash must be a hex string" }, { status: 400 });
+    }
+    throw err;
+  }
+
   ctx.repo.saveDesiredConfig(body.config_hash, body.config_content ?? null);
   ctx.invalidateDesiredConfigCache();
 
   const sockets = ctx.getWebSockets();
-  const desiredHashBytes = hexToUint8Array(body.config_hash);
   let pushed = 0;
   let failed = 0;
   let skippedNoCap = 0;

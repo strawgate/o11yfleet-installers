@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { prepareBroadcastMessage, encodeServerToAgent } from "../src/codec/index.js";
+import {
+  prepareBroadcastMessage,
+  prepareBroadcastMessageWithMeta,
+  encodeServerToAgent,
+} from "../src/codec/index.js";
 import { fromBinary } from "@bufbuild/protobuf";
 import { ServerToAgentSchema } from "../src/codec/gen/opamp_pb.js";
 import type { ServerToAgent } from "../src/codec/types.js";
@@ -130,5 +134,54 @@ describe("prepareBroadcastMessage", () => {
 
     // Broadcast should be faster (typically 5-10x for large payloads)
     expect(broadcastTime).toBeLessThan(standardTime);
+  });
+
+  // ─── Proto-layout invariant regression guard ──────────────────────────
+  //
+  // The fast path in `prepareBroadcastMessage` splices `instance_uid` at byte
+  // offset 3, conditional on `templateBytes[1] === 0x0a && templateBytes[2]
+  // === 0x10` (proto field tag 1 / wire type 2 / length 16 — i.e. "first
+  // field is a 16-byte length-delimited value", which is `instance_uid`
+  // under the current schema). If anyone reorders proto fields or changes
+  // `instance_uid` length, the sniff fails and broadcast falls back to slow
+  // per-frame re-encoding. Without these tests the regression would be
+  // silent until somebody noticed throughput halving in production.
+
+  it("fast-path is enabled and uid is at byte offset 3 (proto-layout invariant)", () => {
+    const meta = prepareBroadcastMessageWithMeta(template);
+    expect(meta.fastPathEnabled).toBe(true);
+    expect(meta.uidOffset).toBe(3);
+
+    // Splice a recognizable UID and verify those bytes appear exactly
+    // where the meta says they will.
+    const uid = new Uint8Array(16);
+    uid.fill(0xab);
+    const buf = new Uint8Array(meta.encode(uid));
+    expect(buf[1]).toBe(0x0a); // proto field tag 1, wire type 2
+    expect(buf[2]).toBe(0x10); // length 16
+    for (let i = 0; i < 16; i += 1) {
+      expect(buf[meta.uidOffset + i]).toBe(0xab);
+    }
+  });
+
+  it("fast-path output decodes to the same UID it spliced", () => {
+    const meta = prepareBroadcastMessageWithMeta(template);
+    const uid = new Uint8Array(16);
+    crypto.getRandomValues(uid);
+    const buf = new Uint8Array(meta.encode(uid));
+    // skip 0x00 codec-frame header before fromBinary
+    const decoded = fromBinary(ServerToAgentSchema, buf.slice(1));
+    expect(decoded.instanceUid).toEqual(uid);
+  });
+
+  it("fast-path falls back to full re-encode when the UID is not 16 bytes", () => {
+    // The `instance_uid` field MUST be 16 bytes per spec, but the closure
+    // gracefully degrades for callers that pass shorter or longer values.
+    const meta = prepareBroadcastMessageWithMeta(template);
+    const wrongLengthUid = new Uint8Array(8); // not 16
+    wrongLengthUid.fill(0xcd);
+    const buf = new Uint8Array(meta.encode(wrongLengthUid));
+    const decoded = fromBinary(ServerToAgentSchema, buf.slice(1));
+    expect(decoded.instanceUid).toEqual(wrongLengthUid);
   });
 });

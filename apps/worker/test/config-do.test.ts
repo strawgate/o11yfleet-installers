@@ -102,7 +102,7 @@ describe("Config Durable Object", () => {
 
     await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "desired-hash" }),
+      body: JSON.stringify({ config_hash: "deadbeefcafe" }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -112,10 +112,10 @@ describe("Config Durable Object", () => {
         const now = Date.now();
         const inserts: Array<[string, string, string, number]> = [
           // [uid, status, current_hash, healthy]
-          ["a1", "connected", "desired-hash", 1],
+          ["a1", "connected", "deadbeefcafe", 1],
           ["a2", "connected", "stale-hash", 1],
           ["a3", "degraded", "stale-hash", 0],
-          ["a4", "disconnected", "desired-hash", 1],
+          ["a4", "disconnected", "deadbeefcafe", 1],
         ];
         for (const [uid, status, hash, healthy] of inserts) {
           state.storage.sql.exec(
@@ -150,7 +150,7 @@ describe("Config Durable Object", () => {
     });
     expect(stats.current_hash_counts).toEqual(
       expect.arrayContaining([
-        { value: "desired-hash", count: 2 },
+        { value: "deadbeefcafe", count: 2 },
         { value: "stale-hash", count: 2 },
       ]),
     );

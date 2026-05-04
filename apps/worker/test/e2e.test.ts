@@ -214,18 +214,18 @@ describe("E2E Scenario #3: Config push via DO", () => {
     // Push config
     const pushRes = await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "v2hashvalue" }),
+      body: JSON.stringify({ config_hash: "deadbeef0002" }),
       headers: { "Content-Type": "application/json" },
     });
     expect(pushRes.status).toBe(200);
     const pushBody = await pushRes.json<{ pushed: number; config_hash: string }>();
     expect(pushBody.pushed).toBe(1);
-    expect(pushBody.config_hash).toBe("v2hashvalue");
+    expect(pushBody.config_hash).toBe("deadbeef0002");
 
     // Verify desired hash was stored
     const statsRes = await stub.fetch("http://internal/stats");
     const stats = await statsRes.json<{ desired_config_hash: string }>();
-    expect(stats.desired_config_hash).toBe("v2hashvalue");
+    expect(stats.desired_config_hash).toBe("deadbeef0002");
 
     ws.close();
   });
@@ -316,7 +316,7 @@ describe("E2E Scenario #6: Hibernation attachment", () => {
 
     const pushRes = await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "hibernate-test" }),
+      body: JSON.stringify({ config_hash: "deadbeef00ce" }),
       headers: { "Content-Type": "application/json" },
     });
     const pushBody = await pushRes.json<{ pushed: number }>();

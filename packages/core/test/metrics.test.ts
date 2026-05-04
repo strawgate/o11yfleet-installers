@@ -122,6 +122,21 @@ describe("computeConfigMetrics", () => {
     expect(result.agents_stale).toBe(1);
   });
 
+  it("accepts a `now` parameter so staleness is deterministic for tests", () => {
+    // Two calls with the same agents and the same `now` must produce
+    // identical metrics (regression: previously `Date.now()` was captured
+    // inside the function, making snapshot tests rerecord on every run).
+    const fixedNow = 1_700_000_000_000;
+    const agents = makeAgents(
+      { status: "connected", last_seen_at: fixedNow - 30_000 }, // not stale
+      { status: "connected", last_seen_at: fixedNow - 100_000 }, // stale
+    );
+    const a = computeConfigMetrics(agents, null, fixedNow);
+    const b = computeConfigMetrics(agents, null, fixedNow);
+    expect(a).toEqual(b);
+    expect(a.agents_stale).toBe(1);
+  });
+
   it("websocket_count is always 0 from computeConfigMetrics", () => {
     const agents = makeAgents({ status: "connected" });
     const result = computeConfigMetrics(agents, null);

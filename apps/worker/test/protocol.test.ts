@@ -352,7 +352,7 @@ describe("DO Stats Endpoints", () => {
     const yamlContent = "receivers:\n  otlp:\n    protocols:\n      grpc:";
     const setRes = await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "hash456", config_content: yamlContent }),
+      body: JSON.stringify({ config_hash: "abc456", config_content: yamlContent }),
       headers: { "Content-Type": "application/json" },
     });
     expect(setRes.status).toBe(200);

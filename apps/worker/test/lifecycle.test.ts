@@ -310,13 +310,13 @@ describe("Agent Detail Endpoint (enriched)", () => {
     const stub = env.CONFIG_DO.get(doId);
     await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "new-hash-abc", config_content: "pipelines: {}" }),
+      body: JSON.stringify({ config_hash: "abcabcabcabc", config_content: "pipelines: {}" }),
       headers: { "Content-Type": "application/json" },
     });
 
     const res = await stub.fetch(`http://internal/agents/${uid}`);
     const detail = (await res.json()) as Record<string, unknown>;
-    expect(detail.desired_config_hash).toBe("new-hash-abc");
+    expect(detail.desired_config_hash).toBe("abcabcabcabc");
     // Agent hasn't applied the new config yet, so it's drifted
     expect(detail.is_drifted).toBe(true);
 

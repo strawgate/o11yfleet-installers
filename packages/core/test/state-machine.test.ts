@@ -1033,6 +1033,99 @@ describe("Config fail retry limit", () => {
     };
   }
 
+  it("APPLIED clears config_fail_count even when the collector echoes no hash", async () => {
+    // Regression: previously the fail-count reset was nested inside the
+    // `if (hash && hashChanged)` branch. A non-conforming collector that
+    // reports APPLIED without echoing the hash would strand the server in
+    // permanent retry-suppression for that agent because config_fail_count
+    // never reset.
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: 3,
+      config_last_failed_hash: failedHash,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+      remote_config_status: {
+        status: RemoteConfigStatuses.APPLIED,
+        last_remote_config_hash: null,
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.newState.config_fail_count).toBe(0);
+    expect(result.newState.config_last_failed_hash).toBeNull();
+    expect(result.dirtyFields.has("config_fail_count")).toBe(true);
+    expect(result.dirtyFields.has("config_last_failed_hash")).toBe(true);
+    expect(result.shouldPersist).toBe(true);
+  });
+
+  it("APPLIED without hash does NOT infer current_config_hash (rollout-flip safety)", async () => {
+    // Why we don't infer: if `desired_config_hash` flips from A to B
+    // between offering A and the agent's hash-less APPLIED for A,
+    // inferring "applied = current desired" would mark current=B and
+    // suppress the next offer of B forever. The collector would stay on
+    // A while the server thinks it's on B. Better to leave
+    // current_config_hash stale (collector keeps getting re-offers,
+    // constant work) than risk the wrong-target convergence.
+    const desired = new Uint8Array([0xab, 0xcd]);
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      desired_config_hash: desired,
+      current_config_hash: null,
+      config_fail_count: 0,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+      remote_config_status: {
+        status: RemoteConfigStatuses.APPLIED,
+        last_remote_config_hash: null,
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.newState.current_config_hash).toBeNull();
+    expect(result.dirtyFields.has("current_config_hash")).toBe(false);
+    expect(result.events.find((e) => e.type === FleetEventType.CONFIG_APPLIED)).toBeUndefined();
+  });
+
+  it("APPLIED is a no-op when fail count was already zero and hash didn't change", async () => {
+    // Don't churn writes for the common case (every successful heartbeat is
+    // an APPLIED with the current hash). shouldPersist must remain false.
+    const hash = new Uint8Array([0x01, 0x02]);
+    const state = makeDefaultState({
+      sequence_num: 1,
+      connected_at: Date.now(),
+      capabilities: configCaps,
+      config_fail_count: 0,
+      current_config_hash: hash,
+    });
+    const msg: AgentToServer = {
+      instance_uid: new Uint8Array(16),
+      sequence_num: 2,
+      capabilities: configCaps,
+      flags: 0,
+      remote_config_status: {
+        status: RemoteConfigStatuses.APPLIED,
+        last_remote_config_hash: hash,
+      },
+    };
+    const result = await processFrame(state, msg);
+    expect(result.newState.config_fail_count).toBe(0);
+    expect(result.dirtyFields.has("config_fail_count")).toBe(false);
+    expect(result.dirtyFields.has("config_last_failed_hash")).toBe(false);
+    // The whole point of this test: nothing changed, no write should fire.
+    expect(result.shouldPersist).toBe(false);
+  });
+
   it("increments config_fail_count on FAILED status", async () => {
     const state = makeDefaultState({
       sequence_num: 1,
