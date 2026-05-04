@@ -165,7 +165,7 @@ export interface CheckCompatibilityResult {
   unknownAgents: number;
   totalAgents: number;
   perGroup: Array<{
-    availableComponents: string;
+    availableComponents: string | null;
     agentCount: number;
     missingComponents: Array<{ kind: string; name: string }>;
   }>;

@@ -26,9 +26,11 @@ import { apiKeyActor, systemActor, tenantAuditContext, userActor } from "./audit
 import { isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { ApiError } from "./shared/errors.js";
+import { AppError } from "./errors.js";
 import { AiApiError } from "./ai/guidance.js";
 import { CSRF_SAFE_METHODS, isTrustedOrigin } from "./shared/http.js";
 import { isAllowedCorsOrigin } from "./shared/origins.js";
+import { parseRpcError } from "./durable-objects/rpc-types.js";
 
 /** Hono context variables set by middleware, available to all handlers. */
 export interface AppVariables {
@@ -173,6 +175,16 @@ app.use("*", async (c, next) => {
 // ─── Error handling ─────────────────────────────────────────────────
 
 app.onError((err, c) => {
+  if (err instanceof AppError) {
+    return jsonErrorResponse(err.message, err.statusCode, {
+      code: err.code,
+      ...(err.requestId ? { request_id: err.requestId } : {}),
+    });
+  }
+  const rpcErr = parseRpcError(err);
+  if (rpcErr) {
+    return jsonErrorResponse(rpcErr.message, rpcErr.statusCode);
+  }
   if (err instanceof ApiError) {
     return jsonErrorResponse(err.message, err.status, {
       ...(err.code ? { code: err.code } : {}),

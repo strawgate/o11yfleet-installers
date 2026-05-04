@@ -200,7 +200,7 @@ describe("auth/enrollment", () => {
     const token = `fp_enroll_${jwt}`;
 
     await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow(
-      "Unsupported enrollment token version",
+      "invalid or missing required claims",
     );
   });
 
@@ -215,7 +215,9 @@ describe("auth/enrollment", () => {
       .sign(key);
     const token = `fp_enroll_${jwt}`;
 
-    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing required fields");
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow(
+      "invalid or missing required claims",
+    );
   });
 
   it("rejects token with missing jti", async () => {
@@ -229,7 +231,9 @@ describe("auth/enrollment", () => {
       .sign(key);
     const token = `fp_enroll_${jwt}`;
 
-    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing token ID (jti)");
+    await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow(
+      "invalid or missing required claims",
+    );
   });
 });
 

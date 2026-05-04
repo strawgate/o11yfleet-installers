@@ -5,7 +5,18 @@
  * Claims are verified server-side — the body is never trusted.
  */
 
+import { z } from "zod";
 import { SignJWT, jwtVerify } from "jose";
+
+const telemetryClaimSchema = z.object({
+  v: z.literal(1),
+  tenant_id: z.string().min(1),
+  config_id: z.string().min(1),
+  collector_id: z.string().min(1),
+  signal: z.enum(["metrics", "logs", "traces"]),
+  iat: z.number().int(),
+  exp: z.number().int(),
+});
 
 export interface TelemetryClaim {
   v: 1;
@@ -61,7 +72,7 @@ export async function verifyTelemetryToken(
   try {
     const key = new TextEncoder().encode(secret);
     const { payload } = await jwtVerify(token, key);
-    return payload as unknown as TelemetryClaim;
+    return telemetryClaimSchema.parse(payload);
   } catch {
     return null;
   }

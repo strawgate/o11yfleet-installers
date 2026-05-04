@@ -525,9 +525,14 @@ async function handleGitHubStart(request: Request, env: Env): Promise<Response> 
   const clientId = githubClientId(env);
   const clientSecret = githubClientSecret(env);
   if (!clientId || !clientSecret) {
-    return githubAuthNotConfiguredResponse(request, env, "GitHub App client ID is not configured", {
-      code: "github_auth_not_configured",
-    });
+    return githubAuthNotConfiguredResponse(
+      request,
+      env,
+      "GitHub App client credentials are not configured",
+      {
+        code: "github_auth_not_configured",
+      },
+    );
   }
 
   const url = new URL(request.url);

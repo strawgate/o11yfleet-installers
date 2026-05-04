@@ -3,11 +3,21 @@
 // Contains tenant_id + config_id + expiry. Verified locally (no D1 lookup on connect).
 // D1 enrollment_tokens table is kept as an admin registry for listing/revocation.
 
+import { z } from "zod";
 import { SignJWT, jwtVerify, errors } from "jose";
 import { base64urlEncode } from "./base64url.js";
 import { timingSafeEqual } from "./timing-safe-compare.js";
 
 const encoder = new TextEncoder();
+
+const enrollmentPayloadSchema = z.object({
+  v: z.literal(1),
+  tenant_id: z.string().min(1),
+  config_id: z.string().min(1),
+  iat: z.number().int(),
+  exp: z.number().int().optional(),
+  jti: z.string().min(1),
+});
 
 export interface EnrollmentClaim {
   v: 1;
@@ -105,26 +115,19 @@ export async function verifyEnrollmentToken(
     throw new Error("Invalid enrollment token signature");
   }
 
-  if (payload["v"] !== 1) {
-    throw new Error(`Unsupported enrollment token version: ${payload["v"]}`);
+  try {
+    const claim = enrollmentPayloadSchema.parse(payload);
+    return {
+      v: 1,
+      tenant_id: claim.tenant_id,
+      config_id: claim.config_id,
+      iat: claim.iat,
+      exp: claim.exp ?? 0,
+      jti: claim.jti,
+    };
+  } catch (_e: unknown) {
+    throw new Error("Enrollment token has invalid or missing required claims");
   }
-
-  if (!payload["tenant_id"] || !payload["config_id"]) {
-    throw new Error("Enrollment token missing required fields");
-  }
-
-  if (!payload["jti"]) {
-    throw new Error("Enrollment token missing token ID (jti)");
-  }
-
-  return {
-    v: 1,
-    tenant_id: payload["tenant_id"] as string,
-    config_id: payload["config_id"] as string,
-    iat: payload["iat"] as number,
-    exp: (payload["exp"] as number) ?? 0,
-    jti: payload["jti"] as string,
-  };
 }
 
 /**

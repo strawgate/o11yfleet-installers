@@ -29,6 +29,7 @@ import { ApiError } from "./shared/errors.js";
 import { AiApiError } from "./ai/guidance.js";
 import { CSRF_SAFE_METHODS, isTrustedOrigin } from "./shared/http.js";
 import { isAllowedCorsOrigin } from "./shared/origins.js";
+import { parseRpcError } from "./durable-objects/rpc-types.js";
 
 /** Hono context variables set by admin middleware, available to all handlers. */
 export interface AdminAppVariables {
@@ -157,6 +158,10 @@ app.use("*", async (c, next) => {
 // ─── Error handling ─────────────────────────────────────────────────
 
 app.onError((err, c) => {
+  const rpcErr = parseRpcError(err);
+  if (rpcErr) {
+    return jsonErrorResponse(rpcErr.message, rpcErr.statusCode);
+  }
   if (err instanceof ApiError) {
     return jsonErrorResponse(err.message, err.status, {
       ...(err.code ? { code: err.code } : {}),
