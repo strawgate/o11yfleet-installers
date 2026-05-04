@@ -17,6 +17,7 @@ import {
   connectWithEnrollment,
   connectWithClaim,
   sendHello,
+  sendHealthReport,
   sendHeartbeat,
   waitForMsg,
   msgToBuffer,
@@ -24,7 +25,6 @@ import {
   decodeFrame,
   AgentCapabilities,
   buildConfigAck,
-  buildHealthReport,
   type AgentToServer,
   type ServerToAgent,
   type AssignmentClaim,
@@ -174,16 +174,11 @@ describe("Agent Health State Changes", () => {
     await sendHello(ws);
 
     // Send health change: unhealthy
-    const healthMsg = buildHealthReport({
+    const serverMsg = await sendHealthReport(ws, {
       healthy: false,
       lastError: "OOM killed",
       status: "degraded",
     });
-    ws.send(encodeFrame(healthMsg));
-
-    const resp = await waitForMsg(ws);
-    const buf = await msgToBuffer(resp);
-    const serverMsg = decodeFrame<ServerToAgent>(buf);
     expect(serverMsg.instance_uid).toBeDefined();
 
     // DO stats should reflect unhealthy agent

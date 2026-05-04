@@ -523,6 +523,38 @@ export async function sendHeartbeat(ws: WebSocket, seqNum: number): Promise<Serv
   return decodeFrame<ServerToAgent>(buf);
 }
 
+/**
+ * Send an OpAMP health report and return the server response. Distinct from
+ * `sendHeartbeat` — heartbeats are bare frames, health reports include the
+ * `health` field (healthy + status + last_error + status_time_unix_nano).
+ * Use this when a test needs to flip an agent's health state and observe
+ * the DO's response.
+ */
+export async function sendHealthReport(
+  ws: WebSocket,
+  opts: {
+    seqNum?: number;
+    healthy: boolean;
+    status?: string;
+    lastError?: string;
+  },
+): Promise<ServerToAgent> {
+  ws.send(
+    encodeFrame(
+      buildHealthReport({
+        sequenceNum: opts.seqNum ?? 1,
+        healthy: opts.healthy,
+        status: opts.status,
+        lastError: opts.lastError,
+      }),
+    ),
+  );
+
+  const msg = await waitForMsg(ws);
+  const buf = await msgToBuffer(msg);
+  return decodeFrame<ServerToAgent>(buf);
+}
+
 // Re-export codec utilities for convenience
 export {
   encodeFrame,
