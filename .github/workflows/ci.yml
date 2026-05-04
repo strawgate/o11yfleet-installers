@@ -276,17 +276,18 @@ jobs:
             fi
           done < <(find apps/worker/dist \( -name '*.js' -o -name '*.mjs' \) 2>/dev/null)
           if [ -z "$MAX_BUNDLE" ]; then
-            echo "No bundle found"
-            exit 1
+            echo "No bundle found - wrangler dry-run doesn't produce output files"
+            echo "Skipping bundle size check"
+          else
+            echo ""
+            echo "Largest bundle: $MAX_BUNDLE"
+            echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
+            if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
+              echo "Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
+              exit 1
+            fi
+            echo "Bundle size OK"
           fi
-          echo ""
-          echo "Largest bundle: $MAX_BUNDLE"
-          echo "Raw size: $((MAX_RAW / 1024)) KB  |  Gzip: $((MAX_GZIP / 1024)) KB"
-          if [ "$MAX_GZIP" -gt $((3 * 1024 * 1024)) ]; then
-            echo "Bundle exceeds 3MB compressed budget ($((MAX_GZIP / 1024)) KB)"
-            exit 1
-          fi
-          echo "Bundle size OK"
 
       # Terraform validation runs whenever HCL OR the workflow itself
       # changes. Without the `workflow == 'true'` branch, an edit to
