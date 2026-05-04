@@ -21,6 +21,7 @@ import { workspaceSettingsSchema, type WorkspaceSettingsValues } from "@/api/for
 import { PageHeader, PageShell } from "@/components/app";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
+import { getErrorMessage } from "@/utils/errors";
 
 export default function SettingsPage() {
   const tenant = useTenant();
@@ -66,7 +67,7 @@ export default function SettingsPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to save",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -81,7 +82,7 @@ export default function SettingsPage() {
     } catch (err) {
       notifications.show({
         title: "Delete failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

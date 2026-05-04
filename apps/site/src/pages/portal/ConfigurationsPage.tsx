@@ -25,6 +25,7 @@ import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { relTime, trunc } from "@/utils/format";
 import { configurationAgentMetrics } from "@/utils/config-stats";
+import { getErrorMessage } from "@/utils/errors";
 
 export default function ConfigurationsPage() {
   const overview = useOverview();
@@ -58,7 +59,7 @@ export default function ConfigurationsPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to create configuration",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

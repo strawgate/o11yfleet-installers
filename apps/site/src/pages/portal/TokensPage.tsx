@@ -18,6 +18,7 @@ import { CopyButton } from "@/components/common/CopyButton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { relTime } from "@/utils/format";
+import { getErrorMessage } from "@/utils/errors";
 
 function TokenSection({ config }: { config: Configuration }) {
   const { data: tokens, isLoading, error, refetch } = useConfigurationTokens(config.id);
@@ -45,7 +46,7 @@ function TokenSection({ config }: { config: Configuration }) {
     } catch (err) {
       notifications.show({
         title: "Failed to create token",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -72,7 +73,7 @@ function TokenSection({ config }: { config: Configuration }) {
           } catch (err) {
             notifications.show({
               title: "Failed to revoke token",
-              message: err instanceof Error ? err.message : "Unknown error",
+              message: getErrorMessage(err),
               color: "red",
             });
           }

@@ -11,33 +11,12 @@ import {
 } from "@o11yfleet/core/api";
 
 import { stripUrlParam } from "./strip-url-param.js";
+import { ApiError, AuthError } from "./api-error";
 
-/* ------------------------------------------------------------------ */
-/*  Error types                                                       */
-/* ------------------------------------------------------------------ */
-
-export class ApiError extends Error {
-  status: number;
-  code?: string;
-  field?: string;
-  detail?: string;
-  constructor(message: string, status: number, body?: ApiErrorResponse) {
-    super(message);
-    this.name = "ApiError";
-    this.status = status;
-    this.code = body?.code;
-    this.field = body?.field;
-    this.detail = body?.detail;
-  }
-}
-
-/** Thrown on 401/403 so the app can redirect to login. */
-export class AuthError extends ApiError {
-  constructor(message = "Session expired") {
-    super(message, 401);
-    this.name = "AuthError";
-  }
-}
+// Re-export so existing `import { ApiError } from "@/api/client"` callers
+// keep working without churn. The classes themselves live in api-error.ts
+// to keep them importable by node:test without window/import.meta.env access.
+export { ApiError, AuthError };
 
 /* ------------------------------------------------------------------ */
 /*  API base detection                                                */

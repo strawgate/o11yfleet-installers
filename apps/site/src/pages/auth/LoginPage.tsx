@@ -4,6 +4,7 @@ import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine
 import { apiUrl, login as apiLogin } from "@/api/client";
 import { GitHubMark } from "@/components/common/GitHubMark";
 import { Logo } from "@/components/common/Logo";
+import { getErrorMessage } from "@/utils/errors";
 
 export default function LoginPage() {
   const [showPasswordLogin, setShowPasswordLogin] = useState(false);
@@ -24,7 +25,7 @@ export default function LoginPage() {
       await apiLogin(email, password);
       window.location.href = "/portal/overview";
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(getErrorMessage(err, "Login failed"));
     } finally {
       setSubmitting(false);
     }

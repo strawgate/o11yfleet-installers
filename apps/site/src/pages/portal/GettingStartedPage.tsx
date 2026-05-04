@@ -27,6 +27,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { configurationAgentMetrics } from "../../utils/config-stats";
 import installScriptSource from "../../../install.sh?raw";
+import { getErrorMessage } from "@/utils/errors";
 
 const INSTALL_SH = (token: string) =>
   `curl --proto '=https' --tlsv1.2 -fsSL https://o11yfleet.com/install.sh | bash -s -- --token ${token}`;
@@ -90,7 +91,7 @@ export default function GettingStartedPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to generate token",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

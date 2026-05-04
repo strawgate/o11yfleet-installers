@@ -36,6 +36,7 @@ import { ErrorState } from "../../components/common/ErrorState";
 import { PlanTag } from "@/components/common/PlanTag";
 import { relTime } from "../../utils/format";
 import { PLAN_OPTIONS } from "../../shared/plans";
+import { getErrorMessage } from "@/utils/errors";
 
 type StatusFilter = "all" | "pending" | "active" | "suspended";
 
@@ -110,7 +111,7 @@ export default function TenantsPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to create tenant",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -137,7 +138,7 @@ export default function TenantsPage() {
     } catch (err) {
       notifications.show({
         title: "Bulk approve failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

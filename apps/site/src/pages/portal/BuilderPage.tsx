@@ -46,6 +46,7 @@ import {
 } from "@/components/pipeline-builder";
 import { AddComponentPanel } from "../../components/pipeline-builder/nodes/AddComponentPanel";
 import { PageHeader, PageShell } from "@/components/app";
+import { getErrorMessage } from "@/utils/errors";
 
 type BuilderMode = "visual" | "split" | "yaml";
 
@@ -109,7 +110,7 @@ export default function BuilderPage() {
     try {
       setYamlPreview(renderCollectorYaml(graph));
     } catch (err) {
-      setYamlPreviewError(err instanceof Error ? err.message : String(err));
+      setYamlPreviewError(getErrorMessage(err, ""));
       setYamlPreview("");
     }
   }, [graph]);

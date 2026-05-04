@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { useLogin } from "../../api/hooks/auth";
 import { Logo } from "@/components/common/Logo";
+import { getErrorMessage } from "@/utils/errors";
 
 export default function AdminLoginPage() {
   const navigate = useNavigate();
@@ -23,7 +24,7 @@ export default function AdminLoginPage() {
         setError("Admin access required");
       }
     } catch (err: unknown) {
-      setError(err instanceof Error ? err.message : "Login failed");
+      setError(getErrorMessage(err, "Login failed"));
     }
   }
 

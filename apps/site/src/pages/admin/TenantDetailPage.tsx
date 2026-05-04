@@ -45,6 +45,7 @@ import {
 } from "../../ai/insight-registry";
 import { emailDomain } from "./ai-context-utils";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
+import { getErrorMessage } from "@/utils/errors";
 
 const TAB_KEYS = ["overview", "configurations", "users", "settings"] as const;
 type Tab = (typeof TAB_KEYS)[number];
@@ -150,7 +151,7 @@ export default function TenantDetailPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to save",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -164,7 +165,7 @@ export default function TenantDetailPage() {
     } catch (err) {
       notifications.show({
         title: "Delete failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -179,7 +180,7 @@ export default function TenantDetailPage() {
     } catch (err) {
       notifications.show({
         title: "Failed to view tenant",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

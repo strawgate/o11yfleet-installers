@@ -31,6 +31,7 @@ import { CopyButton } from "@/components/common/CopyButton";
 import { ErrorState } from "@/components/common/ErrorState";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
 import { relTime } from "@/utils/format";
+import { getErrorMessage } from "@/utils/errors";
 
 function PendingTokensSection() {
   const { data: tokens, isLoading, error, refetch } = usePendingTokens();
@@ -65,7 +66,7 @@ function PendingTokensSection() {
     } catch (err) {
       notifications.show({
         title: "Failed to create token",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -78,7 +79,7 @@ function PendingTokensSection() {
     } catch (err) {
       notifications.show({
         title: "Failed to revoke token",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -247,7 +248,7 @@ function PendingDevicesSection() {
     } catch (err) {
       notifications.show({
         title: "Failed to assign device",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }

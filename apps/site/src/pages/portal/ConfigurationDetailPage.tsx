@@ -60,6 +60,7 @@ import {
   type ConfigurationDetailTab,
 } from "./configuration-detail-model";
 import type { AiGuidanceIntent, AiGuidanceRequest, AiLightFetch } from "@o11yfleet/core/ai";
+import { getErrorMessage } from "@/utils/errors";
 
 type Tab = ConfigurationDetailTab;
 
@@ -318,7 +319,7 @@ export default function ConfigurationDetailPage() {
     } catch (err) {
       notifications.show({
         title: "Delete failed",
-        message: err instanceof Error ? err.message : "Unknown error",
+        message: getErrorMessage(err),
         color: "red",
       });
     }
@@ -373,7 +374,7 @@ export default function ConfigurationDetailPage() {
             loading: false,
             color: "red",
             title: "Restart failed",
-            message: err instanceof Error ? err.message : "Unknown error",
+            message: getErrorMessage(err),
             autoClose: 6000,
             withCloseButton: true,
           });
@@ -427,7 +428,7 @@ export default function ConfigurationDetailPage() {
             loading: false,
             color: "red",
             title: "Disconnect failed",
-            message: err instanceof Error ? err.message : "Unknown error",
+            message: getErrorMessage(err),
             autoClose: 6000,
             withCloseButton: true,
           });
@@ -487,7 +488,7 @@ export default function ConfigurationDetailPage() {
             loading: false,
             color: "red",
             title: "Rollout failed",
-            message: err instanceof Error ? err.message : "Unknown error",
+            message: getErrorMessage(err),
             autoClose: 6000,
             withCloseButton: true,
           });
@@ -601,7 +602,7 @@ export default function ConfigurationDetailPage() {
           mode === "version-diff"
             ? "Latest versus previous configuration version"
             : "Rollout cohort summary",
-          err instanceof Error ? err.message : "Light fetch failed",
+          getErrorMessage(err, "Light fetch failed"),
         ),
       ];
     }

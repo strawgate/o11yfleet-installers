@@ -61,6 +61,7 @@ import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 import { AgentCapabilities } from "@o11yfleet/core/codec";
+import { getErrorMessage } from "@/utils/errors";
 
 type Tab = "overview" | "pipeline" | "config";
 
@@ -278,7 +279,7 @@ export default function AgentDetailPage() {
                           loading: false,
                           color: "red",
                           title: "Restart failed",
-                          message: err instanceof Error ? err.message : "Unknown error",
+                          message: getErrorMessage(err),
                           autoClose: 6000,
                           withCloseButton: true,
                         });
@@ -346,7 +347,7 @@ export default function AgentDetailPage() {
                           loading: false,
                           color: "red",
                           title: "Disconnect failed",
-                          message: err instanceof Error ? err.message : "Unknown error",
+                          message: getErrorMessage(err),
                           autoClose: 6000,
                           withCloseButton: true,
                         });
