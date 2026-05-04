@@ -298,12 +298,14 @@ export default function PortalLayout() {
                 width: 32,
                 height: 32,
                 borderRadius: "var(--mantine-radius-sm)",
-                background: "var(--mantine-color-blue-9)",
-                color: "var(--mantine-color-white)",
+                background: "var(--accent-soft)",
+                color: "var(--accent)",
+                border: "1px solid var(--accent-line)",
                 display: "grid",
                 placeItems: "center",
                 fontSize: 12,
                 fontWeight: 600,
+                letterSpacing: "0.02em",
               }}
             >
               {orgInitials}

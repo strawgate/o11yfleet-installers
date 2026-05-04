@@ -44,10 +44,10 @@ export function MetricCard({
       className={className}
       p="md"
       style={{
-        border: "1px solid var(--mantine-color-default-border)",
+        border: "1px solid var(--line-2)",
         borderRadius: "var(--mantine-radius-md)",
-        background: "var(--mantine-color-body)",
-        boxShadow: "var(--mantine-shadow-xs)",
+        background: "var(--surface)",
+        boxShadow: "var(--shadow-sm)",
         minWidth: 0,
         overflow: "hidden",
       }}

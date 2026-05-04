@@ -181,8 +181,8 @@ export default function OverviewPage() {
       />
 
       <Box mt="lg">
-        <Group justify="space-between" align="center" gap="xs" mb="xs">
-          <Title order={3} size="sm" fw={500}>
+        <Group justify="space-between" align="end" gap="xs" mb="sm">
+          <Title order={3} fw={500} style={{ fontSize: "16px", letterSpacing: "-0.01em" }}>
             Recent configurations
           </Title>
           <Button component={Link} to="/portal/configurations" variant="subtle" size="sm">

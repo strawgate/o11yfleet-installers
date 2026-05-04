@@ -178,7 +178,7 @@ export function ProfileMenu({
             borderRadius: "var(--mantine-radius-md)",
           }}
         >
-          <Avatar size="sm" radius="xl" color="blue">
+          <Avatar size="sm" radius="xl" color="brand">
             {initials}
           </Avatar>
           <Text size="sm" fw={500}>

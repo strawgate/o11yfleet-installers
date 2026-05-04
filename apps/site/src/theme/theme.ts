@@ -86,7 +86,16 @@ export const theme = createTheme({
     Button: { defaultProps: { size: "sm" } },
     // Cards default to bordered with no shadow — matches dev-doc guidance
     // and the patterns we see across mantine.dev and the analytics dashboard.
-    Card: { defaultProps: { withBorder: true, radius: "md" } },
+    // bg/style use --surface and --line-2 so cards share the marketing site's
+    // dark-on-dark elevation instead of Mantine's harsher dark-6 default.
+    Card: {
+      defaultProps: {
+        withBorder: true,
+        radius: "md",
+        bg: "var(--surface)",
+        style: { borderColor: "var(--line-2)" },
+      },
+    },
     // Badges in `light` variant are the de-facto status pill across
     // app primitives (StatusBadge etc.); make that the default everywhere.
     Badge: { defaultProps: { variant: "light" } },

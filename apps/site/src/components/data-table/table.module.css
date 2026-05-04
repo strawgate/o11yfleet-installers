@@ -4,9 +4,9 @@
 .root {
   display: flex;
   flex-direction: column;
-  border: 1px solid var(--mantine-color-default-border);
+  border: 1px solid var(--line-2);
   border-radius: var(--mantine-radius-md);
-  background: var(--mantine-color-body);
+  background: var(--surface);
   overflow: hidden;
 }
 
@@ -17,7 +17,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--line-2);
 }
 
 .scrollArea {
@@ -30,8 +30,8 @@
   position: sticky;
   top: 0;
   z-index: 3;
-  background: var(--mantine-color-body);
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--line-2);
 }
 
 .tbody {
@@ -43,7 +43,7 @@
   display: flex;
   flex-direction: row;
   align-items: stretch;
-  border-bottom: 1px solid var(--mantine-color-default-border);
+  border-bottom: 1px solid var(--line-2);
 }
 
 .tr[data-clickable] {
@@ -110,7 +110,7 @@
 
 .footer {
   padding: var(--mantine-spacing-xs) var(--mantine-spacing-sm);
-  border-top: 1px solid var(--mantine-color-default-border);
+  border-top: 1px solid var(--line-2);
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -228,7 +228,7 @@ export default function OverviewPage() {
       >
         <Card>
           <Group justify="space-between" align="center" mb="sm">
-            <Title order={3} size="sm" fw={500}>
+            <Title order={3} fw={500} style={{ fontSize: "16px", letterSpacing: "-0.01em" }}>
               Recent tenants
             </Title>
             <Button component={Link} to="/admin/tenants" variant="subtle" size="xs">
@@ -280,7 +280,7 @@ export default function OverviewPage() {
         </Card>
 
         <Card>
-          <Title order={3} size="sm" fw={500} mb="sm">
+          <Title order={3} fw={500} style={{ fontSize: "16px", letterSpacing: "-0.01em" }} mb="sm">
             Plan distribution
           </Title>
           {Object.keys(planCounts).length === 0 ? (

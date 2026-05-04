@@ -26,8 +26,19 @@ const toneToColor: Record<StatusTone, string> = {
  * — see `agent-view-model` for the agent state variant.
  */
 export function StatusBadge({ children, tone = "neutral", className }: StatusBadgeProps) {
+  // Default Mantine Badge uppercases text; for status pills we keep mixed case
+  // so values like "90 / 92 connected" stay legible at the tight cell widths
+  // common in collector tables.
+  const variant = tone === "neutral" ? "default" : "light";
   return (
-    <Badge variant="light" color={toneToColor[tone]} className={className}>
+    <Badge
+      variant={variant}
+      color={toneToColor[tone]}
+      className={className}
+      tt="none"
+      radius="sm"
+      style={{ fontWeight: 500, letterSpacing: 0 }}
+    >
       {children}
     </Badge>
   );
