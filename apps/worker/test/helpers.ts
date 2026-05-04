@@ -378,12 +378,6 @@ export async function connectWithEnrollment(
      * Signature: (instanceUid: string, doStub: DurableObjectStub) => Promise<void>
      */
     doAction?: (instanceUid: string, doStub: ReturnType<typeof env.CONFIG_DO.get>) => Promise<void>;
-    /**
-     * Pass `false` to skip the default effective_config in the initial hello.
-     * Useful when a test wants to assert behavior for an agent that has
-     * NOT yet reported its effective config (e.g. drift logic edge cases).
-     */
-    includeEffectiveConfig?: boolean;
   } = {},
 ): Promise<{
   ws: WebSocket;
@@ -403,13 +397,7 @@ export async function connectWithEnrollment(
   // buildHello() defaults include CONFIGURABLE_CAPABILITIES (ReportsStatus,
   // AcceptsRemoteConfig, ReportsEffectiveConfig, ReportsHealth,
   // ReportsRemoteConfig) which is the expected capability set for enrollment.
-  ws.send(
-    encodeFrame(
-      buildHello({
-        includeEffectiveConfig: opts.includeEffectiveConfig,
-      }),
-    ),
-  );
+  ws.send(encodeFrame(buildHello()));
 
   // Receive OpAMP binary response (server accepts enrollment and sends response).
   // The DO may close this socket and request reconnect via AgentIdentification.
@@ -573,3 +561,16 @@ export {
   buildConfigAck,
   buildDescriptionReport,
 } from "@o11yfleet/test-utils";
+
+/**
+ * Creates a Config DO stub and bootstraps its schema.
+ * Used by tests that need to insert agents directly into the DO's SQLite DB.
+ */
+export async function createRuntimeTestContext(): Promise<{
+  durableObject: ReturnType<typeof env.CONFIG_DO.get>;
+}> {
+  const id = env.CONFIG_DO.idFromName(`test-rt:${crypto.randomUUID()}`);
+  const stub = env.CONFIG_DO.get(id);
+  await stub.fetch("http://internal/stats");
+  return { durableObject: stub };
+}
