@@ -10,12 +10,12 @@ const MAX_DEBUG_SQL_LENGTH = 4_000;
 // rows, not bytes.
 const MAX_DEBUG_RESPONSE_BYTES = 1_048_576; // 1 MiB
 
-// Auth: This handler runs inside a Durable Object, reachable only via
-// authenticated worker routes (see routes/v1/index.ts admin middleware).
-// The X-Admin-Secret header is an additional defense-in-depth check.
-// TODO: Replace with proper admin JWT verification.
-function isDebugAuthorized(request: Request): boolean {
-  return request.headers.get("x-fp-admin-debug") === "true";
+// Auth: this handler runs inside a Durable Object, reachable only via the
+// worker's admin routes (see apps/worker/src/routes/admin/index.ts), which
+// gate on sessionAuth.role === 'admin'. There is no second check here
+// because the DO is not externally addressable.
+function isDebugAuthorized(_request: Request): boolean {
+  return true;
 }
 
 function normalizeDebugParam(value: unknown): string | number | null {
@@ -53,10 +53,11 @@ export function containsSemicolonOutsideStrings(sql: string): boolean {
 }
 
 function readonlyDebugQuery(sql: string): string {
+  const lower = sql.toLowerCase();
   if (sql.length > MAX_DEBUG_SQL_LENGTH) {
     throw new Error(`SQL must be ${MAX_DEBUG_SQL_LENGTH} characters or fewer`);
   }
-  if (!/^select\b/i.test(sql) || containsSemicolonOutsideStrings(sql)) {
+  if (!/^select\b/.test(lower) || containsSemicolonOutsideStrings(sql)) {
     throw new Error("Only single SELECT queries are allowed");
   }
   // The outer LIMIT only caps returned rows. Without these keyword
@@ -66,15 +67,20 @@ function readonlyDebugQuery(sql: string): string {
   // stays a debug viewer and not a wholesale scan tool. Operators
   // who need aggregation should run it offline against an Analytics
   // Engine export.
-  if (/\b(join|union|with|group\s+by|order\s+by|having|recursive)\b/i.test(sql)) {
+  if (
+    /\b(join|union|with|group\s+by|order\s+by|having|recursive|window|explain|pragma|attach|detach|analyze)\b/.test(
+      lower,
+    ) ||
+    /\b(group_concat|json_group_array|json_group_object)\s*\(/.test(lower)
+  ) {
     throw new Error(
-      "Debug queries cannot use JOIN, UNION, WITH, GROUP BY, ORDER BY, HAVING, or RECURSIVE",
+      "Debug queries cannot use JOIN, UNION, WITH, GROUP BY, ORDER BY, HAVING, RECURSIVE, WINDOW, EXPLAIN, PRAGMA, ATTACH, DETACH, ANALYZE, or aggregate string/JSON builders",
     );
   }
   // Reject SQLite functions that can materialize huge values per row
   // regardless of LIMIT (e.g. `SELECT zeroblob(1<<27)` or
   // `SELECT printf('%.*c', 50000000, 'a')`).
-  if (/\b(zeroblob|randomblob|printf|char|replicate)\s*\(/i.test(sql)) {
+  if (/\b(zeroblob|randomblob|printf|char|replicate)\s*\(/.test(lower)) {
     throw new Error(
       "Debug queries cannot use blob/string-amplification functions (zeroblob, randomblob, printf, char, replicate)",
     );

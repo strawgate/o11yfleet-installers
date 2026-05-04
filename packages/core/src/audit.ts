@@ -18,6 +18,7 @@ export type AuditActor =
       kind: "user";
       user_id: string;
       email: string | null;
+      role: "member" | "admin" | null;
       ip: string | null;
       user_agent: string | null;
       /** Set when an admin is impersonating; the customer audit log surfaces

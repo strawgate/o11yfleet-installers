@@ -76,6 +76,7 @@ export function userActor(
   args: {
     user_id: string;
     email: string | null;
+    role: "member" | "admin";
     /** Real admin id when this request is an impersonation session. */
     impersonator_user_id?: string | null;
   },
@@ -84,9 +85,15 @@ export function userActor(
     kind: "user",
     user_id: args.user_id,
     email: args.email,
+    role: args.role,
     impersonator_user_id: args.impersonator_user_id ?? null,
     ...networkAttrs(request),
   };
+}
+
+/** Extract the authenticated user ID from an audit actor. */
+export function actorUserId(actor: AuditActor): string | null {
+  return actor.kind === "user" ? actor.user_id : null;
 }
 
 /** Build a `kind: "api_key"` actor from a verified API-key claim. */

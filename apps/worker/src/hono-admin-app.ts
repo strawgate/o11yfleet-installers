@@ -142,7 +142,11 @@ app.use("*", async (c, next) => {
 
   // Build audit actor
   const adminActor = sessionAuth
-    ? userActor(c.req.raw, { user_id: sessionAuth.userId, email: sessionAuth.email })
+    ? userActor(c.req.raw, {
+        user_id: sessionAuth.userId,
+        email: sessionAuth.email,
+        role: sessionAuth.role,
+      })
     : systemActor(c.req.raw);
   const audit = adminAuditContext({
     ctx: c.executionCtx,

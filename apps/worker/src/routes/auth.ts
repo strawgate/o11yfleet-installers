@@ -502,7 +502,7 @@ function buildAuthAuditContext(
   email: string,
 ): AuditContext | null {
   if (!ctx) return null;
-  const actor = userActor(request, { user_id: userId, email });
+  const actor = userActor(request, { user_id: userId, email, role: role as "member" | "admin" });
   if (tenantId) {
     return tenantAuditContext({ ctx, env, request, tenant_id: tenantId, actor });
   }
@@ -740,7 +740,7 @@ async function findOrCreateGitHubUser(
           status: tenantStatus,
           max_configs,
           max_agents_per_config,
-          approved_at: sql<string>`datetime('now')`,
+          ...(tenantStatus === "active" ? { approved_at: sql<string>`datetime('now')` } : {}),
         }),
         env.FP_DB,
       ),

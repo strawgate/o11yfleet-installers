@@ -3,7 +3,7 @@
 // Previously duplicated across index.ts, hono-app.ts, and hono-admin-app.ts.
 
 import type { Env } from "../index.js";
-import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./origins.js";
+import { isAllowedCorsOrigin } from "./origins.js";
 
 /**
  * Build CORS headers from an already-extracted origin string.
@@ -11,8 +11,13 @@ import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./origins.js";
  */
 function getCorsHeadersForOrigin(origin: string, env: Env): Record<string, string> {
   const allowed = isAllowedCorsOrigin(origin, env.ENVIRONMENT);
+  if (!allowed) {
+    // Don't echo CORS headers for disallowed origins. The browser will block
+    // the response in any case, and a non-matching ACAO is just noise in dev tools.
+    return { Vary: "Origin" };
+  }
   return {
-    "Access-Control-Allow-Origin": allowed ? origin : PRODUCTION_ORIGINS[0]!,
+    "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
     "Access-Control-Allow-Credentials": "true",

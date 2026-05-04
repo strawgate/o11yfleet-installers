@@ -5,7 +5,12 @@ import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { AdminEnv } from "./shared.js";
 import { withAdminAudit, withAdminAuditCreate } from "./shared.js";
-import { recordEvent, type AuditContext, type AuditCreateResult } from "../../audit/recorder.js";
+import {
+  actorUserId,
+  recordEvent,
+  type AuditContext,
+  type AuditCreateResult,
+} from "../../audit/recorder.js";
 import {
   adminCreateTenantRequestSchema,
   adminUpdateTenantRequestSchema,
@@ -210,8 +215,9 @@ async function handleUpdateTenant(
   body: z.output<typeof adminUpdateTenantRequestSchema>,
   env: Env,
   tenantId: string,
-  adminId: string,
+  audit: AuditContext,
 ): Promise<Response> {
+  const adminId = actorUserId(audit.actor);
   const set: {
     name?: string;
     plan?: NonNullable<ReturnType<typeof normalizePlan>>;
@@ -220,7 +226,7 @@ async function handleUpdateTenant(
     geo_enabled?: 0 | 1;
     status?: "pending" | "active" | "suspended";
     approved_at?: RawBuilder<string>;
-    approved_by?: string;
+    approved_by?: RawBuilder<string>;
     updated_at: RawBuilder<string>;
   } = { updated_at: sql<string>`datetime('now')` };
 
@@ -242,8 +248,9 @@ async function handleUpdateTenant(
     }
     set.status = body.status as "pending" | "active" | "suspended";
     if (body.status === "active") {
-      set.approved_at = sql<string>`datetime('now')`;
-      set.approved_by = adminId;
+      // Preserve first-approval timestamp — re-activation should not overwrite.
+      set.approved_at = sql<string>`COALESCE(approved_at, datetime('now'))`;
+      set.approved_by = sql<string>`COALESCE(approved_by, ${adminId})`;
     }
   }
 
@@ -405,47 +412,62 @@ export async function getTenantWithPrimaryUser(
   env: Env,
   tenantId: string,
 ): Promise<TenantWithUser | null> {
+  const map = await getTenantsWithPrimaryUsers(env, [tenantId]);
+  return map.get(tenantId) ?? null;
+}
+
+export async function getTenantsWithPrimaryUsers(
+  env: Env,
+  tenantIds: string[],
+): Promise<Map<string, TenantWithUser>> {
+  const result = new Map<string, TenantWithUser>();
+  if (tenantIds.length === 0) return result;
+
   const db = getDb(env.FP_DB);
-  const tenant = await db
+  const rows = await db
     .selectFrom("tenants as t")
     .leftJoin("users as u", "u.tenant_id", "t.id")
-    .select(["t.id", "t.name", "u.email"])
-    .where("t.id", "=", tenantId)
-    .limit(1)
-    .executeTakeFirst();
+    .select(["t.id", "t.name", "t.status", "u.email"])
+    .where("t.id", "in", tenantIds)
+    .orderBy("u.created_at", "asc")
+    .execute();
 
-  if (!tenant) return null;
+  for (const row of rows) {
+    if (!result.has(row.id)) {
+      result.set(row.id, {
+        id: row.id,
+        name: row.name,
+        email: row.email ?? "",
+        tenant_status: row.status ?? null,
+      });
+    }
+  }
 
-  const status = await db
-    .selectFrom("tenants")
-    .select("status")
-    .where("id", "=", tenantId)
-    .executeTakeFirst();
-
-  return {
-    id: tenant.id,
-    name: tenant.name,
-    email: tenant.email ?? "",
-    tenant_status: status?.status ?? null,
-  };
+  return result;
 }
 
 async function handleApproveTenant(
   body: z.output<typeof adminApproveTenantRequestSchema>,
   env: Env,
   tenantId: string,
-  adminId: string,
+  audit: AuditContext,
 ): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
 
+  const adminId = actorUserId(audit.actor);
+
   if (body.action === "approve") {
+    if (tenant.status === "active") {
+      return Response.json({ success: true, status: "active", tenantId });
+    }
+
     await getDb(env.FP_DB)
       .updateTable("tenants")
       .set({
         status: "active",
-        approved_at: sql<string>`datetime('now')`,
-        approved_by: adminId,
+        approved_at: sql<string>`COALESCE(approved_at, datetime('now'))`,
+        approved_by: sql<string>`COALESCE(approved_by, ${adminId})`,
       })
       .where("id", "=", tenantId)
       .execute();
@@ -486,10 +508,11 @@ async function handleApproveTenant(
 async function handleBulkApproveTenants(
   body: z.output<typeof adminBulkApproveRequestSchema>,
   env: Env,
-  adminId: string,
+  audit: AuditContext,
 ): Promise<Response> {
   const approved: string[] = [];
   const failed: { id: string; error: string }[] = [];
+  const adminId = actorUserId(audit.actor);
 
   for (const tenantId of body.tenant_ids) {
     try {
@@ -505,24 +528,20 @@ async function handleBulkApproveTenants(
         continue;
       }
 
-      await getDb(env.FP_DB)
+      const result = await getDb(env.FP_DB)
         .updateTable("tenants")
         .set({
           status: "active",
-          approved_at: sql<string>`datetime('now')`,
-          approved_by: adminId,
+          approved_at: sql<string>`COALESCE(approved_at, datetime('now'))`,
+          approved_by: sql<string>`COALESCE(approved_by, ${adminId})`,
         })
         .where("id", "=", tenantId)
         .where("status", "=", "pending")
         .execute();
 
-      const tenantWithUser = await getTenantWithPrimaryUser(env, tenantId);
-      if (tenantWithUser?.email) {
-        await sendTenantApprovalEmail(env, {
-          tenantName: tenantWithUser.name,
-          tenantEmail: tenantWithUser.email,
-          action: "approved",
-        });
+      if ((result[0]?.numUpdatedRows ?? 0n) === 0n) {
+        failed.push({ id: tenantId, error: "Concurrent state change; tenant no longer pending" });
+        continue;
       }
 
       approved.push(tenantId);
@@ -531,6 +550,31 @@ async function handleBulkApproveTenants(
       failed.push({ id: tenantId, error });
     }
   }
+
+  // Batch-fetch primary users for all approved tenants (single query),
+  // then send emails in parallel. Failures don't roll back approval.
+  const tenantUsers = await getTenantsWithPrimaryUsers(env, approved);
+  const emailResults = await Promise.allSettled(
+    approved
+      .map((id) => tenantUsers.get(id))
+      .filter((u): u is TenantWithUser => u !== undefined && u.email !== "")
+      .map((u) =>
+        sendTenantApprovalEmail(env, {
+          tenantName: u.name,
+          tenantEmail: u.email,
+          action: "approved",
+        }),
+      ),
+  );
+
+  emailResults.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error("Tenant approval email failed", {
+        tenantId: approved[index],
+        error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+      });
+    }
+  });
 
   return typedJsonResponse(adminBulkApproveResponseSchema, { approved, failed }, env);
 }
@@ -561,11 +605,10 @@ tenantRoutes.put("/tenants/:id", jsonValidator(adminUpdateTenantRequestSchema), 
   const audit = c.get("audit");
   const targetId = c.req.param("id");
   const body = c.req.valid("json");
-  const adminId = c.req.header("X-Admin-Id") ?? "system";
   return withAdminAudit(
     audit,
     { action: "admin.tenant.update", resource_type: "tenant", resource_id: targetId },
-    () => handleUpdateTenant(body, c.env, targetId, adminId),
+    () => handleUpdateTenant(body, c.env, targetId, audit),
     targetId,
   );
 });
@@ -612,11 +655,10 @@ tenantRoutes.post(
     const audit = c.get("audit");
     const targetId = c.req.param("id");
     const body = c.req.valid("json");
-    const adminId = c.req.header("X-Admin-Id") ?? "system";
     return withAdminAudit(
       audit,
       { action: "admin.tenant.approve", resource_type: "tenant", resource_id: targetId },
-      () => handleApproveTenant(body, c.env, targetId, adminId),
+      () => handleApproveTenant(body, c.env, targetId, audit),
       targetId,
     );
   },
@@ -625,11 +667,10 @@ tenantRoutes.post(
 tenantRoutes.post("/bulk-approve", jsonValidator(adminBulkApproveRequestSchema), async (c) => {
   const audit = c.get("audit");
   const body = c.req.valid("json");
-  const adminId = c.req.header("X-Admin-Id") ?? "system";
   const resp = await withAdminAudit(
     audit,
     { action: "admin.tenant.bulk_approve", resource_type: "tenant", resource_id: null },
-    () => handleBulkApproveTenants(body, c.env, adminId),
+    () => handleBulkApproveTenants(body, c.env, audit),
   );
   // Mirror an `admin.tenant.approve` event into each approved tenant's
   // own audit log so customers see the action under their tenant.

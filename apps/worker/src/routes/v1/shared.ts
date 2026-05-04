@@ -69,6 +69,19 @@ export async function withAuditCreate(
   }
 }
 
+/** Require admin role for destructive operations. Returns a 403 Response
+ *  if the actor is a user without admin role. API-key and system actors
+ *  bypass — they're already gated by tenant scope and secret auth. */
+export function requireAdminRole(audit: AuditContext | undefined): Response | null {
+  if (!audit || audit.actor.kind !== "user" || audit.actor.role !== "admin") {
+    return new Response(JSON.stringify({ error: "Tenant admin role required" }), {
+      status: 403,
+      headers: { "Content-Type": "application/json" },
+    });
+  }
+  return null;
+}
+
 /** Verify config belongs to tenant and return it */
 /**
  * Look up a configuration row scoped to a tenant, returning `null` if

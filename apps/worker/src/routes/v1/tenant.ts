@@ -4,7 +4,7 @@ import { Hono } from "hono";
 import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { V1Env } from "./shared.js";
-import { withAudit } from "./shared.js";
+import { withAudit, requireAdminRole } from "./shared.js";
 import {
   updateTenantRequestSchema,
   tenantSchema,
@@ -66,12 +66,13 @@ export async function handleDeleteTenant(env: Env, tenantId: string): Promise<Re
     );
   }
 
-  // Atomic batch — sessions, users, tenant must all delete or none.
+  // Atomic batch — pending_tokens, sessions, users, tenant must all delete or none.
   // env.FP_DB.batch is the only way to commit multiple D1 statements
   // atomically (kysely-d1 doesn't support transactions); compileForBatch
   // lets us keep the type-safe builder.
   const db = getDb(env.FP_DB);
   await env.FP_DB.batch([
+    compileForBatch(db.deleteFrom("pending_tokens").where("tenant_id", "=", tenantId), env.FP_DB),
     compileForBatch(
       db
         .deleteFrom("sessions")
@@ -126,6 +127,7 @@ export async function handleGetTeam(env: Env, tenantId: string): Promise<Respons
     .selectFrom("users")
     .select(["id", "email", "display_name", "role", "created_at"])
     .where("tenant_id", "=", tenantId)
+    .where("email", "not like", `impersonation+%@o11yfleet.local`)
     .orderBy("created_at", "asc")
     .execute();
   return Response.json({ members });
@@ -249,7 +251,11 @@ tenantRoutes.delete("/tenant", async (c) => {
   return withAudit(
     audit,
     { action: "tenant.delete", resource_type: "tenant", resource_id: tenantId },
-    () => handleDeleteTenant(c.env, tenantId),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleDeleteTenant(c.env, tenantId);
+    },
   );
 });
 

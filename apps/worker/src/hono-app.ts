@@ -121,10 +121,14 @@ app.use("*", async (c, next) => {
     // OIDC is only for admin routes — not handled here
   }
 
-  // Session auth (cookie) — non-fatal if D1 is overloaded
+  // Session auth (cookie) — non-fatal if D1 is overloaded.
+  // Skip session auth when an API key already authenticated this request
+  // so that tenantId and actor resolve from the same credential source.
   let sessionAuth: Awaited<ReturnType<typeof authenticate>> = null;
   try {
-    sessionAuth = await authenticate(c.req.raw, c.env);
+    if (!apiKeyTenantId) {
+      sessionAuth = await authenticate(c.req.raw, c.env);
+    }
   } catch {
     // D1 overloaded — session auth unavailable
   }
@@ -149,6 +153,7 @@ app.use("*", async (c, next) => {
     actor = userActor(c.req.raw, {
       user_id: sessionAuth.userId,
       email: sessionAuth.email,
+      role: sessionAuth.role,
       impersonator_user_id: sessionAuth.isImpersonation
         ? (sessionAuth.impersonatorUserId ?? null)
         : null,

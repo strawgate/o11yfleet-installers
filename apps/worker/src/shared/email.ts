@@ -186,7 +186,6 @@ export async function sendEmail(
       bodyType: "html",
     });
 
-    console.warn("[email] Sent:", { from: fromAddress, to: toAddresses, subject: options.subject });
     return { success: true };
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err);

@@ -3,7 +3,7 @@
 import { Hono } from "hono";
 import type { Env } from "../../index.js";
 import type { V1Env } from "./shared.js";
-import { withAudit, getOwnedConfig, getDoName } from "./shared.js";
+import { withAudit, getOwnedConfig, getDoName, requireAdminRole } from "./shared.js";
 import { jsonError } from "../../shared/errors.js";
 import { parseRpcError } from "../../durable-objects/rpc-types.js";
 import type { ConfigStatsResult } from "../../durable-objects/rpc-types.js";
@@ -273,58 +273,83 @@ agentRoutes.get("/configurations/:id/rollout-cohort-summary", async (c) => {
 });
 
 agentRoutes.post("/configurations/:id/rollout", async (c) => {
+  const audit = c.get("audit");
   const configId = c.req.param("id");
   return withAudit(
-    c.get("audit"),
+    audit,
     { action: "rollout.start", resource_type: "rollout", resource_id: configId },
-    () => handleRollout(c.req.raw, c.env, c.get("tenantId"), configId),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleRollout(c.req.raw, c.env, c.get("tenantId"), configId);
+    },
   );
 });
 
 agentRoutes.post("/configurations/:id/disconnect", async (c) => {
+  const audit = c.get("audit");
   const configId = c.req.param("id");
   return withAudit(
-    c.get("audit"),
+    audit,
     { action: "agents.disconnect", resource_type: "configuration", resource_id: configId },
-    () => handleDisconnect(c.env, c.get("tenantId"), configId),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleDisconnect(c.env, c.get("tenantId"), configId);
+    },
   );
 });
 
 agentRoutes.post("/configurations/:id/restart", async (c) => {
+  const audit = c.get("audit");
   const configId = c.req.param("id");
   return withAudit(
-    c.get("audit"),
+    audit,
     { action: "agents.restart", resource_type: "configuration", resource_id: configId },
-    () => handleRestart(c.env, c.get("tenantId"), configId),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleRestart(c.env, c.get("tenantId"), configId);
+    },
   );
 });
 
 agentRoutes.post("/configurations/:id/agents/:agentId/disconnect", async (c) => {
+  const audit = c.get("audit");
   const configId = c.req.param("id");
   const instanceUid = c.req.param("agentId");
   return withAudit(
-    c.get("audit"),
+    audit,
     {
       action: "agent.disconnect",
       resource_type: "agent",
       resource_id: instanceUid,
       metadata: { config_id: configId },
     },
-    () => handleDisconnectAgentRoute(c.env, c.get("tenantId"), configId, instanceUid),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleDisconnectAgentRoute(c.env, c.get("tenantId"), configId, instanceUid);
+    },
   );
 });
 
 agentRoutes.post("/configurations/:id/agents/:agentId/restart", async (c) => {
+  const audit = c.get("audit");
   const configId = c.req.param("id");
   const instanceUid = c.req.param("agentId");
   return withAudit(
-    c.get("audit"),
+    audit,
     {
       action: "agent.restart",
       resource_type: "agent",
       resource_id: instanceUid,
       metadata: { config_id: configId },
     },
-    () => handleRestartAgentRoute(c.env, c.get("tenantId"), configId, instanceUid),
+    async () => {
+      const denial = requireAdminRole(audit);
+      if (denial) return denial;
+      return handleRestartAgentRoute(c.env, c.get("tenantId"), configId, instanceUid);
+    },
   );
 });

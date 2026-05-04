@@ -142,9 +142,7 @@ describe("API Authentication", () => {
           headers: { Origin: testCase.rejected, "Access-Control-Request-Method": "GET" },
         });
         expect(rejectedResponse.status).toBe(204);
-        expect(rejectedResponse.headers.get("Access-Control-Allow-Origin")).toBe(
-          "https://app.o11yfleet.com",
-        );
+        expect(rejectedResponse.headers.get("Access-Control-Allow-Origin")).toBeNull();
       }
     } finally {
       env.ENVIRONMENT = previousEnvironment;
@@ -158,7 +156,7 @@ describe("API Authentication", () => {
       headers: { Origin: retiredPreviewOrigin, "Access-Control-Request-Method": "GET" },
     });
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 
   it("allows staging origins in staging environment", async () => {
@@ -184,7 +182,7 @@ describe("API Authentication", () => {
       headers: { Origin: stagingOrigin, "Access-Control-Request-Method": "GET" },
     });
     expect(response.status).toBe(204);
-    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBeNull();
   });
 });
 
