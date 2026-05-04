@@ -249,10 +249,9 @@ jobs:
             echo "Bundle built with wrangler"
           else
             echo "Wrangler build failed, trying esbuild fallback..."
-            cd apps/worker
-            mkdir -p dist
-            pnpm exec esbuild src/instrumented.ts --bundle --outfile=dist/instrumented.js --format=esm --platform=browser --target=es2022 || true
-            if [ -f dist/instrumented.js ]; then
+            mkdir -p apps/worker/dist
+            pnpm --filter @o11yfleet/worker exec esbuild src/instrumented.ts --bundle --outfile=apps/worker/dist/index.js --format=esm --platform=browser --target=es2022 || true
+            if [ -f apps/worker/dist/index.js ]; then
               echo "Bundle built with esbuild fallback"
             fi
           fi
