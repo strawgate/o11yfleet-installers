@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, useSearchParams } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
+import { parseAsStringLiteral, useQueryState } from "nuqs";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   Badge,
@@ -45,17 +46,13 @@ import {
 import { emailDomain } from "./ai-context-utils";
 import type { AiGuidanceRequest } from "@o11yfleet/core/ai";
 
-type Tab = "overview" | "configurations" | "users" | "settings";
-
 const TAB_KEYS = ["overview", "configurations", "users", "settings"] as const;
-const isTab = (value: string | null): value is Tab =>
-  value !== null && (TAB_KEYS as readonly string[]).includes(value);
+type Tab = (typeof TAB_KEYS)[number];
 
 export default function TenantDetailPage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
-  const [searchParams, setSearchParams] = useSearchParams();
 
   const tenant = useAdminTenant(id);
   const configs = useAdminTenantConfigs(id);
@@ -64,8 +61,12 @@ export default function TenantDetailPage() {
   const deleteTenant = useDeleteAdminTenant(id!);
   const impersonateTenant = useImpersonateTenant(id!);
 
-  const tabParam = searchParams.get("tab");
-  const [activeTab, setActiveTab] = useState<Tab>(isTab(tabParam) ? tabParam : "overview");
+  // #786 Nuqs PoC: tab state lives in the URL only. No more dual-source drift
+  // (used to be `useState(searchParams.get("tab")) + useEffect(setActiveTab)`).
+  const [activeTab, setActiveTab] = useQueryState<Tab>(
+    "tab",
+    parseAsStringLiteral(TAB_KEYS).withDefault("overview"),
+  );
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
 
@@ -73,10 +74,6 @@ export default function TenantDetailPage() {
     initialValues: { name: "", plan: "starter" },
     validate: zodResolver(tenantSettingsSchema),
   });
-
-  useEffect(() => {
-    setActiveTab(isTab(tabParam) ? tabParam : "overview");
-  }, [tabParam]);
 
   useEffect(() => {
     // Re-seed the form when tenant data first loads or after a save. Skip
@@ -189,9 +186,12 @@ export default function TenantDetailPage() {
   }
 
   function handleTabChange(value: string | null) {
-    if (!value || !isTab(value)) return;
-    setActiveTab(value);
-    setSearchParams(value === "overview" ? {} : { tab: value });
+    if (!value) return;
+    if ((TAB_KEYS as readonly string[]).includes(value)) {
+      // Nuqs' setActiveTab serializes to ?tab= and elides the param when
+      // value === default ("overview").
+      void setActiveTab(value as Tab);
+    }
   }
 
   const planOptions = PLAN_OPTIONS.map((option) => ({
