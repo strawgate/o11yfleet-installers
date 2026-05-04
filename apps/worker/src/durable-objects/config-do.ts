@@ -3,8 +3,8 @@ import {
   decodeAgentToServer,
   encodeServerToAgent,
   ServerErrorResponseType,
+  type ServerToAgent,
 } from "@o11yfleet/core/codec";
-import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { processFrame, defaultProcessContext } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { signClaim, type AssignmentClaim } from "@o11yfleet/core/auth";
@@ -718,7 +718,6 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         // The new WS will be tagged with our UID, so ctx.getWebSockets(uid) works.
         if (isEnrollment) {
           span.setAttribute("opamp.enrollment_complete", true);
-          span.end();
           ws.close(1000, "Reconnect with new instance_uid");
         }
       }
@@ -957,32 +956,26 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
     const ws = sockets[0]!;
 
+    // Build signal-specific settings for hashing. The hash lets the agent detect
+    // when its telemetry connection settings have changed. The signal field is
+    // included in the hash to differentiate between metrics/traces/logs offers.
+    const signalPayload = {
+      destination_endpoint: endpoint,
+      headers: [{ key: "Authorization", value: `Bearer ${token}` }],
+      heartbeat_interval_seconds: 60,
+    };
+    const settingsWithoutHash =
+      signal === "metrics"
+        ? { own_metrics: signalPayload }
+        : signal === "traces"
+          ? { own_traces: signalPayload }
+          : { own_logs: signalPayload };
+    const settingsJson = new TextEncoder().encode(JSON.stringify(settingsWithoutHash));
+    const hashBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", settingsJson));
+
     const settings: ServerToAgent["connection_settings"] = {
-      hash: new Uint8Array(32),
-      own_metrics:
-        signal === "metrics"
-          ? {
-              destination_endpoint: endpoint,
-              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
-              heartbeat_interval_seconds: 60,
-            }
-          : undefined,
-      own_traces:
-        signal === "traces"
-          ? {
-              destination_endpoint: endpoint,
-              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
-              heartbeat_interval_seconds: 60,
-            }
-          : undefined,
-      own_logs:
-        signal === "logs"
-          ? {
-              destination_endpoint: endpoint,
-              headers: [{ key: "Authorization", value: `Bearer ${token}` }],
-              heartbeat_interval_seconds: 60,
-            }
-          : undefined,
+      hash: hashBytes,
+      ...settingsWithoutHash,
     };
 
     const ownMetricsMsg: ServerToAgent = {
@@ -1012,12 +1005,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     }
     const ws = sockets[0]!;
 
+    // Hash of empty revocation signal (all three cleared). All zeros signals
+    // intentional: this is a revocation, not a new configuration.
+    const revokeSettings = { own_metrics: {}, own_traces: {}, own_logs: {} };
+    const revokeJson = new TextEncoder().encode(JSON.stringify(revokeSettings));
+    const hashBytes = new Uint8Array(await crypto.subtle.digest("SHA-256", revokeJson));
+
     const revokeMsg: ServerToAgent = {
       instance_uid: hexToUint8Array(collectorId),
       flags: 0,
       capabilities: SERVER_CAPABILITIES,
       connection_settings: {
-        hash: new Uint8Array(32),
+        hash: hashBytes,
         own_metrics: {},
         own_traces: {},
         own_logs: {},

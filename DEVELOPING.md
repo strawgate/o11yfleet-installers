@@ -327,17 +327,25 @@ full `just ci-fast` gate before pushing.
 
 ### Coverage
 
-`just coverage` runs Vitest with v8 coverage on the pure-Node tests
-(`packages/core`, `apps/worker` Node-runner) and Istanbul on the
-workerd-pool tests (`apps/worker` runtime). Each produces a separate
-HTML report under `{package}/reports/coverage/`. The workerd pool
-needs Istanbul because `@cloudflare/vitest-pool-workers` runs tests
-in a remote workerd process that isn't v8-instrumented.
+CodeRabbit enforces docstring and test coverage in PRs — missing docstrings or
+untested code will block merge. Use `just coverage` to find gaps.
 
-Coverage is informational today — there's no CI gate. Use it to find
-modules that ship untested (the natural source of bugs like
-`upsertPendingDevice`, which had broken SQL and zero tests when it
-landed in #403).
+### Writing Tests
+
+Tests are living documentation: they prove what code *does*, not just what
+comments claim. Three questions guide what to test:
+
+1. **Is it a pure function?** → Unit test (`apps/worker/test/<module>.test.ts`,
+   add to `vitest.node.config.ts` `include` + coverage `include`).
+
+2. **Does it need DO state (ctx, repo, WebSockets, D1)?** → Runtime test with
+   `runInDurableObject()`. No config changes needed.
+
+3. **Does it touch a protocol (OpAMP, OTLP)?** → Test codec round-trips:
+   `encode()` → `decode()` preserves data, invalid input fails gracefully.
+
+**Bug fixes**: Write a failing test first. This proves the test catches the
+bug, the fix resolves it, and prevents regression.
 
 ### Load Testing & Benchmarks
 

@@ -18,6 +18,7 @@ export default defineConfig({
       "test/data-source-policy.test.ts",
       "test/text-diff.test.ts",
       "test/do-name.test.ts",
+      "test/opamp-session.test.ts",
       "test/policy-schemas.test.ts",
       "test/properties.test.ts",
       "test/github-validate-config.test.ts",
@@ -36,6 +37,7 @@ export default defineConfig({
       // workerd-pool config below) and merged separately.
       include: [
         "src/durable-objects/do-name.ts",
+        "src/durable-objects/opamp-session.ts",
         "src/durable-objects/policy-schemas.ts",
         "src/utils/**/*.ts",
         "src/shared/origins.ts",

@@ -42,6 +42,7 @@ import {
   layoutLR,
   toFlow,
   type BuilderNode,
+  type BuilderEdge,
 } from "@/components/pipeline-builder";
 import { AddComponentPanel } from "../../components/pipeline-builder/nodes/AddComponentPanel";
 import { PageHeader, PageShell } from "@/components/app";
@@ -128,6 +129,13 @@ export default function BuilderPage() {
     const next = toFlow(graph);
     return { nodes: layoutLR(next.nodes, next.edges), edges: next.edges };
   }, [graph]);
+  const [canvasState, setCanvasState] = useState<{
+    nodes: BuilderNode[];
+    edges: BuilderEdge[];
+  }>(flow);
+  useEffect(() => {
+    setCanvasState(flow);
+  }, [flow]);
 
   const guidanceRequest: AiGuidanceRequest = buildInsightRequest(
     insightSurface,
@@ -222,13 +230,13 @@ export default function BuilderPage() {
       await savePipeline.mutateAsync(yamlPreview);
       setSaveModalOpen(false);
       notifications.show({
-        title: "Pipeline preview generated",
-        message: "Saving pipelines is not yet wired to the backend. Copy the YAML below to apply.",
-        color: "yellow",
+        title: "Pipeline saved",
+        message: "Pipeline saved successfully.",
+        color: "green",
       });
     } catch (error) {
       notifications.show({
-        title: "Failed to generate preview",
+        title: "Failed to save pipeline",
         message: error instanceof Error ? error.message : "Unknown error",
         color: "red",
       });
@@ -260,7 +268,7 @@ export default function BuilderPage() {
               onClick={() => setSaveModalOpen(true)}
               disabled={!validation.ok || yamlPreviewError !== null}
             >
-              Review YAML export
+              Save pipeline
             </Button>
           </>
         }
@@ -426,22 +434,18 @@ service:
         onRefresh={() => void guidance.refetch()}
       />
 
-      <Modal
-        opened={saveModalOpen}
-        onClose={() => setSaveModalOpen(false)}
-        title="Review YAML export"
-      >
+      <Modal opened={saveModalOpen} onClose={() => setSaveModalOpen(false)} title="Save pipeline">
         <Stack gap="md">
           <Text size="sm">
-            Saving pipelines is not yet wired to the backend. Review and copy the generated YAML
-            below if you want to apply it manually.
+            Are you sure you want to save this pipeline? This will create a new version of the
+            pipeline.
           </Text>
           <Group gap="xs" justify="flex-end">
             <Button variant="default" onClick={() => setSaveModalOpen(false)}>
               Cancel
             </Button>
             <Button onClick={() => void handleSavePipeline()} loading={savePipeline.isPending}>
-              Continue
+              Save
             </Button>
           </Group>
         </Stack>
@@ -451,7 +455,7 @@ service:
         opened={isAddPanelOpen}
         onClose={() => setIsAddPanelOpen(false)}
         onAddNode={handleAddNode}
-        existingNodes={flow.nodes}
+        existingNodes={canvasState.nodes}
       />
     </PageShell>
   );

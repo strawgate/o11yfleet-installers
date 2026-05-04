@@ -1,10 +1,23 @@
+/**
+ * OpAMP session handling helpers.
+ *
+ * Provides utilities for processing the first WebSocket message from an agent,
+ * including enrollment (initial connection) and reconnection flows.
+ *
+ * - Enrollment: agent sends a first message without a claim; we decode it,
+ *   generate a claim with a DO-assigned UID, and instruct the agent to reconnect.
+ * - Reconnect: agent sends a first message with an existing claim; we validate
+ *   it and optionally refresh the connection settings offer if the agent supports
+ *   OpAMP connection settings negotiation.
+ */
+
 import {
   AgentCapabilities,
   decodeAgentToServer,
   encodeServerToAgent,
   ServerErrorResponseType,
+  type ServerToAgent,
 } from "@o11yfleet/core/codec";
-import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { signClaim } from "@o11yfleet/core/auth";
 import type { AssignmentClaim } from "@o11yfleet/core/auth";
 import { hexToUint8Array } from "@o11yfleet/core/hex";
@@ -13,11 +26,30 @@ import type { WSAttachment } from "./ws-attachment.js";
 import { ASSIGNMENT_CLAIM_TTL_SECONDS, SERVER_CAPABILITIES } from "./constants.js";
 
 export interface SessionContext {
+  /** Agent state repository for persistence. */
   repo: AgentStateRepository;
+  /** HMAC secret for signing assignment claims. */
   hmacSecret: string;
+  /** Callback to schedule the DO alarm after state changes. */
   ensureAlarm: () => Promise<void>;
 }
 
+/**
+ * Process the first WebSocket message from an OpAMP agent.
+ *
+ * Handles both initial enrollment (no prior claim) and reconnection (valid claim):
+ * - **Enrollment**: Decodes the agent's first message, assigns a DO-generated UID,
+ *   signs an assignment claim, and returns AgentIdentification to tell the agent
+ *   to reconnect with the new UID.
+ * - **Reconnect**: Validates the existing claim, optionally refreshes the connection
+ *   settings offer if the agent supports OpAMP connection settings negotiation.
+ *
+ * @param ctx - Session context with repo and HMAC secret.
+ * @param ws - Agent's WebSocket.
+ * @param attachment - Parsed WS attachment with enrollment flags.
+ * @param message - Raw binary first message from the agent.
+ * @returns Updated attachment, earlyReturn flag, and optionally AgentIdentification bytes.
+ */
 export async function handleFirstMessage(
   ctx: SessionContext,
   ws: WebSocket,

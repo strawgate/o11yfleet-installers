@@ -350,12 +350,15 @@ export class FakeOpampAgent {
     // also all StatusOK. Send it now so the server sees a proper post-startup health frame.
     // Note: Some DO implementations (e.g., our Config DO) close the WebSocket after
     // enrollment with code 1000 ("Reconnect with new instance_uid"). If the socket is
-    // not OPEN, reconnect using the assignment claim before sending the health report.
+    // not OPEN, reconnect using the assignment claim. We reconnect WITHOUT sending
+    // hello here — the caller (test) will send hello when ready. This prevents
+    // extra queued messages from interfering with tests that expect N messages = N responses.
     if (this.ws && this.ws.readyState !== WebSocket.OPEN) {
-      await this.connect(); // Reconnect with assignment claim
-      await this.sendHello(); // Send hello on new connection
+      await this.connect(); // Reconnect with assignment claim; DO wakes up from upgrade
     }
-    await this.sendHealthReport();
+    // DO is awake. Caller will send hello/heartbeat to trigger config delivery.
+    // No message is sent here to keep the queue clean for tests that call
+    // sendHello() + waitForMessage() after connectAndEnroll().
 
     return enrollment;
   }
@@ -472,6 +475,21 @@ export class FakeOpampAgent {
   }
 
   async waitForRemoteConfig(timeoutMs = 5000): Promise<ServerToAgent> {
+    // Fast path: drain any non-config queued messages (e.g., a reconnect hello
+    // response that arrived during connectAndEnroll() before the test's
+    // sendHello()). Keep draining until we find one with remote_config OR the
+    // queue is empty. If we find remote_config, return it. If queue is empty,
+    // wait for new messages.
+    while (this.messageQueue.length > 0) {
+      const first = this.messageQueue[0]!;
+      if (first.remote_config) {
+        this.messageQueue.shift();
+        return first;
+      }
+      // Non-config at front — discard and check next
+      this.messageQueue.shift();
+    }
+
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const remaining = deadline - Date.now();
