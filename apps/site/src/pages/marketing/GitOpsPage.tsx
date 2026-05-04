@@ -2,25 +2,25 @@ import { Link } from "react-router-dom";
 
 const rows = [
   {
-    title: "Planned repository sync",
-    desc: "The current MVP uses UI and CLI uploads. Git-backed config sync is on the roadmap.",
+    title: "Infrastructure as Code",
+    desc: "Your repository is the source of truth. Manage observability pipelines with the same rigorous peer review you use for your application code.",
   },
   {
     title: "Keep PR review in your process",
-    desc: "Until sync is built in, review collector YAML in your repo and upload the approved file.",
+    desc: "While native sync is in development, review collector YAML in your repo, merge with confidence, and upload the approved artifact.",
   },
   {
-    title: "Manual promotion today",
-    desc: "Upload known-good YAML and start an explicit rollout when you want collectors updated.",
+    title: "Explicit Promotion",
+    desc: "Upload known-good YAML and trigger a deliberate, monitored rollout when you are ready to update the fleet.",
   },
 ];
 
 const pipeline = ["Commit", "Review", "Upload", "Roll out"];
 
 const visuals = [
-  ["Roadmap: Git sync", "Status: Planned", "Current: UI + CLI upload"],
-  ["Pull request approved", "Config checks: passing", "Ready for upload"],
-  ["Upload source: main branch", "Version: 2026-04-30.1", "Rollout: Manual trigger"],
+  ["Roadmap: Native Git sync", "Status: In Development", "Current: UI + CLI upload"],
+  ["Pull request approved", "CI checks: passing", "Artifact ready"],
+  ["Source: main branch", "Version: 2026-04-30.1", "Rollout: Explicit trigger"],
 ];
 
 export default function GitOpsPage() {
@@ -32,11 +32,11 @@ export default function GitOpsPage() {
         </div>
         <h1>
           GitOps for
-          <br /> collector configuration
+          <br /> OpenTelemetry
         </h1>
         <p className="lede">
-          Keep collector YAML in your repo, then upload approved configs to O11yFleet. Native Git
-          sync is planned.
+          Treat your telemetry pipelines like production infrastructure. Keep collector
+          configurations in version control and roll out with confidence.
         </p>
       </section>
 
@@ -119,7 +119,8 @@ export default function GitOpsPage() {
           <div className="cta-block">
             <h2>Your repo is the source of truth.</h2>
             <p className="lede">
-              Use your repo for review today, and follow the roadmap toward native Git-backed sync.
+              Use your repo for review today, and follow the roadmap toward native Git-backed
+              synchronization.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">

@@ -4,11 +4,15 @@ export default function HomePage() {
   return (
     <>
       <section className="hero wrap">
-        <h1>Free for up to 1000 OTel Collectors</h1>
+        <h1>
+          The OpenTelemetry Control Plane.
+          <br />
+          Free for up to 1,000 Collectors.
+        </h1>
         <p className="lede" style={{ marginTop: 22 }}>
-          Connect collectors, see health and effective configuration, and roll out changes from one
-          hosted control plane. O11yFleet stays free until production requirements like history,
-          rollout safety, and governance become real.
+          We don't want your data. We want your telemetry pipelines to work. Connect collectors,
+          monitor health, and confidently roll out configurations from one vendor-neutral OpAMP
+          control plane. Start with visibility and scale with governance.
         </p>
         <div className="hero-actions">
           <Link to="/signup" className="btn btn-primary btn-lg">
@@ -28,24 +32,33 @@ export default function HomePage() {
           </div>
           <div className="grid-3">
             <div className="card card-pad">
-              <h3>Fleet visibility</h3>
+              <div aria-hidden="true" style={{ fontSize: "2rem", marginBottom: 12 }}>
+                📡
+              </div>
+              <h3>Vendor-Neutral Visibility</h3>
               <p>
-                See connected collectors, heartbeat status, and the effective config each collector
-                is actually running.
+                See connected collectors across any environment, monitor heartbeat status, and
+                detect config drift in real-time. We manage the fleet, not the data.
               </p>
             </div>
             <div className="card card-pad">
-              <h3>Configurations</h3>
+              <div aria-hidden="true" style={{ fontSize: "2rem", marginBottom: 12 }}>
+                🛠️
+              </div>
+              <h3>Safer Rollouts</h3>
               <p>
-                Group collectors by configuration, keep versions, compare changes, and roll back
-                when needed.
+                Push collector changes intentionally. Group collectors by configuration, watch the
+                fleet respond, and roll back instantly if production is on the line.
               </p>
             </div>
             <div className="card card-pad">
-              <h3>Safer rollouts</h3>
+              <div aria-hidden="true" style={{ fontSize: "2rem", marginBottom: 12 }}>
+                💸
+              </div>
+              <h3>Cost Control at the Edge</h3>
               <p>
-                Push collector changes intentionally, watch the fleet respond, and keep rollback
-                close when production is on the line.
+                Filter, deduplicate, and sample telemetry at the source. Stop blowing your Datadog
+                or Splunk budget on low-value data.
               </p>
             </div>
           </div>
@@ -56,28 +69,28 @@ export default function HomePage() {
         <div className="wrap">
           <div className="section-head">
             <span className="eyebrow">Why it matters</span>
-            <h2>OpenTelemetry is open. Collector operations should be too.</h2>
+            <h2>Open standards over proprietary agents.</h2>
           </div>
           <div className="grid-3">
             <div className="card card-pad">
-              <h3>Start with inventory</h3>
+              <h3>Pure-Play OpAMP</h3>
               <p>
-                Most teams just need to know which collectors are connected and what they are
-                running.
+                Built natively on the Open Agent Management Protocol. No bespoke agents to deploy,
+                and zero proprietary lock-in.
               </p>
             </div>
             <div className="card card-pad">
-              <h3>Invite the team</h3>
+              <h3>Massive Free Tier</h3>
               <p>
-                Starter includes 1,000 collectors and 3 users, so shared visibility does not require
-                a sales call.
+                Our Starter plan includes 1,000 collectors and 3 users. Shared visibility shouldn't
+                require a sales call or a massive budget.
               </p>
             </div>
             <div className="card card-pad">
-              <h3>Upgrade for governance</h3>
+              <h3>Built for Governance</h3>
               <p>
-                Growth adds more management policies, 30-day history, repo sync, API keys, RBAC, and
-                audit.
+                Upgrade to Growth or Enterprise for deep management policies, SSO, strict RBAC,
+                extended history, and compliance audit trails.
               </p>
             </div>
           </div>
@@ -90,7 +103,7 @@ export default function HomePage() {
             <h2>Start with fleet visibility.</h2>
             <p className="lede">
               Connect collectors for free, then upgrade when production needs history, rollout
-              safety, team controls, or governance.
+              safety, team controls, or enterprise governance.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">

@@ -25,7 +25,7 @@ const personalPlans = [
     annualPrice: "$290",
     period: "/month",
     annualPeriod: "/year",
-    desc: "For solo operators who need just a little bit more.",
+    desc: "For solo operators who need a little bit more.",
     collectors: "25 collectors",
     configurations: "3 configurations",
     history: "7-day history",
@@ -44,7 +44,7 @@ const organizationPlans = [
     monthlyPrice: "$0",
     annualPrice: "$0",
     period: "",
-    desc: "For small teams that want shared visibility before production governance.",
+    desc: "For teams that want shared visibility before strict production governance.",
     collectors: "1,000 collectors",
     configurations: "1 configuration",
     users: "3 users",
@@ -63,7 +63,7 @@ const organizationPlans = [
     annualPrice: "$5,000",
     period: "/month",
     annualPeriod: "/year",
-    desc: "For organizations running collectors in production.",
+    desc: "For organizations actively operating collectors in production.",
     collectors: "1,000 collectors",
     configurations: "10 configurations",
     history: "30-day history",
@@ -81,14 +81,14 @@ const organizationPlans = [
     annualPrice: "Custom",
     period: "",
     secondaryPrice: "Starts at $50k/year",
-    desc: "For companies with enterprise requirements.",
+    desc: "For companies requiring strict compliance, SSO, and infinite scale.",
     collectors: "Custom collectors",
     configurations: "Unlimited configurations",
     history: "90d-1yr+",
     users: "Unlimited users",
     repos: "Unlimited repositories",
-    support: "Custom",
-    cta: "Contact us",
+    support: "Custom SLA",
+    cta: "Contact Sales",
     ctaTo: "/enterprise",
     ctaClass: "btn btn-secondary btn-lg",
     featured: false,
@@ -192,8 +192,8 @@ export default function PricingPage() {
           <span className="eyebrow">Pricing</span>
           <h1>Your cost is probably $0.</h1>
           <p className="lede">
-            Free for teams with up to 1000 collectors. Who even has more than a thousand collectors?
-            Upgrade when you need more configurations, users, history, or repo sync.
+            Free for teams with up to 1,000 collectors. We believe basic visibility should be free.
+            Upgrade when you need advanced rollout governance, extended history, or team controls.
           </p>
         </div>
       </section>
@@ -205,7 +205,7 @@ export default function PricingPage() {
               <div>
                 <span className="eyebrow">Organization track</span>
                 <h2>Team fleets.</h2>
-                <p className="meta">Invite some friends and stay a while.</p>
+                <p className="meta">Shared visibility and strict governance.</p>
               </div>
               <BillingToggle
                 value={organizationBillingCycle}
@@ -223,7 +223,7 @@ export default function PricingPage() {
               <div>
                 <span className="eyebrow">Individual track</span>
                 <h2>Personal fleets.</h2>
-                <p className="meta">The perfect plan if you like clicky clicky.</p>
+                <p className="meta">For solo operators and side projects.</p>
               </div>
               <BillingToggle value={individualBillingCycle} onChange={setIndividualBillingCycle} />
             </div>
@@ -246,7 +246,7 @@ export default function PricingPage() {
                 Flying solo
               </Link>
               <Link to="/signup?plan=starter" className="btn btn-primary btn-lg">
-                I&apos;ll be inviting friends
+                I'll be inviting my team
               </Link>
             </div>
           </div>

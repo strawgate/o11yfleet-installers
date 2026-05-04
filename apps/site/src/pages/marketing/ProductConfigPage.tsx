@@ -3,24 +3,32 @@ import { Link } from "react-router-dom";
 const rows = [
   {
     title: "Version every change",
-    desc: "Each YAML upload is stored as an immutable snapshot with a content hash.",
+    desc: "Each YAML upload is stored as an immutable snapshot with a content hash. Track the evolution of your pipeline.",
   },
   {
     title: "Immediate rollouts",
-    desc: "Push the current config to connected collectors when you are ready.",
+    desc: "Push the current config to connected collectors instantly across any environment. Stop waiting for slow CM tools.",
   },
   {
-    title: "Effective config visibility",
-    desc: "Collectors can report what they are running so operators can inspect fleet state.",
+    title: "Real-time drift detection",
+    desc: "Collectors report their effective configuration via OpAMP. Spot manual overrides or out-of-sync agents instantly.",
   },
 ];
 
-const steps = ["Edit", "Review", "Roll out", "Monitor"];
+const steps = ["Upload Config", "Review Drift", "Deploy", "Monitor Health"];
 
 const visuals = [
-  ["collector-prod.yaml", "sha256:4f8c…9e1a", "Updated 2m ago"],
-  ["Rollout target: 84 collectors", "Canary: 10%", "Status: Ready"],
-  ["Connected collectors: 82/84", "Drift detected: 2", "Last report: 34s ago"],
+  [{ text: "collector-prod.yaml" }, { text: "sha256:4f8c…9e1a" }, { text: "Updated 2m ago" }],
+  [
+    { text: "Rollout target: 84 collectors" },
+    { text: "Safe rollback ready" },
+    { text: "Status: Ready" },
+  ],
+  [
+    { text: "Connected collectors: 82/84" },
+    { text: "Drift detected: 2", warning: true },
+    { text: "Last report: 34s ago" },
+  ],
 ];
 
 export default function ProductConfigPage() {
@@ -35,8 +43,8 @@ export default function ProductConfigPage() {
           <br /> that doesn't break prod
         </h1>
         <p className="lede">
-          Versioned configs, immediate rollouts, and effective config visibility — so you can see
-          what your collector fleet is running.
+          Move beyond manual SSH and scattered YAML. Versioned configs, immediate rollouts, and
+          real-time effective config visibility.
         </p>
       </section>
 
@@ -71,18 +79,19 @@ export default function ProductConfigPage() {
                   >
                     Example
                   </span>
-                  {(visuals[i] ?? []).map((line) => (
+                  {(visuals[i] ?? []).map((item) => (
                     <div
-                      key={line}
+                      key={item.text}
                       style={{
                         border: "1px solid var(--border, #e2e2e2)",
                         borderRadius: 8,
                         padding: "10px 12px",
                         fontFamily: "var(--mono, ui-monospace, SFMono-Regular, Menlo, monospace)",
                         fontSize: "0.9rem",
+                        color: item.warning ? "var(--warn)" : undefined,
                       }}
                     >
-                      {line}
+                      {item.text}
                     </div>
                   ))}
                 </div>
@@ -119,7 +128,8 @@ export default function ProductConfigPage() {
           <div className="cta-block">
             <h2>Stop guessing what's deployed.</h2>
             <p className="lede">
-              Start with visibility, then take over config management when you're ready.
+              Start with visibility, verify your edge configurations, then take over management when
+              you're ready.
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">

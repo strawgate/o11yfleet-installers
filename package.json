@@ -5,6 +5,7 @@
   "scripts": {
     "lint": "turbo lint",
     "lint:scripts": "oxlint scripts",
+    "lint:prose": "alex apps/site/src/pages/marketing/*.tsx **/*.md",
     "lint:type-aware": "oxlint --type-aware --ignore-pattern '.claude/**' --ignore-pattern 'infra/tfstate-worker/**' .",
     "typecheck": "turbo typecheck",
     "test": "turbo test",
@@ -17,6 +18,7 @@
   "devDependencies": {
     "@vitest/coverage-istanbul": "^4.1.5",
     "@vitest/coverage-v8": "^4.1.5",
+    "alex": "^11.0.1",
     "husky": "^9.1.7",
     "knip": "^6.11.0",
     "oxlint": "^1.62.0",
@@ -25,6 +27,10 @@
     "tsx": "^4.19.0",
     "turbo": "^2.9.8",
     "typescript": "^6.0.3",
-    "wrangler": "^4.87.0"
+    "wrangler": "^4.87.0",
+    "write-good": "^1.0.8"
+  },
+  "dependencies": {
+    "ws": "^8.20.0"
   }
 }

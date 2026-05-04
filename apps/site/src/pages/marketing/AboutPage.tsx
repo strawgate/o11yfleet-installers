@@ -13,14 +13,15 @@ export default function AboutPage() {
         </h1>
         <div className="about-lede-grid">
           <p className="lede">
-            OpenTelemetry Collector has become the standard way to receive, process, and export
-            telemetry. But the operational experience around collector fleets is still too manual.
+            The OpenTelemetry Collector has become the industry standard way to receive, process,
+            and route telemetry. But the operational experience around managing these fleets at
+            scale is still too manual.
           </p>
           <p className="lede">
             Teams end up with scattered YAML, unclear rollout history, and limited visibility into
-            what is actually running. We are building a hosted OpAMP control plane so teams can
-            adopt collector management incrementally — monitor first, manage when ready, and keep
-            telemetry flowing to the systems they already trust.
+            what is actually running. We built a vendor-neutral OpAMP control plane so teams can
+            manage their fleets with confidence — without locking their data into a proprietary
+            pipeline.
           </p>
         </div>
       </section>
@@ -33,8 +34,8 @@ export default function AboutPage() {
             </div>
             <blockquote style={{ fontSize: "1.5rem", lineHeight: 1.5, margin: 0 }}>
               Telemetry should be portable. Configuration should be auditable. Adoption should be
-              incremental. We are not trying to become another required destination — we are trying
-              to make the layer that already exists feel operable.
+              incremental. We are not trying to become another required destination — we are
+              building the control plane that makes OpenTelemetry feel operable.
             </blockquote>
           </div>
         </div>
@@ -49,27 +50,27 @@ export default function AboutPage() {
             {[
               {
                 title: "Open standards over proprietary agents",
-                desc: "Built on OpAMP and OpenTelemetry — not another bespoke agent.",
+                desc: "Built natively on OpAMP and OpenTelemetry. We don't deploy bespoke, black-box agents.",
               },
               {
                 title: "Control without lock-in",
-                desc: "Your telemetry goes wherever you point it. We manage the fleet, not the data.",
+                desc: "Your telemetry goes wherever you point it. We manage the fleet, we don't hold the data.",
               },
               {
-                title: "Free fleet management",
-                desc: "Start with visibility and manual deployment. Pay when governance becomes real.",
+                title: "Massive Free Tier",
+                desc: "Start with visibility for up to 1,000 collectors. Upgrade when enterprise governance becomes a mandate.",
               },
               {
-                title: "Git-ready workflows",
-                desc: "The current MVP stores uploaded YAML versions; Git-backed sync is planned.",
+                title: "Cost Control at the Edge",
+                desc: "Reduce backend ingestion costs by confidently filtering and sampling telemetry at the collector.",
               },
               {
-                title: "Transparent pricing",
-                desc: "Pay for management, not for data volume. No per-GB surprises.",
+                title: "Transparent, Predictable Pricing",
+                desc: "Pay for management seats, not data volume. No per-GB ingestion surprises.",
               },
               {
-                title: "Safe rollouts over magical automation",
-                desc: "Rollouts are explicit and immediate today; progressive rollout controls are planned.",
+                title: "Safer Rollouts",
+                desc: "Rollouts should be explicit, versioned, and instantly reversible.",
               },
             ].map((v) => (
               <div key={v.title} className="about-belief-card">

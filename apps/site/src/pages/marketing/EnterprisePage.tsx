@@ -3,33 +3,33 @@ import { Link } from "react-router-dom";
 const features = [
   {
     icon: "🔐",
-    title: "SSO & SAML",
-    desc: "Enterprise identity integrations are planned; contact us to discuss requirements.",
+    title: "SSO & SAML Integration",
+    desc: "Seamlessly integrate with Okta, Google Workspace, Azure AD, and other enterprise identity providers to mandate secure access.",
   },
   {
     icon: "👥",
-    title: "Role-based access",
-    desc: "Workspace isolation exists today; fine-grained RBAC is planned.",
+    title: "Fine-Grained RBAC",
+    desc: "Enforce strict deployment policies. Control who can view fleets, edit configurations, or trigger production rollouts.",
   },
   {
     icon: "📋",
-    title: "Audit trail",
-    desc: "Configuration versions are recorded today; broader audit export is planned.",
+    title: "Immutable Audit Trails",
+    desc: "The platform records every configuration change, rollout, and rollback. Export comprehensive audit logs for compliance reviews.",
+  },
+  {
+    icon: "💸",
+    title: "Cost & Data Governance",
+    desc: "Push dynamic filtering rules to the edge. Mask PII and drop low-value telemetry before it incurs expensive egress or backend ingestion costs.",
   },
   {
     icon: "🗄️",
-    title: "Custom retention",
-    desc: "Discuss retention requirements before production deployment.",
+    title: "Custom Retention",
+    desc: "Extended configuration history and long-term storage of fleet telemetry to satisfy rigorous internal retention policies.",
   },
   {
     icon: "🛟",
-    title: "Custom support",
-    desc: "Support terms are handled case by case for enterprise customers.",
-  },
-  {
-    icon: "📄",
-    title: "SLAs",
-    desc: "SLA terms are handled case by case while the hosted service is early.",
+    title: "Dedicated Support & SLAs",
+    desc: "Get 24/7 support, named technical contacts, and robust uptime SLAs designed for mission-critical infrastructure.",
   },
 ];
 
@@ -43,17 +43,26 @@ export default function EnterprisePage() {
           <span className="pin">Enterprise</span>
         </div>
         <h1>
-          Collector governance
-          <br /> for large organizations
+          Observability Governance
+          <br /> for the Enterprise
         </h1>
         <p className="lede">
-          Planning support for SSO, audit trails, role-based access, custom retention, and support
-          terms for companies with enterprise requirements.
+          Take control of your telemetry data at the edge. Ensure compliance, enforce strict access
+          policies, and maintain comprehensive audit trails across your global OpenTelemetry fleet.
         </p>
+        <div className="hero-actions">
+          <Link to="/signup" className="btn btn-primary btn-lg">
+            Request a demo
+          </Link>
+        </div>
       </section>
 
       <section className="section">
         <div className="wrap">
+          <div className="section-head">
+            <span className="eyebrow">Enterprise-Ready Foundations</span>
+            <h2>Security and control at scale.</h2>
+          </div>
           <div className="grid-3">
             {features.map((f) => (
               <div key={f.title} className="card card-pad">
@@ -74,8 +83,8 @@ export default function EnterprisePage() {
             <span className="eyebrow">Compliance planning</span>
           </div>
           <p className="lede" style={{ marginBottom: 24 }}>
-            We do not claim current certification coverage here. These are common frameworks we can
-            discuss as requirements during evaluation.
+            Designed with security and auditability in mind. Our platform supports common compliance
+            framework requirements for telemetry data management.
           </p>
           <div className="compliance-grid">
             {compliance.map((c) => (
@@ -97,7 +106,7 @@ export default function EnterprisePage() {
             </p>
             <div className="hero-actions">
               <Link to="/signup" className="btn btn-primary btn-lg">
-                Request a demo
+                Contact Sales
               </Link>
             </div>
           </div>

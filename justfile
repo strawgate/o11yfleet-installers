@@ -99,6 +99,10 @@ lint:
     pnpm turbo lint
 
 [group: 'ci']
+lint-prose:
+    pnpm lint:prose
+
+[group: 'ci']
 typecheck:
     pnpm turbo typecheck
 
@@ -135,7 +139,7 @@ docs-api-check:
     pnpm tsx scripts/check-api-docs.ts
 
 [group: 'ci']
-ci: typegen-check lint typecheck test
+ci: typegen-check lint lint-prose typecheck test
 
 [group: 'ci']
 ci-full: ci test-runtime test-ui

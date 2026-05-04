@@ -31,13 +31,13 @@ const benefits = [
   },
   {
     icon: "📈",
-    title: "Predictable economics",
-    desc: "Pay for management, not telemetry volume. Margins stay yours as your clients' data grows.",
+    title: "Predictable Economics",
+    desc: "Pay for management, not telemetry volume. Fixed costs mean your margins stay yours, even as your clients' data grows exponentially.",
   },
   {
     icon: "🔧",
     title: "Open standards",
-    desc: "Built on OpAMP and OpenTelemetry. No bespoke agents to deploy, no proprietary lock-in to explain.",
+    desc: "Built on OpAMP and OpenTelemetry. No bespoke agents to deploy, and no proprietary lock-in to explain to your clients.",
   },
   {
     icon: "🚀",
@@ -47,7 +47,7 @@ const benefits = [
   {
     icon: "🤝",
     title: "Direct line to engineering",
-    desc: "Shared Slack channel, roadmap access, and early features for active partners.",
+    desc: "Shared Slack channel, roadmap access, and preview features for active partners.",
   },
   {
     icon: "📣",
@@ -129,7 +129,8 @@ export default function PartnersPage() {
         <p className="lede" style={{ marginTop: 22 }}>
           Whether you manage collectors for dozens of clients, deliver observability engagements, or
           ship a backend that receives OTLP — partner with O11yFleet to operate fleets at scale
-          without locking anyone into a proprietary agent.
+          without locking anyone into a proprietary agent. Protect your margins with predictable
+          economics.
         </p>
         <div className="hero-actions">
           <a href="mailto:partners@o11yfleet.com" className="btn btn-primary btn-lg">
@@ -142,7 +143,7 @@ export default function PartnersPage() {
         <div className="trust-strip">
           <span>Multi-workspace by default</span>
           <span>OpAMP &amp; OpenTelemetry native</span>
-          <span>No telemetry pass-through</span>
+          <span>Fixed management costs</span>
         </div>
       </section>
 
