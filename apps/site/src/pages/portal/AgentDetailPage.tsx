@@ -43,6 +43,7 @@ import {
 } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import {
+  Alert,
   Badge,
   Box,
   Button,
@@ -50,6 +51,7 @@ import {
   Code,
   Group,
   Paper,
+  SimpleGrid,
   Stack,
   Tabs,
   Text,
@@ -215,10 +217,10 @@ export default function AgentDetailPage() {
         description={
           <>
             {identity.serviceName ? (
-              <span className="block">
+              <Text component="span" display="block">
                 {identity.serviceName}
                 {identity.serviceVersion ? ` v${identity.serviceVersion}` : ""}
-              </span>
+              </Text>
             ) : null}
             <span>
               Configuration:{" "}
@@ -364,7 +366,13 @@ export default function AgentDetailPage() {
         }
       />
 
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+      <Box
+        style={{
+          display: "grid",
+          gap: "var(--mantine-spacing-sm)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        }}
+      >
         <MetricCard
           label="Connection"
           value={isConnected === true ? "online" : isConnected === false ? "offline" : "unknown"}
@@ -398,7 +406,7 @@ export default function AgentDetailPage() {
           value={hashLabel(currentHash)}
           tone={drift ? "warn" : "neutral"}
         />
-      </div>
+      </Box>
 
       <GuidancePanel
         title="Agent guidance"
@@ -477,10 +485,12 @@ function OverviewTab({
   componentInventory: ComponentInventory | null;
 }) {
   return (
-    <div
+    <SimpleGrid
       id="agent-tab-overview"
       role="tabpanel"
-      className="mt-6 grid grid-cols-1 gap-4 md:grid-cols-2"
+      cols={{ base: 1, md: 2 }}
+      spacing="md"
+      mt="md"
     >
       {/* Identity card */}
       <Card>
@@ -489,29 +499,39 @@ function OverviewTab({
         </Title>
         <dl className="detail-list">
           <dt>Instance UID</dt>
-          <dd className="mono-cell text-sm">{agentUid}</dd>
+          <dd style={{ fontFamily: "var(--mantine-font-family-monospace)" }}>{agentUid}</dd>
           <dt>Hostname</dt>
           <dd>{identity.hostname ?? "—"}</dd>
           <dt>Service</dt>
           <dd>
             {identity.serviceName ?? "—"}
             {identity.serviceVersion && (
-              <span className="meta ml-1">v{identity.serviceVersion}</span>
+              <Text component="span" c="dimmed" size="sm" ml={4}>
+                v{identity.serviceVersion}
+              </Text>
             )}
           </dd>
           <dt>OS</dt>
           <dd>
             {identity.osType ?? "—"}
-            {identity.hostArch && <span className="meta ml-1">({identity.hostArch})</span>}
+            {identity.hostArch && (
+              <Text component="span" c="dimmed" size="sm" ml={4}>
+                ({identity.hostArch})
+              </Text>
+            )}
             {identity.osDescription && (
-              <p className="meta text-xs mt-0.5">{identity.osDescription}</p>
+              <Text size="xs" c="dimmed" mt={2}>
+                {identity.osDescription}
+              </Text>
             )}
           </dd>
           <dt>Connection</dt>
           <dd>
             <ConnectionBadge connected={isConnected} />
             {isConnected && agent.uptime_ms !== null && agent.uptime_ms !== undefined && (
-              <span className="meta ml-2">uptime {formatDuration(agent.uptime_ms)}</span>
+              <Text component="span" c="dimmed" size="sm" ml={8}>
+                uptime {formatDuration(agent.uptime_ms)}
+              </Text>
             )}
           </dd>
           <dt>Generation</dt>
@@ -543,10 +563,14 @@ function OverviewTab({
               <span>
                 {componentCounts.total} total
                 {componentCounts.healthy > 0 && (
-                  <span className="text-green-600 ml-1">({componentCounts.healthy} ok)</span>
+                  <Text component="span" c="green" ml={4}>
+                    ({componentCounts.healthy} ok)
+                  </Text>
                 )}
                 {componentCounts.degraded > 0 && (
-                  <span className="text-amber-600 ml-1">({componentCounts.degraded} degraded)</span>
+                  <Text component="span" c="yellow" ml={4}>
+                    ({componentCounts.degraded} degraded)
+                  </Text>
                 )}
               </span>
             ) : (
@@ -554,8 +578,14 @@ function OverviewTab({
             )}
           </dd>
           <dt>Last error</dt>
-          <dd className={agent.last_error ? "text-red-600" : ""}>
-            {(agent.last_error as string) || "—"}
+          <dd>
+            {agent.last_error ? (
+              <Text component="span" c="red">
+                {agent.last_error as string}
+              </Text>
+            ) : (
+              "—"
+            )}
           </dd>
         </dl>
       </Card>
@@ -571,11 +601,15 @@ function OverviewTab({
             <ConfigBadge sync={configSync} />
           </dd>
           <dt>Desired hash</dt>
-          <dd className="mono-cell text-sm">{hashLabel(desiredHash)}</dd>
+          <dd style={{ fontFamily: "var(--mantine-font-family-monospace)" }}>
+            {hashLabel(desiredHash)}
+          </dd>
           <dt>Current hash</dt>
-          <dd className="mono-cell text-sm">{hashLabel(currentHash)}</dd>
+          <dd style={{ fontFamily: "var(--mantine-font-family-monospace)" }}>
+            {hashLabel(currentHash)}
+          </dd>
           <dt>Effective config hash</dt>
-          <dd className="mono-cell text-sm">
+          <dd style={{ fontFamily: "var(--mantine-font-family-monospace)" }}>
             {hashLabel(agent.effective_config_hash as string | undefined)}
           </dd>
         </dl>
@@ -627,7 +661,7 @@ function OverviewTab({
           </Text>
         )}
       </Card>
-    </div>
+    </SimpleGrid>
   );
 }
 
@@ -652,13 +686,13 @@ function ComponentCategory({ title, components }: { title: string; components: s
 function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
   if (!topology) {
     return (
-      <div id="agent-tab-pipeline" role="tabpanel" className="mt-6">
+      <Box id="agent-tab-pipeline" role="tabpanel" mt="md">
         <EmptyState
           icon="file"
           title="No pipeline to visualize"
           description="This agent has not reported an effective configuration yet."
         />
-      </div>
+      </Box>
     );
   }
 
@@ -666,7 +700,7 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
   const columns = pipelineColumns();
 
   return (
-    <div id="agent-tab-pipeline" role="tabpanel" className="mt-6 space-y-4">
+    <Stack id="agent-tab-pipeline" role="tabpanel" mt="md" gap="md">
       {/* Pipeline flow */}
       <Card>
         <Title order={3} size="sm" mb="md">
@@ -732,7 +766,7 @@ function PipelineTab({ topology }: { topology: PipelineTopology | null }) {
         getRowId={(row) => `${row.category}-${row.name}`}
         ariaLabel="All components"
       />
-    </div>
+    </Stack>
   );
 }
 
@@ -818,41 +852,44 @@ function ConfigTab({
 }) {
   if (!effectiveConfig) {
     return (
-      <div id="agent-tab-config" role="tabpanel" className="mt-6">
+      <Box id="agent-tab-config" role="tabpanel" mt="md">
         <EmptyState
           icon="file"
           title="No effective configuration"
           description="This agent has not reported the configuration it is actually running."
         />
-      </div>
+      </Box>
     );
   }
 
   return (
-    <div id="agent-tab-config" role="tabpanel" className="mt-6 space-y-4">
+    <Stack id="agent-tab-config" role="tabpanel" mt="md" gap="md">
       <Card>
-        <div className="flex items-center justify-between mb-3">
+        <Group justify="space-between" mb="xs">
           <Title order={3} size="sm" mb="md">
             Effective Configuration
           </Title>
-          <div className="flex items-center gap-3">
-            <span className="meta text-xs">
-              Hash: <code className="mono-cell">{hashLabel(effectiveHash, 12)}</code>
-            </span>
+          <Group gap="sm">
+            <Text component="span" c="dimmed" size="xs">
+              Hash:{" "}
+              <Text component="span" ff="monospace" inherit>
+                {hashLabel(effectiveHash, 12)}
+              </Text>
+            </Text>
             <CopyButton text={effectiveConfig} />
-          </div>
-        </div>
+          </Group>
+        </Group>
         {desiredHash && effectiveHash && desiredHash !== effectiveHash && (
-          <div className="bg-amber-50 border border-amber-200 rounded px-3 py-2 mb-3 text-sm text-amber-800">
+          <Alert color="yellow" variant="light" mb="xs">
             ⚠ Effective config hash differs from desired config hash — agent may have additional
             local configuration.
-          </div>
+          </Alert>
         )}
         <Code block style={{ maxHeight: 600, overflowY: "auto" }}>
           {effectiveConfig}
         </Code>
       </Card>
-    </div>
+    </Stack>
   );
 }
 
