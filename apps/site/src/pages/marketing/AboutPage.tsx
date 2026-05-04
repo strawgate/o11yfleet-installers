@@ -7,10 +7,7 @@ export default function AboutPage() {
         <div className="hero-meta">
           <span className="pin">About</span>
         </div>
-        <h1>
-          OpenTelemetry is open.
-          <br /> Collector management should be too.
-        </h1>
+        <h1>Operating collector fleets at scale should not feel improvised.</h1>
         <div className="about-lede-grid">
           <p className="lede">
             The OpenTelemetry Collector has become the industry standard way to receive, process,

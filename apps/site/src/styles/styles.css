@@ -707,6 +707,12 @@ p {
   margin-top: 28px;
   flex-wrap: wrap;
 }
+.hero-subheadline {
+  margin-top: 18px;
+  font-size: clamp(18px, 2vw, 24px);
+  line-height: 1.35;
+  color: var(--fg-2);
+}
 .trust-strip {
   display: flex;
   gap: 18px 32px;
@@ -761,10 +767,10 @@ p {
   gap: 24px;
 }
 .about-lede-grid {
-  margin-top: 48px;
+  margin-top: 28px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 64px;
+  gap: 40px;
   max-width: 1000px;
 }
 .about-manifesto-grid {
@@ -800,7 +806,7 @@ p {
   }
   .about-lede-grid,
   .about-manifesto-grid {
-    gap: 28px;
+    gap: 20px;
   }
   .about-belief-card {
     padding: 28px 0;

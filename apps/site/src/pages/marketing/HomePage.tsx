@@ -5,10 +5,11 @@ export default function HomePage() {
     <>
       <section className="hero wrap">
         <h1>
-          The OpenTelemetry Control Plane.
+          OpenTelemetry is vendor-neutral.
           <br />
-          Free for up to 1,000 Collectors.
+          Collector operations should be too.
         </h1>
+        <p className="hero-subheadline">Free for up to 1,000 OTel Collectors.</p>
         <p className="lede" style={{ marginTop: 22 }}>
           We don't want your data. We want your telemetry pipelines to work. Connect collectors,
           monitor health, and confidently roll out configurations from one vendor-neutral OpAMP
