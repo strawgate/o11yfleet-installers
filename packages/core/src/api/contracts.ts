@@ -817,7 +817,7 @@ export const restartFleetResultSchema = z.object({
 export type RestartFleetResult = z.infer<typeof restartFleetResultSchema>;
 
 export const disconnectFleetResultSchema = z.object({
-  disconnected: z.number(),
+  disconnect_requested: z.number(),
 });
 export type DisconnectFleetResult = z.infer<typeof disconnectFleetResultSchema>;
 

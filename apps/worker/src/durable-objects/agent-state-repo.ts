@@ -894,11 +894,16 @@ export function computeMetricsSql(
         SUM(CASE WHEN healthy = 1 THEN 1 ELSE 0 END) AS healthy_count,
         SUM(CASE WHEN healthy = 0 OR healthy IS NULL THEN 1 ELSE 0 END) AS unhealthy_count,
         SUM(CASE WHEN healthy = 1 AND status != 'disconnected' AND connected_at > 0 THEN 1 ELSE 0 END) AS connected_healthy_count,
-        SUM(CASE WHEN (? IS NULL) OR current_config_hash = ? THEN 1 ELSE 0 END) AS config_up_to_date,
+        SUM(CASE
+          WHEN ? IS NOT NULL AND current_config_hash = ? THEN 1
+          WHEN ? IS NULL AND status = 'connected' THEN 1
+          ELSE 0
+        END) AS config_up_to_date,
         SUM(CASE WHEN ? IS NOT NULL AND (current_config_hash IS NULL OR current_config_hash != ?) THEN 1 ELSE 0 END) AS config_pending,
         SUM(CASE WHEN last_error != '' AND last_error IS NOT NULL THEN 1 ELSE 0 END) AS agents_with_errors,
         SUM(CASE WHEN status != 'disconnected' AND last_seen_at > 0 AND last_seen_at < ? THEN 1 ELSE 0 END) AS agents_stale
       FROM agents`,
+      desiredConfigHash,
       desiredConfigHash,
       desiredConfigHash,
       desiredConfigHash,

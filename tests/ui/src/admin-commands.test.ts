@@ -176,7 +176,7 @@ test.describe("admin commands UI", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ disconnected: 2 }),
+        body: JSON.stringify({ disconnect_requested: 2 }),
       });
     });
 
@@ -334,7 +334,7 @@ test.describe("admin commands UI", () => {
       await route.fulfill({
         status: 200,
         contentType: "application/json",
-        body: JSON.stringify({ disconnected: 0 }),
+        body: JSON.stringify({ disconnect_requested: 0 }),
       });
     });
 

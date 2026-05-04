@@ -1322,3 +1322,147 @@ describe("saveAgentState end-to-end SQL round-trip", () => {
     ws.close();
   });
 });
+
+// ─── computeMetricsSql ↔ computeConfigMetrics parity ─────────────────
+//
+// Regression for a semantic-drift bug where computeMetricsSql counted
+// every agent as `config_up_to_date` when no desired hash was set,
+// while the JS path computeConfigMetrics (packages/core/src/metrics
+// /index.ts ~line 75-79, added in #712) only counts CONNECTED agents
+// in that case. The two metric paths feed the same dashboards via
+// different code paths (DO-aggregated SQL vs. portal-aggregated JS),
+// so a divergence here surfaces as flapping numbers depending on
+// which code path the caller hits. This test pins the contract: for
+// a fleet of one connected + one disconnected agent with NO desired
+// hash, both implementations must report config_up_to_date == 1.
+
+describe("computeMetricsSql ↔ computeConfigMetrics parity", () => {
+  beforeAll(async () => {
+    await bootstrapSchema();
+  });
+
+  it("agrees on config_up_to_date for connected+disconnected with no desired hash", async () => {
+    const { durableObject: doRef } = await createRuntimeTestContext();
+    const tenantId = "metrics-parity-tenant";
+    const configId = "metrics-parity-config";
+
+    // Seed two agents: one connected, one disconnected. The desired
+    // config hash is NULL so the no-desired-hash branch in both
+    // computeMetricsSql and computeConfigMetrics is exercised.
+    await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, current_config_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          "metrics-agent-connected",
+          tenantId,
+          configId,
+          "connected",
+          1,
+          now,
+          now,
+          null,
+        );
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, current_config_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          "metrics-agent-disconnected",
+          tenantId,
+          configId,
+          "disconnected",
+          1,
+          now,
+          0,
+          null,
+        );
+        // A third agent in the default "unknown" state (created but
+        // never reported). Both paths must agree it does NOT count
+        // toward config_up_to_date — only `status === "connected"`
+        // does in the no-desired-hash branch. This guards against a
+        // future drift where someone broadens the SQL predicate to
+        // `status != 'disconnected'` (which would match `unknown`)
+        // without updating the JS path to match.
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, current_config_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          "metrics-agent-unknown",
+          tenantId,
+          configId,
+          "unknown",
+          1,
+          now,
+          0,
+          null,
+        );
+        // A fourth agent with a hypothetical active non-connected
+        // status ("running") AND a recent connected_at. The strict
+        // semantic excludes it; a broader `status != 'disconnected' AND
+        // connected_at > 0` predicate would accidentally count it. The
+        // unknown agent above (connected_at=0) wouldn't catch that
+        // specific drift — this one does.
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, healthy, last_seen_at, connected_at, current_config_hash)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          "metrics-agent-running",
+          tenantId,
+          configId,
+          "running",
+          1,
+          now,
+          now,
+          null,
+        );
+      },
+    );
+
+    const { sqlMetrics, jsMetrics } = await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const { computeMetricsSql } = await import("../src/durable-objects/agent-state-repo.js");
+        const { computeConfigMetrics } = await import("@o11yfleet/core/metrics");
+        const STALE_MS = 60_000;
+        const sql = computeMetricsSql(state.storage.sql, null, STALE_MS);
+        // Materialise the same row set the JS path consumes by
+        // reading every agent and feeding them through
+        // computeConfigMetrics. Pass null for desiredConfigHash so
+        // both paths take the same branch.
+        const rows = state.storage.sql
+          .exec(
+            `SELECT instance_uid, status, healthy, capabilities, current_config_hash, last_error, last_seen_at FROM agents`,
+          )
+          .toArray();
+        const agentMap = new Map<
+          string,
+          {
+            status: string;
+            healthy: number;
+            capabilities: number;
+            current_config_hash: string | null;
+            last_error: string;
+            last_seen_at: number;
+          }
+        >();
+        for (const r of rows) {
+          agentMap.set(String(r["instance_uid"]), {
+            status: String(r["status"] ?? ""),
+            healthy: Number(r["healthy"] ?? 0),
+            capabilities: Number(r["capabilities"] ?? 0),
+            current_config_hash: r["current_config_hash"] ? String(r["current_config_hash"]) : null,
+            last_error: String(r["last_error"] ?? ""),
+            last_seen_at: Number(r["last_seen_at"] ?? 0),
+          });
+        }
+        const js = computeConfigMetrics(agentMap, null);
+        return { sqlMetrics: sql, jsMetrics: js };
+      },
+    );
+
+    // The contract: only the connected agent counts as up-to-date
+    // when there is no desired hash. Both paths must agree.
+    expect(sqlMetrics.config_up_to_date).toBe(1);
+    expect(jsMetrics.config_up_to_date).toBe(1);
+    expect(sqlMetrics.config_up_to_date).toBe(jsMetrics.config_up_to_date);
+  });
+});

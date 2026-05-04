@@ -89,7 +89,7 @@ export interface SweepResult {
 }
 
 export interface DisconnectResult {
-  disconnected: number;
+  disconnect_requested: number;
   failed: number;
 }
 

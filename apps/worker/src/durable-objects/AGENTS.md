@@ -200,7 +200,7 @@ The command handler (`command-handler.ts`) exposes admin actions via
 | Command            | Endpoint                      | Response fields                                     |
 | ------------------ | ----------------------------- | --------------------------------------------------- |
 | Set desired config | `/command/set-desired-config` | `pushed`, `failed`, `skipped_no_cap`, `config_hash` |
-| Disconnect all     | `/command/disconnect-all`     | `disconnected`, `failed`                            |
+| Disconnect all     | `/command/disconnect-all`     | `disconnect_requested`, `failed`                    |
 | Restart            | `/command/restart`            | `restarted`, `failed`, `skipped_no_cap`             |
 | Sweep stale        | `/command/sweep`              | `swept`, `active_websockets`, `duration_ms`         |
 

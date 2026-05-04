@@ -416,7 +416,7 @@ export default function ConfigurationDetailPage() {
             title: "Disconnect sent",
             // Phrase as "closed" not "disconnected" — the agent reconnects
             // on its own backoff (typically within seconds).
-            message: `Closed ${result.disconnected} collector connection(s); agents will reconnect automatically`,
+            message: `Closed ${result.disconnect_requested} collector connection(s); agents will reconnect automatically`,
             autoClose: 4000,
             withCloseButton: true,
           });

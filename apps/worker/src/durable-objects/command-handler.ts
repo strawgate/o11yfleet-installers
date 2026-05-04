@@ -144,7 +144,7 @@ export function handleDisconnectAll(ctx: CommandContext): Response {
   }
   // Note: ws.close() is fire-and-forget — the actual disconnect happens
   // asynchronously. The count reflects close requests, not confirmed disconnects.
-  return Response.json({ disconnected: closed, failed });
+  return Response.json({ disconnect_requested: closed, failed });
 }
 
 function findSocketByInstanceUid(ctx: CommandContext, instanceUid: string): WebSocket | null {
@@ -370,7 +370,7 @@ export function disconnectAllData(ctx: CommandContext): DisconnectResult {
       failed++;
     }
   }
-  return { disconnected: closed, failed };
+  return { disconnect_requested: closed, failed };
 }
 
 export function disconnectAgentData(

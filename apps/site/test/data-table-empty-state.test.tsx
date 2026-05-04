@@ -29,6 +29,9 @@ test("ErrorState: renders message and retry hint", () => {
   const html = renderToStaticMarkup(
     withProvider(<ErrorState message="Network is down" retry={() => undefined} />),
   );
+  // After consolidation in #721 the shared ErrorState renders just the
+  // provided message — no "Couldn't load data" prefix — and a retry
+  // button labeled "Try again".
   assert.match(html, /Network is down/);
   assert.match(html, /Try again/);
 });
