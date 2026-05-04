@@ -5,14 +5,12 @@ import type { ConfigDurableObject } from "./durable-objects/config-do.js";
 import type { SweepResult } from "./durable-objects/rpc-types.js";
 import { PENDING_DO_CONFIG_ID } from "./durable-objects/constants.js";
 export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
-import { handleAdminRequest } from "./routes/admin/index.js";
+import { adminApp } from "./hono-admin-app.js";
 import { v1App } from "./hono-app.js";
-import { handleAuthRequest, authenticate } from "./routes/auth.js";
+import { handleAuthRequest } from "./routes/auth.js";
 import { getDb } from "./db/client.js";
 import { runManifestDriftCheck } from "./jobs/manifest-drift-check.js";
-import { timingSafeEqual } from "./utils/crypto.js";
-import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
-import { verifyClaim, verifyEnrollmentToken, isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
+import { verifyClaim, verifyEnrollmentToken } from "@o11yfleet/core/auth";
 import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
 import type { AuditEvent } from "@o11yfleet/core/audit";
 
@@ -444,100 +442,16 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     return v1App.fetch(request, env, ctx);
   }
 
-  // API routes — with auth + CORS
+  // Admin routes — handled entirely by Hono (admin auth, CORS, dispatch)
+  if (url.pathname.startsWith("/api/admin/")) {
+    return adminApp.fetch(request, env, ctx);
+  }
+
+  // Unknown API routes (v1 and admin already short-circuited above)
   if (url.pathname.startsWith("/api/")) {
-    // Check Bearer token first (programmatic API access). O11YFLEET_API_BEARER_SECRET is intentionally
-    // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
-    let hasApiSecretBearer = false;
-    let oidcClaims: GitHubOIDCClaims | null = null;
-    let _apiKeyTenantId: string | null = null;
-    let _apiKeyJti: string | null = null;
-
-    const auth = request.headers.get("Authorization");
-    const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-
-    let oidcError: string | null = null;
-
-    if (token) {
-      if (isApiKey(token)) {
-        // Tenant-scoped signed API key — tenant_id is embedded in the claim.
-        // Verified via HMAC-SHA256, no D1 lookup needed.
-        try {
-          const claim = await verifyApiKey(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
-          _apiKeyTenantId = claim.tenant_id;
-          _apiKeyJti = claim.jti;
-        } catch (err) {
-          return addSecurityHeaders(
-            addCorsHeaders(
-              Response.json(
-                { error: err instanceof Error ? err.message : "Invalid API key" },
-                { status: 401 },
-              ),
-              request,
-              env,
-            ),
-          );
-        }
-      } else if (
-        env.O11YFLEET_API_BEARER_SECRET &&
-        timingSafeEqual(token, env.O11YFLEET_API_BEARER_SECRET)
-      ) {
-        hasApiSecretBearer = true;
-      } else if (looksLikeJWT(token) && env.O11YFLEET_OIDC_ALLOWED_REPOS) {
-        // Attempt GitHub Actions OIDC verification — scoped to "provision" operations only.
-        const allowedRepos = env.O11YFLEET_OIDC_ALLOWED_REPOS.split(",").map((r) => r.trim());
-        const audience = env.O11YFLEET_OIDC_AUDIENCE ?? "o11yfleet";
-        const result = await verifyGitHubOIDC(token, { audience, allowedRepos });
-        if (result.ok) {
-          oidcClaims = result.claims;
-        } else {
-          oidcError = result.error;
-          console.warn(`OIDC verification failed: ${result.error}`);
-        }
-      }
-    }
-
-    // Try session-based auth (cookie) — non-fatal if D1 is overloaded
-    let sessionAuth: Awaited<ReturnType<typeof authenticate>> = null;
-    try {
-      sessionAuth = await authenticate(request, env);
-    } catch {
-      // D1 overloaded — session auth unavailable, fall through to
-      // API key / Bearer / OIDC auth which don't need D1
-    }
-
-    let resp: Response;
-
-    // Admin routes — /api/admin/*
-    if (url.pathname.startsWith("/api/admin/")) {
-      const { adminAuditContext, systemActor, userActor } = await import("./audit/recorder.js");
-      const adminActor = sessionAuth
-        ? userActor(request, { user_id: sessionAuth.userId, email: sessionAuth.email })
-        : systemActor(request);
-      const adminAudit = adminAuditContext({ ctx, env, request, actor: adminActor });
-      // OIDC "provision" scope: only allows POST /api/admin/tenants (tenant creation).
-      // This enables CI workflows to provision test infrastructure without full admin access.
-      if (oidcClaims && request.method === "POST" && url.pathname === "/api/admin/tenants") {
-        resp = await handleAdminRequest(request, env, url, adminAudit);
-      } else if (sessionAuth?.role === "admin") {
-        resp = await handleAdminRequest(request, env, url, adminAudit);
-      } else {
-        const body = hasApiSecretBearer
-          ? { error: "Admin session required", code: "admin_session_required" }
-          : oidcClaims
-            ? { error: "OIDC scope insufficient", code: "oidc_scope_insufficient" }
-            : { error: "Admin access required", oidc_error: oidcError };
-        return addSecurityHeaders(
-          addCorsHeaders(Response.json(body, { status: 403 }), request, env),
-        );
-      }
-    }
-    // Unknown API routes
-    else {
-      resp = Response.json({ error: "Not found" }, { status: 404 });
-    }
-
-    return addSecurityHeaders(addCorsHeaders(resp, request, env));
+    return addSecurityHeaders(
+      addCorsHeaders(Response.json({ error: "Not found" }, { status: 404 }), request, env),
+    );
   }
 
   // OpAMP WebSocket endpoint

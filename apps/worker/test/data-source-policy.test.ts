@@ -35,13 +35,14 @@ describe("UI data-source policy", () => {
   });
 
   it("keeps admin fleet counters on Analytics Engine instead of D1 agent rollups", () => {
-    const source = readRepoFile("apps/worker/src/routes/admin/index.ts");
-    const overview = functionBody(source, "handleAdminOverview");
-    const health = functionBody(source, "handleHealthCheck");
-    const tenants = functionBody(source, "handleListTenants");
+    const healthSource = readRepoFile("apps/worker/src/routes/admin/health.ts");
+    const tenantsSource = readRepoFile("apps/worker/src/routes/admin/tenants.ts");
+    const overview = functionBody(healthSource, "handleAdminOverview");
+    const health = functionBody(healthSource, "handleHealthCheck");
+    const tenants = functionBody(tenantsSource, "handleListTenants");
 
-    expect(source).toContain("currentFleetSummary");
-    expect(source).toContain("currentFleetSummaryByTenant");
+    expect(healthSource).toContain("currentFleetSummary");
+    expect(healthSource).toContain("currentFleetSummaryByTenant");
     expect(overview).not.toContain("agent_summaries");
     expect(health).not.toContain("agent_summaries");
     expect(tenants).not.toContain("agent_summaries");
