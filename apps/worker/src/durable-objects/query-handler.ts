@@ -93,7 +93,12 @@ export function getAgentData(
   const connected = isConnected(uid);
   const desired = getDesiredConfig();
   const effectiveHash = agent["effective_config_hash"] as string | null;
-  const isDrifted = desired.hash !== null && effectiveHash !== desired.hash;
+  // Drift means "agent's effective config differs from desired". If the agent
+  // hasn't reported an effective config yet (effectiveHash === null), we don't
+  // know — that's not the same as drift. Treat null as not-drifted so the UI
+  // can render an "awaiting effective report" state instead of a false alarm.
+  const isDrifted =
+    desired.hash !== null && effectiveHash !== null && effectiveHash !== desired.hash;
   const connectedAt = agent["connected_at"] as number | null;
   const uptimeMs = connected && connectedAt ? Date.now() - connectedAt : null;
 

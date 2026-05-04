@@ -73,6 +73,8 @@ interface CollectorState {
   configsApplied: number;
   messagesReceived: number;
   messagesSent: number;
+  effectiveConfigBody: Uint8Array | null;
+  effectiveConfigContentType: string;
 }
 
 function initialState(): CollectorState {
@@ -86,6 +88,8 @@ function initialState(): CollectorState {
     configsApplied: 0,
     messagesReceived: 0,
     messagesSent: 0,
+    effectiveConfigBody: null,
+    effectiveConfigContentType: "text/yaml",
   };
 }
 
@@ -212,7 +216,7 @@ function connectAndRun(
         // Handle Blob (Node.js native WebSocket may return Blob)
         if (event.data instanceof Blob) {
           (event.data as Blob).arrayBuffer().then((buf) => {
-            handleBinaryMessage(buf, ws, name, state);
+            handleBinaryMessage(buf, ws, name, state, onClaim);
           });
           return;
         }
@@ -220,7 +224,7 @@ function connectAndRun(
         return;
       }
 
-      handleBinaryMessage(data, ws, name, state);
+      handleBinaryMessage(data, ws, name, state, onClaim);
     });
 
     ws.addEventListener("close", (event) => {
@@ -290,6 +294,7 @@ function handleBinaryMessage(
   ws: WebSocket,
   name: string,
   state: CollectorState,
+  onClaimUpdate: (claim: string) => void,
 ): void {
   try {
     const msg = decodeFrame<ServerToAgent>(data);
@@ -303,6 +308,41 @@ function handleBinaryMessage(
 
     log.ws("←", `[${name}] ServerToAgent — uid=${uid.slice(0, 8)}... flags=${msg.flags ?? 0}`);
 
+    // Adopt server-assigned instance_uid (OpAMP §3.2.1.2 — agents MUST
+    // adopt new_instance_uid). Without this, every reconnect looks like
+    // a fresh enrollment to the worker because state.instanceUid stays
+    // at its initial random value.
+    if (msg.agent_identification?.new_instance_uid) {
+      const newUid =
+        msg.agent_identification.new_instance_uid instanceof Uint8Array
+          ? msg.agent_identification.new_instance_uid
+          : new Uint8Array(msg.agent_identification.new_instance_uid);
+      state.instanceUid = newUid;
+      log.ok(
+        `[${name}] Adopted server-assigned instance_uid=${hexFromBytes(newUid).slice(0, 8)}...`,
+      );
+    }
+
+    // Adopt connection_settings.opamp.headers — the worker delivers the
+    // signed assignment claim here as `Authorization: Bearer <claim>`.
+    // The fake-collector connects via WebSocket query param, so we strip
+    // the "Bearer " prefix and store the raw claim for the next reconnect.
+    if (msg.connection_settings?.opamp?.headers) {
+      const headers = msg.connection_settings.opamp.headers as Array<{
+        key: string;
+        value: string;
+      }>;
+      const auth = headers.find((h) => h.key === "Authorization");
+      if (auth?.value?.startsWith("Bearer ")) {
+        const claim = auth.value.slice(7);
+        if (claim !== state.assignmentClaim) {
+          state.assignmentClaim = claim;
+          onClaimUpdate(claim);
+          log.ok(`[${name}] Received assignment claim — will reconnect with hot-path token`);
+        }
+      }
+    }
+
     // Handle remote config push
     if (msg.remote_config) {
       const hash = msg.remote_config.config_hash
@@ -315,12 +355,32 @@ function handleBinaryMessage(
 
       log.ok(`[${name}] 📦 Config push received! hash=${hash?.slice(0, 16) ?? "null"}`);
 
+      // "Apply" the config — copy the YAML body from remote_config to
+      // effective_config so the server (and UI Pipeline tab) can see what
+      // we're "running". The OpAMP server uses effective_config to
+      // distinguish "agent acknowledged the hash" from "agent is actually
+      // running this config", and the portal renders pipelines from
+      // effective_config_body.
+      const remoteEntry =
+        msg.remote_config.config?.config_map?.[""] ??
+        Object.values(msg.remote_config.config?.config_map ?? {})[0];
+      if (remoteEntry?.body) {
+        state.effectiveConfigBody =
+          remoteEntry.body instanceof Uint8Array
+            ? remoteEntry.body
+            : new Uint8Array(remoteEntry.body);
+        state.effectiveConfigContentType = remoteEntry.content_type ?? "text/yaml";
+      }
+
       // "Apply" the config
       if (hash && msg.remote_config.config_hash) {
         state.currentConfigHash = hash;
         state.configsApplied++;
 
-        // Send config applied ACK
+        // Send config applied ACK with effective_config so the server
+        // can record what we're running. Without effective_config, the
+        // server treats the agent as "haven't reported yet" and the
+        // pipeline visualizer shows an empty state.
         state.sequenceNum++;
         const ack: AgentToServer = {
           instance_uid: state.instanceUid,
@@ -329,7 +389,8 @@ function handleBinaryMessage(
             AgentCapabilities.ReportsStatus |
             AgentCapabilities.AcceptsRemoteConfig |
             AgentCapabilities.ReportsHealth |
-            AgentCapabilities.ReportsRemoteConfig,
+            AgentCapabilities.ReportsRemoteConfig |
+            AgentCapabilities.ReportsEffectiveConfig,
           flags: 0,
           remote_config_status: {
             last_remote_config_hash:
@@ -339,17 +400,35 @@ function handleBinaryMessage(
             status: RemoteConfigStatuses.APPLIED,
             error_message: "",
           },
+          ...(state.effectiveConfigBody
+            ? {
+                effective_config: {
+                  config_map: {
+                    config_map: {
+                      "": {
+                        body: state.effectiveConfigBody,
+                        content_type: state.effectiveConfigContentType,
+                      },
+                    },
+                  },
+                },
+              }
+            : {}),
         };
         ws.send(encodeFrame(ack));
         state.messagesSent++;
-        log.ws("→", `[${name}] ConfigApplied ACK — hash=${hash.slice(0, 16)}...`);
+        log.ws(
+          "→",
+          `[${name}] ConfigApplied ACK + effective_config — hash=${hash.slice(0, 16)}...`,
+        );
       }
     }
 
-    // Handle ReportFullState flag
+    // Handle ReportFullState flag — respond with full state at seq+1
+    // (NOT another Hello at seq=0, which would re-trigger the flag).
     if (msg.flags && msg.flags & 0x00000001) {
       log.warn(`[${name}] Server requested full state report`);
-      sendHello(ws, state, name);
+      sendFullState(ws, state, name, false);
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err);
@@ -360,8 +439,23 @@ function handleBinaryMessage(
 // ──────────────────────────────────────────────
 // Send helpers
 // ──────────────────────────────────────────────
-function sendHello(ws: WebSocket, state: CollectorState, name: string): void {
-  state.sequenceNum = 0;
+
+/**
+ * Send a full state report. With `initial=true` this is the OpAMP Hello
+ * (seq=0, signals fresh connection — server responds with ReportFullState).
+ * With `initial=false` this is the response TO that ReportFullState flag:
+ * same payload (full agent state), but seq incremented so the server
+ * doesn't interpret it as another Hello and re-request full state.
+ *
+ * Per OpAMP §4.2: the Hello (seq=0) and the response to ReportFullState
+ * carry the same fields. Only the seq differs.
+ */
+function sendFullState(ws: WebSocket, state: CollectorState, name: string, initial: boolean): void {
+  if (initial) {
+    state.sequenceNum = 0;
+  } else {
+    state.sequenceNum++;
+  }
   const msg: AgentToServer = {
     instance_uid: state.instanceUid,
     sequence_num: state.sequenceNum,
@@ -392,7 +486,12 @@ function sendHello(ws: WebSocket, state: CollectorState, name: string): void {
   };
   ws.send(encodeFrame(msg));
   state.messagesSent++;
-  log.ws("→", `[${name}] Hello (seq=0, status=${state.status})`);
+  const label = initial ? "Hello" : "FullState";
+  log.ws("→", `[${name}] ${label} (seq=${state.sequenceNum}, status=${state.status})`);
+}
+
+function sendHello(ws: WebSocket, state: CollectorState, name: string): void {
+  sendFullState(ws, state, name, true);
 }
 
 function sendHeartbeat(ws: WebSocket, state: CollectorState, name: string): void {
