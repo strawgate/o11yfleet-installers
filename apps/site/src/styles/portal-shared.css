@@ -178,6 +178,14 @@ body.auth {
   border: 0;
 }
 
+/* Metric tile variant — applied via theme.components.extend on Card when
+   `<Card variant="metric">`. See theme.ts. */
+.metric-card {
+  box-shadow: var(--shadow-sm);
+  overflow: hidden;
+  min-width: 0;
+}
+
 .detail-list {
   display: grid;
   grid-template-columns: auto 1fr;

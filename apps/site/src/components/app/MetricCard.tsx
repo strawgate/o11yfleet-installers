@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { Box, Group, Stack, Text } from "@mantine/core";
+import { Box, Card, Group, Stack, Text } from "@mantine/core";
 import { ObservationBadge } from "@/components/app/ObservationBadge";
 import type { Observation } from "@/api/models/observed";
 
@@ -21,9 +21,10 @@ const toneToColor: Record<NonNullable<MetricCardProps["tone"]>, string> = {
 };
 
 /**
- * Headline metric tile. Optional `observation` renders an ObservationBadge
- * in the top-right when status is non-OK so users can tell at a glance that
- * the metric is missing/partial/unavailable rather than zero.
+ * Headline metric tile. The `metric` Card variant (wired in `theme.ts` via
+ * `Card.extend`, see #784) absorbs the shadow + overflow rules; Card's default
+ * props give us border + radius + bg. The component still owns the layout
+ * composition (label / value / detail / children).
  */
 export function MetricCard({
   label,
@@ -37,30 +38,17 @@ export function MetricCard({
   const shouldShowObservation = observation && observation.status !== "ok";
 
   return (
-    <Box
+    <Card
       component="section"
       role="group"
       aria-label={label}
       className={className}
+      variant="metric"
       p="md"
-      style={{
-        border: "1px solid var(--line-2)",
-        borderRadius: "var(--mantine-radius-md)",
-        background: "var(--surface)",
-        boxShadow: "var(--shadow-sm)",
-        minWidth: 0,
-        overflow: "hidden",
-      }}
     >
       <Stack gap={4}>
         <Group justify="space-between" gap="xs" mih={20}>
-          <Text
-            size="xs"
-            ff="monospace"
-            c="dimmed"
-            tt="uppercase"
-            style={{ letterSpacing: "0.08em", fontSize: "10.5px" }}
-          >
+          <Text size="xs" ff="monospace" c="dimmed" tt="uppercase" lts="0.08em" fz={10.5}>
             {label}
           </Text>
           {shouldShowObservation ? <ObservationBadge observation={observation} /> : null}
@@ -68,14 +56,10 @@ export function MetricCard({
         <Text
           ff="monospace"
           fw={500}
-          style={{
-            fontSize: "1.5rem",
-            lineHeight: 1.2,
-            color: toneToColor[tone],
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
+          fz={24}
+          lh={1.2}
+          c={toneToColor[tone]}
+          style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}
         >
           {value}
         </Text>
@@ -86,6 +70,6 @@ export function MetricCard({
         ) : null}
         {children ? <Box mt="xs">{children}</Box> : null}
       </Stack>
-    </Box>
+    </Card>
   );
 }

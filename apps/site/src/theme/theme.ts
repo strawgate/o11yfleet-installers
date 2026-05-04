@@ -1,4 +1,4 @@
-import { createTheme, type MantineColorsTuple } from "@mantine/core";
+import { Card, createTheme, type MantineColorsTuple } from "@mantine/core";
 
 // Brand: oklch hue 152° (lime green) — matches existing --accent in styles.css
 const brand: MantineColorsTuple = [
@@ -88,14 +88,21 @@ export const theme = createTheme({
     // and the patterns we see across mantine.dev and the analytics dashboard.
     // bg/style use --surface and --line-2 so cards share the marketing site's
     // dark-on-dark elevation instead of Mantine's harsher dark-6 default.
-    Card: {
+    // PoC (#784): `<Card variant="metric">` absorbs the headline-tile-specific
+    // box-shadow + overflow handling on top of the bordered/radius/bg defaults.
+    // The MetricCard component still owns its layout composition; the variant
+    // just lets us delete the inline `style={{ border, borderRadius, background,
+    // boxShadow, ... }}` block that was repeated.
+    Card: Card.extend({
       defaultProps: {
         withBorder: true,
         radius: "md",
         bg: "var(--surface)",
         style: { borderColor: "var(--line-2)" },
       },
-    },
+      classNames: (_theme, props) =>
+        props.variant === "metric" ? { root: "metric-card" } : { root: "" },
+    }),
     // Badges in `light` variant are the de-facto status pill across
     // app primitives (StatusBadge etc.); make that the default everywhere.
     Badge: { defaultProps: { variant: "light" } },
