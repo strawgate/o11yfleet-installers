@@ -81,7 +81,7 @@ jobs:
     env:
       TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
       TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -225,7 +225,7 @@ jobs:
     env:
       TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
       TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
