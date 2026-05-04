@@ -4,11 +4,7 @@ export default function HomePage() {
   return (
     <>
       <section className="hero wrap">
-        <h1>
-          OpenTelemetry is vendor-neutral.
-          <br />
-          Collector operations should be too.
-        </h1>
+        <h1>The OpenTelemetry Control Plane.</h1>
         <p className="hero-subheadline">Free for up to 1,000 OTel Collectors.</p>
         <p className="lede" style={{ marginTop: 22 }}>
           We don't want your data. We want your telemetry pipelines to work. Connect collectors,

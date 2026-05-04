@@ -97,12 +97,11 @@ test("marketing home and about pages use the updated hero copy", () => {
     </MemoryRouter>,
   );
 
-  assert.match(homeHtml, /OpenTelemetry is vendor-neutral\./);
+  assert.match(homeHtml, /OpenTelemetry is open\./);
   assert.match(homeHtml, /Collector operations should be too\./);
   assert.match(homeHtml, /Free for up to 1,000 OTel Collectors\./);
   assert.match(homeHtml, /class="hero-subheadline"/);
 
-  assert.match(aboutHtml, /Operating collector fleets at scale should not feel improvised\./);
-  assert.doesNotMatch(aboutHtml, /OpenTelemetry is open\./);
-  assert.doesNotMatch(aboutHtml, /Collector management should be too\./);
+  assert.match(aboutHtml, /OpenTelemetry is open\./);
+  assert.match(aboutHtml, /Collector management should be too\./);
 });

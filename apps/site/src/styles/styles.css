@@ -767,10 +767,10 @@ p {
   gap: 24px;
 }
 .about-lede-grid {
-  margin-top: 28px;
+  margin-top: 48px;
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 40px;
+  gap: 64px;
   max-width: 1000px;
 }
 .about-manifesto-grid {
@@ -806,7 +806,7 @@ p {
   }
   .about-lede-grid,
   .about-manifesto-grid {
-    gap: 20px;
+    gap: 28px;
   }
   .about-belief-card {
     padding: 28px 0;
