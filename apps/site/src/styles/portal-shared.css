@@ -95,22 +95,6 @@ body.auth {
   flex-direction: column;
   gap: 14px;
 }
-.auth-card .divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--fg-4);
-  font-size: 11.5px;
-  font-family: var(--font-mono);
-  margin: 8px 0 4px;
-}
-.auth-card .divider::before,
-.auth-card .divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--line);
-}
 .auth-card .sso-btn {
   display: inline-flex;
   align-items: center;
