@@ -1,0 +1,133 @@
+name: Cleanup Preview Deployments
+
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Dry run (list only, no deletions)'
+        required: true
+        default: 'true'
+        type: boolean
+  # Run weekly to clean up stale previews
+  schedule:
+    - cron: '0 0 * * 0'  # Every Sunday at midnight
+
+permissions:
+  contents: read
+  pull-requests: read
+  deployments: write
+
+jobs:
+  cleanup-previews:
+    runs-on: ubuntu-latest
+    outputs:
+      orphaned_count: ${{ steps.find.outputs.orphaned_count }}
+      projects_to_delete: ${{ steps.find.outputs.projects_json }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: List open PRs with previews
+        id: open-prs
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Get all open PRs as a JSON array
+          OPEN_PRS_JSON=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open&per_page=100" | \
+            jq '[.[].number]')
+          echo "open_prs_json=$OPEN_PRS_JSON" >> $GITHUB_OUTPUT
+
+      - name: Find orphaned Pages projects
+        id: find
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "$CLOUDFLARE_API_TOKEN" ] || [ -z "$CLOUDFLARE_ACCOUNT_ID" ]; then
+            echo "::error::Missing Cloudflare credentials"
+            exit 1
+          fi
+
+          # List all Pages projects
+          echo "Fetching all Pages projects..."
+          PROJECTS=$(curl -s -X GET \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json" | \
+            jq -r '.result[] | select(.name | startswith("o11yfleet-preview-")) | .name')
+
+          # Read open PRs from step output as JSON array
+          OPEN_PRS_JSON='${{ steps.open-prs.outputs.open_prs_json }}'
+
+          # Build JSON array of orphaned projects
+          ORPHANED_JSON="[]"
+          ORPHANED_COUNT=0
+
+          while IFS= read -r project; do
+            [ -z "$project" ] && continue
+
+            # Extract PR number from project name (o11yfleet-preview-123)
+            PR_NUM="${project#o11yfleet-preview-}"
+
+            # Check if PR is still open using jq
+            if ! echo "$OPEN_PRS_JSON" | jq -e --argjson num "$PR_NUM" 'index($num) == null' > /dev/null 2>&1; then
+              echo "Found orphaned project: $project (PR #$PR_NUM is closed)"
+              ORPHANED_JSON=$(echo "$ORPHANED_JSON" | jq ". + [\"$project\"]")
+              ORPHANED_COUNT=$((ORPHANED_COUNT + 1))
+            fi
+          done <<< "$PROJECTS"
+
+          echo "projects_json<<EOF" >> $GITHUB_OUTPUT
+          echo "$ORPHANED_JSON" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+          echo "orphaned_count=$ORPHANED_COUNT" >> $GITHUB_OUTPUT
+
+      - name: Summary of orphaned previews
+        run: |
+          ORPHANED_COUNT=${{ steps.find.outputs.orphaned_count }}
+          echo "## Orphaned Preview Cleanup Summary"
+          echo ""
+          echo "Orphaned projects found: $ORPHANED_COUNT"
+          echo ""
+          if [ "$ORPHANED_COUNT" -gt 0 ]; then
+            echo "Projects to delete:"
+            echo '${{ steps.find.outputs.projects_json }}' | jq -r '.[]' 2>/dev/null || echo "$ORPHANED_COUNT projects (see JSON output)"
+            echo ""
+          fi
+
+      - name: Delete orphaned Pages projects
+        if: ${{ !inputs.dry_run && steps.find.outputs.orphaned_count > 0 }}
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -euo pipefail
+
+          # Parse JSON array of projects to delete
+          PROJECTS=$(echo '${{ steps.find.outputs.projects_json }}' | jq -r '.[]')
+
+          echo "Deleting orphaned Pages projects..."
+          for project in $PROJECTS; do
+            echo "Deleting $project..."
+            RESPONSE=$(curl -s -X DELETE \
+              "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${project}" \
+              -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+              -H "Content-Type: application/json")
+
+            SUCCESS=$(echo "$RESPONSE" | jq -r '.success')
+            if [ "$SUCCESS" = "true" ]; then
+              echo "✓ Deleted $project"
+            else
+              ERROR=$(echo "$RESPONSE" | jq -r '.errors[0].message // "Unknown error"')
+              echo "✗ Failed to delete $project: $ERROR"
+            fi
+          done
+
+      - name: Dry run notice
+        if: ${{ inputs.dry_run }}
+        run: |
+          echo "## Dry Run Mode - No deletions made"
+          echo ""
+          echo "To actually delete orphaned previews, run this workflow with 'dry_run: false'"

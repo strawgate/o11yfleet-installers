@@ -382,7 +382,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           REPO: ${{ github.repository }}
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           AWS_ACCESS_KEY_ID: ${{ secrets.TERRAFORM_STATE_R2_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.TERRAFORM_STATE_R2_SECRET_ACCESS_KEY }}
@@ -440,6 +440,21 @@ jobs:
             -var="o11yfleet_seed_tenant_user_email=${O11YFLEET_SEED_TENANT_USER_EMAIL}" \
             -var="o11yfleet_seed_tenant_user_password=${O11YFLEET_SEED_TENANT_USER_PASSWORD}" \
             -auto-approve || true
+
+          # Delete the Pages project for this PR
+          PAGES_PROJECT="o11yfleet-preview-${PR_NUMBER}"
+          echo "Deleting Pages project ${PAGES_PROJECT}..."
+          PAGES_DELETE_RESPONSE=$(curl -s -X DELETE \
+            "https://api.cloudflare.com/client/v4/accounts/${CLOUDFLARE_ACCOUNT_ID}/pages/projects/${PAGES_PROJECT}" \
+            -H "Authorization: Bearer ${CLOUDFLARE_API_TOKEN}" \
+            -H "Content-Type: application/json")
+          PAGES_SUCCESS=$(echo "$PAGES_DELETE_RESPONSE" | jq -r '.success')
+          if [ "$PAGES_SUCCESS" = "true" ]; then
+            echo "✓ Deleted Pages project ${PAGES_PROJECT}"
+          else
+            PAGES_ERROR=$(echo "$PAGES_DELETE_RESPONSE" | jq -r '.errors[0].message // "Unknown error"')
+            echo "Note: Pages project cleanup: $PAGES_ERROR (may already be deleted)"
+          fi
 
           # Deactivate the GitHub deployments
           for dep_id in $(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
