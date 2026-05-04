@@ -10,9 +10,17 @@ import {
   connectWithEnrollment,
   connectWithClaim,
   sendHello,
+  waitForMsg,
+  waitForClose,
+  msgToBuffer,
+  encodeFrame,
+  decodeFrame,
   type AssignmentClaim,
+  type ServerToAgent,
   createRuntimeTestContext,
 } from "./helpers.js";
+import { buildDisconnect } from "@o11yfleet/test-utils";
+import { hexToUint8Array } from "@o11yfleet/core/hex";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
@@ -1134,11 +1142,13 @@ describe("duplicate-UID detection closes the socket", () => {
     const config = await createConfig(tenant.id, "dup-close-test");
     const token = await createEnrollmentToken(config.id);
 
-    // First enrollment
+    // First enrollment — keep ws1 OPEN so the dup-detect tag lookup
+    // sees two OPEN sockets sharing the same do_assigned_uid.
     const { ws: ws1, enrollment } = await connectWithEnrollment(token.token);
     const originalUid = enrollment.instance_uid;
+    const originalUidBytes = hexToUint8Array(originalUid);
 
-    // Create a claim with the same UID
+    // Create a claim with the same UID so ws2 is tagged identically.
     const claim: AssignmentClaim = {
       v: 1,
       tenant_id: tenant.id,
@@ -1149,18 +1159,153 @@ describe("duplicate-UID detection closes the socket", () => {
       exp: Math.floor(Date.now() / 1000) + 86400,
     };
 
-    // Second connection with same UID should trigger duplicate detection
+    // Second connection with the same UID. The dup-detect branch in
+    // ConfigDurableObject.webSocketMessage only fires on
+    // `sequence_num === 0` (see config-do.ts ~line 586). Drive the
+    // test through that branch by sending a frame with seq_num=0 —
+    // hello is the natural OpAMP first frame, but any seq=0 frame
+    // works. Using buildDisconnect with sequenceNum: 0 here keeps
+    // the test focused on "second-frame on same UID with seq 0
+    // → dup-detect close" without conflating the assertion with
+    // the agent_disconnect handler (dup-detect runs first and
+    // returns early at config-do.ts ~line 632).
+    //
+    // PRIOR BUG: this test used buildDisconnect's default
+    // sequenceNum=99 and never drove the dup-detect branch — the
+    // disconnect path closed the socket for an unrelated reason and
+    // the assertion `ws2.readyState === CLOSED` passed for the wrong
+    // reason. See issue strawgate/o11yfleet#731.
     const ws2 = await connectWithClaim(claim);
-    await ws2.send(encodeFrame(buildDisconnect({ instanceUid: originalUid })));
+    ws2.send(encodeFrame(buildDisconnect({ instanceUid: originalUidBytes, sequenceNum: 0 })));
 
-    // Wait for the response
-    await new Promise((r) => {
-      setTimeout(r, 100);
-    });
+    // Capture the dup-rejection frame. Per OpAMP spec §3.2.1.2 the
+    // server tells the duplicate connection to adopt a new UID via
+    // agent_identification.new_instance_uid (16 random bytes).
+    const dupMsgEvent = await waitForMsg(ws2);
+    const dupBuf = await msgToBuffer(dupMsgEvent);
+    const dupResponse = decodeFrame<ServerToAgent>(dupBuf);
 
-    // ws2 should be closed after receiving agent_identification with new UID
+    expect(dupResponse.agent_identification).toBeDefined();
+    expect(dupResponse.agent_identification!.new_instance_uid).toBeDefined();
+    const newUidBytes = dupResponse.agent_identification!.new_instance_uid!;
+    expect(newUidBytes.length).toBe(16);
+    // The response's outer instance_uid must match the new UID so a
+    // strict OpAMP client correlates the rename with the frame.
+    expect(dupResponse.instance_uid).toBeDefined();
+    expect(Array.from(dupResponse.instance_uid!)).toEqual(Array.from(newUidBytes));
+    // The new UID must differ from the original so the reconnect
+    // actually escapes the duplicate condition.
+    expect(Array.from(newUidBytes)).not.toEqual(Array.from(originalUidBytes));
+
+    // Now wait for the close that follows the rename frame. The DO
+    // calls ws.close(1000, "Reconnect with new instance_uid") at
+    // config-do.ts ~line 630 — both code AND reason are part of the
+    // contract: opamp-go logs the reason at info level and clients
+    // use the 1000 (NormalClosure) code to distinguish a managed
+    // rename from a transport error. Asserting on both prevents a
+    // future refactor from silently changing the wire-level signal.
+    const closeEvent = await waitForClose(ws2);
+    expect(closeEvent.code).toBe(1000);
+    expect(closeEvent.reason).toBe("Reconnect with new instance_uid");
     expect(ws2.readyState).toBe(WebSocket.CLOSED);
 
     ws1.close();
+  });
+});
+
+// ─── saveAgentState end-to-end SQL round-trip ────────────────────────
+//
+// Regression for a class of bug where the saveAgentState UPSERT in
+// agent-state-repo.ts contained `//` line-comments inside a SQL
+// string — SQLite's parser doesn't accept `//` (only `--` / `/* */`),
+// so the statement raised `near "/": syntax error` at runtime. The
+// bug survived merge because every other test that mentioned the
+// agents table either inserted via raw SQL (skipping saveAgentState
+// entirely) or only exercised paths that didn't hit the Tier-2
+// UPSERT. This test drives a real enrollment + hello flow (the
+// canonical Tier-2 path: `forceFullPersist=true` on the first
+// message in config-do.ts ~line 750) and then reads the row back
+// from DO-local SQLite. Any future syntax error in saveAgentState's
+// SQL — comments, missing column, broken ON CONFLICT clause — will
+// cause the row to be missing and `.one()` to throw "no results."
+
+describe("saveAgentState end-to-end SQL round-trip", () => {
+  beforeAll(async () => {
+    await bootstrapSchema();
+  });
+
+  it("writes a row to DO SQLite when the hello path executes Tier-2 UPSERT", async () => {
+    const tenant = await createTenant("Save State Corp");
+    const config = await createConfig(tenant.id, "save-state-config");
+    const token = await createEnrollmentToken(config.id);
+
+    // The whole assertion runs inside `doAction` so it executes
+    // while the DO is awake (right after the reconnect hello
+    // completes). After connectWithEnrollment returns, the WS may
+    // be closed by hibernation in the test pool, which would flip
+    // status to "disconnected" via webSocketClose → markDisconnected
+    // and mask the very write we're trying to verify. Reading inside
+    // the doAction window keeps the test focused on saveAgentState.
+    let observed: Record<string, unknown> | null = null;
+    const { ws } = await connectWithEnrollment(token.token, {
+      doAction: async (uid, doStub) => {
+        await runInDurableObject(
+          doStub,
+          async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+            // Deliberately SELECT every column saveAgentState writes
+            // — if the UPSERT raised, .one() throws "no results" and
+            // the test fails loudly with the column list intact for
+            // diff context.
+            observed = state.storage.sql
+              .exec(
+                `SELECT instance_uid, tenant_id, config_id, sequence_num, generation, status, connected_at, last_seen_at, capabilities, agent_description
+                 FROM agents WHERE instance_uid = ?`,
+                uid,
+              )
+              .one();
+          },
+        );
+      },
+    });
+
+    expect(observed).not.toBeNull();
+    const row = observed!;
+    // Identity columns reflect the values the DO assigned at accept
+    // time. tenant_id / config_id come from the WS attachment, not
+    // the agent frame — proves the UPSERT used the right binding
+    // order on the bind list (a swapped binding here would make
+    // these mismatch).
+    expect(row["tenant_id"]).toBe(tenant.id);
+    expect(row["config_id"]).toBe(config.id);
+    // generation is bumped on first connect (config-do.ts ~line
+    // 659). Non-zero is enough — the exact value depends on whether
+    // the DO had a prior session.
+    expect(Number(row["generation"])).toBeGreaterThanOrEqual(1);
+    // The `status` column stores the agent-reported health status
+    // (e.g. StatusOK), NOT a connection-state enum — the state
+    // machine writes msg.health.status here per state-machine
+    // processor.ts ~line 192. buildHello defaults healthStatus to
+    // "StatusOK", and the only other observable value on this path
+    // is "disconnected" (set when agent_disconnect runs). Asserting
+    // "StatusOK" pins the round-trip: the row was written by the
+    // hello path and not later mutated by a disconnect.
+    expect(row["status"]).toBe("StatusOK");
+    // connected_at must be a fresh non-zero timestamp. The fix for
+    // #708 dropped the old CASE clause that incorrectly overrode
+    // the state-machine value — guard against that regression by
+    // asserting the value is in the recent past.
+    const connectedAt = Number(row["connected_at"]);
+    expect(connectedAt).toBeGreaterThan(Date.now() - 60_000);
+    expect(connectedAt).toBeLessThanOrEqual(Date.now());
+    // capabilities was bound from the agent's hello frame and
+    // buildHello defaults to a non-zero capability mask
+    // (CONFIGURABLE_CAPABILITIES).
+    expect(Number(row["capabilities"])).toBeGreaterThan(0);
+    // agent_description is JSON-encoded by saveAgentState; it must
+    // be a non-empty string for /agents to surface anything useful.
+    expect(typeof row["agent_description"]).toBe("string");
+    expect((row["agent_description"] as string).length).toBeGreaterThan(0);
+
+    ws.close();
   });
 });
