@@ -120,6 +120,19 @@ export const tenantSchema = z
   .passthrough();
 export type Tenant = z.infer<typeof tenantSchema>;
 
+/**
+ * Admin tenant detail response. Same as Tenant plus the join-aggregated
+ * stats fields that admin endpoints compute over configurations and agents.
+ * The base shape uses passthrough() so unknown fields still flow through.
+ */
+export const adminTenantSchema = tenantSchema.extend({
+  config_count: z.number().int().min(0).optional(),
+  agent_count: z.number().int().min(0).optional(),
+  connected_agents: z.number().int().min(0).optional(),
+  healthy_agents: z.number().int().min(0).optional(),
+});
+export type AdminTenant = z.infer<typeof adminTenantSchema>;
+
 export const adminCreateTenantRequestSchema = z
   .object({
     name: shortNameSchema,

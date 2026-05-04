@@ -12,11 +12,11 @@ import {
 import {
   adminBulkApproveResponseSchema,
   adminSettingsSchema,
-  tenantSchema,
+  adminTenantSchema,
   type AdminBulkApproveResponse,
   type AdminSettings,
+  type AdminTenant,
   type AuthUser,
-  type Tenant,
 } from "@o11yfleet/core/api";
 import type { AdminHealthPayload } from "../../pages/admin/support-model";
 
@@ -24,15 +24,7 @@ import type { AdminHealthPayload } from "../../pages/admin/support-model";
 /*  Response types                                                    */
 /* ------------------------------------------------------------------ */
 
-// Re-export Tenant from @o11yfleet/core/api as the canonical shape;
-// admin endpoints add stats fields (config_count, agent_count, etc.) that
-// pass through tenantSchema.passthrough() — captured as AdminTenantStats.
-export type AdminTenant = Tenant & {
-  config_count?: number;
-  agent_count?: number;
-  connected_agents?: number;
-  healthy_agents?: number;
-};
+export type { AdminTenant };
 
 export interface AdminOverview {
   total_tenants?: number;
@@ -200,7 +192,7 @@ export function useAdminTenants() {
 export function useAdminTenant(id: string | undefined) {
   return useQuery({
     queryKey: ["admin", "tenant", id],
-    queryFn: () => apiGetTyped(tenantSchema, `/api/admin/tenants/${id}`) as Promise<AdminTenant>,
+    queryFn: () => apiGetTyped(adminTenantSchema, `/api/admin/tenants/${id}`),
     enabled: !!id,
   });
 }
@@ -280,7 +272,7 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string; plan?: string; [key: string]: unknown }) =>
-      apiPostTyped(tenantSchema, "/api/admin/tenants", body) as Promise<AdminTenant>,
+      apiPostTyped(adminTenantSchema, "/api/admin/tenants", body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
@@ -292,7 +284,7 @@ export function useUpdateAdminTenant(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<AdminTenant>) =>
-      apiPutTyped(tenantSchema, `/api/admin/tenants/${id}`, body) as Promise<AdminTenant>,
+      apiPutTyped(adminTenantSchema, `/api/admin/tenants/${id}`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "tenant", id] });

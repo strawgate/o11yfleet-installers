@@ -226,6 +226,10 @@ export async function apiDel<T>(path: string): Promise<T> {
  *
  * Mirrors the contract of `apps/worker/src/shared/responses.ts:typedJsonResponse`
  * so client and server share the same validate-only-in-dev posture.
+ *
+ * Caveat: on validation failure, we cast raw data to z.output<T>. For schemas
+ * with `.transform()`, raw and parsed types diverge — schemas used here should
+ * be plain object/extend shapes without transforms.
  */
 function validateResponse<T extends z.ZodType>(
   schema: T,
