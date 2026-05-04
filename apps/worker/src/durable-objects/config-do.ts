@@ -26,7 +26,12 @@ import type {
 import { SqliteAgentStateRepo } from "./sqlite-agent-state-repo.js";
 import { parseAttachment } from "./ws-attachment.js";
 import type { WSAttachment } from "./ws-attachment.js";
-import { handleDebugTables, handleDebugQuery, debugTablesData, debugQueryData } from "./admin-debug-handler.js";
+import {
+  handleDebugTables,
+  handleDebugQuery,
+  debugTablesData,
+  debugQueryData,
+} from "./admin-debug-handler.js";
 import {
   handleSetDesiredConfig,
   handleDisconnectAll,
@@ -424,6 +429,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         }
       }
       if (!instanceUid) {
+        // The worker is supposed to set this header on every WS upgrade routed
+        // through handleOpampRequest. The fallback exists only to keep the DO
+        // alive if a future code path forgets to set it; the format must match
+        // what the codec expects (dashless 32-char hex).
         instanceUid = crypto.randomUUID().replace(/-/g, "");
       }
     }
@@ -607,6 +616,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
             agent_identification: { new_instance_uid: newUid },
           };
           ws.send(encodeServerToAgent(dupResponse));
+          // Close so the agent reconnects with the new UID; the fresh
+          // socket gets the correct tag from acceptWebSocket. Mirrors
+          // the enrollment-complete close at line ~847.
+          ws.close(1000, "Reconnect with new instance_uid");
           span.end();
           return;
         }
@@ -1016,11 +1029,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   async rpcGetStats(): Promise<ConfigStatsResult> {
     this.ensureInit();
-    return getStatsData(
-      this.repo,
-      () => this.getDesiredConfig(),
-      this.ctx.getWebSockets().length,
-    );
+    return getStatsData(this.repo, () => this.getDesiredConfig(), this.ctx.getWebSockets().length);
   }
 
   async rpcListAgents(params: AgentListParams): Promise<AgentListResult> {

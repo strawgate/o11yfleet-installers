@@ -12,6 +12,8 @@ import {
   sendHello,
   type AssignmentClaim,
 } from "./helpers.js";
+import { buildDisconnect } from "@o11yfleet/test-utils";
+import { encodeFrame } from "@o11yfleet/core/codec";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
@@ -926,5 +928,97 @@ describe("webSocketError defensive attachment parse", () => {
         expect(row["status"]).toBe("disconnected");
       },
     );
+  });
+});
+
+// ─── agent_disconnect clears connected_at ─────────────────────────────────
+
+describe("agent_disconnect clears connected_at in persisted row", () => {
+  beforeAll(async () => {
+    await bootstrapSchema();
+  });
+
+  it("connected_at is set to 0 in SQLite after agent_disconnect frame", async () => {
+    const tenant = await createTenant("Disconnect Test Corp");
+    const config = await createConfig(tenant.id, "disconnect-test");
+    const token = await createEnrollmentToken(config.id);
+
+    // Enroll and connect agent
+    const { ws, enrollment } = await connectWithEnrollment(token.token);
+
+    // Wait a moment so connected_at is definitely set to a non-zero value
+    await new Promise((r) => {
+      setTimeout(r, 50);
+    });
+
+    // Send agent_disconnect frame
+    ws.send(encodeFrame(buildDisconnect({ instanceUid: enrollment.instance_uid })));
+
+    // Wait for the disconnect to be processed
+    await new Promise((r) => {
+      setTimeout(r, 50);
+    });
+
+    // Query the database directly
+    const id = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    await runInDurableObject(
+      id,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const row = state.storage.sql
+          .exec(
+            `SELECT status, connected_at FROM agents WHERE instance_uid = ?`,
+            enrollment.instance_uid,
+          )
+          .one();
+        expect(row["status"]).toBe("disconnected");
+        // connected_at should be 0 after disconnect (was set to a non-zero value on connect)
+        expect(Number(row["connected_at"])).toBe(0);
+      },
+    );
+
+    ws.close();
+  });
+});
+
+// ─── duplicate UID socket closed ─────────────────────────────────────────
+
+describe("duplicate-UID detection closes the socket", () => {
+  beforeAll(async () => {
+    await bootstrapSchema();
+  });
+
+  it("duplicate-UID response closes the socket so agent reconnects with new UID", async () => {
+    const tenant = await createTenant("Dup Close Corp");
+    const config = await createConfig(tenant.id, "dup-close-test");
+    const token = await createEnrollmentToken(config.id);
+
+    // First enrollment
+    const { ws: ws1, enrollment } = await connectWithEnrollment(token.token);
+    const originalUid = enrollment.instance_uid;
+
+    // Create a claim with the same UID
+    const claim: AssignmentClaim = {
+      v: 1,
+      tenant_id: tenant.id,
+      config_id: config.id,
+      instance_uid: originalUid,
+      generation: 1,
+      iat: Math.floor(Date.now() / 1000),
+      exp: Math.floor(Date.now() / 1000) + 86400,
+    };
+
+    // Second connection with same UID should trigger duplicate detection
+    const ws2 = await connectWithClaim(claim);
+    await ws2.send(encodeFrame(buildDisconnect({ instanceUid: originalUid })));
+
+    // Wait for the response
+    await new Promise((r) => {
+      setTimeout(r, 100);
+    });
+
+    // ws2 should be closed after receiving agent_identification with new UID
+    expect(ws2.readyState).toBe(WebSocket.CLOSED);
+
+    ws1.close();
   });
 });

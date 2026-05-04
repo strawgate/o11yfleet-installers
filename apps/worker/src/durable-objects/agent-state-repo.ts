@@ -483,7 +483,9 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        current_config_hash = excluded.current_config_hash,
        effective_config_hash = COALESCE(excluded.effective_config_hash, agents.effective_config_hash),
        last_seen_at = excluded.last_seen_at,
-       connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE agents.connected_at END,
+       // Trust the state machine: connected_at = 0 means "clear on disconnect",
+       // which the old CASE clause was incorrectly overriding.
+       connected_at = excluded.connected_at,
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
        capabilities = excluded.capabilities,
        component_health_map = COALESCE(excluded.component_health_map, agents.component_health_map),
