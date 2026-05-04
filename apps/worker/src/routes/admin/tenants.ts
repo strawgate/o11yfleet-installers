@@ -65,7 +65,7 @@ async function handleCreateTenant(request: Request, env: Env): Promise<AuditCrea
   const limits = PLAN_LIMITS[plan];
 
   const id = crypto.randomUUID();
-  await getDb(env.FP_DB)
+  const inserted = await getDb(env.FP_DB)
     .insertInto("tenants")
     .values({
       id,
@@ -74,11 +74,31 @@ async function handleCreateTenant(request: Request, env: Env): Promise<AuditCrea
       max_configs: limits.max_configs,
       max_agents_per_config: limits.max_agents_per_config,
     })
-    .execute();
+    .returningAll()
+    .executeTakeFirst();
+
+  if (!inserted) {
+    return {
+      response: jsonError("Failed to create tenant", 500),
+      resource_id: null,
+    };
+  }
+
+  const tenant = {
+    id: inserted.id,
+    name: inserted.name,
+    plan: inserted.plan,
+    status: inserted.status ?? undefined,
+    approved_at: inserted.approved_at ?? undefined,
+    max_configs: inserted.max_configs ?? undefined,
+    max_agents_per_config: inserted.max_agents_per_config ?? undefined,
+    created_at: inserted.created_at ?? undefined,
+    updated_at: inserted.updated_at ?? undefined,
+  } satisfies Tenant;
 
   return {
-    response: Response.json({ id, name: body.name, plan }, { status: 201 }),
-    resource_id: id,
+    response: typedJsonResponse(tenantSchema, tenant, env, { status: 201 }),
+    resource_id: tenant.id,
   };
 }
 

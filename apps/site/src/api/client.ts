@@ -219,30 +219,37 @@ export async function apiDel<T>(path: string): Promise<T> {
 /* ------------------------------------------------------------------ */
 
 /**
- * Validate a payload against a Zod schema. In dev/test, warn on mismatch
- * and return the parsed-or-raw value (don't throw — schema drift shouldn't
- * crash a page that already received the data). In prod, skip the check
- * for a zero-overhead pass-through.
+ * Validate a payload against a Zod schema. In dev, throw an `ApiError` so
+ * schema drift surfaces immediately (react-query mutations/queries catch and
+ * report it). In prod, warn on mismatch and pass the raw value through so a
+ * page that already received data isn't crashed by a contract drift; the
+ * goal there is observability, not a hard fail.
  *
  * Mirrors the contract of `apps/worker/src/shared/responses.ts:typedJsonResponse`
  * so client and server share the same validate-only-in-dev posture.
  *
- * Caveat: on validation failure, we cast raw data to z.output<T>. For schemas
- * with `.transform()`, raw and parsed types diverge — schemas used here should
- * be plain object/extend shapes without transforms.
+ * Caveat: on prod validation failure, we cast raw data to z.output<T>. For
+ * schemas with `.transform()`, raw and parsed types diverge — schemas used
+ * here should be plain object/extend shapes without transforms.
  */
 function validateResponse<T extends z.ZodType>(
   schema: T,
   data: unknown,
   path: string,
 ): z.output<T> {
-  if (import.meta.env.PROD) return data as z.output<T>;
   const result = schema.safeParse(data);
-  if (!result.success) {
+  if (result.success) return result.data;
+  // Dev vs prod split: throw in dev so contract drift gets fixed before
+  // shipping; warn-and-pass-through in prod so a page already mid-render
+  // isn't crashed by a server-side response shape change.
+  if (import.meta.env.PROD) {
     console.warn(`[typed-client] ${path} response failed schema validation:`, result.error.issues);
     return data as z.output<T>;
   }
-  return result.data;
+  throw new ApiError(
+    `[typed-client] ${path} response failed schema validation: ${JSON.stringify(result.error.issues)}`,
+    500,
+  );
 }
 
 /** GET JSON with response-schema validation in dev. */

@@ -6,22 +6,22 @@ interface RuntimeValidationEnv {
   /** "production" | "staging" | "dev" — drives the default behavior of
    *  `typedJsonResponse`'s runtime check. */
   ENVIRONMENT?: "staging" | "dev" | "production";
-  /** Override for the default. `"true"` forces validation on; `"false"`
-   *  forces it off; unset uses the environment default (on in dev/staging,
-   *  off in production). Set in `wrangler.jsonc` `vars` or via
-   *  `wrangler dev --var O11YFLEET_RUNTIME_VALIDATION:false`. */
+  /** Explicit opt-in override. `"1"` forces validation on; anything else
+   *  (including unset) leaves the default off. Set in `wrangler.jsonc`
+   *  `vars` or via `wrangler dev --var O11YFLEET_RUNTIME_VALIDATION:1`. */
   O11YFLEET_RUNTIME_VALIDATION?: string;
 }
 
 /**
  * Decide whether `typedJsonResponse` should run the runtime safeParse for
- * a given env. Default: on for non-production, off for production. The
- * `O11YFLEET_RUNTIME_VALIDATION` binding overrides either direction.
+ * a given env. Default: OFF unless explicitly enabled. We previously
+ * defaulted ON for any env that wasn't `"production"`, but that meant a
+ * misconfigured prod with `ENVIRONMENT` unset would silently flip
+ * validation on. Now validation only runs when ENVIRONMENT is explicitly
+ * `"dev"` or the `O11YFLEET_RUNTIME_VALIDATION` opt-in is set to `"1"`.
  */
 function shouldValidate(env: RuntimeValidationEnv): boolean {
-  if (env.O11YFLEET_RUNTIME_VALIDATION === "true") return true;
-  if (env.O11YFLEET_RUNTIME_VALIDATION === "false") return false;
-  return env.ENVIRONMENT !== "production";
+  return env.ENVIRONMENT === "dev" || env.O11YFLEET_RUNTIME_VALIDATION === "1";
 }
 
 /**
@@ -34,7 +34,8 @@ function shouldValidate(env: RuntimeValidationEnv): boolean {
  * the schema is also applied at runtime via `safeParse`. Mismatches are
  * logged via `console.warn` — not thrown — so a worker that's already
  * serving the response doesn't 500 over a contract drift; the goal is
- * observability for dev/staging.
+ * observability in dev. Validation is OFF by default and only runs when
+ * `ENVIRONMENT === "dev"` or `O11YFLEET_RUNTIME_VALIDATION === "1"`.
  *
  * The `env` argument is optional so legacy call sites that don't have
  * `env` in scope (e.g., DO query handlers that take `SqlStorage` only)

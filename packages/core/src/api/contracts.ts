@@ -72,8 +72,11 @@ export const authUserSchema = z
     id: z.string().optional(),
     userId: z.string().optional(),
     email: z.string().email(),
-    name: z.string().optional(),
-    displayName: z.string().optional(),
+    name: z.string().nullable().optional(),
+    // displayName comes from `users.display_name`, which is nullable in
+    // D1. Accept null/undefined/string so a freshly-created user without
+    // a name doesn't trip Zod validation.
+    displayName: z.string().nullable().optional(),
     role: z.enum(["member", "admin"]).or(z.string()).optional(),
     tenant_id: z.string().nullable().optional(),
     tenantId: z.string().nullable().optional(),
@@ -81,7 +84,9 @@ export const authUserSchema = z
     // can route to /pending-approval when a user logs in before their
     // tenant is approved. Optional so admin-scoped /me responses (no
     // tenant binding) and other consumers don't need to provide it.
-    tenantStatus: tenantStatusSchema.optional(),
+    // Nullable for the same reason as the other tenant_* fields above —
+    // D1 left-joins return null, not undefined.
+    tenantStatus: tenantStatusSchema.nullable().optional(),
     isImpersonation: z.boolean().optional(),
   })
   .passthrough()
@@ -120,7 +125,8 @@ export type AuthLoginResponse = z.infer<typeof authLoginResponseSchema>;
 export const authMeUserSchema = z.object({
   userId: z.string(),
   email: z.string().email(),
-  displayName: z.string().optional(),
+  // displayName comes from `users.display_name`, nullable in D1.
+  displayName: z.string().nullable().optional(),
   tenantId: z.string().nullable(),
   tenantStatus: tenantStatusSchema,
   role: z.enum(["member", "admin"]).or(z.string()),
