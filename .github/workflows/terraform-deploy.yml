@@ -244,7 +244,7 @@ jobs:
 
       - name: Check production imports
         if: ${{ steps.target.outputs.env == 'prod' }}
-        run: just tf-check-prod-imports prod
+        run: just tf-check-staging-readiness prod
 
       - name: Terraform apply
         run: just tf-apply ${{ steps.target.outputs.env }}
