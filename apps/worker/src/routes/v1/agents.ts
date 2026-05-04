@@ -176,15 +176,20 @@ export async function handleRollout(
   const r2Obj = await env.FP_CONFIGS.get(r2Key);
   const configContent = r2Obj ? await r2Obj.text() : null;
 
-  // Fleet component compatibility gate — accepts override=true to force rollout
+  // Fleet component compatibility gate — accepts override=true to force rollout.
+  // Strict-boolean check on `override` prevents string truthy values like
+  // "false" / "0" from accidentally bypassing the gate. When forceOverride is
+  // set the DO returns 200 (instead of 409) regardless of compat.compatible,
+  // so this worker only blocks the rollout on a 409 response.
   if (configContent) {
-    let override = false;
-    try {
-      const reqBody = (await request.clone().json()) as { override?: boolean };
-      override = reqBody.override ?? false;
-    } catch {
-      /* ignore malformed body */
-    }
+    const reqBody = await request
+      .clone()
+      .json()
+      .catch(() => null);
+    const override =
+      reqBody !== null &&
+      typeof reqBody === "object" &&
+      (reqBody as { override?: unknown }).override === true;
 
     const checkCompatResp = await stub.fetch(
       new Request("http://internal/command/check-compatibility", {
@@ -193,18 +198,22 @@ export async function handleRollout(
         headers: { "Content-Type": "application/json" },
       }),
     );
-    if (!checkCompatResp.ok) {
-      return new Response("Fleet compatibility check failed", { status: 502 });
-    }
-    const compat = (await checkCompatResp.json()) as {
-      compatible: boolean;
-      missingComponents?: { kind: string; name: string }[];
-      compatibleAgents?: number;
-      incompatibleAgents?: number;
-      unknownAgents?: number;
-      totalAgents?: number;
-    };
-    if (!compat.compatible) {
+
+    // The DO returns 409 with a structured payload on real incompatibility.
+    // Forward that body to the caller so they can read missing_components etc.
+    // Reserve 502 for true upstream failures (5xx, network errors, malformed JSON).
+    if (checkCompatResp.status === 409) {
+      const compat = (await checkCompatResp.json().catch(() => null)) as {
+        compatible: boolean;
+        missingComponents?: { kind: string; name: string }[];
+        compatibleAgents?: number;
+        incompatibleAgents?: number;
+        unknownAgents?: number;
+        totalAgents?: number;
+      } | null;
+      if (!compat) {
+        return new Response("Fleet compatibility check returned malformed body", { status: 502 });
+      }
       return Response.json(
         {
           error: "INCOMPATIBLE_FLEET",
@@ -216,6 +225,10 @@ export async function handleRollout(
         { status: 409 },
       );
     }
+    if (!checkCompatResp.ok) {
+      return new Response("Fleet compatibility check failed", { status: 502 });
+    }
+    // 2xx from the DO means either compat passed or override=true; rollout proceeds.
   }
 
   const result = await stub.rpcSetDesiredConfig({
