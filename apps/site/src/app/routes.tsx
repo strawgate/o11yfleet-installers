@@ -16,21 +16,23 @@ import SignupPage from "@/pages/auth/SignupPage";
 import ForgotPage from "@/pages/auth/ForgotPage";
 
 import NotFoundPage from "@/pages/NotFoundPage";
-import { Button } from "@mantine/core";
+import { Button, Center, Stack, Text, Title } from "@mantine/core";
 
 function ChunkLoadError({ name }: { name: string }) {
   return (
-    <div className="grid min-h-[40vh] place-items-center px-6 py-12 text-center">
-      <div className="max-w-md">
-        <h2 className="text-xl font-medium">Failed to load {name}</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
+    <Center mih="40vh" px="md" py="xl">
+      <Stack align="center" gap="xs" maw={480}>
+        <Title order={2} size="h3" fw={500}>
+          Failed to load {name}
+        </Title>
+        <Text size="sm" c="dimmed" ta="center">
           This usually happens after a deployment. A refresh should fix it.
-        </p>
+        </Text>
         <Button mt="md" onClick={() => window.location.reload()}>
           Reload page
         </Button>
-      </div>
-    </div>
+      </Stack>
+    </Center>
   );
 }
 
@@ -134,7 +136,13 @@ const DataTablePlayground = import.meta.env.DEV
   : null;
 
 function SuspenseFallback() {
-  return <div className="flex justify-center p-16">Loading...</div>;
+  return (
+    <Center p="xl">
+      <Text size="sm" c="dimmed">
+        Loading...
+      </Text>
+    </Center>
+  );
 }
 
 export function AppRoutes() {

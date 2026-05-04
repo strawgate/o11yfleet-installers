@@ -15,7 +15,7 @@ import { relTime } from "../../utils/format";
 import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import { Button, Group, TextInput } from "@mantine/core";
+import { Box, Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
@@ -143,12 +143,23 @@ function AgentSection({
   const previousCursor: string | null | undefined = cursor !== null ? null : undefined;
 
   return (
-    <section className="mt-6 rounded-md border border-border bg-card">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3">
-        <div>
-          <h3 className="text-sm font-medium text-foreground">{config.name}</h3>
-          <p className="mt-1 text-xs text-muted-foreground">{summaryText}</p>
-        </div>
+    <Card component="section" withBorder mt="md" p={0}>
+      <Group
+        justify="space-between"
+        gap="sm"
+        wrap="wrap"
+        px="md"
+        py="sm"
+        style={{ borderBottom: "1px solid var(--mantine-color-default-border)" }}
+      >
+        <Stack gap={2}>
+          <Text size="sm" fw={500} component="h3">
+            {config.name}
+          </Text>
+          <Text size="xs" c="dimmed">
+            {summaryText}
+          </Text>
+        </Stack>
         <Group gap="xs" wrap="wrap">
           {expanded ? (
             <TextInput
@@ -170,13 +181,17 @@ function AgentSection({
             {expanded ? "Hide collectors" : "View collectors"}
           </Button>
         </Group>
-      </div>
+      </Group>
 
       {!expanded ? (
-        <div id={sectionId} className="grid gap-4 p-4">
-          <div
-            className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(140px,1fr))]"
+        <Stack id={sectionId} p="md" gap="md">
+          <Box
             aria-label={`${config.name} collector summary`}
+            style={{
+              display: "grid",
+              gap: "var(--mantine-spacing-sm)",
+              gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))",
+            }}
           >
             <MetricCard label="Total" value={hasSnapshotStats ? totalAgentsLabel : "—"} />
             <MetricCard label="Connected" value={hasSnapshotStats ? connectedAgentsLabel : "—"} />
@@ -195,15 +210,15 @@ function AgentSection({
                 tone="warn"
               />
             ) : null}
-          </div>
-          <p className="text-sm text-muted-foreground">
+          </Box>
+          <Text size="sm" c="dimmed">
             {hasSnapshotStats
               ? "Summary uses the fleet metrics snapshot. Collector rows load only when you open this configuration."
               : "Metrics snapshot unavailable. Open this configuration to query its live agent page."}
-          </p>
-        </div>
+          </Text>
+        </Stack>
       ) : (
-        <div id={sectionId}>
+        <Box id={sectionId}>
           <GuidancePanel
             title={`${config.name} agents`}
             guidance={guidance.data}
@@ -245,9 +260,9 @@ function AgentSection({
               </EmptyState>
             }
           />
-        </div>
+        </Box>
       )}
-    </section>
+    </Card>
   );
 }
 
@@ -332,7 +347,7 @@ export default function AgentsPage() {
       />
 
       {cfgList.length === 0 ? (
-        <section className="rounded-md border border-border bg-card">
+        <Card component="section" withBorder>
           <EmptyState
             icon="file"
             title="No configurations yet"
@@ -345,7 +360,7 @@ export default function AgentsPage() {
               Guided setup
             </Button>
           </EmptyState>
-        </section>
+        </Card>
       ) : (
         cfgList.map((c) => (
           <AgentSection
