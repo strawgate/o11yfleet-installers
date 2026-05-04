@@ -75,7 +75,6 @@ jobs:
       }}
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
-    environment: production
     permissions:
       contents: read
       pull-requests: write
