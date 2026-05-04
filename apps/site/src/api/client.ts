@@ -1,6 +1,7 @@
 // api/client.ts — Typed API client for o11yfleet.
 // Replaces the old window.FP global with a modern, typed module.
 
+import type { z } from "zod";
 import {
   apiErrorResponseSchema,
   authLoginResponseSchema,
@@ -211,6 +212,62 @@ export async function apiDel<T>(path: string): Promise<T> {
   }
   if (res.status === 204) return {} as T;
   return res.json() as Promise<T>;
+}
+
+/* ------------------------------------------------------------------ */
+/*  Schema-validated helpers (mirrors worker's typedJsonResponse)     */
+/* ------------------------------------------------------------------ */
+
+/**
+ * Validate a payload against a Zod schema. In dev/test, warn on mismatch
+ * and return the parsed-or-raw value (don't throw — schema drift shouldn't
+ * crash a page that already received the data). In prod, skip the check
+ * for a zero-overhead pass-through.
+ *
+ * Mirrors the contract of `apps/worker/src/shared/responses.ts:typedJsonResponse`
+ * so client and server share the same validate-only-in-dev posture.
+ */
+function validateResponse<T extends z.ZodType>(
+  schema: T,
+  data: unknown,
+  path: string,
+): z.output<T> {
+  if (import.meta.env.PROD) return data as z.output<T>;
+  const result = schema.safeParse(data);
+  if (!result.success) {
+    console.warn(`[typed-client] ${path} response failed schema validation:`, result.error.issues);
+    return data as z.output<T>;
+  }
+  return result.data;
+}
+
+/** GET JSON with response-schema validation in dev. */
+export async function apiGetTyped<T extends z.ZodType>(
+  schema: T,
+  path: string,
+): Promise<z.output<T>> {
+  const raw = await apiGet<unknown>(path);
+  return validateResponse(schema, raw, path);
+}
+
+/** POST JSON with response-schema validation in dev. */
+export async function apiPostTyped<T extends z.ZodType>(
+  schema: T,
+  path: string,
+  body?: unknown,
+): Promise<z.output<T>> {
+  const raw = await apiPost<unknown>(path, body);
+  return validateResponse(schema, raw, path);
+}
+
+/** PUT JSON with response-schema validation in dev. */
+export async function apiPutTyped<T extends z.ZodType>(
+  schema: T,
+  path: string,
+  body: unknown,
+): Promise<z.output<T>> {
+  const raw = await apiPut<unknown>(path, body);
+  return validateResponse(schema, raw, path);
 }
 
 /* ------------------------------------------------------------------ */

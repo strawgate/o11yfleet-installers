@@ -1,11 +1,38 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiGet, apiPost, apiPut, apiDel, normalizeUser, type User } from "../client";
-import type { AuthUser } from "@o11yfleet/core/api";
+import {
+  apiGet,
+  apiGetTyped,
+  apiPost,
+  apiPostTyped,
+  apiPutTyped,
+  apiDel,
+  normalizeUser,
+  type User,
+} from "../client";
+import {
+  adminBulkApproveResponseSchema,
+  adminSettingsSchema,
+  tenantSchema,
+  type AdminBulkApproveResponse,
+  type AdminSettings,
+  type AuthUser,
+  type Tenant,
+} from "@o11yfleet/core/api";
 import type { AdminHealthPayload } from "../../pages/admin/support-model";
 
 /* ------------------------------------------------------------------ */
 /*  Response types                                                    */
 /* ------------------------------------------------------------------ */
+
+// Re-export Tenant from @o11yfleet/core/api as the canonical shape;
+// admin endpoints add stats fields (config_count, agent_count, etc.) that
+// pass through tenantSchema.passthrough() — captured as AdminTenantStats.
+export type AdminTenant = Tenant & {
+  config_count?: number;
+  agent_count?: number;
+  connected_agents?: number;
+  healthy_agents?: number;
+};
 
 export interface AdminOverview {
   total_tenants?: number;
@@ -17,22 +44,6 @@ export interface AdminOverview {
   total_users?: number;
   tenants?: number;
   agents?: number;
-  [key: string]: unknown;
-}
-
-export interface AdminTenant {
-  id: string;
-  name: string;
-  plan?: string;
-  status?: string;
-  max_configs?: number;
-  max_agents_per_config?: number;
-  created_at?: string;
-  approved_at?: string | null;
-  config_count?: number;
-  agent_count?: number;
-  connected_agents?: number;
-  healthy_agents?: number;
   [key: string]: unknown;
 }
 
@@ -189,7 +200,7 @@ export function useAdminTenants() {
 export function useAdminTenant(id: string | undefined) {
   return useQuery({
     queryKey: ["admin", "tenant", id],
-    queryFn: () => apiGet<AdminTenant>(`/api/admin/tenants/${id}`),
+    queryFn: () => apiGetTyped(tenantSchema, `/api/admin/tenants/${id}`) as Promise<AdminTenant>,
     enabled: !!id,
   });
 }
@@ -269,7 +280,7 @@ export function useCreateTenant() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { name: string; plan?: string; [key: string]: unknown }) =>
-      apiPost<AdminTenant>("/api/admin/tenants", body),
+      apiPostTyped(tenantSchema, "/api/admin/tenants", body) as Promise<AdminTenant>,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
@@ -281,7 +292,7 @@ export function useUpdateAdminTenant(id: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: Partial<AdminTenant>) =>
-      apiPut<AdminTenant>(`/api/admin/tenants/${id}`, body),
+      apiPutTyped(tenantSchema, `/api/admin/tenants/${id}`, body) as Promise<AdminTenant>,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "tenant", id] });
@@ -326,12 +337,9 @@ export function useApproveTenant(id: string) {
 
 export function useBulkApproveTenants() {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { tenant_ids: string[] }) =>
-      apiPost<{ approved: string[]; failed: { id: string; error: string }[] }>(
-        "/api/admin/bulk-approve",
-        body,
-      ),
+  return useMutation<AdminBulkApproveResponse, Error, { tenant_ids: string[] }>({
+    mutationFn: (body) =>
+      apiPostTyped(adminBulkApproveResponseSchema, "/api/admin/bulk-approve", body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
@@ -340,9 +348,9 @@ export function useBulkApproveTenants() {
 }
 
 export function useAdminSettings() {
-  return useQuery({
+  return useQuery<AdminSettings>({
     queryKey: ["admin", "settings"],
-    queryFn: () => apiGet<{ auto_approve_signups: boolean }>("/api/admin/settings"),
+    queryFn: () => apiGetTyped(adminSettingsSchema, "/api/admin/settings"),
   });
 }
 
