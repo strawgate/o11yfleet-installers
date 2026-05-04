@@ -30,6 +30,9 @@ export default defineConfig({
       // that return before any D1/R2/DO binding is touched, so it's safe
       // to run in plain Node with stubbed Env/ExecutionContext.
       "test/hono-app.test.ts",
+      // Pure unit tests that don't need workerd
+      "test/observability-events.test.ts",
+      "test/tenant-lifecycle.test.ts",
     ],
     coverage: {
       provider: "v8",
@@ -47,6 +50,8 @@ export default defineConfig({
         "src/shared/origins.ts",
         "src/shared/errors.ts",
         "src/shared/validation.ts",
+        "src/shared/tenant-lifecycle.ts",
+        "src/observability-events.ts",
         "src/github/api.ts",
         "src/github/validate-config.ts",
         "src/github/check-runs.ts",
