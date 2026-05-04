@@ -2,12 +2,7 @@
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "ignoreExportsUsedInFile": true,
   "ignoreDependencies": ["cloudflare"],
-  "ignore": [
-    "scripts/**",
-    "infra/**",
-    "**/vitest.stryker.config.ts",
-    "**/bench/**"
-  ],
+  "ignore": ["scripts/**", "infra/**", "**/vitest.stryker.config.ts", "**/bench/**"],
   "exclude": ["enumMembers", "duplicates", "binaries"],
   "workspaces": {
     "packages/core": {

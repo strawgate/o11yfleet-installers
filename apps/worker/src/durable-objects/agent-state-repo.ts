@@ -10,6 +10,8 @@ import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
 import { assertNever } from "@o11yfleet/core/assert-never";
 import type {
+  ComponentInventory,
+  FleetComponentGroup,
   DesiredConfig,
   DoPolicy,
   AgentPageCursor,
@@ -225,6 +227,63 @@ function migrateSchema(sql: SqlStorage): void {
   if (!pendingDeviceCols.some((c) => c["name"] === "expires_at")) {
     sql.exec(`ALTER TABLE pending_devices ADD COLUMN expires_at INTEGER`);
   }
+}
+
+// ─── Component Inventory ────────────────────────────────────────────
+
+export function extractComponentInventory(
+  row: { available_components: string | null } | null,
+): ComponentInventory | null {
+  if (!row?.available_components) return null;
+  try {
+    const raw = JSON.parse(row.available_components) as Record<string, unknown>;
+    const components = raw["components"] as Record<string, unknown> | undefined;
+    if (!components || typeof components !== "object") return null;
+    const extractNames = (section: unknown): string[] => {
+      if (!section || typeof section !== "object") return [];
+      const subMap = (section as Record<string, unknown>)["sub_component_map"] as
+        | Record<string, unknown>
+        | undefined;
+      if (!subMap || typeof subMap !== "object") return [];
+      return Object.keys(subMap);
+    };
+    return {
+      receivers: extractNames(components["receivers"]),
+      processors: extractNames(components["processors"]),
+      exporters: extractNames(components["exporters"]),
+      extensions: extractNames(components["extensions"]),
+      connectors: extractNames(components["connectors"]),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function getFleetComponentInventory(
+  sql: SqlStorage,
+  tenantId: string,
+  configId: string,
+): FleetComponentGroup[] {
+  const rows = sql
+    .exec(
+      `SELECT instance_uid, available_components FROM agents
+       WHERE tenant_id = ? AND config_id = ? AND status != 'disconnected'`,
+      tenantId,
+      configId,
+    )
+    .toArray() as Array<{ instance_uid: string; available_components: string | null }>;
+
+  const groups = new Map<string, FleetComponentGroup>();
+  for (const row of rows) {
+    const fingerprint = row.available_components ?? "null";
+    if (!groups.has(fingerprint)) {
+      groups.set(fingerprint, { availableComponents: fingerprint, agentCount: 0, agentUids: [] });
+    }
+    const g = groups.get(fingerprint)!;
+    g.agentCount++;
+    g.agentUids.push(row.instance_uid);
+  }
+  return Array.from(groups.values()).sort((a, b) => b.agentCount - a.agentCount);
 }
 
 // ─── Config State ───────────────────────────────────────────────────

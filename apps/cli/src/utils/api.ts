@@ -124,7 +124,9 @@ export async function getCurrentUser(): Promise<{
   email: string;
   tenantId?: string;
 }> {
-  const resp = await apiRequest<{ user?: { userId: string; email: string; tenantId?: string } }>("/auth/me");
+  const resp = await apiRequest<{ user?: { userId: string; email: string; tenantId?: string } }>(
+    "/auth/me",
+  );
   if (resp.error || !resp.data) {
     throw new ApiError("Not authenticated", resp.status, resp.error);
   }

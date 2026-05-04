@@ -166,11 +166,7 @@ export class RpcError extends Error {
   public readonly statusCode: number;
   public readonly details?: Record<string, unknown>;
 
-  constructor(
-    message: string,
-    statusCode: number,
-    details?: Record<string, unknown>,
-  ) {
+  constructor(message: string, statusCode: number, details?: Record<string, unknown>) {
     super(`[${statusCode}] ${message}`);
     this.name = "RpcError";
     this.statusCode = statusCode;
@@ -181,9 +177,7 @@ export class RpcError extends Error {
 /** Parse an RPC error that crossed the DO boundary.
  *  Returns `{ statusCode, message }` if the error has a `[NNN] ` prefix,
  *  or `null` if it doesn't match. */
-export function parseRpcError(
-  err: unknown,
-): { statusCode: number; message: string } | null {
+export function parseRpcError(err: unknown): { statusCode: number; message: string } | null {
   if (!(err instanceof Error)) return null;
   const match = /^\[(\d{3})\] (.*)$/.exec(err.message);
   if (!match) return null;

@@ -4,6 +4,7 @@ import type {
   AgentStateRepository,
   DesiredConfig,
   DoPolicy,
+  FleetComponentGroup,
   ListAgentsPageParams,
   AgentPageResult,
   StaleAgent,
@@ -33,6 +34,7 @@ import {
   autoUnenrollStaleAgents,
   recordSweep,
   getSweepStats,
+  getFleetComponentInventory,
 } from "./agent-state-repo.js";
 
 export class SqliteAgentStateRepo implements AgentStateRepository {
@@ -133,5 +135,9 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
 
   getSweepStats(): SweepStats {
     return getSweepStats(this.sql);
+  }
+
+  getFleetComponentInventory(tenantId: string, configId: string): FleetComponentGroup[] {
+    return getFleetComponentInventory(this.sql, tenantId, configId);
   }
 }

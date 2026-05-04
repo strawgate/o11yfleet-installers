@@ -145,7 +145,7 @@ export async function mockPortal(page: Page) {
               is_connected: true,
               status: "Connected",
               healthy: true,
-              capabilities: 0x1 | 0x800 | 0x400, // ReportsStatus | ReportsHealth | AcceptsRestartCommand
+              capabilities: 0x1 | 0x800 | 0x400 | 0x4000, // ReportsStatus | ReportsHealth | AcceptsRestartCommand | ReportsAvailableComponents
               effective_config_hash: cfg.current_config_hash,
               last_seen_at: "2026-04-28T00:00:00Z",
               agent_description: {
@@ -169,7 +169,7 @@ export async function mockPortal(page: Page) {
     is_connected: true,
     status: "Connected",
     healthy: true,
-    capabilities: 0x1 | 0x800 | 0x400,
+    capabilities: 0x1 | 0x800 | 0x400 | 0x4000,
     sequence_num: 42,
     last_seen_at: "2026-04-28T00:00:00Z",
     effective_config_hash: "abcdef1234",
@@ -182,6 +182,15 @@ export async function mockPortal(page: Page) {
       non_identifying_attributes: [],
     },
     component_health_map: null,
+    available_components: {
+      components: {
+        receivers: { sub_component_map: { otlp: {} } },
+        processors: { sub_component_map: { batch: {} } },
+        exporters: { sub_component_map: { debug: {} } },
+        extensions: { sub_component_map: { health_check: {} } },
+        connectors: { sub_component_map: {} },
+      },
+    },
   });
 
   await mockJson(page, "/api/v1/api-keys", {

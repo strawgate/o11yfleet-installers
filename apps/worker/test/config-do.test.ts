@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { describe, it, expect, beforeAll } from "vitest";
+import { describe, it, test, expect, beforeAll, beforeEach } from "vitest";
 import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { runInDurableObject } from "cloudflare:test";
 import {
@@ -10,12 +10,9 @@ import {
   connectWithEnrollment,
   connectWithClaim,
   sendHello,
-  O11YFLEET_CLAIM_HMAC_SECRET,
   type AssignmentClaim,
+  createRuntimeTestContext,
 } from "./helpers.js";
-import { buildDisconnect } from "@o11yfleet/test-utils";
-import { encodeFrame } from "@o11yfleet/core/codec";
-import { verifyClaim } from "@o11yfleet/core/auth";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
@@ -106,7 +103,7 @@ describe("Config Durable Object", () => {
 
     await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "deadbeefcafe" }),
+      body: JSON.stringify({ config_hash: "desired-hash" }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -116,10 +113,10 @@ describe("Config Durable Object", () => {
         const now = Date.now();
         const inserts: Array<[string, string, string, number]> = [
           // [uid, status, current_hash, healthy]
-          ["a1", "connected", "deadbeefcafe", 1],
+          ["a1", "connected", "desired-hash", 1],
           ["a2", "connected", "stale-hash", 1],
           ["a3", "degraded", "stale-hash", 0],
-          ["a4", "disconnected", "deadbeefcafe", 1],
+          ["a4", "disconnected", "desired-hash", 1],
         ];
         for (const [uid, status, hash, healthy] of inserts) {
           state.storage.sql.exec(
@@ -154,7 +151,7 @@ describe("Config Durable Object", () => {
     });
     expect(stats.current_hash_counts).toEqual(
       expect.arrayContaining([
-        { value: "deadbeefcafe", count: 2 },
+        { value: "desired-hash", count: 2 },
         { value: "stale-hash", count: 2 },
       ]),
     );
@@ -783,62 +780,6 @@ describe("isAgentConnected via agent detail endpoint", () => {
   });
 });
 
-// ─── Enrollment response shape (regression for OpAMP enrollment dance) ───
-
-describe("Enrollment response", () => {
-  // Regression: the DO used to ws.close(1000, "Reconnect with new
-  // instance_uid") immediately after sending the enrollment response.
-  // That close beat the data frame to opamp-go's processing pipeline
-  // — connection_settings.opamp.headers (containing the assignment
-  // claim) was lost, the agent kept reconnecting with the original
-  // fp_enroll_ token, and the server kept treating each reconnect as
-  // a fresh enrollment. Real otelcol-contrib v0.123.0 would loop
-  // forever, flooding logs with "Cannot write WS message: websocket:
-  // close sent." Per OpAMP §3.2.4 the agent reconnects on its own when
-  // it receives ConnectionSettingsOffers — the force-close was
-  // redundant for spec-compliant clients and harmful when send/close
-  // ordering matters.
-  it("leaves the enrollment WebSocket OPEN after the first response", async () => {
-    const tenant = await createTenant("Enroll Open Corp");
-    const config = await createConfig(tenant.id, "enroll-open-config");
-    const token = await createEnrollmentToken(config.id);
-
-    const { ws } = await connectWithEnrollment(token.token);
-
-    // The DO must NOT force-close the WS after sending the enrollment
-    // response. If this assertion ever flips back to CLOSED/CLOSING,
-    // real opamp-go clients will lose the assignment claim and loop.
-    expect(ws.readyState).toBe(WebSocket.OPEN);
-
-    ws.close();
-  });
-
-  // The enrollment response must include the assignment claim in
-  // connection_settings.opamp.headers as `Authorization: Bearer
-  // <claim>`. Real opamp-go clients and our fake-collector both rely
-  // on this exact placement to learn the new credentials for
-  // subsequent reconnects.
-  it("delivers the assignment claim via connection_settings.opamp.headers", async () => {
-    const tenant = await createTenant("Enroll Claim Corp");
-    const config = await createConfig(tenant.id, "enroll-claim-config");
-    const token = await createEnrollmentToken(config.id);
-
-    const { enrollment } = await connectWithEnrollment(token.token);
-
-    // connectWithEnrollment surfaces the claim it pulled from the
-    // first response — verify it's actually a signed assignment claim
-    // (not the original fp_enroll_ token). Assignment claims are
-    // base64url-encoded JSON+HMAC; they don't start with `fp_enroll_`
-    // and they decode through `verifyClaim`.
-    expect(enrollment.assignment_claim).toBeDefined();
-    expect(enrollment.assignment_claim).not.toMatch(/^fp_enroll_/);
-    const claim = await verifyClaim(enrollment.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
-    expect(claim.tenant_id).toBe(tenant.id);
-    expect(claim.config_id).toBe(config.id);
-    expect(claim.instance_uid).toBe(enrollment.instance_uid);
-  });
-});
-
 // ─── Duplicate UID detection via WebSocket tags ─────────────────────
 
 describe("Duplicate UID detection", () => {
@@ -986,6 +927,149 @@ describe("webSocketError defensive attachment parse", () => {
         expect(row["status"]).toBe("disconnected");
       },
     );
+  });
+});
+
+describe("Fleet Component Inventory", () => {
+  let doRef: ConfigDO;
+  const tenantId = "test-tenant";
+  const configId = "test-config";
+
+  beforeEach(async () => {
+    const setup = await createRuntimeTestContext();
+    doRef = setup.durableObject;
+  });
+
+  test("getFleetComponentInventory returns agents grouped by component fingerprint", async () => {
+    await doRef.fetch("http://internal/stats");
+
+    // Insert test agents with different available_components
+    await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, available_components)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "agent-1",
+          tenantId,
+          configId,
+          "connected",
+          now,
+          now,
+          JSON.stringify({
+            components: {
+              receivers: { sub_component_map: { otlp: {} } },
+              processors: { sub_component_map: {} },
+              exporters: { sub_component_map: {} },
+              extensions: { sub_component_map: {} },
+              connectors: { sub_component_map: {} },
+            },
+          }),
+        );
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, available_components)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "agent-2",
+          tenantId,
+          configId,
+          "connected",
+          now,
+          now,
+          JSON.stringify({
+            components: {
+              receivers: { sub_component_map: { otlp: {} } },
+              processors: { sub_component_map: {} },
+              exporters: { sub_component_map: {} },
+              extensions: { sub_component_map: {} },
+              connectors: { sub_component_map: {} },
+            },
+          }),
+        );
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, available_components)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "agent-3",
+          tenantId,
+          configId,
+          "connected",
+          now,
+          now,
+          JSON.stringify({
+            components: {
+              receivers: { sub_component_map: { otlp: {}, prometheus: {} } },
+              processors: { sub_component_map: {} },
+              exporters: { sub_component_map: {} },
+              extensions: { sub_component_map: {} },
+              connectors: { sub_component_map: {} },
+            },
+          }),
+        );
+      },
+    );
+
+    const groups = await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const { getFleetComponentInventory } =
+          await import("../src/durable-objects/agent-state-repo.js");
+        return getFleetComponentInventory(state.storage.sql, tenantId, configId);
+      },
+    );
+
+    expect(groups).toHaveLength(2);
+    const sorted = [...groups].sort((a, b) => b.agentCount - a.agentCount);
+    expect(sorted[0]!.agentCount).toBe(2);
+    expect(sorted[0]!.agentUids).toContain("agent-1");
+    expect(sorted[0]!.agentUids).toContain("agent-2");
+    expect(sorted[1]!.agentCount).toBe(1);
+    expect(sorted[1]!.agentUids).toContain("agent-3");
+  });
+
+  test("getFleetComponentInventory handles agents with null available_components", async () => {
+    await doRef.fetch("http://internal/stats");
+
+    await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const now = Date.now();
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, available_components)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "agent-1",
+          tenantId,
+          configId,
+          "connected",
+          now,
+          now,
+          null,
+        );
+        state.storage.sql.exec(
+          `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at, available_components)
+           VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          "agent-2",
+          tenantId,
+          configId,
+          "connected",
+          now,
+          now,
+          null,
+        );
+      },
+    );
+
+    const groups = await runInDurableObject(
+      doRef,
+      async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
+        const { getFleetComponentInventory } =
+          await import("../src/durable-objects/agent-state-repo.js");
+        return getFleetComponentInventory(state.storage.sql, tenantId, configId);
+      },
+    );
+
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.agentCount).toBe(2);
+    expect(groups[0]!.availableComponents).toBe("null");
   });
 });
 

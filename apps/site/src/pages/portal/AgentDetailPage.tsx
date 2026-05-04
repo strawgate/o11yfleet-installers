@@ -28,6 +28,7 @@ import {
   buildAgentDetailGuidanceTargets,
   buildAgentDetailModel,
   pipelineRows,
+  type ComponentInventory,
   type ConfigSyncView,
   type ComponentSummary,
   type PipelineRow,
@@ -435,6 +436,7 @@ export default function AgentDetailPage() {
           currentHash={currentHash}
           capabilities={capabilities}
           componentCounts={componentCounts}
+          componentInventory={model.componentInventory}
         />
       )}
       {tab === "pipeline" && <PipelineTab topology={topology} />}
@@ -460,6 +462,7 @@ function OverviewTab({
   currentHash,
   capabilities,
   componentCounts,
+  componentInventory,
 }: {
   agent: AgentDetail;
   identity: ReturnType<typeof extractAgentIdentity>;
@@ -471,6 +474,7 @@ function OverviewTab({
   currentHash: string | null | undefined;
   capabilities: string[];
   componentCounts: ComponentSummary;
+  componentInventory: ComponentInventory | null;
 }) {
   return (
     <div
@@ -596,6 +600,51 @@ function OverviewTab({
           </Text>
         )}
       </Card>
+
+      {/* Compiled-in Components card */}
+      <Card>
+        <Title order={3} size="sm" mb="md">
+          Compiled-in Components
+        </Title>
+        {componentInventory ? (
+          Object.values(componentInventory).some((items) => items.length > 0) ? (
+            <Stack gap="xs">
+              <ComponentCategory title="Receivers" components={componentInventory.receivers} />
+              <ComponentCategory title="Processors" components={componentInventory.processors} />
+              <ComponentCategory title="Exporters" components={componentInventory.exporters} />
+              <ComponentCategory title="Extensions" components={componentInventory.extensions} />
+              <ComponentCategory title="Connectors" components={componentInventory.connectors} />
+            </Stack>
+          ) : (
+            <Text size="sm" c="dimmed">
+              Component inventory was reported, but no compiled-in components were listed.
+            </Text>
+          )
+        ) : (
+          <Text size="sm" c="dimmed">
+            No component inventory reported. The agent may be running an older collector version
+            that does not support OpAMP AvailableComponents.
+          </Text>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function ComponentCategory({ title, components }: { title: string; components: string[] }) {
+  if (components.length === 0) return null;
+  return (
+    <div>
+      <Text size="xs" fw={600} c="dimmed" mb="xs">
+        {title}
+      </Text>
+      <Group gap="xs">
+        {components.map((name) => (
+          <Badge key={name} variant="light" size="sm" tt="none">
+            {name}
+          </Badge>
+        ))}
+      </Group>
     </div>
   );
 }

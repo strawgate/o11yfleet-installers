@@ -428,3 +428,164 @@ function extractLineNumber(message: string): number | null {
   const n = Number(m[1]);
   return Number.isFinite(n) && n > 0 ? n : null;
 }
+
+import type { FleetComponentGroup } from "../durable-objects/agent-state-repo-interface.js";
+
+const COMPONENT_KINDS = [
+  "receivers",
+  "processors",
+  "exporters",
+  "extensions",
+  "connectors",
+] as const;
+type ComponentKind = (typeof COMPONENT_KINDS)[number];
+
+export interface ComponentDeclaration {
+  kind: ComponentKind;
+  name: string;
+}
+
+export function extractComponentDeclarations(yamlConfig: string): ComponentDeclaration[] {
+  const decls: ComponentDeclaration[] = [];
+  try {
+    const parsed = parseYaml(yamlConfig) as Record<string, unknown> | null;
+    if (!parsed || typeof parsed !== "object") return [];
+    for (const kind of COMPONENT_KINDS) {
+      const section = parsed[kind] as unknown;
+      // Handle map format: receivers: { otlp: {}, prometheus: {} }
+      // Reject arrays (typeof array === 'object') and scalars.
+      if (section && typeof section === "object" && !Array.isArray(section)) {
+        for (const name of Object.keys(section as Record<string, unknown>)) {
+          decls.push({ kind, name });
+        }
+      }
+    }
+  } catch {
+    return [];
+  }
+  return decls;
+}
+
+export interface FleetCompatibilityResult {
+  compatible: boolean;
+  missingComponents: ComponentDeclaration[];
+  compatibleAgents: number;
+  incompatibleAgents: number;
+  /** Agents that have not reported available_components — unknown capability. */
+  unknownAgents: number;
+  totalAgents: number;
+  perGroup: {
+    availableComponents: string;
+    agentCount: number;
+    missingComponents: ComponentDeclaration[];
+  }[];
+}
+
+export function validateFleetCompatibility(
+  decls: ComponentDeclaration[],
+  fleetGroups: FleetComponentGroup[],
+): FleetCompatibilityResult {
+  const missingMap = new Map<string, ComponentDeclaration>();
+  let compatibleAgents = 0;
+  let incompatibleAgents = 0;
+  let unknownAgents = 0;
+
+  for (const group of fleetGroups) {
+    // Agents that have not reported available_components cannot be validated.
+    // Treat them as "unknown" — they do not cause incompatibility.
+    if (group.availableComponents === "null" || group.availableComponents === null) {
+      unknownAgents += group.agentCount;
+      continue;
+    }
+
+    let fingerprint: ComponentInventory | null = null;
+    try {
+      fingerprint = extractComponentInventoryFromRaw(JSON.parse(group.availableComponents));
+    } catch {
+      unknownAgents += group.agentCount;
+      continue;
+    }
+
+    if (!fingerprint) {
+      unknownAgents += group.agentCount;
+      continue;
+    }
+
+    const missing = decls.filter((d) => {
+      const list = fingerprint![d.kind];
+      return !list.includes(d.name);
+    });
+
+    if (missing.length === 0) {
+      compatibleAgents += group.agentCount;
+    } else {
+      incompatibleAgents += group.agentCount;
+      // Deduplicate by individual component key so we don't return the same
+      // component twice even if multiple groups are missing it.
+      for (const m of missing) {
+        missingMap.set(`${m.kind}/${m.name}`, m);
+      }
+    }
+  }
+
+  return {
+    compatible: incompatibleAgents === 0,
+    missingComponents: Array.from(missingMap.values()),
+    compatibleAgents,
+    incompatibleAgents,
+    unknownAgents,
+    totalAgents: compatibleAgents + incompatibleAgents + unknownAgents,
+    perGroup: fleetGroups.map((g) => {
+      if (g.availableComponents === "null" || g.availableComponents === null) {
+        return {
+          availableComponents: g.availableComponents,
+          agentCount: g.agentCount,
+          missingComponents: [],
+        };
+      }
+      let fp: ComponentInventory | null = null;
+      try {
+        fp = extractComponentInventoryFromRaw(JSON.parse(g.availableComponents));
+      } catch {
+        fp = null;
+      }
+      const missing = fp ? decls.filter((d) => !fp![d.kind]?.includes(d.name)) : [];
+      return {
+        availableComponents: g.availableComponents,
+        agentCount: g.agentCount,
+        missingComponents: missing,
+      };
+    }),
+  };
+}
+
+interface ComponentInventory {
+  receivers: string[];
+  processors: string[];
+  exporters: string[];
+  extensions: string[];
+  connectors: string[];
+}
+
+function extractComponentInventoryFromRaw(
+  raw: Record<string, unknown> | null,
+): ComponentInventory | null {
+  if (!raw) return null;
+  const components = raw["components"] as Record<string, unknown> | undefined;
+  if (!components || typeof components !== "object") return null;
+  const extractNames = (section: unknown): string[] => {
+    if (!section || typeof section !== "object") return [];
+    const subMap = (section as Record<string, unknown>)["sub_component_map"] as
+      | Record<string, unknown>
+      | undefined;
+    if (!subMap || typeof subMap !== "object") return [];
+    return Object.keys(subMap);
+  };
+  return {
+    receivers: extractNames(components["receivers"]),
+    processors: extractNames(components["processors"]),
+    exporters: extractNames(components["exporters"]),
+    extensions: extractNames(components["extensions"]),
+    connectors: extractNames(components["connectors"]),
+  };
+}

@@ -12,6 +12,7 @@ OpAMP (Open Agent Management Protocol) fleet management on Cloudflare Workers, D
 | `DEVELOPING.md` | Developer workflow, build, test, package map |
 | `CODE_STYLE.md` | Style preferences for reviewers              |
 | `docs/`         | Architecture docs, design decisions          |
+| `TESTING.md`    | Testing strategies and test maintenance      |
 
 ## Essential Commands
 

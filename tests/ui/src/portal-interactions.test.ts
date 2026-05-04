@@ -111,4 +111,29 @@ test.describe("portal interactions", () => {
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
+
+  test("AgentDetailPage: compiled-in components card renders reported available_components", async ({
+    page,
+  }) => {
+    const runtime = collectRuntimeErrors(page);
+    await mockPortal(page);
+    await page.goto(`${UI_URL}/portal/agents/${CONFIG_ID}/${AGENT_UID}`);
+
+    await expect(page.getByRole("heading", { name: "demo-host" })).toBeVisible();
+
+    const componentsHeading = page.getByRole("heading", { name: "Compiled-in Components" });
+    await expect(componentsHeading).toBeVisible();
+
+    await expect(page.getByText("Receivers")).toBeVisible();
+    await expect(page.getByText("otlp").first()).toBeVisible();
+    await expect(page.getByText("Processors")).toBeVisible();
+    await expect(page.getByText("batch")).toBeVisible();
+    await expect(page.getByText("Exporters")).toBeVisible();
+    await expect(page.getByText("debug")).toBeVisible();
+    await expect(page.getByText("Extensions")).toBeVisible();
+    await expect(page.getByText("health_check")).toBeVisible();
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
 });

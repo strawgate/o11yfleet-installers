@@ -36,6 +36,14 @@ export type PipelineRow = {
   status: string | null;
 };
 
+export type ComponentInventory = {
+  receivers: string[];
+  processors: string[];
+  exporters: string[];
+  extensions: string[];
+  connectors: string[];
+};
+
 export type AgentDetailModel = {
   desiredHash: string | undefined;
   currentHash: string | null | undefined;
@@ -53,6 +61,7 @@ export type AgentDetailModel = {
   capabilitiesBits: number;
   componentCounts: ComponentSummary;
   configSync: ConfigSyncView;
+  componentInventory: ComponentInventory | null;
   guidanceContext: Record<string, unknown>;
   pageContext: ReturnType<typeof buildBrowserPageContext>;
 };
@@ -153,6 +162,9 @@ export function buildAgentDetailModel({
   const capabilitiesBits = (agent?.capabilities as number | null) ?? 0;
   const capabilities = parseCapabilities(capabilitiesBits);
   const componentCounts = componentSummary(agent, topology);
+  const componentInventory = parseComponentInventory(
+    agent?.available_components as Record<string, unknown> | null | undefined,
+  );
   const configSync = configSyncView({
     drift,
     currentHash,
@@ -239,6 +251,7 @@ export function buildAgentDetailModel({
     capabilities,
     capabilitiesBits,
     componentCounts,
+    componentInventory,
     configSync,
     guidanceContext: {
       configuration_id: configId ?? null,
@@ -378,4 +391,27 @@ export function parseCapabilities(caps: number | null): string[] {
     if (caps & Number(bit)) result.push(name);
   }
   return result;
+}
+
+export function parseComponentInventory(
+  availableComponents: Record<string, unknown> | null | undefined,
+): ComponentInventory | null {
+  if (!availableComponents) return null;
+  const components = availableComponents["components"] as Record<string, unknown> | undefined;
+  if (!components || typeof components !== "object") return null;
+  const extractNames = (section: unknown): string[] => {
+    if (!section || typeof section !== "object") return [];
+    const subMap = (section as Record<string, unknown>)["sub_component_map"] as
+      | Record<string, unknown>
+      | undefined;
+    if (!subMap || typeof subMap !== "object") return [];
+    return Object.keys(subMap);
+  };
+  return {
+    receivers: extractNames(components["receivers"]),
+    processors: extractNames(components["processors"]),
+    exporters: extractNames(components["exporters"]),
+    extensions: extractNames(components["extensions"]),
+    connectors: extractNames(components["connectors"]),
+  };
 }

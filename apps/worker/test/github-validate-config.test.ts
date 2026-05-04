@@ -1,7 +1,11 @@
 // Pure-function validator tests. No I/O, no Workers runtime needed.
 
 import { describe, expect, it } from "vitest";
-import { validateCollectorConfig } from "../src/github/validate-config.js";
+import {
+  validateCollectorConfig,
+  extractComponentDeclarations,
+  validateFleetCompatibility,
+} from "../src/github/validate-config.js";
 
 const PATH = "o11yfleet/config.yaml";
 
@@ -294,5 +298,121 @@ service:
       yaml: "receivers:\n  otlp:\n",
     });
     expect(result.conclusion).toBe("success");
+  });
+});
+
+describe("extractComponentDeclarations", () => {
+  it("extracts receiver component names", () => {
+    const yaml = "receivers:\n  otlp:\n  prometheus:\nprocessors:\n  batch:\n";
+    const decls = extractComponentDeclarations(yaml);
+    expect(decls).toContainEqual({ kind: "receivers", name: "otlp" });
+    expect(decls).toContainEqual({ kind: "receivers", name: "prometheus" });
+    expect(decls).toContainEqual({ kind: "processors", name: "batch" });
+  });
+
+  it("ignores comments and empty lines", () => {
+    const yaml = "# comment\nreceivers:\n  otlp:\n\nprocessors:\n  batch:\n";
+    const decls = extractComponentDeclarations(yaml);
+    expect(decls).toHaveLength(2);
+  });
+
+  it("ignores non-mapping section values (arrays)", () => {
+    // receivers: [otlp] is valid YAML but not a component map.
+    // Should not produce declarations with numeric keys.
+    const yaml = "receivers:\n  - otlp\n";
+    const decls = extractComponentDeclarations(yaml);
+    expect(decls).toHaveLength(0);
+    expect(decls.some((d) => d.name === "0")).toBe(false);
+  });
+});
+
+describe("validateFleetCompatibility", () => {
+  it("returns compatible when all agents have declared components", () => {
+    const yaml = "receivers:\n  otlp:\n";
+    const decls = extractComponentDeclarations(yaml);
+    const groups = [
+      {
+        availableComponents: JSON.stringify({
+          components: {
+            receivers: { sub_component_map: { otlp: {} } },
+            processors: { sub_component_map: {} },
+            exporters: { sub_component_map: {} },
+            extensions: { sub_component_map: {} },
+            connectors: { sub_component_map: {} },
+          },
+        }),
+        agentCount: 5,
+        agentUids: ["a1", "a2", "a3", "a4", "a5"],
+      },
+    ];
+    const result = validateFleetCompatibility(decls, groups);
+    expect(result.compatible).toBe(true);
+    expect(result.totalAgents).toBe(5);
+    expect(result.missingComponents).toHaveLength(0);
+  });
+
+  it("returns incompatible when agents lack declared components", () => {
+    const yaml = "receivers:\n  jaeger:\n";
+    const decls = extractComponentDeclarations(yaml);
+    const groups = [
+      {
+        availableComponents: JSON.stringify({
+          components: {
+            receivers: { sub_component_map: { otlp: {} } },
+            processors: { sub_component_map: {} },
+            exporters: { sub_component_map: {} },
+            extensions: { sub_component_map: {} },
+            connectors: { sub_component_map: {} },
+          },
+        }),
+        agentCount: 10,
+        agentUids: Array.from({ length: 10 }, (_, i) => `agent-${i}`),
+      },
+    ];
+    const result = validateFleetCompatibility(decls, groups);
+    expect(result.compatible).toBe(false);
+    expect(result.incompatibleAgents).toBe(10);
+    expect(result.missingComponents).toContainEqual({ kind: "receivers", name: "jaeger" });
+  });
+
+  it("deduplicates missingComponents across multiple groups", () => {
+    const yaml = "receivers:\n  jaeger:\n  otlp:\n";
+    const decls = extractComponentDeclarations(yaml);
+    // Two groups, both missing the same component
+    const groups = [
+      {
+        availableComponents: JSON.stringify({
+          components: {
+            receivers: { sub_component_map: {} }, // missing both jaeger and otlp
+            processors: { sub_component_map: {} },
+            exporters: { sub_component_map: {} },
+            extensions: { sub_component_map: {} },
+            connectors: { sub_component_map: {} },
+          },
+        }),
+        agentCount: 5,
+        agentUids: ["a1", "a2", "a3", "a4", "a5"],
+      },
+      {
+        availableComponents: JSON.stringify({
+          components: {
+            receivers: { sub_component_map: {} }, // missing both jaeger and otlp
+            processors: { sub_component_map: {} },
+            exporters: { sub_component_map: {} },
+            extensions: { sub_component_map: {} },
+            connectors: { sub_component_map: {} },
+          },
+        }),
+        agentCount: 3,
+        agentUids: ["b1", "b2", "b3"],
+      },
+    ];
+    const result = validateFleetCompatibility(decls, groups);
+    expect(result.compatible).toBe(false);
+    expect(result.incompatibleAgents).toBe(8);
+    // Each missing component should appear exactly once
+    expect(result.missingComponents).toHaveLength(2);
+    expect(result.missingComponents).toContainEqual({ kind: "receivers", name: "jaeger" });
+    expect(result.missingComponents).toContainEqual({ kind: "receivers", name: "otlp" });
   });
 });

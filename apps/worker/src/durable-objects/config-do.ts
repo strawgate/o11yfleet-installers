@@ -24,6 +24,10 @@ import type {
   DoPolicy,
 } from "./agent-state-repo-interface.js";
 import { SqliteAgentStateRepo } from "./sqlite-agent-state-repo.js";
+import {
+  extractComponentDeclarations,
+  validateFleetCompatibility,
+} from "../github/validate-config.js";
 import { parseAttachment } from "./ws-attachment.js";
 import type { WSAttachment } from "./ws-attachment.js";
 import {
@@ -376,6 +380,10 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       return handleDebugTables(this.ctx.storage.sql, request);
     if (url.pathname === "/debug/query" && request.method === "POST")
       return handleDebugQuery(this.ctx.storage.sql, request);
+
+    // Compatibility check route
+    if (url.pathname === "/command/check-compatibility" && request.method === "POST")
+      return this.handleCheckCompatibility(request);
 
     // Pending device routes (only for __pending__ DOs)
     if (isPendingDo) {
@@ -998,6 +1006,35 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       this.cachedPolicy = null; // Invalidate — next getPolicy() re-reads from SQLite
     }
     return Response.json({ policy: this.getPolicy() });
+  }
+
+  private async handleCheckCompatibility(request: Request): Promise<Response> {
+    try {
+      const body = (await request.json()) as {
+        yamlConfig: unknown;
+        override?: unknown;
+      };
+      const { yamlConfig, override } = body;
+      if (typeof yamlConfig !== "string") {
+        return Response.json({ error: "yamlConfig must be a string" }, { status: 400 });
+      }
+      // Require explicit boolean true to prevent type coercion bypass.
+      const forceOverride = override === true;
+
+      const { tenant_id, config_id } = this.getMyIdentity();
+      const inventory = this.repo.getFleetComponentInventory(tenant_id, config_id);
+
+      const declarations = extractComponentDeclarations(yamlConfig);
+      const compat = validateFleetCompatibility(declarations, inventory);
+
+      if (compat.compatible || forceOverride) {
+        return Response.json({ ...compat, override: forceOverride });
+      }
+
+      return Response.json({ ...compat, compatible: false }, { status: 409 });
+    } catch (err) {
+      return Response.json({ error: String(err) }, { status: 500 });
+    }
   }
 
   private emitMetrics(): void {

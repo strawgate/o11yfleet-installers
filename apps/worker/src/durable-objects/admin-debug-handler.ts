@@ -183,9 +183,6 @@ export function debugQueryData(sql: SqlStorage, params: DebugQueryParams): Debug
     }
     return { rows, row_count: rows.length, truncated, response_bytes_estimate: bytes };
   } catch (error) {
-    throw new RpcError(
-      error instanceof Error ? error.message : "Query failed",
-      400,
-    );
+    throw new RpcError(error instanceof Error ? error.message : "Query failed", 400);
   }
 }

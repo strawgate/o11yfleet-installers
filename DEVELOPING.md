@@ -240,6 +240,8 @@ just playwright-install
 
 This downloads Chromium and dependencies (~300MB).
 
+For detailed testing strategies and maintenance guidelines, see [TESTING.md](./TESTING.md).
+
 ### Running Tests While Developing
 
 | Scenario                | Command                                |
