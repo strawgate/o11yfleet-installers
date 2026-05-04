@@ -41,7 +41,7 @@ function isNavActive(pathname: string, to: string) {
 function FooterColumn({ title, links }: { title: string; links: { label: string; to: string }[] }) {
   return (
     <div className="footer-col">
-      <h5>{title}</h5>
+      <h3>{title}</h3>
       <ul>
         {links.map((l) => (
           <li key={l.label}>

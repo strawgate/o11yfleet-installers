@@ -144,9 +144,18 @@ export default function GettingStartedPage() {
                 allowDeselect={false}
               />
               <Group>
-                <Button onClick={() => setStep(1)} disabled={!selectedConfigId}>
+                <Button
+                  onClick={() => setStep(1)}
+                  disabled={!selectedConfigId}
+                  aria-describedby={!selectedConfigId ? "step1-help" : undefined}
+                >
                   Continue
                 </Button>
+                {!selectedConfigId ? (
+                  <span id="step1-help" className="sr-only">
+                    Select a configuration to continue
+                  </span>
+                ) : null}
               </Group>
             </Stack>
           )}

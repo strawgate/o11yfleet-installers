@@ -167,6 +167,18 @@ a {
   text-decoration: none;
 }
 
+/* WCAG SC 1.4.1 — inline links inside body copy must not rely on color
+   alone (#757 a11y audit, F8). Underline links inside paragraphs and list
+   items; navs/buttons keep their explicit no-underline styling. */
+:where(p, li) a {
+  color: var(--accent-2);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+:where(p, li) a:hover {
+  text-decoration-thickness: 2px;
+}
+
 ::selection {
   background: var(--accent-soft);
   color: var(--fg);
@@ -489,13 +501,15 @@ p {
   max-width: 32ch;
   font-size: 13.5px;
 }
-.footer-col h5 {
+.footer-col h3 {
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 500;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  color: var(--fg-4);
+  /* WCAG SC 1.4.3: --fg-3 keeps the 4.5:1 contrast that --fg-4 misses on
+     the dark footer background (see #757 a11y audit, A1). */
+  color: var(--fg-3);
   margin-bottom: 14px;
 }
 .footer-col ul {
