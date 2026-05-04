@@ -221,7 +221,8 @@ export default function DOViewerPage() {
                     {rows.map((row, rowIndex) => {
                       // Use composite key: first column value + rowIndex for uniqueness
                       // Fallback to rowIndex only if first column is null/undefined
-                      const firstColKey = row[columns[0]] ?? "";
+                      const firstCol = columns[0];
+                      const firstColKey = firstCol !== undefined ? (row[firstCol] ?? "") : "";
                       const rowKey = `${String(firstColKey)}-${rowIndex}`;
                       return (
                         <Table.Tr key={rowKey}>

@@ -804,11 +804,25 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
           span.setAttribute("opamp.config_offered", true);
         }
 
-        // Enrollment complete: tell the agent to reconnect with the DO-assigned UID.
-        // The new WS will be tagged with our UID, so ctx.getWebSockets(uid) works.
+        // Enrollment complete. We previously force-closed the WS here (code 1000
+        // "Reconnect with new instance_uid") to push the agent onto a fresh
+        // socket. That broke real opamp-go clients: ws.send(connection_settings)
+        // immediately followed by ws.close() doesn't reliably let the client
+        // process the settings before tearing down — the client's WSSender
+        // floods "Cannot write WS message: websocket: close sent" and the
+        // assignment claim from connection_settings.opamp.headers is dropped,
+        // so the next reconnect reuses the original fp_enroll_ token and we
+        // loop on enrollment forever.
+        //
+        // The close was unnecessary anyway. The WS is already tagged with the
+        // DO-assigned UID (acceptWebSocket(server, [instanceUid]) above), and
+        // `attachment.is_enrollment = false` is set in handleFirstMessage so
+        // subsequent frames on this socket go through the normal processFrame
+        // path. Per OpAMP §3.2.4, when a client receives ConnectionSettingsOffers
+        // it reconnects on its own using the new credentials — we don't need
+        // (and shouldn't) force it.
         if (isEnrollment) {
           span.setAttribute("opamp.enrollment_complete", true);
-          ws.close(1000, "Reconnect with new instance_uid");
         }
       }
     } catch (err) {

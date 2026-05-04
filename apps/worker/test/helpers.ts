@@ -378,6 +378,12 @@ export async function connectWithEnrollment(
      * Signature: (instanceUid: string, doStub: DurableObjectStub) => Promise<void>
      */
     doAction?: (instanceUid: string, doStub: ReturnType<typeof env.CONFIG_DO.get>) => Promise<void>;
+    /**
+     * Pass `false` to skip the default effective_config in the initial hello.
+     * Useful when a test wants to assert behavior for an agent that has
+     * NOT yet reported its effective config (e.g. drift logic edge cases).
+     */
+    includeEffectiveConfig?: boolean;
   } = {},
 ): Promise<{
   ws: WebSocket;
@@ -397,7 +403,7 @@ export async function connectWithEnrollment(
   // buildHello() defaults include CONFIGURABLE_CAPABILITIES (ReportsStatus,
   // AcceptsRemoteConfig, ReportsEffectiveConfig, ReportsHealth,
   // ReportsRemoteConfig) which is the expected capability set for enrollment.
-  ws.send(encodeFrame(buildHello()));
+  ws.send(encodeFrame(buildHello({ includeEffectiveConfig: opts.includeEffectiveConfig })));
 
   // Receive OpAMP binary response (server accepts enrollment and sends response).
   // The DO may close this socket and request reconnect via AgentIdentification.
@@ -429,8 +435,9 @@ export async function connectWithEnrollment(
     exp: Math.floor(Date.now() / 1000) + 86400, // 24h
   };
 
-  // The DO closes the enrollment WebSocket (code 1000 "Reconnect with new instance_uid").
-  // Reconnect and send hello while the DO is still awake — this keeps WS tags valid.
+  // The DO no longer force-closes the enrollment WebSocket (real opamp-go clients
+  // need to process connection_settings before any close). Tests can keep using the
+  // enrollment WS directly — only reconnect if a test explicitly closed it.
   let openWs = ws;
   let adoptedUid = doAssignedUid;
   if (ws.readyState !== WebSocket.OPEN) {
@@ -440,11 +447,9 @@ export async function connectWithEnrollment(
     const reconnectMsg = await waitForMsg(openWs);
     const reconnectBuf = await msgToBuffer(reconnectMsg);
     const reconnectResponse = decodeFrame<ServerToAgent>(reconnectBuf);
-    // Confirm the adopted UID from the reconnect response and update claim.
     adoptedUid = reconnectResponse.instance_uid
       ? uint8ToHex(reconnectResponse.instance_uid)
       : doAssignedUid;
-    // Keep claim aligned with final adopted UID.
     finalAssignmentClaim = { ...finalAssignmentClaim, instance_uid: adoptedUid };
   }
 

@@ -44,16 +44,32 @@ export function parseAttachment(raw: unknown): WSAttachment | null {
   ) {
     return null;
   }
+  // Validate instance_uid is hex (32 chars) to prevent InvalidHexError downstream
+  const HEX32_RE = /^[0-9a-f]{32}$/i;
+  const instanceUid = obj["instance_uid"] as string;
+  if (!HEX32_RE.test(instanceUid)) {
+    return null;
+  }
+
   let connected_at = obj["connected_at"];
   if (!Number.isFinite(connected_at) || connected_at < 0) {
     connected_at = Date.now();
   }
+
+  // Validate do_assigned_uid if present, or fail if enrollment requires it
+  const isEnrollment = typeof obj["is_enrollment"] === "boolean" ? obj["is_enrollment"] : undefined;
+  const doAssignedRaw = obj["do_assigned_uid"];
+  const doAssignedValid = typeof doAssignedRaw === "string" && HEX32_RE.test(doAssignedRaw);
+  if ((doAssignedRaw !== undefined && !doAssignedValid) || (isEnrollment && !doAssignedValid)) {
+    return null;
+  }
+
   return {
     tenant_id: obj["tenant_id"],
     config_id: obj["config_id"],
     instance_uid: obj["instance_uid"],
     connected_at,
-    is_enrollment: typeof obj["is_enrollment"] === "boolean" ? obj["is_enrollment"] : undefined,
+    is_enrollment: isEnrollment,
     capabilities: typeof obj["capabilities"] === "number" ? obj["capabilities"] : undefined,
     pending_connection_settings:
       typeof obj["pending_connection_settings"] === "string"
@@ -72,7 +88,6 @@ export function parseAttachment(raw: unknown): WSAttachment | null {
       typeof obj["last_seen_at"] === "number" && Number.isFinite(obj["last_seen_at"])
         ? obj["last_seen_at"]
         : undefined,
-    do_assigned_uid:
-      typeof obj["do_assigned_uid"] === "string" ? obj["do_assigned_uid"] : undefined,
+    do_assigned_uid: doAssignedValid ? (doAssignedRaw as string) : undefined,
   };
 }

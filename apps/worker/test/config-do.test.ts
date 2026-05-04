@@ -111,7 +111,7 @@ describe("Config Durable Object", () => {
 
     await stub.fetch("http://internal/command/set-desired-config", {
       method: "POST",
-      body: JSON.stringify({ config_hash: "desired-hash" }),
+      body: JSON.stringify({ config_hash: "deadbeef0001" }),
       headers: { "Content-Type": "application/json" },
     });
 
@@ -121,10 +121,10 @@ describe("Config Durable Object", () => {
         const now = Date.now();
         const inserts: Array<[string, string, string, number]> = [
           // [uid, status, current_hash, healthy]
-          ["a1", "connected", "desired-hash", 1],
-          ["a2", "connected", "stale-hash", 1],
-          ["a3", "degraded", "stale-hash", 0],
-          ["a4", "disconnected", "desired-hash", 1],
+          ["a1", "connected", "deadbeef0001", 1],
+          ["a2", "connected", "deadbeef0002", 1],
+          ["a3", "degraded", "deadbeef0002", 0],
+          ["a4", "disconnected", "deadbeef0001", 1],
         ];
         for (const [uid, status, hash, healthy] of inserts) {
           state.storage.sql.exec(
@@ -159,8 +159,8 @@ describe("Config Durable Object", () => {
     });
     expect(stats.current_hash_counts).toEqual(
       expect.arrayContaining([
-        { value: "desired-hash", count: 2 },
-        { value: "stale-hash", count: 2 },
+        { value: "deadbeef0001", count: 2 },
+        { value: "deadbeef0002", count: 2 },
       ]),
     );
   });
@@ -906,7 +906,7 @@ describe("webSocketError defensive attachment parse", () => {
         state.storage.sql.exec(
           `INSERT INTO agents (instance_uid, tenant_id, config_id, status, last_seen_at, connected_at)
            VALUES (?, ?, ?, ?, ?, ?)`,
-          "ws-error-agent-1",
+          "00000000000000000000000000000001",
           "tenant-1",
           "config-ws-error-valid-attach",
           "connected",
@@ -917,7 +917,7 @@ describe("webSocketError defensive attachment parse", () => {
         const attachment = {
           tenant_id: "tenant-1",
           config_id: "config-ws-error-valid-attach",
-          instance_uid: "ws-error-agent-1",
+          instance_uid: "00000000000000000000000000000001",
           connected_at: Date.now(),
           sequence_num: 5,
           last_seen_at: Date.now(),
@@ -930,7 +930,7 @@ describe("webSocketError defensive attachment parse", () => {
         await instance.webSocketError(mockWs, new Error("transport error"));
 
         const row = state.storage.sql
-          .exec(`SELECT status FROM agents WHERE instance_uid = ?`, "ws-error-agent-1")
+          .exec(`SELECT status FROM agents WHERE instance_uid = ?`, "00000000000000000000000000000001")
           .one();
         expect(row["status"]).toBe("disconnected");
       },
@@ -1101,8 +1101,17 @@ describe("agent_disconnect clears connected_at in persisted row", () => {
       setTimeout(r, 50);
     });
 
-    // Send agent_disconnect frame
-    ws.send(encodeFrame(buildDisconnect({ instanceUid: enrollment.instance_uid })));
+    // Send agent_disconnect frame. Use sequenceNum=1 (next-expected after the
+    // enrollment hello at seq=0) so the state-machine doesn't drop it as a
+    // sequence-gap report-full-state.
+    ws.send(
+      encodeFrame(
+        buildDisconnect({
+          instanceUid: hexToUint8Array(enrollment.instance_uid),
+          sequenceNum: 1,
+        }),
+      ),
+    );
 
     // Wait for the disconnect to be processed
     await new Promise((r) => {
@@ -1111,8 +1120,9 @@ describe("agent_disconnect clears connected_at in persisted row", () => {
 
     // Query the database directly
     const id = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(id);
     await runInDurableObject(
-      id,
+      stub,
       async (_instance: InstanceType<typeof ConfigDurableObject>, state) => {
         const row = state.storage.sql
           .exec(

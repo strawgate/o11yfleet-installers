@@ -70,7 +70,7 @@ app.use("*", async (c, next) => {
       c.env,
     );
   }
-  await next();
+  return next();
 });
 
 // ─── Admin auth middleware ───────────────────────────────────────────
@@ -137,7 +137,7 @@ app.use("*", async (c, next) => {
   });
 
   c.set("audit", audit);
-  await next();
+  return next();
 });
 
 // ─── CORS + security headers (after handler) ────────────────────────

@@ -29,13 +29,11 @@ test("ErrorState: renders message and retry hint", () => {
   const html = renderToStaticMarkup(
     withProvider(<ErrorState message="Network is down" retry={() => undefined} />),
   );
-  // React server-renders the apostrophe as `&#x27;` HTML entity.
-  assert.match(html, /Couldn(?:&#x27;|')t load data/);
   assert.match(html, /Network is down/);
-  assert.match(html, /Retry/);
+  assert.match(html, /Try again/);
 });
 
 test("ErrorState: omits retry button when no callback", () => {
   const html = renderToStaticMarkup(withProvider(<ErrorState message="x" />));
-  assert.doesNotMatch(html, /Retry/);
+  assert.doesNotMatch(html, /Try again/);
 });

@@ -72,7 +72,7 @@ app.use("*", async (c, next) => {
       c.env,
     );
   }
-  await next();
+  return next();
 });
 
 // ─── Auth middleware: resolves tenantId + audit context ──────────────
@@ -157,7 +157,7 @@ app.use("*", async (c, next) => {
 
   c.set("tenantId", tenantId);
   c.set("audit", audit);
-  await next();
+  return next();
 });
 
 // ─── CORS + security headers (after handler) ────────────────────────

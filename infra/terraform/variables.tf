@@ -102,7 +102,7 @@ variable "worker_compatibility_flags" {
 variable "worker_crons" {
   type        = list(string)
   description = "Cron schedules for Terraform-managed Worker cron triggers. Must match `triggers.crons` in apps/worker/wrangler.jsonc — drift is checked by scripts/check-cron-drift.ts and the same script wired into CI's fast job."
-  default     = ["0 0 * * *", "17 3 * * *", "12 6 * * *"]
+  default     = ["0 0 * * *", "17 3 * * *", "12 6 * * *", "45 4 * * *"]
 
   validation {
     condition     = length(var.worker_crons) > 0

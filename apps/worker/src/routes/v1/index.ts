@@ -74,7 +74,16 @@ async function routeV1Request(
   app.use("*", async (c, next) => {
     c.set("tenantId", tenantId);
     c.set("audit", audit as AuditContext);
-    await next();
+    return next();
+  });
+  // Re-throw typed errors so the outer handleV1Request can map them to JSON.
+  // Without this, Hono's default error handler would mask AiApiError/ApiError
+  // as plain 500s.
+  app.onError((err) => {
+    if (err instanceof ApiError || err instanceof AiApiError) {
+      throw err;
+    }
+    throw err;
   });
   app.route("/api/v1", v1Router);
 

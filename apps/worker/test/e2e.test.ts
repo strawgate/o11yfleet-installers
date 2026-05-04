@@ -204,7 +204,7 @@ describe("E2E Scenario #3: Config push via DO", () => {
         Upgrade: "websocket",
         "x-fp-tenant-id": "s3-tenant",
         "x-fp-config-id": "s3-config",
-        "x-fp-instance-uid": "s3uid123456789ab",
+        "x-fp-instance-uid": "00000000000000000000000000000003",
       },
     });
     expect(wsRes.status).toBe(101);
@@ -307,7 +307,7 @@ describe("E2E Scenario #6: Hibernation attachment", () => {
         Upgrade: "websocket",
         "x-fp-tenant-id": "s6-tenant",
         "x-fp-config-id": "s6-config",
-        "x-fp-instance-uid": "s6uid123456789ab",
+        "x-fp-instance-uid": "00000000000000000000000000000006",
       },
     });
     expect(wsRes.status).toBe(101);

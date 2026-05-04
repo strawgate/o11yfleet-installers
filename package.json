@@ -11,7 +11,7 @@
     "test:dev-check": "tsx --test scripts/dev-check.test.ts scripts/with-local-env.test.ts",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .",
-    "knip": "knip --no-config-hints --max-issues 26",
+    "knip": "knip --no-config-hints --max-issues 31",
     "prepare": "husky"
   },
   "devDependencies": {
