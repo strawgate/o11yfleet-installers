@@ -97,7 +97,15 @@ export async function handleDisconnectAgentRoute(
     return Response.json(result);
   } catch (err) {
     const rpcErr = parseRpcError(err);
-    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    if (rpcErr) {
+      // Reconstruct the {disconnected: false, reason} body that the data
+      // function attached to the RpcError. CF DO RPC strips custom Error
+      // properties, so we infer it from the message (which IS the reason).
+      return Response.json(
+        { disconnected: false, reason: rpcErr.message },
+        { status: rpcErr.statusCode },
+      );
+    }
     throw err;
   }
 }
@@ -120,7 +128,13 @@ export async function handleRestartAgentRoute(
     return Response.json(result);
   } catch (err) {
     const rpcErr = parseRpcError(err);
-    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    if (rpcErr) {
+      // See note in handleDisconnectAgentRoute about RpcError details.
+      return Response.json(
+        { restarted: false, reason: rpcErr.message },
+        { status: rpcErr.statusCode },
+      );
+    }
     throw err;
   }
 }

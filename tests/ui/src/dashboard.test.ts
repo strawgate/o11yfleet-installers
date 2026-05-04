@@ -253,6 +253,10 @@ test.describe("admin operations coverage", () => {
       total_agents: 3,
       total_active_tokens: 1,
       total_users: 4,
+      connected_agents: 2,
+      healthy_agents: 2,
+      metrics_source: "analytics_engine",
+      metrics_error: null,
     });
     await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", {
       tenants: [
@@ -267,6 +271,11 @@ test.describe("admin operations coverage", () => {
           created_at: "2026-04-28T20:00:00.000Z",
         },
       ],
+      pagination: { page: 1, limit: 25, total: 1, has_more: false },
+      filters: { q: "", plan: "", status: null, sort: "newest" },
+      status_counts: { active: 1 },
+      metrics_source: "analytics_engine",
+      metrics_error: null,
     });
     await mockJson(page, "/api/admin/health", {
       status: "healthy",
@@ -426,8 +435,8 @@ test.describe("admin operations coverage", () => {
     await page.getByRole("button", { name: "View as tenant" }).click();
 
     await expect(page).toHaveURL(/\/portal\/overview$/);
-    await expect(page.getByText("Viewing as tenant")).toBeVisible();
-    await expect(page.getByText("You are impersonating Demo Org")).toBeVisible();
+    await expect(page.getByText("Viewing as workspace")).toBeVisible();
+    await expect(page.getByText(/You are impersonating Demo Org/)).toBeVisible();
     await expect(page.getByRole("heading", { name: "Fleet overview" })).toBeVisible();
     await expect(page.getByText("prod-collectors")).toBeVisible();
     runtime.dispose();

@@ -455,7 +455,8 @@ export function useCreatePendingToken() {
 export function useRevokePendingToken() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (tokenId: string) => apiDel(`/api/v1/pending-tokens/${encodeURIComponent(tokenId)}`),
+    mutationFn: (tokenId: string) =>
+      apiDel(`/api/v1/pending-tokens/${encodeURIComponent(tokenId)}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["pending-tokens"] });
     },

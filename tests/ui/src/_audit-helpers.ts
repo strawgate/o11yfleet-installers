@@ -66,16 +66,24 @@ export async function mockSession(page: Page, user = memberUser) {
 }
 
 export async function mockGuidance(page: Page) {
+  const guidanceFixture = JSON.stringify({
+    summary: "",
+    items: [],
+    generated_at: "2026-04-28T00:00:00Z",
+    model: "none",
+  });
   await page.route(`**/api/v1/ai/guidance`, async (route) => {
     await route.fulfill({
       status: 200,
       contentType: "application/json",
-      body: JSON.stringify({
-        summary: "",
-        items: [],
-        generated_at: "2026-04-28T00:00:00Z",
-        model: "none",
-      }),
+      body: guidanceFixture,
+    });
+  });
+  await page.route(`**/api/admin/ai/guidance`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: guidanceFixture,
     });
   });
 }
@@ -235,9 +243,13 @@ export async function mockAdmin(page: Page) {
   await mockSession(page, adminUser);
   await mockGuidance(page);
 
+  await mockJson(page, "/api/admin/settings", { auto_approve_signups: false });
+
   await mockJson(page, "/api/admin/overview", {
-    tenants_count: 5,
-    configs_count: 12,
+    total_tenants: 5,
+    total_configurations: 12,
+    total_active_tokens: 3,
+    total_users: 8,
     total_agents: 47,
     connected_agents: 42,
     healthy_agents: 38,
@@ -268,6 +280,16 @@ export async function mockAdmin(page: Page) {
             status: "active",
           },
         ],
+        pagination: {
+          page: 1,
+          limit: 25,
+          total: 2,
+          has_more: false,
+        },
+        filters: { q: "", plan: "", status: null, sort: "newest" },
+        status_counts: { active: 2 },
+        metrics_source: "analytics_engine",
+        metrics_error: null,
       }),
     });
   });
@@ -290,7 +312,15 @@ export async function mockAdmin(page: Page) {
     },
   });
   await mockJson(page, "/api/admin/usage", {
-    window: { days_elapsed: 28, days_in_month: 30 },
+    configured: true,
+    currency: "USD",
+    generated_at: "2026-04-28T00:00:00Z",
+    window: {
+      start_date: "2026-04-01",
+      end_date: "2026-04-30",
+      days_elapsed: 28,
+      days_in_month: 30,
+    },
     services: [
       {
         id: "workers",
@@ -307,16 +337,26 @@ export async function mockAdmin(page: Page) {
         ],
         line_items: [],
         notes: [],
+        month_to_date_estimated_spend_usd: 14,
+        projected_month_estimated_spend_usd: 15,
       },
     ],
     required_env: [],
     pricing: { source: "Cloudflare published rates 2026-Q2", notes: [] },
+    month_to_date_estimated_spend_usd: 14,
+    projected_month_estimated_spend_usd: 15,
   });
   await mockJson(page, "/api/admin/plans", {
     plans: [
-      { id: "free", name: "Free", agent_limit: 5, config_limit: 1 },
-      { id: "pro", name: "Pro", agent_limit: 50, config_limit: 10 },
-      { id: "enterprise", name: "Enterprise", agent_limit: -1, config_limit: -1 },
+      { id: "free", name: "Free", agent_limit: 5, config_limit: 1, tenant_count: 0 },
+      { id: "pro", name: "Pro", agent_limit: 50, config_limit: 10, tenant_count: 1 },
+      {
+        id: "enterprise",
+        name: "Enterprise",
+        agent_limit: -1,
+        config_limit: -1,
+        tenant_count: 1,
+      },
     ],
   });
 }

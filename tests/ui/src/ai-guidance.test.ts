@@ -142,6 +142,10 @@ test.describe("AI guidance surfaces", () => {
       total_agents: 12,
       total_active_tokens: 1,
       total_users: 2,
+      connected_agents: 10,
+      healthy_agents: 9,
+      metrics_source: "analytics_engine",
+      metrics_error: null,
     });
     await mockJson(page, "/api/admin/health", {
       status: "healthy",
@@ -167,6 +171,11 @@ test.describe("AI guidance surfaces", () => {
           created_at: "2026-04-28T20:00:00.000Z",
         },
       ],
+      pagination: { page: 1, limit: 25, total: 1, has_more: false },
+      filters: { q: "", plan: "", status: null, sort: "newest" },
+      status_counts: { active: 1 },
+      metrics_source: "analytics_engine",
+      metrics_error: null,
     });
     await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {
       expect(route.request().postDataJSON()).toMatchObject({
@@ -349,13 +358,24 @@ test.describe("AI guidance surfaces", () => {
       total_agents: 0,
       total_active_tokens: 0,
       total_users: 1,
+      connected_agents: 0,
+      healthy_agents: 0,
+      metrics_source: "analytics_engine",
+      metrics_error: null,
     });
     await mockJson(page, "/api/admin/health", {
       status: "healthy",
       checks: { worker: { status: "healthy" } },
       timestamp: "2026-04-28T20:00:00.000Z",
     });
-    await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", { tenants: [] });
+    await mockJson(page, "/api/admin/tenants?sort=newest&page=1&limit=25", {
+      tenants: [],
+      pagination: { page: 1, limit: 25, total: 0, has_more: false },
+      filters: { q: "", plan: "", status: null, sort: "newest" },
+      status_counts: {},
+      metrics_source: "analytics_engine",
+      metrics_error: null,
+    });
     let guidanceResponses = 0;
     const guidanceRequestCounts = new Map<string, number>();
     await page.route(`${API_URL}/api/admin/ai/guidance`, async (route) => {
@@ -670,15 +690,18 @@ test.describe("AI guidance surfaces", () => {
 
     await page.goto(`${UI_URL}/portal/overview?api=${encodeURIComponent(API_URL)}`);
 
-    await expect(page.getByRole("button", { name: "Open navigation" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Toggle navigation" })).toBeVisible();
     await expect(page.getByRole("button", { name: "Open command menu" })).toBeVisible();
-    await expect(page.getByRole("link", { name: "Docs" })).toBeVisible();
-    await expect(page.locator(".topbar-right")).toBeVisible();
-    await expect(page.locator(".sidebar.open")).toHaveCount(0);
-    await page.getByRole("button", { name: "Open navigation" }).click();
-    await expect(page.locator(".sidebar.open")).toHaveCount(1);
+    // Profile menu is visible in the topbar; the older `.topbar-right` /
+    // hard-coded Docs link were removed when the portal moved to Mantine's
+    // AppShell. Assert on a remaining anchor (the profile menu trigger).
+    await expect(page.getByRole("button", { name: "Profile menu" })).toBeVisible();
+    // Mantine AppShell handles mobile nav internally — the legacy
+    // `.sidebar.open` / `.sidebar-backdrop` classes don't exist anymore.
+    // What still matters: toggling the burger reveals the nav links.
+    await page.getByRole("button", { name: "Toggle navigation" }).click();
     await expect(page.getByRole("link", { name: "Agents" })).toBeVisible();
-    await page.locator(".sidebar-backdrop").click();
+    await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Open command menu" }).click();
     // Mantine Spotlight renders the search as role="textbox" (the
     // textbox-as-combobox-without-explicit-role pattern is valid ARIA).

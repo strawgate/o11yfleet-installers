@@ -930,7 +930,10 @@ describe("webSocketError defensive attachment parse", () => {
         await instance.webSocketError(mockWs, new Error("transport error"));
 
         const row = state.storage.sql
-          .exec(`SELECT status FROM agents WHERE instance_uid = ?`, "00000000000000000000000000000001")
+          .exec(
+            `SELECT status FROM agents WHERE instance_uid = ?`,
+            "00000000000000000000000000000001",
+          )
           .one();
         expect(row["status"]).toBe("disconnected");
       },

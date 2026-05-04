@@ -1286,6 +1286,33 @@ describe("Config Applying Status (§5.3.2)", () => {
     // and don't tangle with the original agent's auto-ack of the config.
     // Reuse `agent.uid` so this reconnect targets the same agent — a
     // fresh random UID would test "new agent with old claim" instead.
+    // Close the original socket first: holding two open sockets with the
+    // same UID trips the duplicate-UID detection (config-do.ts §"Duplicate
+    // UID detection"), which closes the new socket and reassigns it a
+    // fresh UID — defeating the "same agent" intent of this test.
+    agent.close();
+    // Wait for the server to mark the agent disconnected before we open
+    // the new socket. If we open while the original is still tracked as
+    // OPEN, the dup-UID detector reassigns the new socket a fresh UID
+    // (config-do.ts §"Duplicate UID detection"), defeating the test.
+    // Polling on real server state avoids the unprincipled fixed-sleep
+    // — `is_connected: false` means webSocketClose has run, which means
+    // getWebSockets(tag).filter(OPEN) won't find the prior socket.
+    const uidHex = uint8ToHex(agent.uid);
+    const closeDeadline = Date.now() + 5000;
+    let serverSawClose = false;
+    while (Date.now() < closeDeadline) {
+      const detail = await api<{ is_connected: boolean }>(
+        `/api/v1/configurations/${configId}/agents/${uidHex}`,
+        { headers: { "X-Tenant-Id": tenantId } as Record<string, string> },
+      );
+      if (detail.status === 200 && detail.data.is_connected === false) {
+        serverSawClose = true;
+        break;
+      }
+      await settle(50);
+    }
+    expect(serverSawClose).toBe(true);
     const reconnected = createAgent({
       assignmentClaim: agent.enrollment!.assignment_claim,
       instanceUid: agent.uid,
@@ -1322,7 +1349,6 @@ describe("Config Applying Status (§5.3.2)", () => {
     expect(reply).toBeDefined();
     expect(reconnected.lastCloseCode).toBeNull();
     reconnected.close();
-    agent.close();
   });
 });
 
