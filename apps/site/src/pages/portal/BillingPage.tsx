@@ -32,14 +32,14 @@ export default function BillingPage() {
 
           <Stack gap={6} mt="lg">
             <Group justify="space-between" gap="xs">
-              <Text size="sm">Policies</Text>
+              <Text size="sm">Configurations</Text>
               <Text size="sm" c="dimmed" ff="monospace">
                 {view.usedConfigs} / {view.maxConfigsLabel}
               </Text>
             </Group>
             <Progress
               value={view.configPct}
-              aria-label={`${view.usedConfigs} of ${view.maxConfigsLabel} policies used`}
+              aria-label={`${view.usedConfigs} of ${view.maxConfigsLabel} configurations used`}
             />
           </Stack>
 

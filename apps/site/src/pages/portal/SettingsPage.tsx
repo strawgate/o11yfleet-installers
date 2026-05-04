@@ -116,7 +116,7 @@ export default function SettingsPage() {
           <Stack gap="md">
             <TextInput label="Workspace name" {...form.getInputProps("name")} />
             <TextInput
-              label="Tenant ID"
+              label="Workspace ID"
               description="Read-only identifier for your workspace."
               styles={{ input: { fontFamily: "var(--mantine-font-family-monospace)" } }}
               value={t?.id ?? ""}

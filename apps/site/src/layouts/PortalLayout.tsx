@@ -322,11 +322,16 @@ export default function PortalLayout() {
 
       <AppShell.Main>
         {isImpersonating ? (
-          <Alert color="yellow" mb="md" title="Viewing as tenant" role="status" aria-live="polite">
+          <Alert
+            color="yellow"
+            mb="md"
+            title="Viewing as workspace"
+            role="status"
+            aria-live="polite"
+          >
             <Group justify="space-between" wrap="wrap" gap="sm">
               <Text size="sm">
-                You are impersonating {orgName}. Actions in this portal affect this tenant
-                workspace.
+                You are impersonating {orgName}. Actions in this portal affect this workspace.
               </Text>
               <Button size="xs" variant="default" onClick={handleLogout}>
                 End impersonation

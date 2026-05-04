@@ -24,7 +24,7 @@ export default function AuditLogPage() {
   if (tenantLoading) {
     return (
       <PageShell>
-        <PageHeader title="Audit Log" description="Track every user action in your tenant." />
+        <PageHeader title="Audit Log" description="Track every user action in your workspace." />
         <LoadingSpinner />
       </PageShell>
     );
@@ -33,7 +33,7 @@ export default function AuditLogPage() {
   if (tenantError) {
     return (
       <PageShell>
-        <PageHeader title="Audit Log" description="Track every user action in your tenant." />
+        <PageHeader title="Audit Log" description="Track every user action in your workspace." />
         <ErrorState
           error={tenantError}
           retry={() => {
@@ -47,11 +47,11 @@ export default function AuditLogPage() {
   if (!isEnterprise) {
     return (
       <PageShell>
-        <PageHeader title="Audit Log" description="Track every user action in your tenant." />
+        <PageHeader title="Audit Log" description="Track every user action in your workspace." />
         <EmptyState
           icon="activity"
           title="Audit log access is an Enterprise feature"
-          description="Upgrade to Enterprise to view and export your tenant's audit history."
+          description="Upgrade to Enterprise to view and export your workspace's audit history."
         >
           <Button onClick={() => (window.location.href = "/pricing")}>See plans</Button>
         </EmptyState>
@@ -70,7 +70,7 @@ export default function AuditLogPage() {
     <PageShell>
       <PageHeader
         title="Audit Log"
-        description="Every mutating user action in this tenant. Read-only."
+        description="Every mutating user action in this workspace. Read-only."
       />
 
       <Group align="flex-end" gap="md" wrap="wrap" pb="md">

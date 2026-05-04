@@ -35,10 +35,10 @@ export default function HomePage() {
               </p>
             </div>
             <div className="card card-pad">
-              <h3>Management policies</h3>
+              <h3>Configurations</h3>
               <p>
-                Group collectors by policy, keep configuration versions, compare changes, and roll
-                back when needed.
+                Group collectors by configuration, keep versions, compare changes, and roll back
+                when needed.
               </p>
             </div>
             <div className="card card-pad">

@@ -11,7 +11,7 @@ const personalPlans = [
     period: "",
     desc: "The perfect plan for simple monitoring in personal projects.",
     collectors: "10 collectors",
-    policies: "1 policy",
+    configurations: "1 configuration",
     users: "1 user",
     support: "Community",
     cta: "Start Hobby",
@@ -27,7 +27,7 @@ const personalPlans = [
     annualPeriod: "/year",
     desc: "For solo operators who need just a little bit more.",
     collectors: "25 collectors",
-    policies: "3 policies",
+    configurations: "3 configurations",
     history: "7-day history",
     users: "1 user",
     support: "Email",
@@ -46,7 +46,7 @@ const organizationPlans = [
     period: "",
     desc: "For small teams that want shared visibility before production governance.",
     collectors: "1,000 collectors",
-    policies: "1 policy",
+    configurations: "1 configuration",
     users: "3 users",
     repos: "No repo sync",
     support: "Community",
@@ -65,7 +65,7 @@ const organizationPlans = [
     annualPeriod: "/year",
     desc: "For organizations running collectors in production.",
     collectors: "1,000 collectors",
-    policies: "10 policies",
+    configurations: "10 configurations",
     history: "30-day history",
     users: "10 users",
     repos: "10 repositories",
@@ -83,7 +83,7 @@ const organizationPlans = [
     secondaryPrice: "Starts at $50k/year",
     desc: "For companies with enterprise requirements.",
     collectors: "Custom collectors",
-    policies: "Unlimited policies",
+    configurations: "Unlimited configurations",
     history: "90d-1yr+",
     users: "Unlimited users",
     repos: "Unlimited repositories",
@@ -136,7 +136,7 @@ function PlanCard({ plan, billingCycle }: { plan: Plan; billingCycle: BillingCyc
       : plan.period;
   const limits = [
     ["Collectors", plan.collectors],
-    ["Management policies", plan.policies],
+    ["Configurations", plan.configurations],
   ];
   if ("history" in plan && plan.history) limits.splice(2, 0, ["History", plan.history]);
   limits.push(["Users", plan.users]);
@@ -193,7 +193,7 @@ export default function PricingPage() {
           <h1>Your cost is probably $0.</h1>
           <p className="lede">
             Free for teams with up to 1000 collectors. Who even has more than a thousand collectors?
-            Upgrade when you need more management policies, users, history, or repo sync.
+            Upgrade when you need more configurations, users, history, or repo sync.
           </p>
         </div>
       </section>

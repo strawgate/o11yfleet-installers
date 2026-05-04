@@ -4,7 +4,7 @@ const partnerTypes = [
   {
     eyebrow: "MSPs",
     title: "Managed service providers",
-    desc: "Run collector fleets across many client environments from a single control plane. Multi-tenant isolation, per-tenant rollouts, and consolidated visibility — without standing up infrastructure for every customer.",
+    desc: "Run collector fleets across many client environments from a single control plane. Multi-workspace isolation, per-workspace rollouts, and consolidated visibility — without standing up infrastructure for every customer.",
   },
   {
     eyebrow: "Consultancies",
@@ -26,7 +26,7 @@ const partnerTypes = [
 const benefits = [
   {
     icon: "🏢",
-    title: "Multi-tenant by design",
+    title: "Multi-workspace by design",
     desc: "Isolate every client's fleet, configurations, and tokens. Switch contexts without juggling logins.",
   },
   {
@@ -140,7 +140,7 @@ export default function PartnersPage() {
           </Link>
         </div>
         <div className="trust-strip">
-          <span>Multi-tenant by default</span>
+          <span>Multi-workspace by default</span>
           <span>OpAMP &amp; OpenTelemetry native</span>
           <span>No telemetry pass-through</span>
         </div>

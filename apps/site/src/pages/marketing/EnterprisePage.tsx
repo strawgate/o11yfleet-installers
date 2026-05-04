@@ -9,7 +9,7 @@ const features = [
   {
     icon: "👥",
     title: "Role-based access",
-    desc: "Tenant isolation exists today; fine-grained RBAC is planned.",
+    desc: "Workspace isolation exists today; fine-grained RBAC is planned.",
   },
   {
     icon: "📋",

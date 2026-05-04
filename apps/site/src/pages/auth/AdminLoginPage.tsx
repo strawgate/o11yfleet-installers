@@ -42,8 +42,8 @@ export default function AdminLoginPage() {
           Activity is logged.
         </p>
         <aside className="auth-notice" aria-label="Notice">
-          This page is for O11yFleet employees. Tenant workspace users should use the regular
-          workspace sign-in page.
+          This page is for O11yFleet employees. Workspace users should use the regular workspace
+          sign-in page.
         </aside>
 
         <form onSubmit={(event) => void handleSubmit(event)}>
