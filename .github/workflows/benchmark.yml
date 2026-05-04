@@ -21,7 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd7df9757dd7b87a6d5e10c9b3e4c8b3c0a0b # v4
 
       - name: Setup Node.js + pnpm
         uses: ./.github/actions/setup-node-pnpm
