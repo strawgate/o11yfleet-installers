@@ -47,11 +47,11 @@ affected by those files. Use `just check-staged` for the pre-commit gate and
 
 ### Testing
 
-| Command            | What it does                    | Needs running server?     |
-| ------------------ | ------------------------------- | ------------------------- |
-| `just test`        | Fast unit tests (Core + Worker) | No                        |
-| `just test-ui`     | Playwright browser tests        | No (starts its own)       |
-| `just smoke-local` | API + OpAMP smoke test          | Yes (`just dev-up` first) |
+| Command        | What it does                    | Needs running server?             |
+| -------------- | ------------------------------- | --------------------------------- |
+| `just test`    | Fast unit tests (Core + Worker) | No                                |
+| `just test-ui` | Playwright browser tests        | Yes (`just dev` or `just dev-up`) |
+| `just smoke`   | API + OpAMP smoke test          | Yes (`just dev-up` first)         |
 
 One-time Playwright setup:
 
@@ -65,21 +65,19 @@ just playwright-install
 
 ```bash
 just check-staged    # Run checks on staged files (pre-commit hook)
-just ci-fast         # Full lint + typecheck + test (before pushing)
+just ci              # Full lint + typecheck + test (before pushing)
 ```
 
 ## GitHub Check Mapping
 
-Use `just reproduce-check <name>` to run one GitHub check locally.
+Use `just ci-check <name>` to run one GitHub check locally.
 
-| GitHub check         | Local command                             |
-| -------------------- | ----------------------------------------- |
-| `lint-typecheck`     | `just reproduce-check lint-typecheck`     |
-| `test-fast`          | `just reproduce-check test-fast`          |
-| `test-slow`          | `just reproduce-check test-slow`          |
-| `deploy-validate`    | `just reproduce-check deploy-validate`    |
-| Terraform `validate` | `just reproduce-check terraform-validate` |
-| Terraform `plan`     | `just reproduce-check terraform-plan`     |
+| GitHub check      | Local command                   |
+| ----------------- | ------------------------------- |
+| `lint-typecheck`  | `just ci-check lint-typecheck`  |
+| `test-fast`       | `just ci-check test-fast`       |
+| `test-slow`       | `just ci-check test-slow`       |
+| `deploy-validate` | `just ci-check deploy-validate` |
 
 For a full pre-PR pass:
 
@@ -90,7 +88,7 @@ just ci-pr
 For a faster non-browser gate:
 
 ```bash
-just ci-fast
+just ci
 ```
 
 ## UI Testing

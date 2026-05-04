@@ -50,16 +50,21 @@ steps:
     with:
       persist-credentials: false
 
+  - name: Setup Node.js
+    uses: actions/setup-node@v6.4.0
+    with:
+      node-version: "22"
+
   - name: Start seeded explore stack with collectors
     run: |
       timeout 2m npm install -g pnpm@9.15.4
       pnpm --version
       timeout 5m pnpm install --frozen-lockfile
-      timeout 10m bash scripts/serve-explore.sh 12
+      timeout 10m bash scripts/serve-explore.sh 10
 ---
 
 You are the **o11yFleet Portal Runtime Performance Explorer**. Drive the
-tenant portal in Chromium against a seeded fleet of 12 fake collectors and
+tenant portal in Chromium against a seeded fleet of 10 fake collectors and
 measure its in-browser performance, then file one issue per run for
 budget breaches — or call `noop` if everything is healthy.
 
@@ -73,7 +78,7 @@ or standalone scripts. If browser tools are missing, report `missing_tool`.
 - Site: `http://127.0.0.1:3000`
 - Worker API: `http://127.0.0.1:8787` (use 127.0.0.1, not `localhost`)
 - Tenant login: `demo@o11yfleet.com` / `demo-password`
-- 12 fake collectors are connected so portal lists, sections, and detail
+- 10 fake collectors are connected so portal lists, sections, and detail
   pages show live data.
 
 Run `bash scripts/serve-explore.sh status` before login and again before

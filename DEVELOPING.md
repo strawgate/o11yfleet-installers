@@ -181,9 +181,9 @@ You can safely ignore these warnings for local development.
 | `just dev`                | Start only the Worker                                                          |
 | `just ui`                 | Start only the site                                                            |
 | `just dev-reset`          | Servers are running and local D1 needs reseeding                               |
-| `just smoke-local`        | Verify API + OpAMP lifecycle (requires: `eval "$(just admin-login)"` first)    |
+| `just smoke`              | Verify API + OpAMP lifecycle (requires: `eval "$(just admin-login)"` first)    |
 | `just check`              | Run only checks affected by changed, staged, and untracked files               |
-| `just ci-fast`            | Run the fast local gate before pushing                                         |
+| `just ci`                 | Run the fast local gate before pushing                                         |
 | `just ci-pr`              | Reproduce required PR checks, including slow browser/runtime coverage          |
 | `just ensure-dev-secrets` | Re-randomize any placeholder values in `apps/worker/.dev.vars` (idempotent)    |
 | `just admin-login`        | Log in as the seeded admin and print `FP_ADMIN_COOKIE` for `eval` + curl usage |
@@ -227,7 +227,7 @@ just test-runtime
 just test-ui
 
 # Full pre-PR gate
-just ci-fast
+just ci
 ```
 
 ### One-Time Playwright Setup
@@ -247,7 +247,7 @@ For detailed testing strategies and maintenance guidelines, see [TESTING.md](./T
 | Scenario                | Command                                |
 | ----------------------- | -------------------------------------- |
 | After every code change | `just test-core` or `just test-worker` |
-| Before pushing          | `just ci-fast`                         |
+| Before pushing          | `just ci`                              |
 | Full regression         | `just ci-pr` (includes browser tests)  |
 | Single test file        | `pnpm vitest run path/to/test.ts`      |
 
@@ -264,7 +264,7 @@ just test-opamp
 
 # Run smoke tests (requires admin login first)
 eval "$(just admin-login)"
-just smoke-local
+just smoke
 ```
 
 ### Code Quality Checks
@@ -325,7 +325,7 @@ This scoping prevents slow runtime tests (~30s) from blocking fast dependency
 updates while ensuring behavioral changes are still covered. When modifying
 shared packages like `@o11yfleet/core` or `@o11yfleet/db`, rely on their
 respective unit test suites (`just test-core`, `just test-worker`) and the
-full `just ci-fast` gate before pushing.
+full `just ci` gate before pushing.
 
 ### Coverage
 

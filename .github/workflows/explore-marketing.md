@@ -50,6 +50,11 @@ steps:
     with:
       persist-credentials: false
 
+  - name: Setup Node.js
+    uses: actions/setup-node@v6.4.0
+    with:
+      node-version: "22"
+
   - name: Start seeded explore stack
     run: |
       timeout 2m npm install -g pnpm@9.15.4

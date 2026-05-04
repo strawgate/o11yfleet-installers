@@ -1,0 +1,15 @@
+name: Setup Just
+description: Install just command runner using taiki-e/install-action.
+
+inputs:
+  version:
+    description: Version to install. Use 'just' for latest.
+    default: "just"
+
+runs:
+  using: composite
+  steps:
+    - name: Install Just
+      uses: taiki-e/install-action@677545a6099080f1407a17387affe64bf4bd8f67 # just
+      with:
+        tool: just

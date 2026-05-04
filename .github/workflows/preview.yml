@@ -41,7 +41,7 @@ jobs:
           node-version: "22"
           cache: pnpm
 
-      - uses: taiki-e/install-action@just
+      - uses: ./.github/actions/setup-just
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
@@ -50,9 +50,9 @@ jobs:
         run: just worker-bundle
 
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v4
+        uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: "1.9"
+          terraform-version: "1.9"
 
       - name: Deploy preview with Terraform
         id: deploy

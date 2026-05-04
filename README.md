@@ -90,7 +90,7 @@ just playwright-install
 just test-ui
 
 # Full pre-PR gate
-just ci-fast
+just ci
 ```
 
 ### Common Tasks
@@ -144,17 +144,16 @@ details.
 
 ## Useful Commands
 
-| Command                       | Purpose                                |
-| ----------------------------- | -------------------------------------- |
-| `just dev-up`                 | Start the full local app loop          |
-| `just dev-reset`              | Re-run local migrations and seed data  |
-| `just check`                  | Run changed-file-aware checks          |
-| `just ci-fast`                | Fast pre-PR gate                       |
-| `just ci-pr`                  | Reproduce required PR checks locally   |
-| `just reproduce-check <name>` | Run one GitHub check locally           |
-| `just smoke-local`            | API + OpAMP lifecycle smoke test       |
-| `just test-ui`                | Browser UI tests                       |
-| `just pipeline-experiment`    | Pipeline graph/YAML experiment harness |
+| Command                | Purpose                               |
+| ---------------------- | ------------------------------------- |
+| `just dev-up`          | Start the full local app loop         |
+| `just dev-reset`       | Re-run local migrations and seed data |
+| `just check`           | Run changed-file-aware checks         |
+| `just ci`              | Fast pre-PR gate                      |
+| `just ci-pr`           | Reproduce required PR checks locally  |
+| `just ci-check <name>` | Run one GitHub check locally          |
+| `just smoke`           | API + OpAMP lifecycle smoke test      |
+| `just test-ui`         | Browser UI tests                      |
 
 ## Docs
 

@@ -81,7 +81,7 @@ jobs:
       # compatible with the currently deployed Worker. Contract/destructive
       # schema changes need a separate release after old code is gone.
       - name: Deploy production environment
-        run: just deploy-env prod
+        run: just deploy prod
 
       - name: Resolve production site smoke targets
         id: site-smoke

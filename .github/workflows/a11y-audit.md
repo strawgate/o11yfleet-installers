@@ -85,7 +85,7 @@ steps:
       npm install -g pnpm@9.15.4
       pnpm install --frozen-lockfile
       pnpm --filter @o11yfleet/ui-tests exec playwright install chromium
-      bash scripts/serve-explore.sh 12
+      bash scripts/serve-explore.sh 10
 ---
 
 # o11yFleet A11y & Usability Auditor
@@ -129,7 +129,7 @@ The setup step starts a seeded local stack:
 - Worker API: `http://localhost:8787`
 - Tenant login: `demo@o11yfleet.com` / `demo-password`
 - Admin login: `admin@o11yfleet.com` / `admin-password`
-- 12 fake collectors so agent-list filtering, pagination, and detail pages
+- 10 fake collectors so agent-list filtering, pagination, and detail pages
   can be exercised.
 
 Use `?api=http://localhost:8787` on login URLs if the UI does not auto-pick

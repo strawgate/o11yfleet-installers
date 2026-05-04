@@ -82,7 +82,7 @@ jobs:
           fi
 
       - name: Deploy environment
-        run: just deploy-env ${{ inputs.environment }}
+        run: just deploy ${{ inputs.environment }}
 
       - name: Resolve site smoke targets
         id: site-smoke

@@ -55,13 +55,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+      - uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: "1.9"
+          terraform-version: "1.9"
 
-      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
-        with:
-          tool: just
+      - uses: ./.github/actions/setup-just
 
       - name: Validate Terraform
         run: just tf-validate
@@ -85,13 +83,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+      - uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: "1.9"
+          terraform-version: "1.9"
 
-      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
-        with:
-          tool: just
+      - uses: ./.github/actions/setup-just
 
       - name: Select environment
         id: target
@@ -231,13 +227,11 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - uses: hashicorp/setup-terraform@5e8dbf3c6d9deaf4193ca7a8fb23f2ac83bb6c85 # v4.0.0
+      - uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: "1.9"
+          terraform-version: "1.9"
 
-      - uses: taiki-e/install-action@51cd0b8c0499559d9a4d75c0f5c67bec3a894ec8 # v2.75.28
-        with:
-          tool: just
+      - uses: ./.github/actions/setup-just
 
       - name: Select environment
         id: target

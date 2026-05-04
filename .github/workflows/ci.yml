@@ -126,6 +126,31 @@ jobs:
           find .github/workflows \( -name '*.yml' -o -name '*.yaml' \) ! -name '*.lock.yml' -print0 |
             xargs -0 go run github.com/rhysd/actionlint/cmd/actionlint@latest
 
+      - name: Ensure lock files only modified by gh-aw
+        if: needs.changes.outputs.workflow == 'true'
+        run: |
+          # .lock.yml files should only be modified by gh aw compile
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            BASE="${{ github.event.pull_request.base.sha }}"
+            HEAD="${{ github.event.pull_request.head.sha }}"
+          elif [ "${{ github.event_name }}" = "push" ]; then
+            BASE="${{ github.event.before }}"
+            HEAD="${{ github.sha }}"
+          else
+            BASE="${{ github.sha }}^"
+            HEAD="${{ github.sha }}"
+          fi
+          lock_file_changes=$(git diff --name-only "$BASE" "$HEAD" -- '*.lock.yml' || true)
+          if [ -n "$lock_file_changes" ]; then
+            echo "ERROR: The following .lock.yml files were modified directly:"
+            echo "$lock_file_changes"
+            echo ""
+            echo "Lock files must only be modified by running 'gh aw compile'"
+            echo "Do NOT edit .lock.yml files directly - update the source .md files instead"
+            exit 1
+          fi
+          echo "No direct .lock.yml modifications detected"
+
       - uses: pnpm/action-setup@v6
         if: needs.changes.outputs.node == 'true' || needs.changes.outputs.fast == 'true' || needs.changes.outputs.deploy == 'true'
 
@@ -210,15 +235,15 @@ jobs:
         if: needs.changes.outputs.fast == 'true'
         run: pnpm --filter @o11yfleet/site test
 
-      - uses: taiki-e/install-action@just
+      - uses: ./.github/actions/setup-just
         if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
 
       - name: Build worker bundle
-        if: needs.changes.outputs.deploy == 'true'
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
         run: just worker-bundle
 
       - name: "Check bundle size (Workers limit: 10MB compressed)"
-        if: needs.changes.outputs.deploy == 'true'
+        if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
         run: |
           MAX_GZIP=0
           MAX_BUNDLE=""
@@ -252,9 +277,9 @@ jobs:
       # validation (the deploy filter excludes .github/workflows/**).
       - name: Terraform validate
         if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
-        uses: hashicorp/setup-terraform@v4
+        uses: ./.github/actions/setup-terraform
         with:
-          terraform_version: "1.11"
+          terraform-version: "1.11"
 
       - run: just tf-validate
         if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'

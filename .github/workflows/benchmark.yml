@@ -1,0 +1,97 @@
+name: OpAMP Benchmark
+
+on:
+  schedule:
+    # Run weekly on Monday at 9am UTC
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+    inputs:
+      iterations:
+        description: 'Number of iterations per test'
+        required: false
+        default: '1000'
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  benchmark:
+    name: OpAMP Performance Benchmark
+    runs-on: ubuntu-latest
+    
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js + pnpm
+        uses: ./.github/actions/setup-node-pnpm
+        with:
+          node-version: "22"
+          pnpm-version: "9"
+          cache: "pnpm"
+          install: "true"
+
+      - name: Build TypeScript worker
+        run: pnpm --filter @o11yfleet/worker build
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-wasip2
+
+      - name: Build Rust worker
+        working-directory: apps/worker-rust
+        run: |
+          cargo install wasm-pack
+          wasm-pack build --target web --release
+
+      - name: Build TypeScript packages
+        run: pnpm build
+
+      - name: Start TS Worker
+        run: |
+          cd apps/worker
+          npx wrangler dev --port 8787 &
+          sleep 10
+          curl -s http://localhost:8787/healthz || exit 1
+
+      - name: Start Rust Worker
+        run: |
+          cd apps/worker-rust
+          npx wrangler dev --port 8788 &
+          sleep 10
+          curl -s http://localhost:8788/healthz || exit 1
+
+      - name: Run Benchmarks
+        env:
+          TS_URL: http://localhost:8787
+          RUST_URL: http://localhost:8788
+          ITERATIONS: ${{ github.event.inputs.iterations || '1000' }}
+        run: node tests/benchmarks/run-bench.mjs
+
+      - name: Check WASM size
+        run: |
+          SIZE=$(stat -c%s apps/worker-rust/pkg/*.wasm 2>/dev/null || echo 0)
+          echo "WASM size: $((SIZE / 1024)) KB"
+          
+          # Warn if over 500KB
+          if [ "$SIZE" -gt 512000 ]; then
+            echo "::warning::WASM binary is large (>500KB)"
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark-*.csv
+          retention-days: 90
+
+      - name: Comment PR with results
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            // This would read the benchmark CSV and post a PR comment
+            // For now, just acknowledge
+            console.log('Benchmark results uploaded');

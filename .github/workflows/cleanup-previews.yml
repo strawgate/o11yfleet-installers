@@ -35,7 +35,7 @@ jobs:
           OPEN_PRS_JSON=$(curl -s -H "Authorization: Bearer ${GH_TOKEN}" \
             "https://api.github.com/repos/${{ github.repository }}/pulls?state=open&per_page=100" | \
             jq '[.[].number]')
-          echo "open_prs_json=$OPEN_PRS_JSON" >> $GITHUB_OUTPUT
+          echo "open_prs_json=$OPEN_PRS_JSON" >> "$GITHUB_OUTPUT"
 
       - name: Find orphaned Pages projects
         id: find
@@ -72,17 +72,19 @@ jobs:
             PR_NUM="${project#o11yfleet-preview-}"
 
             # Check if PR is still open using jq
-            if ! echo "$OPEN_PRS_JSON" | jq -e --argjson num "$PR_NUM" 'index($num) == null' > /dev/null 2>&1; then
+            if echo "$OPEN_PRS_JSON" | jq -e --argjson num "$PR_NUM" 'index($num) == null' > /dev/null 2>&1; then
               echo "Found orphaned project: $project (PR #$PR_NUM is closed)"
               ORPHANED_JSON=$(echo "$ORPHANED_JSON" | jq ". + [\"$project\"]")
               ORPHANED_COUNT=$((ORPHANED_COUNT + 1))
             fi
           done <<< "$PROJECTS"
 
-          echo "projects_json<<EOF" >> $GITHUB_OUTPUT
-          echo "$ORPHANED_JSON" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-          echo "orphaned_count=$ORPHANED_COUNT" >> $GITHUB_OUTPUT
+          {
+            echo "projects_json<<EOF"
+            echo "$ORPHANED_JSON"
+            echo "EOF"
+            echo "orphaned_count=$ORPHANED_COUNT"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Summary of orphaned previews
         run: |

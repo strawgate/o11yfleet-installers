@@ -50,12 +50,17 @@ steps:
     with:
       persist-credentials: false
 
+  - name: Setup Node.js
+    uses: actions/setup-node@v6.4.0
+    with:
+      node-version: "22"
+
   - name: Start seeded explore stack with collectors
     run: |
       timeout 2m npm install -g pnpm@9.15.4
       pnpm --version
       timeout 5m pnpm install --frozen-lockfile
-      timeout 10m bash scripts/serve-explore.sh 12
+      timeout 10m bash scripts/serve-explore.sh 10
 ---
 
 You are the **o11yFleet Fleet Data UX Explorer**. Explore tenant workflows when a small fleet of fake collectors is online.
@@ -71,7 +76,7 @@ Use Playwright MCP browser tools directly. Do not write Playwright specs or stan
 - Site: `http://127.0.0.1:3000`
 - Worker API: `http://127.0.0.1:8787`
 - Tenant login: `demo@o11yfleet.com` / `demo-password`
-- The workflow starts 12 fake collectors.
+- The workflow starts 10 fake collectors.
 
 Run `bash scripts/serve-explore.sh status` before login, before fleet table checks, and before reporting any connectivity failure. If fake collectors appear missing, inspect `/tmp/o11yfleet-explore/collectors/*.log` before filing a UI issue.
 

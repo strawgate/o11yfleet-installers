@@ -31,7 +31,7 @@ Worker routes, Worker versions/deployments, static site assets, DNS, and optiona
 Access configuration.
 
 When moving an environment from Cloudflare Pages to Workers Static Assets, use
-the application deploy path (`just deploy-env <env>`, **Deploy Environment**, or
+the application deploy path (`just deploy <env>`, **Deploy Environment**, or
 the release workflow). The Terraform-only workflow is for control-plane changes
 and does not upload a fresh site asset bundle.
 
@@ -42,10 +42,10 @@ Wrangler is still used for three things:
 - Applying D1 migrations.
 
 Those Wrangler operations are intentionally wrapped by `just` recipes. Shared
-environment deploys should call `just deploy-env <env>` rather than invoking
+environment deploys should call `just deploy <env>` rather than invoking
 Terraform, Wrangler, and smoke tests separately.
 
-`just deploy-env <env>` first imports any Worker identities left behind by a
+`just deploy <env>` first imports any Worker identities left behind by a
 partial bootstrap, then applies only long-lived control-plane resources before
 checking Worker secret inventory. That gives first-time environments a chance
 to create the Worker script identity without creating routes before a Worker
@@ -61,7 +61,7 @@ later updates use versioned secret updates so Terraform can inherit from the
 latest Worker version.
 
 Do not use `wrangler deploy` as the normal Worker release path for shared
-environments. Use the workflows or `just deploy-env <env>` so Terraform remains
+environments. Use the workflows or `just deploy <env>` so Terraform remains
 authoritative.
 
 ## Required GitHub Configuration
@@ -245,7 +245,7 @@ just tf-plan prod
 Equivalent local command, with deploy credentials exported:
 
 ```bash
-just deploy-env dev
+just deploy dev
 ```
 
 The recipe builds the site with
@@ -253,7 +253,7 @@ The recipe builds the site with
 Terraform-managed static site Worker and assets, runs D1 migrations, and applies
 the Terraform-managed API Worker version.
 
-For a brand-new environment, `just deploy-env dev` also performs one
+For a brand-new environment, `just deploy dev` also performs one
 Terraform-managed Durable Object migration bootstrap before the normal Worker
 rollout. Cloudflare requires the `ConfigDurableObject` class migration to be
 deployed before a Worker version can bind that class, so the bootstrap uploads a
@@ -291,7 +291,7 @@ just tf-check-staging-readiness staging
 Manual local staging deploy:
 
 ```bash
-just deploy-env staging
+just deploy staging
 ```
 
 CI staging smoke covers `/healthz`, `/auth/seed`, config creation, enrollment
@@ -327,7 +327,7 @@ Production requires:
 
 The release workflow runs tests, deploys and smokes the production API Worker,
 static site Worker/assets, D1 migrations, and API Worker through the same
-`just deploy-env prod` path used by manual deploys. It then smoke-tests the
+`just deploy prod` path used by manual deploys. It then smoke-tests the
 custom domains and the full API flow.
 
 If a production deploy fails after D1 migrations but before Worker rollout, stop
@@ -436,8 +436,8 @@ This file is ignored by git and should be `0600`.
 
 | Recipe                                    | What it does                                                                                                                                                        |
 | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `just deploy-env <env>`                   | Full environment deploy: import partial Worker identities, apply control-plane resources, provision/check secrets, migrate D1, deploy API Worker, then deploy site. |
-| `just deploy-staging`                     | `deploy-env staging` with `REQUIRE_TERRAFORM_STATE_READY=true`; refuses unless `TERRAFORM_STAGING_DEPLOY_ENABLED=true`.                                             |
+| `just deploy <env>`                       | Full environment deploy: import partial Worker identities, apply control-plane resources, provision/check secrets, migrate D1, deploy API Worker, then deploy site. |
+| `just deploy-staging`                     | `deploy staging` with `REQUIRE_TERRAFORM_STATE_READY=true`; refuses unless `TERRAFORM_STAGING_DEPLOY_ENABLED=true`.                                                 |
 | `just tf-plan <env>`                      | Targeted Terraform plan for long-lived control-plane resources.                                                                                                     |
 | `just tf-apply <env>`                     | Targeted Terraform apply for long-lived control-plane resources.                                                                                                    |
 | `just tf-apply-control-plane <env>`       | Targeted apply used by deploys before secrets and code rollouts.                                                                                                    |

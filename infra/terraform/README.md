@@ -141,7 +141,7 @@ those data-bearing resources can be imported instead of recreated.
 - Manual dispatch can plan `dev`, `staging`, or `prod`; applying is restricted to the `main` branch and uses the matching GitHub environment.
 
 `.github/workflows/deploy-environment.yml` is the manual full-environment
-deploy path. It runs `just deploy-env <env>`, which applies Terraform control
+deploy path. It runs `just deploy <env>`, which applies Terraform control
 plane resources, uploads the Terraform-managed static site Worker/assets, runs
 D1 migrations, uploads a Terraform-managed API Worker version, and smoke-tests
 the site plus the deploy-grade API flow. The workflow is restricted to `main`
@@ -149,7 +149,7 @@ for the shared `dev`, `staging`, and `prod` environments; per-PR deploys should
 use a separate preview environment rather than mutating shared long-lived state.
 
 `.github/workflows/release.yml` is the production application release path. It
-is intentionally a thin wrapper around `just deploy-env prod`, so release,
+is intentionally a thin wrapper around `just deploy prod`, so release,
 manual, and staging deploys keep the same ordering and preflights.
 
 `main` also has an automatic staging deploy in `.github/workflows/ci.yml`, but
@@ -306,7 +306,7 @@ files, and `just tf-apply-site <env>` passes the asset directory plus
 This keeps the public frontend deploy in Terraform rather than a separate
 Wrangler asset upload.
 
-The `deploy-env` just recipe uses Terraform for environment control-plane
+The `deploy` just recipe uses Terraform for environment control-plane
 resources, static site rollout, and API Worker rollout, then Wrangler only for
 D1 migrations and secret inventory checks. It imports Worker identities left by
 partial bootstrap attempts, runs a targeted control-plane Terraform pass so new
@@ -325,7 +325,7 @@ Worker rollout, because Cloudflare requires the class migration to exist before
 the Worker version binds `CONFIG_DO`. Worker routes, cron triggers, queue
 consumers, and site routes are applied by the targeted code-rollout recipes
 after their Worker deployments exist.
-`deploy-staging` is the CI-safe wrapper around `deploy-env staging`: it requires
+`deploy-staging` is the CI-safe wrapper around `deploy staging`: it requires
 `TERRAFORM_STAGING_DEPLOY_ENABLED=true` and checks staging state before
 applying.
 
@@ -382,7 +382,7 @@ manual **Deploy Environment** workflow for `staging` with
 `require_state_ready=false`, or run locally:
 
 ```bash
-just deploy-env staging
+just deploy staging
 ```
 
 After that succeeds, run `just tf-check-staging-readiness staging`, set
@@ -390,7 +390,7 @@ After that succeeds, run `just tf-check-staging-readiness staging`, set
 deploy take over.
 
 When cutting an environment over from Cloudflare Pages, use the application
-deploy path (`just deploy-env <env>`, the **Deploy Environment** workflow, or
+deploy path (`just deploy <env>`, the **Deploy Environment** workflow, or
 the release workflow) so Terraform creates the static site Worker version,
 deployment, DNS records, and routes together. A control-plane-only Terraform
 apply can create the Worker identity, DNS, and routes, but it intentionally does

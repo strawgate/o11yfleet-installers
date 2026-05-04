@@ -18,6 +18,7 @@ type CheckPlan = {
 type DevCheckOptions = {
   all: boolean;
   json: boolean;
+  quiet: boolean;
   since: string | null;
   staged: boolean;
 };
@@ -46,6 +47,7 @@ export function parseOptions(argv = process.argv.slice(2)): DevCheckOptions {
   return {
     all: args.has("--all"),
     json: args.has("--json"),
+    quiet: args.has("--quiet"),
     since,
     staged: args.has("--staged"),
   };
@@ -252,16 +254,28 @@ export function buildSteps(plan: CheckPlan): CheckStep[] {
     });
   }
 
-  if (plan.runAllFast) {
+  // Run type-aware lint alongside turbo when both would run
+  if (plan.runAllFast && plan.runTypeAwareLint) {
     steps.push({
       id: "fast-suite",
       command: "pnpm",
       args: ["turbo", "lint", "typecheck", "test"],
       reason: "code or shared config changed",
     });
-  }
-
-  if (plan.runTypeAwareLint) {
+    steps.push({
+      id: "type-aware-lint",
+      command: "pnpm",
+      args: ["lint:type-aware"],
+      reason: "TypeScript files changed",
+    });
+  } else if (plan.runAllFast) {
+    steps.push({
+      id: "fast-suite",
+      command: "pnpm",
+      args: ["turbo", "lint", "typecheck", "test"],
+      reason: "code or shared config changed",
+    });
+  } else if (plan.runTypeAwareLint) {
     steps.push({
       id: "type-aware-lint",
       command: "pnpm",
@@ -314,11 +328,13 @@ export function formatDuration(ms: number): string {
   return `${(ms / 1_000).toFixed(1)}s`;
 }
 
-function runStep(step: CheckStep): number {
+function runStep(step: CheckStep, quiet: boolean): number {
   const started = Date.now();
-  console.log(`\n[dev-check] ${step.id}: ${step.reason}`);
-  console.log(`$ ${[step.command, ...step.args].join(" ")}`);
-  const result = spawnSync(step.command, step.args, { stdio: "inherit" });
+  if (!quiet) {
+    console.log(`\n[dev-check] ${step.id}: ${step.reason}`);
+    console.log(`$ ${[step.command, ...step.args].join(" ")}`);
+  }
+  const result = spawnSync(step.command, step.args, { stdio: quiet ? "pipe" : "inherit" });
   const elapsed = Date.now() - started;
   if (result.error) {
     console.error(`Failed to start process: ${result.error.message}`);
@@ -329,9 +345,15 @@ function runStep(step: CheckStep): number {
     process.exit(1);
   }
   if (result.status !== 0) {
+    if (quiet) {
+      if (result.stdout) process.stdout.write(result.stdout);
+      if (result.stderr) process.stderr.write(result.stderr);
+    }
     process.exit(result.status ?? 1);
   }
-  console.log(`[dev-check] ${step.id} passed in ${formatDuration(elapsed)}`);
+  if (!quiet) {
+    console.log(`[dev-check] ${step.id} passed in ${formatDuration(elapsed)}`);
+  }
   return elapsed;
 }
 
@@ -344,8 +366,7 @@ export function chunkFiles(files: string[], size = prettierChunkSize): string[][
 }
 
 function printPlan(plan: CheckPlan, files: string[], options: DevCheckOptions): void {
-  if (options.all) {
-    console.log("Running full local check.");
+  if (options.quiet || options.all) {
     return;
   }
 
@@ -375,22 +396,6 @@ function printPlan(plan: CheckPlan, files: string[], options: DevCheckOptions): 
   for (const [name, enabled, reason] of checks) {
     console.log(`  ${enabled ? "run " : "skip"} ${name.padEnd(14)} ${reason}`);
   }
-
-  if (plan.runAllFast) {
-    console.log("Code/config change detected: running full fast lint/typecheck/test.");
-  }
-  if (plan.runWorkerRuntime) {
-    console.log("Worker/runtime-adjacent change detected: running workerd runtime tests.");
-  }
-  if (plan.runDocsApiCheck) {
-    console.log("API docs-adjacent change detected: checking generated API docs.");
-  }
-  if (plan.runScriptsLint) {
-    console.log("Script/tooling change detected: linting repo maintenance scripts.");
-  }
-  if (plan.runWorkerTypegenCheck) {
-    console.log("Worker typegen-adjacent change detected: checking generated Worker types.");
-  }
 }
 
 function main(): void {
@@ -412,10 +417,12 @@ function main(): void {
 
   let totalMs = 0;
   for (const step of steps) {
-    totalMs += runStep(step);
+    totalMs += runStep(step, options.quiet);
   }
 
-  console.log(`\nDev check passed in ${formatDuration(totalMs)}.`);
+  if (!options.quiet) {
+    console.log(`\nDev check passed in ${formatDuration(totalMs)}.`);
+  }
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? "").href) {
