@@ -23,11 +23,10 @@ export default function OverviewPage() {
   const ov = overview.data;
   const tenantList = useMemo(() => tenants.data?.tenants ?? [], [tenants.data]);
   const tenantPagination = tenants.data?.pagination;
-  const totalTenants = ov?.total_tenants ?? ov?.tenants ?? tenantList.length;
-  const totalConfigs =
-    ov?.total_configurations ?? (ov?.["total_configs"] as number | undefined) ?? 0;
-  const totalAgents = ov?.total_agents ?? ov?.agents ?? 0;
-  const healthStatus = health.data?.status ?? (ov?.["health"] as string | undefined) ?? "unknown";
+  const totalTenants = ov?.total_tenants ?? tenantList.length;
+  const totalConfigs = ov?.total_configurations ?? 0;
+  const totalAgents = ov?.total_agents ?? 0;
+  const healthStatus = health.data?.status ?? "unknown";
 
   const planCounts: Record<string, number> = {};
   for (const t of tenantList) {
@@ -178,7 +177,7 @@ export default function OverviewPage() {
       <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
         <MetricCard
           label={
-            ov?.total_tenants !== undefined || ov?.tenants !== undefined
+            ov?.total_tenants !== undefined
               ? "Total tenants"
               : `Tenants in page ${tenantPagination?.page ?? 1}`
           }

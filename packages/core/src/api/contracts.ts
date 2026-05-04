@@ -186,6 +186,238 @@ export const adminSettingsSchema = z
   .strict();
 export type AdminSettings = z.infer<typeof adminSettingsSchema>;
 
+/**
+ * `metrics_source` reports whether fleet metrics came from Analytics
+ * Engine SQL or are unavailable. Both admin overview and tenants-page
+ * responses surface this so the UI can render an "UNAVAILABLE" badge
+ * instead of stale zeros.
+ */
+const metricsSourceSchema = z.enum(["analytics_engine", "unavailable"]);
+
+export const adminOverviewSchema = z
+  .object({
+    total_tenants: z.number().int().min(0),
+    total_configurations: z.number().int().min(0),
+    total_active_tokens: z.number().int().min(0),
+    total_users: z.number().int().min(0),
+    total_agents: z.number().int().min(0).nullable(),
+    connected_agents: z.number().int().min(0).nullable(),
+    healthy_agents: z.number().int().min(0).nullable(),
+    metrics_source: metricsSourceSchema,
+    metrics_error: z.string().nullable().optional(),
+  })
+  .passthrough();
+export type AdminOverview = z.infer<typeof adminOverviewSchema>;
+
+export const adminTenantsPageSchema = z
+  .object({
+    tenants: z.array(adminTenantSchema),
+    pagination: z.object({
+      page: z.number().int().min(1),
+      limit: z.number().int().min(1),
+      total: z.number().int().min(0),
+      has_more: z.boolean(),
+    }),
+    filters: z.object({
+      q: z.string(),
+      plan: z.string(),
+      status: z.string().nullable(),
+      sort: z.string(),
+    }),
+    status_counts: z.record(z.string(), z.number()),
+    metrics_source: metricsSourceSchema,
+    metrics_error: z.string().nullable().optional(),
+  })
+  .passthrough();
+export type AdminTenantsPage = z.infer<typeof adminTenantsPageSchema>;
+
+/** Plan definition + tenant headcount for the admin Plans page. */
+export const adminPlanSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    tenant_count: z.number().int().min(0),
+  })
+  .passthrough();
+export type AdminPlan = z.infer<typeof adminPlanSchema>;
+
+export const adminListPlansResponseSchema = z.object({
+  plans: z.array(adminPlanSchema),
+});
+export type AdminListPlansResponse = z.infer<typeof adminListPlansResponseSchema>;
+
+/** Tenant configuration row as returned by the admin tenant-configs list.
+ *  The route returns `{ configurations: [] }`. We use a passthrough shape
+ *  with only `id` + `name` required because the admin UI only reads those
+ *  two columns; the full Kysely row passes through unchanged. */
+export const adminTenantConfigSchema = z
+  .object({
+    id: idSchema,
+    name: z.string(),
+  })
+  .passthrough();
+export type AdminTenantConfig = z.infer<typeof adminTenantConfigSchema>;
+
+export const adminListTenantConfigsResponseSchema = z.object({
+  configurations: z.array(adminTenantConfigSchema),
+});
+export type AdminListTenantConfigsResponse = z.infer<typeof adminListTenantConfigsResponseSchema>;
+
+export const adminTenantUserSchema = z
+  .object({
+    id: idSchema,
+    email: z.string(),
+    display_name: z.string().nullable().optional(),
+    role: z.string().optional(),
+    created_at: z.string().optional(),
+  })
+  .passthrough();
+export type AdminTenantUser = z.infer<typeof adminTenantUserSchema>;
+
+export const adminListTenantUsersResponseSchema = z.object({
+  users: z.array(adminTenantUserSchema),
+});
+export type AdminListTenantUsersResponse = z.infer<typeof adminListTenantUsersResponseSchema>;
+
+/**
+ * Health endpoint shape — checks/sources are Records<string, ...> because
+ * the set of probes evolves; passthrough keeps unknown keys flowing
+ * through. This is the customer-facing "control plane health" payload.
+ */
+export const adminHealthCheckSchema = z
+  .object({
+    status: z.string().optional(),
+    latency_ms: z.number().nullable().optional(),
+    error: z.string().optional(),
+    detail: z.string().optional(),
+  })
+  .passthrough();
+
+export const adminHealthDataSourceSchema = z
+  .object({
+    status: z.string().optional(),
+    detail: z.string().optional(),
+  })
+  .passthrough();
+
+export const adminHealthMetricsSchema = z
+  .object({
+    total_tenants: z.number().int(),
+    total_configurations: z.number().int(),
+    tenants_without_configurations: z.number().int(),
+    configurations_without_agents: z.number().int(),
+    total_users: z.number().int(),
+    active_sessions: z.number().int(),
+    impersonation_sessions: z.number().int(),
+    active_tokens: z.number().int(),
+    total_agents: z.number().int(),
+    connected_agents: z.number().int(),
+    disconnected_agents: z.number().int(),
+    unknown_agents: z.number().int(),
+    healthy_agents: z.number().int(),
+    unhealthy_agents: z.number().int(),
+    stale_agents: z.number().int(),
+    last_agent_seen_at: z.string().nullable(),
+    latest_fleet_snapshot_at: z.string().nullable().optional(),
+    latest_configuration_updated_at: z.string().nullable(),
+    plan_counts: z.record(z.string(), z.number()),
+  })
+  .passthrough();
+
+export const adminHealthSchema = z
+  .object({
+    status: z.string().optional(),
+    checks: z.record(z.string(), adminHealthCheckSchema).optional(),
+    metrics: adminHealthMetricsSchema.optional(),
+    sources: z.record(z.string(), adminHealthDataSourceSchema).optional(),
+    timestamp: z.string().optional(),
+  })
+  .passthrough();
+export type AdminHealth = z.infer<typeof adminHealthSchema>;
+
+/**
+ * Cloudflare usage estimation. Deeply nested — we shape the top level
+ * with strict types and let `services` pass through (its children evolve
+ * faster than the wrapper).
+ */
+export const adminUsageWindowSchema = z.object({
+  start_date: z.string(),
+  end_date: z.string(),
+  days_elapsed: z.number(),
+  days_in_month: z.number(),
+});
+
+export const adminUsageLineItemSchema = z
+  .object({
+    label: z.string(),
+    quantity: z.number(),
+    unit: z.string(),
+    included: z.number(),
+    billable: z.number(),
+    unit_price_usd: z.number(),
+    estimated_spend_usd: z.number(),
+  })
+  .passthrough();
+
+export const adminUsageDailySchema = z
+  .object({
+    date: z.string(),
+    estimated_spend_usd: z.number(),
+    units: z.record(z.string(), z.number()),
+  })
+  .passthrough();
+
+export const adminUsageServiceSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    status: z.enum(["ready", "not_configured", "error"]),
+    source: z.string(),
+    daily: z.array(adminUsageDailySchema),
+    line_items: z.array(adminUsageLineItemSchema),
+    month_to_date_estimated_spend_usd: z.number(),
+    projected_month_estimated_spend_usd: z.number(),
+    notes: z.array(z.string()),
+    error: z.string().optional(),
+  })
+  .passthrough();
+export type AdminUsageService = z.infer<typeof adminUsageServiceSchema>;
+export type AdminUsageDaily = z.infer<typeof adminUsageDailySchema>;
+export type AdminUsageLineItem = z.infer<typeof adminUsageLineItemSchema>;
+
+export const adminUsageSchema = z
+  .object({
+    configured: z.boolean(),
+    currency: z.literal("USD"),
+    generated_at: z.string(),
+    window: adminUsageWindowSchema,
+    pricing: z.object({
+      source: z.string(),
+      notes: z.array(z.string()),
+    }),
+    required_env: z.array(z.string()),
+    services: z.array(adminUsageServiceSchema),
+    month_to_date_estimated_spend_usd: z.number(),
+    projected_month_estimated_spend_usd: z.number(),
+  })
+  .passthrough();
+export type AdminUsage = z.infer<typeof adminUsageSchema>;
+
+/** Result of a debug DO SELECT query — opaque rows + row count. */
+export const adminDoQueryResponseSchema = z.object({
+  rows: z.array(z.record(z.string(), z.unknown())),
+  row_count: z.number().int().min(0),
+});
+export type AdminDoQueryResponse = z.infer<typeof adminDoQueryResponseSchema>;
+
+/** Tenant approve/reject result. */
+export const adminApproveTenantResponseSchema = z.object({
+  success: z.boolean(),
+  status: z.enum(["active", "suspended"]),
+  tenantId: idSchema,
+});
+export type AdminApproveTenantResponse = z.infer<typeof adminApproveTenantResponseSchema>;
+
 const debugSqlParamSchema = z.union([z.string(), z.number(), z.boolean(), z.null()]);
 const debugReadSqlSchema = z
   .string()

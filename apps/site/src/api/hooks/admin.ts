@@ -1,155 +1,77 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  apiDel,
   apiGet,
   apiGetTyped,
   apiPost,
   apiPostTyped,
   apiPutTyped,
-  apiDel,
   normalizeUser,
   type User,
 } from "../client";
 import {
+  adminApproveTenantResponseSchema,
   adminBulkApproveResponseSchema,
+  adminDoQueryResponseSchema,
+  adminHealthSchema,
+  adminListPlansResponseSchema,
+  adminListTenantConfigsResponseSchema,
+  adminListTenantUsersResponseSchema,
+  adminOverviewSchema,
   adminSettingsSchema,
   adminTenantSchema,
+  adminTenantsPageSchema,
+  adminUsageSchema,
+  type AdminApproveTenantResponse,
   type AdminBulkApproveResponse,
+  type AdminDoQueryResponse,
+  type AdminHealth,
+  type AdminOverview,
+  type AdminPlan,
   type AdminSettings,
   type AdminTenant,
+  type AdminTenantConfig,
+  type AdminTenantsPage,
+  type AdminTenantUser,
+  type AdminUsage,
+  type AdminUsageDaily,
+  type AdminUsageLineItem,
+  type AdminUsageService,
   type AuthUser,
 } from "@o11yfleet/core/api";
-import type { AdminHealthPayload } from "../../pages/admin/support-model";
 
 /* ------------------------------------------------------------------ */
-/*  Response types                                                    */
+/*  Re-exports                                                        */
 /* ------------------------------------------------------------------ */
 
-export type { AdminTenant };
-
-export interface AdminOverview {
-  total_tenants?: number;
-  total_configurations?: number;
-  total_agents?: number;
-  connected_agents?: number;
-  healthy_agents?: number;
-  total_active_tokens?: number;
-  total_users?: number;
-  tenants?: number;
-  agents?: number;
-  [key: string]: unknown;
-}
-
-export interface AdminTenantConfig {
-  id: string;
-  name: string;
-  [key: string]: unknown;
-}
-
-export interface AdminTenantUser {
-  id: string;
-  email: string;
-  role?: string;
-  [key: string]: unknown;
-}
-
-export interface AdminPlan {
-  id: string;
-  name: string;
-  [key: string]: unknown;
-}
-
-export type AdminHealth = AdminHealthPayload;
-
-export interface AdminUsageLineItem {
-  label: string;
-  quantity: number;
-  unit: string;
-  included: number;
-  billable: number;
-  unit_price_usd: number;
-  estimated_spend_usd: number;
-}
-
-export interface AdminUsageDaily {
-  date: string;
-  estimated_spend_usd: number;
-  units: Record<string, number>;
-}
-
-export interface AdminUsageService {
-  id: string;
-  name: string;
-  status: "ready" | "not_configured" | "error";
-  source: string;
-  daily: AdminUsageDaily[];
-  line_items: AdminUsageLineItem[];
-  month_to_date_estimated_spend_usd: number;
-  projected_month_estimated_spend_usd: number;
-  notes: string[];
-  error?: string;
-}
-
-export interface AdminUsage {
-  configured: boolean;
-  currency: "USD";
-  generated_at: string;
-  window: {
-    start_date: string;
-    end_date: string;
-    days_elapsed: number;
-    days_in_month: number;
-  };
-  pricing: {
-    source: string;
-    notes: string[];
-  };
-  required_env: string[];
-  services: AdminUsageService[];
-  month_to_date_estimated_spend_usd: number;
-  projected_month_estimated_spend_usd: number;
-}
-
-export interface AdminTenantsPagination {
-  page: number;
-  limit: number;
-  total: number;
-  has_more: boolean;
-}
-
-export interface AdminTenantsFilters {
-  q: string;
-  plan: string;
-  status: string | null;
-  sort: string;
-}
-
-export interface AdminTenantsPage {
-  tenants: AdminTenant[];
-  pagination: AdminTenantsPagination;
-  filters: AdminTenantsFilters;
-  status_counts: Record<string, number>;
-}
-
-export interface AdminDoQueryResponse {
-  rows: Array<Record<string, unknown>>;
-  row_count: number;
-}
-
-function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
-  if (Array.isArray(value)) return value;
-  const wrapped = value[key];
-  if (Array.isArray(wrapped)) return wrapped as T[];
-  throw new Error(`unwrapList expected array payload for "${key}": ${JSON.stringify(value)}`);
-}
+// Re-export the canonical types from @o11yfleet/core/api so admin pages
+// can keep importing them from this hook module without a churn PR.
+export type {
+  AdminApproveTenantResponse,
+  AdminBulkApproveResponse,
+  AdminDoQueryResponse,
+  AdminHealth,
+  AdminOverview,
+  AdminPlan,
+  AdminSettings,
+  AdminTenant,
+  AdminTenantConfig,
+  AdminTenantsPage,
+  AdminTenantUser,
+  AdminUsage,
+  AdminUsageDaily,
+  AdminUsageLineItem,
+  AdminUsageService,
+};
 
 /* ------------------------------------------------------------------ */
 /*  Query hooks                                                       */
 /* ------------------------------------------------------------------ */
 
 export function useAdminOverview() {
-  return useQuery({
+  return useQuery<AdminOverview>({
     queryKey: ["admin", "overview"],
-    queryFn: () => apiGet<AdminOverview>("/api/admin/overview"),
+    queryFn: () => apiGetTyped(adminOverviewSchema, "/api/admin/overview"),
   });
 }
 
@@ -171,18 +93,18 @@ export function useAdminTenantsPage(params?: {
   const search = query.toString();
   const path = search.length > 0 ? `/api/admin/tenants?${search}` : "/api/admin/tenants";
 
-  return useQuery({
+  return useQuery<AdminTenantsPage>({
     queryKey: ["admin", "tenants", params ?? {}],
-    queryFn: async () => apiGet<AdminTenantsPage>(path),
+    queryFn: () => apiGetTyped(adminTenantsPageSchema, path),
     refetchInterval: 10_000,
   });
 }
 
 export function useAdminTenants() {
-  return useQuery({
+  return useQuery<AdminTenant[]>({
     queryKey: ["admin", "tenants", "legacy"],
     queryFn: async () => {
-      const payload = await apiGet<AdminTenantsPage>("/api/admin/tenants?limit=500");
+      const payload = await apiGetTyped(adminTenantsPageSchema, "/api/admin/tenants?limit=500");
       return payload.tenants;
     },
     refetchInterval: 10_000,
@@ -198,55 +120,54 @@ export function useAdminTenant(id: string | undefined) {
 }
 
 export function useAdminTenantConfigs(id: string | undefined) {
-  return useQuery({
+  return useQuery<AdminTenantConfig[]>({
     queryKey: ["admin", "tenant", id, "configurations"],
-    queryFn: async () =>
-      unwrapList<AdminTenantConfig>(
-        await apiGet<AdminTenantConfig[] | { configurations: AdminTenantConfig[] }>(
-          `/api/admin/tenants/${id}/configurations`,
-        ),
-        "configurations",
-      ),
+    queryFn: async () => {
+      const body = await apiGetTyped(
+        adminListTenantConfigsResponseSchema,
+        `/api/admin/tenants/${id}/configurations`,
+      );
+      return body.configurations;
+    },
     enabled: !!id,
   });
 }
 
 export function useAdminTenantUsers(id: string | undefined) {
-  return useQuery({
+  return useQuery<AdminTenantUser[]>({
     queryKey: ["admin", "tenant", id, "users"],
-    queryFn: async () =>
-      unwrapList<AdminTenantUser>(
-        await apiGet<AdminTenantUser[] | { users: AdminTenantUser[] }>(
-          `/api/admin/tenants/${id}/users`,
-        ),
-        "users",
-      ),
+    queryFn: async () => {
+      const body = await apiGetTyped(
+        adminListTenantUsersResponseSchema,
+        `/api/admin/tenants/${id}/users`,
+      );
+      return body.users;
+    },
     enabled: !!id,
   });
 }
 
 export function useAdminPlans() {
-  return useQuery({
+  return useQuery<AdminPlan[]>({
     queryKey: ["admin", "plans"],
-    queryFn: async () =>
-      unwrapList<AdminPlan>(
-        await apiGet<AdminPlan[] | { plans: AdminPlan[] }>("/api/admin/plans"),
-        "plans",
-      ),
+    queryFn: async () => {
+      const body = await apiGetTyped(adminListPlansResponseSchema, "/api/admin/plans");
+      return body.plans;
+    },
   });
 }
 
 export function useAdminHealth() {
-  return useQuery({
+  return useQuery<AdminHealth>({
     queryKey: ["admin", "health"],
-    queryFn: () => apiGet<AdminHealth>("/api/admin/health"),
+    queryFn: () => apiGetTyped(adminHealthSchema, "/api/admin/health"),
   });
 }
 
 export function useAdminUsage() {
-  return useQuery({
+  return useQuery<AdminUsage>({
     queryKey: ["admin", "usage"],
-    queryFn: () => apiGet<AdminUsage>("/api/admin/usage"),
+    queryFn: () => apiGetTyped(adminUsageSchema, "/api/admin/usage"),
     refetchInterval: 300_000,
   });
 }
@@ -314,12 +235,13 @@ export function useImpersonateTenant(id: string) {
 
 export function useApproveTenant(id: string) {
   const qc = useQueryClient();
-  return useMutation({
-    mutationFn: (body: { action: "approve" | "reject"; reason?: string }) =>
-      apiPost<{ success: boolean; status: string; tenantId: string }>(
-        `/api/admin/tenants/${id}/approve`,
-        body,
-      ),
+  return useMutation<
+    AdminApproveTenantResponse,
+    Error,
+    { action: "approve" | "reject"; reason?: string }
+  >({
+    mutationFn: (body) =>
+      apiPostTyped(adminApproveTenantResponseSchema, `/api/admin/tenants/${id}/approve`, body),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "tenant", id] });
@@ -347,8 +269,12 @@ export function useAdminSettings() {
 }
 
 export function useAdminDoQuery(configId: string) {
-  return useMutation({
-    mutationFn: (body: { sql: string; params: unknown[] }) =>
-      apiPost<AdminDoQueryResponse>(`/api/admin/configurations/${configId}/do/query`, body),
+  return useMutation<AdminDoQueryResponse, Error, { sql: string; params: unknown[] }>({
+    mutationFn: (body) =>
+      apiPostTyped(
+        adminDoQueryResponseSchema,
+        `/api/admin/configurations/${configId}/do/query`,
+        body,
+      ),
   });
 }

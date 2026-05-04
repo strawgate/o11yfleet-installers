@@ -1,44 +1,17 @@
-export type HealthCheck = {
-  status?: string;
-  latency_ms?: number;
-  error?: string;
-  detail?: string;
-};
+// Re-export the canonical health-payload types from @o11yfleet/core/api
+// so admin pages can keep their existing imports from support-model.
+import type { z } from "zod";
+import type {
+  adminHealthCheckSchema,
+  adminHealthDataSourceSchema,
+  adminHealthMetricsSchema,
+  AdminHealth,
+} from "@o11yfleet/core/api";
 
-export type HealthMetrics = {
-  total_tenants: number;
-  total_configurations: number;
-  tenants_without_configurations: number;
-  configurations_without_agents: number;
-  total_users: number;
-  active_sessions: number;
-  impersonation_sessions: number;
-  active_tokens: number;
-  total_agents: number;
-  connected_agents: number;
-  disconnected_agents: number;
-  unknown_agents: number;
-  healthy_agents: number;
-  unhealthy_agents: number;
-  stale_agents: number;
-  last_agent_seen_at: string | null;
-  latest_fleet_snapshot_at?: string | null;
-  latest_configuration_updated_at: string | null;
-  plan_counts: Record<string, number>;
-};
-
-export type HealthDataSource = {
-  status?: string;
-  detail?: string;
-};
-
-export type AdminHealthPayload = {
-  status?: string;
-  checks?: Record<string, HealthCheck>;
-  metrics?: HealthMetrics;
-  sources?: Record<string, HealthDataSource>;
-  timestamp?: string;
-};
+export type HealthCheck = z.infer<typeof adminHealthCheckSchema>;
+export type HealthMetrics = z.infer<typeof adminHealthMetricsSchema>;
+export type HealthDataSource = z.infer<typeof adminHealthDataSourceSchema>;
+export type AdminHealthPayload = AdminHealth;
 
 export interface SupportTenant {
   id: string;
