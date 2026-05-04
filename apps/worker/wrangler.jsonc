@@ -82,7 +82,7 @@
   // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
   // reconciliation fallback at 03:17 UTC.
   "triggers": {
-    "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *"],
+    "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *", "45 4 * * *"],
   },
   "migrations": [
     {
@@ -174,7 +174,7 @@
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *", "45 4 * * *"],
       },
       "analytics_engine_datasets": [
         {
@@ -265,7 +265,7 @@
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *", "45 4 * * *"],
       },
       "analytics_engine_datasets": [
         {
@@ -344,7 +344,7 @@
       // Scheduled jobs: daily product metrics at midnight UTC, plus stale-agent
       // reconciliation fallback at 03:17 UTC.
       "triggers": {
-        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *"],
+        "crons": ["0 0 * * *", "17 3 * * *", "12 6 * * *", "45 4 * * *"],
       },
       "analytics_engine_datasets": [
         {

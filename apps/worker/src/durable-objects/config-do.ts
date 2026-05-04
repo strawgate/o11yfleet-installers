@@ -7,6 +7,7 @@ import {
 } from "@o11yfleet/core/codec";
 import { processFrame, defaultProcessContext } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import { parseGeoLatitude, parseGeoLongitude } from "@o11yfleet/core/branded";
 import { signClaim, verifyClaim, type AssignmentClaim } from "@o11yfleet/core/auth";
 import { configMetricsToDoubles, FLEET_CONFIG_SNAPSHOT_INTERVAL } from "@o11yfleet/core/metrics";
 import {
@@ -423,7 +424,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         }
       }
       if (!instanceUid) {
-        instanceUid = crypto.randomUUID();
+        instanceUid = crypto.randomUUID().replace(/-/g, "");
       }
     }
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
@@ -444,12 +445,8 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
         source_ip: sourceIp,
         geo_country: request.headers.get("x-fp-geo-country") ?? null,
         geo_city: request.headers.get("x-fp-geo-city") ?? null,
-        geo_lat: request.headers.get("x-fp-geo-lat")
-          ? Number(request.headers.get("x-fp-geo-lat"))
-          : null,
-        geo_lon: request.headers.get("x-fp-geo-lon")
-          ? Number(request.headers.get("x-fp-geo-lon"))
-          : null,
+        geo_lat: parseGeoLatitude(request.headers.get("x-fp-geo-lat")),
+        geo_lon: parseGeoLongitude(request.headers.get("x-fp-geo-lon")),
         connected_at: Date.now(),
       });
     } else {
@@ -1050,11 +1047,18 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
 
   async rpcSweep(): Promise<SweepResult> {
     this.ensureInit();
-    return sweepData(
+    const result = await sweepData(
       this.commandCtx(),
       (uid) => this.isAgentConnected(uid),
       () => this.emitMetrics(),
     );
+    // Also sweep expired pending devices + stale assignments
+    const { sweepExpiredPendingDevices } = await import("./agent-state-repo.js");
+    const pendingSwept = sweepExpiredPendingDevices(this.ctx.storage.sql);
+    if (pendingSwept > 0) {
+      console.log(`[sweep] cleaned ${pendingSwept} expired pending devices/assignments`);
+    }
+    return result;
   }
 
   async rpcDisconnectAll(): Promise<DisconnectResult> {

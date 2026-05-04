@@ -27,6 +27,9 @@ function stringifyWithBigint(value: unknown): string | null {
   return JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
 }
 
+/** TTL for pending devices and stale assignments (48 hours). */
+const STALE_PENDING_TTL_MS = 48 * 60 * 60 * 1000;
+
 // Re-export types from the interface file for backward compatibility
 export type {
   DesiredConfig,
@@ -214,6 +217,12 @@ function migrateSchema(sql: SqlStorage): void {
   }
   if (!agentColNames.has("config_last_failed_hash")) {
     sql.exec(`ALTER TABLE agents ADD COLUMN config_last_failed_hash TEXT`);
+  }
+
+  // Migration 6: add expires_at to pending_devices for GC.
+  const pendingDeviceCols = sql.exec(`PRAGMA table_info(pending_devices)`).toArray();
+  if (!pendingDeviceCols.some((c) => c["name"] === "expires_at")) {
+    sql.exec(`ALTER TABLE pending_devices ADD COLUMN expires_at INTEGER`);
   }
 }
 
@@ -1067,9 +1076,11 @@ export function upsertPendingDevice(
   },
 ): void {
   const now = Date.now();
+  const PENDING_DEVICE_TTL_MS = STALE_PENDING_TTL_MS;
+  const expiresAt = now + PENDING_DEVICE_TTL_MS;
   sql.exec(
-    `INSERT INTO pending_devices (instance_uid, tenant_id, display_name, source_ip, geo_country, geo_city, geo_lat, geo_lon, agent_description, connected_at, last_seen_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO pending_devices (instance_uid, tenant_id, display_name, source_ip, geo_country, geo_city, geo_lat, geo_lon, agent_description, connected_at, last_seen_at, expires_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT(instance_uid) DO UPDATE SET
        display_name = COALESCE(excluded.display_name, pending_devices.display_name),
        source_ip = COALESCE(excluded.source_ip, pending_devices.source_ip),
@@ -1079,7 +1090,8 @@ export function upsertPendingDevice(
        geo_lon = COALESCE(excluded.geo_lon, pending_devices.geo_lon),
        agent_description = COALESCE(excluded.agent_description, pending_devices.agent_description),
        connected_at = CASE WHEN excluded.connected_at > 0 THEN excluded.connected_at ELSE pending_devices.connected_at END,
-       last_seen_at = ?
+       last_seen_at = ?,
+       expires_at = ?
      WHERE instance_uid = ?`,
     info.instance_uid,
     info.tenant_id,
@@ -1092,7 +1104,9 @@ export function upsertPendingDevice(
     info.agent_description ?? null,
     info.connected_at ?? 0,
     now,
+    expiresAt,
     now,
+    expiresAt,
     info.instance_uid,
   );
 }
@@ -1196,4 +1210,24 @@ export function getPendingAssignment(
 
 export function deletePendingAssignment(sql: SqlStorage, instanceUid: string): void {
   sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
+}
+
+/**
+ * Sweep expired pending devices and stale pending assignments.
+ * Returns the number of rows deleted.
+ */
+export function sweepExpiredPendingDevices(sql: SqlStorage): number {
+  const now = Date.now();
+  // Delete devices with an expires_at in the past
+  const deviceResult = sql.exec(
+    `DELETE FROM pending_devices WHERE expires_at IS NOT NULL AND expires_at < ?`,
+    now,
+  );
+  // Delete assignments older than 48 hours (no TTL column — use assigned_at)
+  const STALE_ASSIGNMENT_MS = STALE_PENDING_TTL_MS;
+  const assignmentResult = sql.exec(
+    `DELETE FROM pending_assignments WHERE assigned_at > 0 AND assigned_at < ?`,
+    now - STALE_ASSIGNMENT_MS,
+  );
+  return deviceResult.rowsWritten + assignmentResult.rowsWritten;
 }

@@ -1418,6 +1418,7 @@ async function handleCreatePendingToken(
       token_hash: tokenHash,
       label,
       target_config_id: targetConfigId,
+      expires_at: new Date((now + PENDING_TOKEN_TTL_SECONDS) * 1000).toISOString(),
     })
     .execute();
 

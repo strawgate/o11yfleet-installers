@@ -100,6 +100,7 @@ const CRON_SWEEP_TIMEOUT_MS = 2_000;
 const STALE_AGENT_SWEEP_CRON = "17 3 * * *";
 const PRODUCT_METRICS_CRON = "0 0 * * *";
 const MANIFEST_DRIFT_CHECK_CRON = "12 6 * * *";
+const D1_TABLE_GC_CRON = "45 4 * * *";
 
 type TenantPlanBucket = "free" | "paid" | "enterprise";
 
@@ -238,6 +239,10 @@ export default {
       await runManifestDriftCheck(env);
       return;
     }
+    if (controller.cron === D1_TABLE_GC_CRON) {
+      await gcEphemeralTables(env);
+      return;
+    }
     if (controller.cron !== STALE_AGENT_SWEEP_CRON) {
       return;
     }
@@ -304,6 +309,85 @@ async function emitProductMetrics(env: Env): Promise<void> {
     });
   } catch {
     // Analytics Engine write failures should not fail the cron invocation.
+  }
+}
+
+/**
+ * Daily GC for ephemeral D1 tables — sessions, pending_tokens, enrollment_tokens.
+ * Deletes expired/revoked rows that would otherwise accumulate forever.
+ */
+async function gcEphemeralTables(env: Env): Promise<void> {
+  const db = getDb(env.FP_DB);
+  const now = new Date().toISOString();
+  // revoked_at is stored via SQLite datetime('now') → 'YYYY-MM-DD HH:MM:SS' format,
+  // so the cutoff must match that format (not JS toISOString which uses 'T' separator).
+  const revokedCutoff = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
+    .toISOString()
+    .replace("T", " ")
+    .slice(0, 19);
+
+  // Batch the GC queries for efficiency — they're independent
+  const [sessionResult, pendingTokenResult, enrollmentTokenResult] = await Promise.allSettled([
+    db.deleteFrom("sessions").where("expires_at", "<", now).execute(),
+    db
+      .deleteFrom("pending_tokens")
+      .where((eb) =>
+        eb.or([
+          // Expired tokens that haven't been revoked (revoked tokens keep 7-day audit trail)
+          eb.and([
+            eb("expires_at", "is not", null),
+            eb("expires_at", "<", now),
+            eb("revoked_at", "is", null),
+          ]),
+          // Revoked tokens older than 7 days
+          eb.and([eb("revoked_at", "is not", null), eb("revoked_at", "<", revokedCutoff)]),
+        ]),
+      )
+      .execute(),
+    db
+      .deleteFrom("enrollment_tokens")
+      .where((eb) =>
+        eb.or([
+          // Expired tokens that haven't been revoked
+          eb.and([
+            eb("expires_at", "is not", null),
+            eb("expires_at", "<", now),
+            eb("revoked_at", "is", null),
+          ]),
+          // Revoked tokens older than 7 days
+          eb.and([eb("revoked_at", "is not", null), eb("revoked_at", "<", revokedCutoff)]),
+        ]),
+      )
+      .execute(),
+  ]);
+
+  const sessions =
+    sessionResult.status === "fulfilled" ? Number(sessionResult.value[0]?.numDeletedRows ?? 0) : 0;
+  const pendingTokens =
+    pendingTokenResult.status === "fulfilled"
+      ? Number(pendingTokenResult.value[0]?.numDeletedRows ?? 0)
+      : 0;
+  const enrollmentTokens =
+    enrollmentTokenResult.status === "fulfilled"
+      ? Number(enrollmentTokenResult.value[0]?.numDeletedRows ?? 0)
+      : 0;
+
+  const total = sessions + pendingTokens + enrollmentTokens;
+  if (total > 0) {
+    console.log(
+      `[cron] D1 GC: deleted ${sessions} sessions, ${pendingTokens} pending tokens, ${enrollmentTokens} enrollment tokens`,
+    );
+  }
+
+  // Log failures but don't throw — each table GC is independent
+  for (const [name, result] of [
+    ["sessions", sessionResult],
+    ["pending_tokens", pendingTokenResult],
+    ["enrollment_tokens", enrollmentTokenResult],
+  ] as const) {
+    if (result.status === "rejected") {
+      console.error(`[cron] D1 GC failed for ${name}:`, result.reason);
+    }
   }
 }
 

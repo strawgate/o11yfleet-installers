@@ -19,6 +19,7 @@
     "./audit": "./src/audit.ts",
     "./assert-never": "./src/assert-never.ts",
     "./hex": "./src/hex.ts",
+    "./branded": "./src/branded.ts",
     "./metrics": "./src/metrics/index.ts"
   },
   "scripts": {
