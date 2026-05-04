@@ -95,6 +95,36 @@ export async function handleCreateConfiguration(
   };
 }
 
+/**
+ * Map a `configurations` D1 row to the public `Configuration` shape.
+ * D1 returns `null` for unset optional columns (description,
+ * current_config_hash, timestamps) but `configurationSchema` accepts
+ * either `null` or `undefined` for those slots — we pass `null` through
+ * directly so the wire shape mirrors what's in the row, with `?? undefined`
+ * only on fields that the schema doesn't model as nullable.
+ */
+function configurationFromRow(row: {
+  id: string;
+  tenant_id: string;
+  name: string;
+  description?: string | null;
+  current_config_hash?: string | null;
+  status?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+}): Configuration {
+  return {
+    id: row.id,
+    tenant_id: row.tenant_id,
+    name: row.name,
+    description: row.description ?? null,
+    current_config_hash: row.current_config_hash ?? null,
+    status: row.status ?? undefined,
+    created_at: row.created_at ?? undefined,
+    updated_at: row.updated_at ?? undefined,
+  } satisfies Configuration;
+}
+
 export async function handleGetConfiguration(
   env: Env,
   tenantId: string,
@@ -102,7 +132,7 @@ export async function handleGetConfiguration(
 ): Promise<Response> {
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
-  return typedJsonResponse(configurationSchema, config as Configuration, env);
+  return typedJsonResponse(configurationSchema, configurationFromRow(config), env);
 }
 
 export async function handleUpdateConfiguration(
@@ -134,7 +164,8 @@ export async function handleUpdateConfiguration(
     .execute();
 
   const updated = await getOwnedConfig(env, tenantId, configId);
-  return typedJsonResponse(configurationSchema, updated as Configuration, env);
+  if (!updated) return jsonError("Configuration not found", 404);
+  return typedJsonResponse(configurationSchema, configurationFromRow(updated), env);
 }
 
 export async function handleDeleteConfiguration(

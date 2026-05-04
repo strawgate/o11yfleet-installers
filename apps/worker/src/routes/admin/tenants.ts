@@ -188,9 +188,20 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
 }
 
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
-  const tenant = await findTenantById(env, tenantId);
-  if (!tenant) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, tenant as Tenant, env);
+  const row = await findTenantById(env, tenantId);
+  if (!row) return jsonError("Tenant not found", 404);
+  const tenant = {
+    id: row.id,
+    name: row.name,
+    plan: row.plan,
+    status: row.status ?? undefined,
+    approved_at: row.approved_at ?? undefined,
+    max_configs: row.max_configs ?? undefined,
+    max_agents_per_config: row.max_agents_per_config ?? undefined,
+    created_at: row.created_at ?? undefined,
+    updated_at: row.updated_at ?? undefined,
+  } satisfies Tenant;
+  return typedJsonResponse(tenantSchema, tenant, env);
 }
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
@@ -241,7 +252,18 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .returningAll()
     .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, updated as Tenant, env);
+  const tenant = {
+    id: updated.id,
+    name: updated.name,
+    plan: updated.plan,
+    status: updated.status ?? undefined,
+    approved_at: updated.approved_at ?? undefined,
+    max_configs: updated.max_configs ?? undefined,
+    max_agents_per_config: updated.max_agents_per_config ?? undefined,
+    created_at: updated.created_at ?? undefined,
+    updated_at: updated.updated_at ?? undefined,
+  } satisfies Tenant;
+  return typedJsonResponse(tenantSchema, tenant, env);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {

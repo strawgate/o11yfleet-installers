@@ -20,17 +20,37 @@ import { validateJsonBody } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { getDb } from "../../db/client.js";
 import { compileForBatch } from "../../db/queries.js";
-import { findTenantById, countConfigsForTenant } from "../../shared/db-helpers.js";
+import { findTenantById, countConfigsForTenant, type TenantRow } from "../../shared/db-helpers.js";
 import { handleListAuditLogs } from "./audit-logs.js";
 import { isAnalyticsSqlConfigured, runAnalyticsSql } from "../../analytics-sql.js";
 import { latestSnapshotForTenant } from "@o11yfleet/core/metrics";
 
 // ─── Handlers ───────────────────────────────────────────────────────
 
+/**
+ * Map a `tenants` D1 row to the public `Tenant` shape. D1 returns `null`
+ * for unset optional columns (max_configs, approved_at, etc.) but the
+ * `tenantSchema` expects `undefined` for those slots; coerce at the
+ * boundary so the contract on the wire stays clean.
+ */
+function tenantFromRow(row: TenantRow): Tenant {
+  return {
+    id: row.id,
+    name: row.name,
+    plan: row.plan,
+    status: row.status ?? undefined,
+    approved_at: row.approved_at ?? undefined,
+    max_configs: row.max_configs ?? undefined,
+    max_agents_per_config: row.max_agents_per_config ?? undefined,
+    created_at: row.created_at ?? undefined,
+    updated_at: row.updated_at ?? undefined,
+  } satisfies Tenant;
+}
+
 export async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, tenant as Tenant, env);
+  return typedJsonResponse(tenantSchema, tenantFromRow(tenant), env);
 }
 
 export async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
@@ -86,7 +106,7 @@ export async function handleUpdateTenant(
   if (Object.keys(set).length === 1) {
     const tenant = await findTenantById(env, tenantId);
     if (!tenant) return jsonError("Tenant not found", 404);
-    return typedJsonResponse(tenantSchema, tenant as Tenant, env);
+    return typedJsonResponse(tenantSchema, tenantFromRow(tenant), env);
   }
 
   const updated = await getDb(env.FP_DB)
@@ -96,7 +116,7 @@ export async function handleUpdateTenant(
     .returningAll()
     .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, updated as Tenant, env);
+  return typedJsonResponse(tenantSchema, tenantFromRow(updated), env);
 }
 
 // ─── Team Handler ───────────────────────────────────────────────────

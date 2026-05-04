@@ -122,8 +122,7 @@ export function handleGetStats(
   wsCount: number,
 ): Response {
   const data = getStatsData(repo, getDesiredConfig, wsCount);
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy wrapper, data shape matches schema
-  return typedJsonResponse(configStatsSchema, data as any);
+  return typedJsonResponse(configStatsSchema, data);
 }
 
 export function handleGetAgents(repo: AgentStateRepository, request: Request): Response {
@@ -137,8 +136,7 @@ export function handleGetAgents(repo: AgentStateRepository, request: Request): R
       health: url.searchParams.get("health") ?? undefined,
       sort: url.searchParams.get("sort") ?? undefined,
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy wrapper, data shape matches schema
-    return typedJsonResponse(agentPageSchema, result as any);
+    return typedJsonResponse(agentPageSchema, result);
   } catch (err) {
     if (err instanceof RpcError) {
       return Response.json({ error: err.message }, { status: err.statusCode });
@@ -155,6 +153,5 @@ export function handleGetAgent(
 ): Response {
   const result = getAgentData(repo, uid, isConnected, getDesiredConfig);
   if (!result) return Response.json({ error: "Agent not found" }, { status: 404 });
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- legacy wrapper, data shape matches schema
-  return typedJsonResponse(agentDetailSchema, result as any);
+  return typedJsonResponse(agentDetailSchema, result);
 }

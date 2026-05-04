@@ -5,7 +5,15 @@
  * ConfigDurableObject. With DO RPC, the Worker calls typed methods
  * directly on the stub instead of constructing internal fetch()
  * requests with URL routing.
+ *
+ * Result types align with the public API contracts in
+ * `@o11yfleet/core/api` so the data flows through `typedJsonResponse`
+ * without unsafe casts. If a contract drifts, the TS error surfaces
+ * here at the producer instead of being silenced with `as any` at the
+ * boundary.
  */
+
+import type { Agent, SweepStats } from "@o11yfleet/core/api";
 
 // ─── Query types ──────────────────────────────────────────────────
 
@@ -19,17 +27,17 @@ export interface AgentListParams {
 }
 
 export interface AgentListResult {
-  agents: unknown[];
+  agents: Agent[];
   pagination: {
     limit: number;
     next_cursor: string | null;
     has_more: boolean;
-    sort: string;
+    sort: "last_seen_desc" | "last_seen_asc" | "instance_uid_asc";
   };
   filters: {
     q?: string;
     status?: string;
-    health?: string;
+    health?: "healthy" | "unhealthy" | "unknown";
   };
 }
 
@@ -42,17 +50,21 @@ export interface ConfigStatsResult {
   current_hash_counts: Array<{ value: string; count: number }>;
   desired_config_hash: string | null;
   active_websockets: number;
-  stale_sweep: unknown;
+  stale_sweep: SweepStats;
 }
 
-export interface AgentDetailResult {
+/**
+ * Single-agent detail response. Extends `Agent` so the spread of the
+ * underlying agent row (including `instance_uid`, hostname, etc.)
+ * type-checks against the `agentDetailSchema` consumer.
+ */
+export interface AgentDetailResult extends Agent {
   is_connected: boolean;
   desired_config_hash: string | null;
   is_drifted: boolean;
   uptime_ms: number | null;
-  component_health_map: unknown;
-  available_components: unknown;
-  [key: string]: unknown;
+  component_health_map: Record<string, unknown> | null;
+  available_components: Record<string, unknown> | null;
 }
 
 // ─── Command types ────────────────────────────────────────────────
