@@ -58,6 +58,9 @@ export default function MarketingLayout() {
 
   return (
     <>
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <header className="site-header">
         <div className="wrap">
           <Link to="/" className="logo" aria-label="O11yFleet home">
@@ -100,7 +103,9 @@ export default function MarketingLayout() {
         </div>
       </header>
 
-      <Outlet />
+      <main id="main-content" tabIndex={-1}>
+        <Outlet />
+      </main>
 
       <footer className="site-footer">
         <div className="wrap">

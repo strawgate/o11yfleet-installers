@@ -231,6 +231,9 @@ export default function PortalLayout() {
       navbar={{ width: 260, breakpoint: "sm", collapsed: { mobile: !sidebar.opened } }}
       padding="md"
     >
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <CommandPaletteShortcut onOpen={openCommand} />
 
       <AppShell.Header>
@@ -320,7 +323,7 @@ export default function PortalLayout() {
         </Box>
       </AppShell.Navbar>
 
-      <AppShell.Main>
+      <AppShell.Main id="main-content" tabIndex={-1}>
         {isImpersonating ? (
           <Alert
             color="yellow"

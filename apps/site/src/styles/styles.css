@@ -911,6 +911,26 @@ p {
   border: 0;
 }
 
+.skip-link {
+  position: absolute;
+  top: -40px;
+  left: 8px;
+  z-index: 1000;
+  padding: 8px 12px;
+  background: var(--mantine-color-body, #fff);
+  color: var(--mantine-color-text, #000);
+  border: 2px solid var(--accent, currentColor);
+  border-radius: 4px;
+  text-decoration: none;
+  font-weight: 600;
+}
+.skip-link:focus,
+.skip-link:focus-visible {
+  top: 8px;
+  outline: 2px solid var(--accent, currentColor);
+  outline-offset: 2px;
+}
+
 /* ------------------------------------------------------------------ */
 /*  Restored from pre-#683 (still referenced by JSX or shipped HTML)  */
 /* ------------------------------------------------------------------ */

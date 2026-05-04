@@ -162,6 +162,9 @@ export default function AdminLayout() {
       navbar={{ width: 260, breakpoint: "sm", collapsed: { mobile: !sidebar.opened } }}
       padding="md"
     >
+      <a href="#main-content" className="skip-link">
+        Skip to content
+      </a>
       <CommandPaletteShortcut onOpen={openCommand} />
 
       <Box
@@ -230,7 +233,7 @@ export default function AdminLayout() {
         <Stack p="sm" gap={0} />
       </AppShell.Navbar>
 
-      <AppShell.Main>
+      <AppShell.Main id="main-content" tabIndex={-1}>
         <Outlet />
       </AppShell.Main>
 

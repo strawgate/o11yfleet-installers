@@ -1100,6 +1100,7 @@ export default function ConfigurationDetailPage() {
             value={confirmName}
             onChange={(e) => setConfirmName(e.currentTarget.value)}
             placeholder={c.name}
+            aria-label={`Type the configuration name "${c.name}" to confirm deletion`}
             data-autofocus
           />
           <Group gap="xs" justify="flex-end">
