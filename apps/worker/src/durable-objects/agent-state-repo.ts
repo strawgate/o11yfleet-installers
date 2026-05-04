@@ -8,6 +8,7 @@
 import type { AgentState } from "@o11yfleet/core/state-machine";
 import type { ConfigMetrics } from "@o11yfleet/core/metrics";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
+import { assertNever } from "@o11yfleet/core/assert-never";
 import type {
   DesiredConfig,
   DoPolicy,
@@ -761,23 +762,47 @@ export function listAgentsPage(
   if (params.health === "unhealthy") where.push(`a.healthy = 0`);
   if (params.health === "unknown") where.push(`a.healthy IS NULL`);
 
-  const dir = params.sort.endsWith("_desc") ? "DESC" : "ASC";
   if (params.cursor) {
-    if (params.sort === "instance_uid_asc") {
-      where.push(`a.instance_uid > ?`);
-      bind.push(params.cursor.instance_uid);
-    } else {
-      where.push(
-        `(a.last_seen_at ${dir === "DESC" ? "<" : ">"} ? OR (a.last_seen_at = ? AND a.instance_uid ${dir === "DESC" ? "<" : ">"} ?))`,
-      );
-      bind.push(params.cursor.last_seen_at, params.cursor.last_seen_at, params.cursor.instance_uid);
+    switch (params.sort) {
+      case "instance_uid_asc":
+        where.push(`a.instance_uid > ?`);
+        bind.push(params.cursor.instance_uid);
+        break;
+      case "last_seen_asc":
+        where.push(`(a.last_seen_at > ? OR (a.last_seen_at = ? AND a.instance_uid > ?))`);
+        bind.push(
+          params.cursor.last_seen_at,
+          params.cursor.last_seen_at,
+          params.cursor.instance_uid,
+        );
+        break;
+      case "last_seen_desc":
+        where.push(`(a.last_seen_at < ? OR (a.last_seen_at = ? AND a.instance_uid < ?))`);
+        bind.push(
+          params.cursor.last_seen_at,
+          params.cursor.last_seen_at,
+          params.cursor.instance_uid,
+        );
+        break;
+      default:
+        assertNever(params.sort);
     }
   }
   const whereSql = where.length ? `WHERE ${where.join(" AND ")}` : "";
-  const orderSql =
-    params.sort === "instance_uid_asc"
-      ? "a.instance_uid ASC"
-      : `a.last_seen_at ${dir}, a.instance_uid ${dir}`;
+  let orderSql: string;
+  switch (params.sort) {
+    case "instance_uid_asc":
+      orderSql = "a.instance_uid ASC";
+      break;
+    case "last_seen_asc":
+      orderSql = "a.last_seen_at ASC, a.instance_uid ASC";
+      break;
+    case "last_seen_desc":
+      orderSql = "a.last_seen_at DESC, a.instance_uid DESC";
+      break;
+    default:
+      assertNever(params.sort);
+  }
   // The list endpoint intentionally does not include `effective_config_body`
   // (which can be many KB per agent). Detail endpoints join `config_snapshots`
   // on demand for that field.

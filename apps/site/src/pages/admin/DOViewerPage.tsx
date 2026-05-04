@@ -218,14 +218,19 @@ export default function DOViewerPage() {
                     </Table.Tr>
                   </Table.Thead>
                   <Table.Tbody>
-                    {rows.map((row, rowIndex) => (
-                      // eslint-disable-next-line react/no-array-index-key -- SQL result rows have no natural ID
-                      <Table.Tr key={rowIndex}>
-                        {columns.map((col) => (
-                          <Table.Td key={col}>{buildDoCell(row[col])}</Table.Td>
-                        ))}
-                      </Table.Tr>
-                    ))}
+                    {rows.map((row, rowIndex) => {
+                      // Use composite key: first column value + rowIndex for uniqueness
+                      // Fallback to rowIndex only if first column is null/undefined
+                      const firstColKey = row[columns[0]] ?? "";
+                      const rowKey = `${String(firstColKey)}-${rowIndex}`;
+                      return (
+                        <Table.Tr key={rowKey}>
+                          {columns.map((col) => (
+                            <Table.Td key={col}>{buildDoCell(row[col])}</Table.Td>
+                          ))}
+                        </Table.Tr>
+                      );
+                    })}
                   </Table.Tbody>
                 </Table>
               </Table.ScrollContainer>

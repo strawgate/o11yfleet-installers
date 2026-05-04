@@ -141,7 +141,9 @@ export function handleDisconnectAll(ctx: CommandContext): Response {
       failed++;
     }
   }
-  return Response.json({ disconnected: closed, failed });
+  // Note: ws.close() is fire-and-forget — the actual disconnect happens
+  // asynchronously. The count reflects close requests, not confirmed disconnects.
+  return Response.json({ disconnect_requested: closed, failed });
 }
 
 function findSocketByInstanceUid(ctx: CommandContext, instanceUid: string): WebSocket | null {
@@ -370,10 +372,16 @@ export function disconnectAllData(ctx: CommandContext): DisconnectResult {
   return { disconnected: closed, failed };
 }
 
-export function disconnectAgentData(ctx: CommandContext, instanceUid: string): DisconnectAgentResult {
+export function disconnectAgentData(
+  ctx: CommandContext,
+  instanceUid: string,
+): DisconnectAgentResult {
   const ws = findSocketByInstanceUid(ctx, instanceUid);
   if (!ws) {
-    throw new RpcError("agent_not_connected", 404, { disconnected: false, reason: "agent_not_connected" });
+    throw new RpcError("agent_not_connected", 404, {
+      disconnected: false,
+      reason: "agent_not_connected",
+    });
   }
   try {
     ws.close(4001, "Server-initiated disconnect");
@@ -386,17 +394,26 @@ export function disconnectAgentData(ctx: CommandContext, instanceUid: string): D
 export function restartAgentData(ctx: CommandContext, instanceUid: string): RestartAgentResult {
   const ws = findSocketByInstanceUid(ctx, instanceUid);
   if (!ws) {
-    throw new RpcError("agent_not_connected", 404, { restarted: false, reason: "agent_not_connected" });
+    throw new RpcError("agent_not_connected", 404, {
+      restarted: false,
+      reason: "agent_not_connected",
+    });
   }
   const attachment = parseAttachment(ws.deserializeAttachment());
   if (!attachment) {
-    throw new RpcError("attachment_missing", 500, { restarted: false, reason: "attachment_missing" });
+    throw new RpcError("attachment_missing", 500, {
+      restarted: false,
+      reason: "attachment_missing",
+    });
   }
   if (
     attachment.capabilities !== undefined &&
     !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
   ) {
-    throw new RpcError("capability_not_advertised", 409, { restarted: false, reason: "capability_not_advertised" });
+    throw new RpcError("capability_not_advertised", 409, {
+      restarted: false,
+      reason: "capability_not_advertised",
+    });
   }
   try {
     const msg: ServerToAgent = {
@@ -483,5 +500,10 @@ export async function sweepData(
     // Metrics writes are best-effort and should not block stale reconciliation.
   }
 
-  return { swept: staleUids.length, unenrolled, active_websockets: activeSocketCount, duration_ms: durationMs };
+  return {
+    swept: staleUids.length,
+    unenrolled,
+    active_websockets: activeSocketCount,
+    duration_ms: durationMs,
+  };
 }
