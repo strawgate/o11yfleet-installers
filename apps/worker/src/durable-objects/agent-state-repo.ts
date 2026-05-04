@@ -530,6 +530,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
   const componentHealthMap = stringifyWithBigint(state.component_health_map);
   const availableComponents = stringifyWithBigint(state.available_components);
 
+  // Trust the state machine: connected_at = 0 means "clear on disconnect",
+  // which the old CASE clause was incorrectly overriding.
   sql.exec(
     `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, component_health_map, available_components, config_fail_count, config_last_failed_hash)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -542,8 +544,6 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
        current_config_hash = excluded.current_config_hash,
        effective_config_hash = COALESCE(excluded.effective_config_hash, agents.effective_config_hash),
        last_seen_at = excluded.last_seen_at,
-       // Trust the state machine: connected_at = 0 means "clear on disconnect",
-       // which the old CASE clause was incorrectly overriding.
        connected_at = excluded.connected_at,
        agent_description = COALESCE(excluded.agent_description, agents.agent_description),
        capabilities = excluded.capabilities,

@@ -61,12 +61,16 @@ export function detectApiBase(): string {
   // vite's proxy (same-origin = cookies work). Allow ?api= override for direct access.
   if (host === "localhost" || host === "127.0.0.1") {
     const params = new URLSearchParams(window.location.search);
-    const apiParam = params.get("api") || localStorage.getItem("fp-api-base");
-    if (apiParam) {
+    const apiFromQuery = params.get("api");
+    const apiParam = apiFromQuery || localStorage.getItem("fp-api-base");
+    if (apiFromQuery) {
       const url = stripUrlParam(window.location.href, "api");
       window.history.replaceState({}, "", url);
-      if (isLocalOverride(apiParam)) return apiParam;
+      // The query param has overridden any stored value; clear the stored
+      // entry so a future reload doesn't surface a stale fallback.
+      localStorage.removeItem("fp-api-base");
     }
+    if (apiParam && isLocalOverride(apiParam)) return apiParam;
     // Use relative URLs (empty string) to leverage vite proxy; fall back to
     // explicit env var if set.
     if (!buildApiUrl) return "";
@@ -112,9 +116,7 @@ export function detectApiBase(): string {
   return "";
 }
 
-const _apiBase = detectApiBase();
-localStorage.removeItem("fp-api-base");
-export const apiBase: string = _apiBase;
+export const apiBase: string = detectApiBase();
 
 export function apiUrl(path: string): string {
   return apiBase + path;
