@@ -34,11 +34,20 @@ export function typedJsonResponse<T extends z.ZodType>(
 ): Response {
   // The third argument is overloaded: either the worker `env` (so we can
   // read the runtime-validation flag) or a plain `ResponseInit`. Distinguish
-  // by checking for the flag field — `ResponseInit` never has it.
+  // by checking whether it looks like ResponseInit (has status/headers/etc).
+  // We can't use `"O11YFLEET_RUNTIME_VALIDATION" in envOrInit` because
+  // optional env properties don't exist on Cloudflare's Proxy-wrapped env.
   let env: RuntimeValidationEnv | undefined;
   let resolvedInit: ResponseInit | undefined;
-  if (envOrInit && "O11YFLEET_RUNTIME_VALIDATION" in envOrInit) {
-    env = envOrInit;
+  if (
+    envOrInit &&
+    typeof envOrInit === "object" &&
+    !("status" in envOrInit) &&
+    !("headers" in envOrInit) &&
+    !("statusText" in envOrInit)
+  ) {
+    // Looks like env, not ResponseInit
+    env = envOrInit as RuntimeValidationEnv;
     resolvedInit = init;
   } else {
     resolvedInit = envOrInit as ResponseInit | undefined;
