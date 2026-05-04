@@ -188,22 +188,16 @@ describe("auth/enrollment", () => {
   });
 
   it("rejects token with unsupported version", async () => {
-    // Craft a valid-signature token but with v=2
-    const jti = crypto.randomUUID();
-    const payload = { v: 2, tenant_id: "t", config_id: "c", iat: 0, exp: 0, jti };
-    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    // Craft a valid-signature JWT with v=2
+    const { SignJWT } = await import("jose");
     const enc = new TextEncoder();
-    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      enc.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
-    const sigB64 = base64urlEncode(new Uint8Array(sig));
-    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+    const key = enc.encode(secret);
+    const jwt = await new SignJWT({ v: 2, tenant_id: "t", config_id: "c" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setJti(crypto.randomUUID())
+      .sign(key);
+    const token = `fp_enroll_${jwt}`;
 
     await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow(
       "Unsupported enrollment token version",
@@ -211,40 +205,29 @@ describe("auth/enrollment", () => {
   });
 
   it("rejects token with missing tenant_id or config_id", async () => {
-    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    const { SignJWT } = await import("jose");
     const enc = new TextEncoder();
-    const payload = { v: 1, tenant_id: "", config_id: "c", iat: 0, exp: 0, jti: "id-1" };
-    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      enc.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
-    const sigB64 = base64urlEncode(new Uint8Array(sig));
-    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+    const key = enc.encode(secret);
+    const jwt = await new SignJWT({ v: 1, tenant_id: "", config_id: "c" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .setJti("id-1")
+      .sign(key);
+    const token = `fp_enroll_${jwt}`;
 
     await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing required fields");
   });
 
   it("rejects token with missing jti", async () => {
-    const { base64urlEncode } = await import("../src/auth/base64url.js");
+    const { SignJWT } = await import("jose");
     const enc = new TextEncoder();
-    // Craft payload without jti field
-    const payload = { v: 1, tenant_id: "t", config_id: "c", iat: 0, exp: 0 };
-    const payloadB64 = base64urlEncode(enc.encode(JSON.stringify(payload)));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      enc.encode(secret),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(payloadB64));
-    const sigB64 = base64urlEncode(new Uint8Array(sig));
-    const token = `fp_enroll_${payloadB64}.${sigB64}`;
+    const key = enc.encode(secret);
+    // Craft JWT without jti
+    const jwt = await new SignJWT({ v: 1, tenant_id: "t", config_id: "c" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setIssuedAt()
+      .sign(key);
+    const token = `fp_enroll_${jwt}`;
 
     await expect(verifyEnrollmentToken(token, secret)).rejects.toThrow("missing token ID (jti)");
   });

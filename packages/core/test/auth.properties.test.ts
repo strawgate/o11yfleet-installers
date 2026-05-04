@@ -305,20 +305,8 @@ describe("enrollment input validation", () => {
     ).rejects.toThrow(/secret must not be empty/);
   });
 
-  it("rejects malformed JSON payload (signed with valid HMAC)", async () => {
-    const enc = new TextEncoder();
-    const badPayload = base64urlEncode(enc.encode("{not json"));
-    const key = await crypto.subtle.importKey(
-      "raw",
-      enc.encode(SECRET),
-      { name: "HMAC", hash: "SHA-256" },
-      false,
-      ["sign"],
-    );
-    const sig = await crypto.subtle.sign("HMAC", key, enc.encode(badPayload));
-    const token = `fp_enroll_${badPayload}.${base64urlEncode(new Uint8Array(sig))}`;
-    await expect(verifyEnrollmentToken(token, SECRET)).rejects.toThrow(
-      /Malformed enrollment token payload/,
-    );
+  it("rejects a malformed JWT (not a valid token)", async () => {
+    const token = "fp_enroll_not.a.valid-jwt";
+    await expect(verifyEnrollmentToken(token, SECRET)).rejects.toThrow();
   });
 });

@@ -1,9 +1,10 @@
-// Enrollment tokens — self-contained signed claims
-// Format: fp_enroll_<base64url_payload>.<base64url_signature>
+// Enrollment tokens — self-contained signed JWTs
+// Format: fp_enroll_<JWT> (standard HS256 JWT with fp_enroll_ prefix)
 // Contains tenant_id + config_id + expiry. Verified locally (no D1 lookup on connect).
 // D1 enrollment_tokens table is kept as an admin registry for listing/revocation.
 
-import { base64urlEncode, base64urlDecode } from "./base64url.js";
+import { SignJWT, jwtVerify, errors } from "jose";
+import { base64urlEncode } from "./base64url.js";
 import { timingSafeEqual } from "./timing-safe-compare.js";
 
 const encoder = new TextEncoder();
@@ -17,19 +18,6 @@ export interface EnrollmentClaim {
   jti: string; // unique token ID (for revocation tracking)
 }
 
-async function getEnrollmentKey(secret: string): Promise<CryptoKey> {
-  if (!secret) {
-    throw new Error("Enrollment secret must not be empty");
-  }
-  return crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-}
-
 /**
  * Generate a signed enrollment token embedding tenant_id + config_id.
  * The token is self-verifiable — no database lookup needed to route.
@@ -41,6 +29,9 @@ export async function generateEnrollmentToken(opts: {
   expires_in_seconds?: number;
   jti?: string;
 }): Promise<{ token: string; jti: string; expires_at: string | null }> {
+  if (!opts.secret) {
+    throw new Error("Enrollment secret must not be empty");
+  }
   const jti = opts.jti ?? crypto.randomUUID();
   const now = Math.floor(Date.now() / 1000);
   if (
@@ -54,21 +45,23 @@ export async function generateEnrollmentToken(opts: {
   }
   const exp = opts.expires_in_seconds ? now + opts.expires_in_seconds : 0;
 
-  const claim: EnrollmentClaim = {
+  const key = encoder.encode(opts.secret);
+  const builder = new SignJWT({
     v: 1,
     tenant_id: opts.tenant_id,
     config_id: opts.config_id,
-    iat: now,
-    exp,
-    jti,
-  };
+  })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt(now)
+    .setJti(jti);
 
-  const payload = base64urlEncode(encoder.encode(JSON.stringify(claim)));
-  const key = await getEnrollmentKey(opts.secret);
-  const sig = await crypto.subtle.sign("HMAC", key, encoder.encode(payload));
-  const sigB64 = base64urlEncode(new Uint8Array(sig));
+  // exp=0 means no expiry — omit the JWT exp claim so jose doesn't reject it
+  if (exp > 0) {
+    builder.setExpirationTime(exp);
+  }
 
-  const token = `fp_enroll_${payload}.${sigB64}`;
+  const jwt = await builder.sign(key);
+  const token = `fp_enroll_${jwt}`;
   const expires_at = exp > 0 ? new Date(exp * 1000).toISOString() : null;
 
   return { token, jti, expires_at };
@@ -82,59 +75,56 @@ export async function verifyEnrollmentToken(
   token: string,
   secret: string,
 ): Promise<EnrollmentClaim> {
+  if (!secret) {
+    throw new Error("Enrollment secret must not be empty");
+  }
   if (!token.startsWith("fp_enroll_")) {
     throw new Error("Not an enrollment token");
   }
 
-  const body = token.slice("fp_enroll_".length);
-  const dotIdx = body.indexOf(".");
-  if (dotIdx === -1) {
+  const jwt = token.slice("fp_enroll_".length);
+  if (!jwt.includes(".")) {
     throw new Error("Invalid enrollment token format");
   }
 
-  const payload = body.slice(0, dotIdx);
-  const signature = body.slice(dotIdx + 1);
-
-  const key = await getEnrollmentKey(secret);
-  const sigBytes = base64urlDecode(signature);
-  const valid = await crypto.subtle.verify(
-    "HMAC",
-    key,
-    sigBytes.buffer.slice(
-      sigBytes.byteOffset,
-      sigBytes.byteOffset + sigBytes.byteLength,
-    ) as ArrayBuffer,
-    encoder.encode(payload),
-  );
-
-  if (!valid) {
+  const key = encoder.encode(secret);
+  let payload: Record<string, unknown>;
+  try {
+    const result = await jwtVerify(jwt, key);
+    payload = result.payload;
+  } catch (e: unknown) {
+    if (e instanceof errors.JWTExpired) {
+      throw new Error("Enrollment token expired");
+    }
+    if (e instanceof errors.JWSSignatureVerificationFailed) {
+      throw new Error("Invalid enrollment token signature");
+    }
+    if (e instanceof errors.JWSInvalid) {
+      throw new Error("Malformed enrollment token payload (invalid JSON)");
+    }
     throw new Error("Invalid enrollment token signature");
   }
 
-  let claim: EnrollmentClaim;
-  try {
-    claim = JSON.parse(new TextDecoder().decode(base64urlDecode(payload))) as EnrollmentClaim;
-  } catch {
-    throw new Error("Malformed enrollment token payload (invalid JSON)");
+  if (payload["v"] !== 1) {
+    throw new Error(`Unsupported enrollment token version: ${payload["v"]}`);
   }
 
-  if (claim.v !== 1) {
-    throw new Error(`Unsupported enrollment token version: ${claim.v}`);
-  }
-
-  if (claim.exp > 0 && claim.exp < Date.now() / 1000) {
-    throw new Error("Enrollment token expired");
-  }
-
-  if (!claim.tenant_id || !claim.config_id) {
+  if (!payload["tenant_id"] || !payload["config_id"]) {
     throw new Error("Enrollment token missing required fields");
   }
 
-  if (!claim.jti) {
+  if (!payload["jti"]) {
     throw new Error("Enrollment token missing token ID (jti)");
   }
 
-  return claim;
+  return {
+    v: 1,
+    tenant_id: payload["tenant_id"] as string,
+    config_id: payload["config_id"] as string,
+    iat: payload["iat"] as number,
+    exp: (payload["exp"] as number) ?? 0,
+    jti: payload["jti"] as string,
+  };
 }
 
 /**

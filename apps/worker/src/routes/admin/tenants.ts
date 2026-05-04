@@ -1,6 +1,7 @@
 // Tenant CRUD, impersonation, approval, and bulk operations
 
 import { Hono } from "hono";
+import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { AdminEnv } from "./shared.js";
 import { withAdminAudit, withAdminAuditCreate } from "./shared.js";
@@ -18,7 +19,7 @@ import { typedJsonResponse } from "../../shared/responses.js";
 import { jsonError, ApiError } from "../../shared/errors.js";
 import { DEFAULT_PLAN, PLAN_LIMITS, VALID_PLANS, normalizePlan } from "../../shared/plans.js";
 import { sessionCookie } from "../../shared/cookies.js";
-import { validateJsonBody } from "../../shared/validation.js";
+import { jsonValidator } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { getDb } from "../../db/client.js";
 import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
@@ -51,9 +52,10 @@ export function normalizeTenantSort(value: string | null): TenantSort {
 
 // ─── Handlers ───────────────────────────────────────────────────────
 
-async function handleCreateTenant(request: Request, env: Env): Promise<AuditCreateResult> {
-  const body = await validateJsonBody(request, adminCreateTenantRequestSchema);
-
+async function handleCreateTenant(
+  body: z.output<typeof adminCreateTenantRequestSchema>,
+  env: Env,
+): Promise<AuditCreateResult> {
   const plan = normalizePlan(body.plan ?? DEFAULT_PLAN);
   if (!plan) {
     return {
@@ -204,8 +206,12 @@ async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   return typedJsonResponse(tenantSchema, tenant, env);
 }
 
-async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
-  const body = await validateJsonBody(request, adminUpdateTenantRequestSchema);
+async function handleUpdateTenant(
+  body: z.output<typeof adminUpdateTenantRequestSchema>,
+  env: Env,
+  tenantId: string,
+  adminId: string,
+): Promise<Response> {
   const set: {
     name?: string;
     plan?: NonNullable<ReturnType<typeof normalizePlan>>;
@@ -237,7 +243,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     set.status = body.status as "pending" | "active" | "suspended";
     if (body.status === "active") {
       set.approved_at = sql<string>`datetime('now')`;
-      set.approved_by = request.headers.get("X-Admin-Id") ?? "system";
+      set.approved_by = adminId;
     }
   }
 
@@ -425,16 +431,13 @@ export async function getTenantWithPrimaryUser(
 }
 
 async function handleApproveTenant(
-  request: Request,
+  body: z.output<typeof adminApproveTenantRequestSchema>,
   env: Env,
   tenantId: string,
+  adminId: string,
 ): Promise<Response> {
-  const body = await validateJsonBody(request, adminApproveTenantRequestSchema);
-
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-
-  const adminId = request.headers.get("X-Admin-Id") ?? "system";
 
   if (body.action === "approve") {
     await getDb(env.FP_DB)
@@ -480,10 +483,11 @@ async function handleApproveTenant(
   return jsonError("Invalid action", 400);
 }
 
-async function handleBulkApproveTenants(request: Request, env: Env): Promise<Response> {
-  const body = await validateJsonBody(request, adminBulkApproveRequestSchema);
-  const adminId = request.headers.get("X-Admin-Id") ?? "system";
-
+async function handleBulkApproveTenants(
+  body: z.output<typeof adminBulkApproveRequestSchema>,
+  env: Env,
+  adminId: string,
+): Promise<Response> {
   const approved: string[] = [];
   const failed: { id: string; error: string }[] = [];
 
@@ -535,12 +539,13 @@ async function handleBulkApproveTenants(request: Request, env: Env): Promise<Res
 
 export const tenantRoutes = new Hono<AdminEnv>();
 
-tenantRoutes.post("/tenants", async (c) => {
+tenantRoutes.post("/tenants", jsonValidator(adminCreateTenantRequestSchema), async (c) => {
   const audit = c.get("audit");
+  const body = c.req.valid("json");
   return withAdminAuditCreate(
     audit,
     { action: "admin.tenant.create", resource_type: "tenant" },
-    () => handleCreateTenant(c.req.raw, c.env),
+    () => handleCreateTenant(body, c.env),
   );
 });
 
@@ -552,13 +557,15 @@ tenantRoutes.get("/tenants/:id", async (c) => {
   return handleGetTenant(c.env, c.req.param("id"));
 });
 
-tenantRoutes.put("/tenants/:id", async (c) => {
+tenantRoutes.put("/tenants/:id", jsonValidator(adminUpdateTenantRequestSchema), async (c) => {
   const audit = c.get("audit");
   const targetId = c.req.param("id");
+  const body = c.req.valid("json");
+  const adminId = c.req.header("X-Admin-Id") ?? "system";
   return withAdminAudit(
     audit,
     { action: "admin.tenant.update", resource_type: "tenant", resource_id: targetId },
-    () => handleUpdateTenant(c.req.raw, c.env, targetId),
+    () => handleUpdateTenant(body, c.env, targetId, adminId),
     targetId,
   );
 });
@@ -598,23 +605,31 @@ tenantRoutes.post("/tenants/:id/impersonate", async (c) => {
   );
 });
 
-tenantRoutes.post("/tenants/:id/approve", async (c) => {
-  const audit = c.get("audit");
-  const targetId = c.req.param("id");
-  return withAdminAudit(
-    audit,
-    { action: "admin.tenant.approve", resource_type: "tenant", resource_id: targetId },
-    () => handleApproveTenant(c.req.raw, c.env, targetId),
-    targetId,
-  );
-});
+tenantRoutes.post(
+  "/tenants/:id/approve",
+  jsonValidator(adminApproveTenantRequestSchema),
+  async (c) => {
+    const audit = c.get("audit");
+    const targetId = c.req.param("id");
+    const body = c.req.valid("json");
+    const adminId = c.req.header("X-Admin-Id") ?? "system";
+    return withAdminAudit(
+      audit,
+      { action: "admin.tenant.approve", resource_type: "tenant", resource_id: targetId },
+      () => handleApproveTenant(body, c.env, targetId, adminId),
+      targetId,
+    );
+  },
+);
 
-tenantRoutes.post("/bulk-approve", async (c) => {
+tenantRoutes.post("/bulk-approve", jsonValidator(adminBulkApproveRequestSchema), async (c) => {
   const audit = c.get("audit");
+  const body = c.req.valid("json");
+  const adminId = c.req.header("X-Admin-Id") ?? "system";
   const resp = await withAdminAudit(
     audit,
     { action: "admin.tenant.bulk_approve", resource_type: "tenant", resource_id: null },
-    () => handleBulkApproveTenants(c.req.raw, c.env),
+    () => handleBulkApproveTenants(body, c.env, adminId),
   );
   // Mirror an `admin.tenant.approve` event into each approved tenant's
   // own audit log so customers see the action under their tenant.

@@ -31,8 +31,8 @@ describe("GitHub social auth", () => {
       expect(response.status).toBe(302);
       const location = new URL(response.headers.get("Location") ?? "");
       const state = location.searchParams.get("state") ?? "";
-      const [payload] = state.split(".");
-      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+      const parts = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!))) as {
         returnTo: string;
       };
       expect(decoded.returnTo).toBe(`${siteOrigin}/portal/overview`);
@@ -70,8 +70,8 @@ describe("GitHub social auth", () => {
           expect(response.status).toBe(302);
           const location = new URL(response.headers.get("Location") ?? "");
           const state = location.searchParams.get("state") ?? "";
-          const [payload] = state.split(".");
-          const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+          const parts = state.split(".");
+          const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!))) as {
             returnTo: string;
           };
           expect(decoded.returnTo).toBe(`${siteOrigin}/portal/overview`);
@@ -91,8 +91,8 @@ describe("GitHub social auth", () => {
     expect(response.status).toBe(302);
     const location = new URL(response.headers.get("Location") ?? "");
     const state = location.searchParams.get("state") ?? "";
-    const [payload] = state.split(".");
-    const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+    const parts = state.split(".");
+    const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!))) as {
       returnTo: string;
     };
     expect(decoded.returnTo).toBe("https://dev-app.o11yfleet.com/portal/overview");
@@ -110,8 +110,8 @@ describe("GitHub social auth", () => {
       expect(response.status).toBe(302);
       const location = new URL(response.headers.get("Location") ?? "");
       const state = location.searchParams.get("state") ?? "";
-      const [payload] = state.split(".");
-      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+      const parts = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!))) as {
         returnTo: string;
       };
       expect(decoded.returnTo).toBe("http://localhost:4000/portal/overview");
@@ -132,8 +132,8 @@ describe("GitHub social auth", () => {
       expect(response.status).toBe(302);
       const location = new URL(response.headers.get("Location") ?? "");
       const state = location.searchParams.get("state") ?? "";
-      const [payload] = state.split(".");
-      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(payload!))) as {
+      const parts = state.split(".");
+      const decoded = JSON.parse(new TextDecoder().decode(base64urlDecode(parts[1]!))) as {
         returnTo: string;
       };
       expect(decoded.returnTo).toBe("https://o11yfleet.com/portal/overview");

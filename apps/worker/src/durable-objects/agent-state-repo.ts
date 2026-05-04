@@ -19,6 +19,8 @@ import type {
   SweepResult,
   SweepStats,
 } from "./agent-state-repo-interface.js";
+import { doDb, execQuery, execQueryOne, execMutation, execMutationCount } from "./do-query.js";
+import type { AgentsTable, DoConfigTable } from "./do-sqlite-schema.js";
 
 /** JSON.stringify with BigInt → string coercion. SQLite columns
  *  carrying capability bitmasks decode as BigInt; the agent state JSON
@@ -55,178 +57,254 @@ function safeJsonParse(value: unknown): unknown {
   }
 }
 
+// ─── Version-numbered DO SQLite migration system ────────────────────
+//
+// Each Migration.up function must be idempotent: safe to run on a DO
+// whose schema already contains the target objects (e.g. columns added
+// by a prior CREATE TABLE IF NOT EXISTS in version 1).
+
+interface Migration {
+  version: number;
+  description: string;
+  up: (sql: SqlStorage) => void;
+}
+
+/** Check whether a column exists on a table (used by historical migrations). */
+function hasColumn(sql: SqlStorage, table: string, column: string): boolean {
+  return sql
+    .exec(`PRAGMA table_info(${table})`)
+    .toArray()
+    .some((c) => c["name"] === column);
+}
+
+/** Add a column only if it doesn't already exist. */
+function addColumnIfMissing(sql: SqlStorage, table: string, definition: string): void {
+  const colName = definition.split(/\s/)[0]!;
+  if (!hasColumn(sql, table, colName)) {
+    sql.exec(`ALTER TABLE ${table} ADD COLUMN ${definition}`);
+  }
+}
+
+export const MIGRATIONS: readonly Migration[] = [
+  // ── V1: full base schema (CREATE IF NOT EXISTS — inherently idempotent) ──
+  {
+    version: 1,
+    description: "Base schema: agents, config_snapshots, do_config, pending tables",
+    up: (sql) => {
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS agents (
+          instance_uid TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          config_id TEXT NOT NULL,
+          sequence_num INTEGER NOT NULL DEFAULT 0,
+          generation INTEGER NOT NULL DEFAULT 1,
+          healthy INTEGER NOT NULL DEFAULT 1,
+          status TEXT NOT NULL DEFAULT 'unknown',
+          last_error TEXT NOT NULL DEFAULT '',
+          current_config_hash TEXT,
+          effective_config_hash TEXT,
+          last_seen_at INTEGER NOT NULL DEFAULT 0,
+          connected_at INTEGER NOT NULL DEFAULT 0,
+          agent_description TEXT,
+          capabilities INTEGER NOT NULL DEFAULT 0,
+          component_health_map TEXT,
+          available_components TEXT,
+          config_fail_count INTEGER NOT NULL DEFAULT 0,
+          config_last_failed_hash TEXT
+        )
+      `);
+      // Deduplicated config snapshots — one row per unique effective config hash.
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS config_snapshots (
+          hash TEXT PRIMARY KEY,
+          body TEXT NOT NULL
+        )
+      `);
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS do_config (
+          id INTEGER PRIMARY KEY CHECK (id = 1),
+          desired_config_hash TEXT,
+          desired_config_content TEXT,
+          desired_config_bytes BLOB,
+          tenant_id TEXT NOT NULL DEFAULT '',
+          config_id TEXT NOT NULL DEFAULT '',
+          last_sweep_at INTEGER NOT NULL DEFAULT 0,
+          last_sweep_stale_count INTEGER NOT NULL DEFAULT 0,
+          last_sweep_active_socket_count INTEGER NOT NULL DEFAULT 0,
+          last_sweep_duration_ms INTEGER NOT NULL DEFAULT 0,
+          last_stale_sweep_at INTEGER NOT NULL DEFAULT 0,
+          total_sweeps INTEGER NOT NULL DEFAULT 0,
+          total_stale_swept INTEGER NOT NULL DEFAULT 0,
+          sweeps_with_stale INTEGER NOT NULL DEFAULT 0,
+          max_agents_per_config INTEGER,
+          auto_unenroll_after_days INTEGER DEFAULT 30
+        )
+      `);
+      sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
+      // Intentionally NO indexes on `agents`. DO-local SQLite is in-process —
+      // full table scans of 30K rows take <1ms. Each index adds +1 billed row
+      // written per UPSERT ($1/M), dwarfing the read savings ($0.001/M).
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS pending_devices (
+          instance_uid TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          display_name TEXT,
+          source_ip TEXT,
+          geo_country TEXT,
+          geo_city TEXT,
+          geo_lat REAL,
+          geo_lon REAL,
+          agent_description TEXT,
+          connected_at INTEGER NOT NULL DEFAULT 0,
+          last_seen_at INTEGER NOT NULL DEFAULT 0,
+          expires_at INTEGER
+        )
+      `);
+      sql.exec(
+        `CREATE INDEX IF NOT EXISTS idx_pending_devices_tenant ON pending_devices(tenant_id)`,
+      );
+      sql.exec(
+        `CREATE INDEX IF NOT EXISTS idx_pending_devices_last_seen ON pending_devices(last_seen_at)`,
+      );
+      sql.exec(`
+        CREATE TABLE IF NOT EXISTS pending_assignments (
+          instance_uid TEXT PRIMARY KEY,
+          tenant_id TEXT NOT NULL,
+          target_config_id TEXT NOT NULL,
+          assigned_at INTEGER NOT NULL DEFAULT 0,
+          assigned_by TEXT
+        )
+      `);
+      sql.exec(
+        `CREATE INDEX IF NOT EXISTS idx_pending_assignments_config ON pending_assignments(target_config_id)`,
+      );
+    },
+  },
+
+  // ── Historical migrations (V2–V9) ──
+  // These exist so the version table documents what happened. Each up()
+  // is idempotent: columns already present from V1 are silently skipped.
+
+  {
+    version: 2,
+    description: "Add tenant_id, config_id to do_config",
+    up: (sql) => {
+      addColumnIfMissing(sql, "do_config", "tenant_id TEXT NOT NULL DEFAULT ''");
+      addColumnIfMissing(sql, "do_config", "config_id TEXT NOT NULL DEFAULT ''");
+    },
+  },
+  {
+    version: 3,
+    description: "Add max_agents_per_config policy to do_config",
+    up: (sql) => {
+      addColumnIfMissing(sql, "do_config", "max_agents_per_config INTEGER");
+    },
+  },
+  {
+    version: 4,
+    description: "Add desired_config_bytes (pre-encoded YAML) to do_config",
+    up: (sql) => {
+      addColumnIfMissing(sql, "do_config", "desired_config_bytes BLOB");
+    },
+  },
+  {
+    version: 5,
+    description: "Add sweep tracking columns to do_config",
+    up: (sql) => {
+      for (const col of [
+        "last_sweep_at INTEGER NOT NULL DEFAULT 0",
+        "last_sweep_stale_count INTEGER NOT NULL DEFAULT 0",
+        "last_sweep_active_socket_count INTEGER NOT NULL DEFAULT 0",
+        "last_sweep_duration_ms INTEGER NOT NULL DEFAULT 0",
+        "last_stale_sweep_at INTEGER NOT NULL DEFAULT 0",
+        "total_sweeps INTEGER NOT NULL DEFAULT 0",
+        "total_stale_swept INTEGER NOT NULL DEFAULT 0",
+        "sweeps_with_stale INTEGER NOT NULL DEFAULT 0",
+      ]) {
+        addColumnIfMissing(sql, "do_config", col);
+      }
+    },
+  },
+  {
+    version: 6,
+    description: "Add auto_unenroll_after_days to do_config",
+    up: (sql) => {
+      addColumnIfMissing(sql, "do_config", "auto_unenroll_after_days INTEGER DEFAULT 30");
+      sql.exec(
+        `UPDATE do_config SET auto_unenroll_after_days = 30 WHERE auto_unenroll_after_days IS NULL`,
+      );
+    },
+  },
+  {
+    version: 7,
+    description: "Migrate effective_config_body to config_snapshots, drop agent indexes",
+    up: (sql) => {
+      if (hasColumn(sql, "agents", "effective_config_body")) {
+        sql.exec(`
+          INSERT OR IGNORE INTO config_snapshots (hash, body)
+          SELECT effective_config_hash, effective_config_body
+          FROM agents
+          WHERE effective_config_hash IS NOT NULL AND effective_config_body IS NOT NULL
+        `);
+      }
+      sql.exec(`DROP INDEX IF EXISTS idx_agents_status`);
+      sql.exec(`DROP INDEX IF EXISTS idx_agents_last_seen`);
+      sql.exec(`DROP INDEX IF EXISTS idx_agents_config_hash`);
+    },
+  },
+  {
+    version: 8,
+    description: "Add config fail tracking columns to agents",
+    up: (sql) => {
+      addColumnIfMissing(sql, "agents", "config_fail_count INTEGER NOT NULL DEFAULT 0");
+      addColumnIfMissing(sql, "agents", "config_last_failed_hash TEXT");
+    },
+  },
+  {
+    version: 9,
+    description: "Add expires_at to pending_devices",
+    up: (sql) => {
+      addColumnIfMissing(sql, "pending_devices", "expires_at INTEGER");
+    },
+  },
+];
+
 /**
- * Initialize all tables in DO-local SQLite.
+ * Run all pending DO-local SQLite migrations.
+ *
+ * Idempotent: re-running on an already-migrated DO is a no-op (only a
+ * single SELECT against `_schema_version`). Each migration's `up` is
+ * also individually idempotent so that V1's full CREATE TABLE IF NOT
+ * EXISTS doesn't conflict with the historical ALTER TABLE migrations.
  */
-export function initSchema(sql: SqlStorage): void {
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS agents (
-      instance_uid TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      config_id TEXT NOT NULL,
-      sequence_num INTEGER NOT NULL DEFAULT 0,
-      generation INTEGER NOT NULL DEFAULT 1,
-      healthy INTEGER NOT NULL DEFAULT 1,
-      status TEXT NOT NULL DEFAULT 'unknown',
-      last_error TEXT NOT NULL DEFAULT '',
-      current_config_hash TEXT,
-      effective_config_hash TEXT,
-      last_seen_at INTEGER NOT NULL DEFAULT 0,
-      connected_at INTEGER NOT NULL DEFAULT 0,
-      agent_description TEXT,
-      capabilities INTEGER NOT NULL DEFAULT 0,
-      component_health_map TEXT,
-      available_components TEXT
-    )
-  `);
-  // Deduplicated config snapshots — one row per unique effective config hash.
-  // Agents reference by hash only; the body lives here once.
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS config_snapshots (
-      hash TEXT PRIMARY KEY,
-      body TEXT NOT NULL
-    )
-  `);
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS do_config (
-      id INTEGER PRIMARY KEY CHECK (id = 1),
-      desired_config_hash TEXT,
-      desired_config_content TEXT,
-      desired_config_bytes BLOB,
-      tenant_id TEXT NOT NULL DEFAULT '',
-      config_id TEXT NOT NULL DEFAULT '',
-      last_sweep_at INTEGER NOT NULL DEFAULT 0,
-      last_sweep_stale_count INTEGER NOT NULL DEFAULT 0,
-      last_sweep_active_socket_count INTEGER NOT NULL DEFAULT 0,
-      last_sweep_duration_ms INTEGER NOT NULL DEFAULT 0,
-      last_stale_sweep_at INTEGER NOT NULL DEFAULT 0,
-      total_sweeps INTEGER NOT NULL DEFAULT 0,
-      total_stale_swept INTEGER NOT NULL DEFAULT 0,
-      sweeps_with_stale INTEGER NOT NULL DEFAULT 0,
-      max_agents_per_config INTEGER,
-      auto_unenroll_after_days INTEGER DEFAULT 30
-    )
-  `);
-  // Ensure singleton row exists
-  sql.exec(`INSERT OR IGNORE INTO do_config (id) VALUES (1)`);
-  // Intentionally NO indexes on `agents`. DO-local SQLite is in-process —
-  // full table scans of 30K rows take <1ms. Each index adds +1 billed row
-  // written per UPSERT ($1/M), dwarfing the read savings ($0.001/M).
-  // See AGENTS.md for the full cost analysis.
-  // Pending devices table — for __pending__ DOs only
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS pending_devices (
-      instance_uid TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      display_name TEXT,
-      source_ip TEXT,
-      geo_country TEXT,
-      geo_city TEXT,
-      geo_lat REAL,
-      geo_lon REAL,
-      agent_description TEXT,
-      connected_at INTEGER NOT NULL DEFAULT 0,
-      last_seen_at INTEGER NOT NULL DEFAULT 0
-    )
-  `);
-  sql.exec(`CREATE INDEX IF NOT EXISTS idx_pending_devices_tenant ON pending_devices(tenant_id)`);
-  sql.exec(
-    `CREATE INDEX IF NOT EXISTS idx_pending_devices_last_seen ON pending_devices(last_seen_at)`,
+export function runMigrations(sql: SqlStorage): void {
+  sql.exec(`CREATE TABLE IF NOT EXISTS _schema_version (
+    version INTEGER PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT (datetime('now')),
+    description TEXT
+  )`);
+
+  const applied = new Set(
+    sql
+      .exec(`SELECT version FROM _schema_version`)
+      .toArray()
+      .map((r) => (r as Record<string, unknown>)["version"] as number),
   );
-  // Pending assignments — maps device to target config
-  sql.exec(`
-    CREATE TABLE IF NOT EXISTS pending_assignments (
-      instance_uid TEXT PRIMARY KEY,
-      tenant_id TEXT NOT NULL,
-      target_config_id TEXT NOT NULL,
-      assigned_at INTEGER NOT NULL DEFAULT 0,
-      assigned_by TEXT
-    )
-  `);
-  sql.exec(
-    `CREATE INDEX IF NOT EXISTS idx_pending_assignments_config ON pending_assignments(target_config_id)`,
-  );
-  // Migrate existing DO-local schemas forward.
-  migrateSchema(sql);
+
+  for (const m of MIGRATIONS) {
+    if (applied.has(m.version)) continue;
+    m.up(sql);
+    sql.exec(
+      `INSERT INTO _schema_version (version, description) VALUES (?, ?)`,
+      m.version,
+      m.description,
+    );
+    applied.add(m.version);
+  }
 }
 
-/** Idempotent schema migrations for existing DOs. */
-function migrateSchema(sql: SqlStorage): void {
-  const cols = sql.exec(`PRAGMA table_info(do_config)`).toArray();
-  const addDoConfigColumn = (
-    name: string,
-    definition = `${name} INTEGER NOT NULL DEFAULT 0`,
-  ): void => {
-    if (!cols.some((c) => c["name"] === name)) {
-      sql.exec(`ALTER TABLE do_config ADD COLUMN ${definition}`);
-    }
-  };
-  addDoConfigColumn("tenant_id", "tenant_id TEXT NOT NULL DEFAULT ''");
-  addDoConfigColumn("config_id", "config_id TEXT NOT NULL DEFAULT ''");
-  // Cached tenant policy. Seeded at /init when the resource is created and
-  // refreshed via /sync-policy when tenant settings change. Lets the DO
-  // enforce per-tenant limits without a header from the worker.
-  addDoConfigColumn("max_agents_per_config", "max_agents_per_config INTEGER");
-  // Migration: pre-encoded YAML bytes for the WS hot path. New rows get
-  // this column populated by `saveDesiredConfig`. Existing rows fall
-  // back to encoding-on-read in `loadDesiredConfig` until the next
-  // `set-desired-config` overwrites them.
-  addDoConfigColumn("desired_config_bytes", "desired_config_bytes BLOB");
-  // Migration 1: add stale sweep tracking columns to do_config
-  for (const column of [
-    "last_sweep_at",
-    "last_sweep_stale_count",
-    "last_sweep_active_socket_count",
-    "last_sweep_duration_ms",
-    "last_stale_sweep_at",
-    "total_sweeps",
-    "total_stale_swept",
-    "sweeps_with_stale",
-  ]) {
-    addDoConfigColumn(column);
-  }
-  // Migration: auto-unenroll policy column. New DOs get DEFAULT 30 from the
-  // CREATE TABLE definition. Existing DOs get NULL here (no DEFAULT on ALTER)
-  // so behavior doesn't change silently — admins must opt in.
-  addDoConfigColumn("auto_unenroll_after_days", "auto_unenroll_after_days INTEGER");
-  // Migration 2: add config_snapshots table (CREATE IF NOT EXISTS handles this)
-  // Migration 3: migrate legacy effective_config_body values into config_snapshots.
-  const agentCols = sql.exec(`PRAGMA table_info(agents)`).toArray();
-  if (agentCols.some((c) => c["name"] === "effective_config_body")) {
-    // Move existing bodies to config_snapshots.
-    sql.exec(`
-      INSERT OR IGNORE INTO config_snapshots (hash, body)
-      SELECT effective_config_hash, effective_config_body
-      FROM agents
-      WHERE effective_config_hash IS NOT NULL AND effective_config_body IS NOT NULL
-    `);
-    // Leave the legacy column in place for rollback compatibility. New reads use config_snapshots.
-  }
-  // Migration 4: drop agents indexes that were adding write cost.
-  // Each index adds +1 billed row written per UPSERT ($1/M). DO-local SQLite
-  // is in-process — full table scans of 30K rows take <1ms, so these indexes
-  // were pure write tax. See AGENTS.md.
-  sql.exec(`DROP INDEX IF EXISTS idx_agents_status`);
-  sql.exec(`DROP INDEX IF EXISTS idx_agents_last_seen`);
-  sql.exec(`DROP INDEX IF EXISTS idx_agents_config_hash`);
-
-  // Migration 5: config-fail retry limit columns on agents.
-  // Tracks consecutive FAILED responses for the same config hash so the
-  // server can stop re-offering bad configs after MAX_CONFIG_FAIL_RETRIES.
-  const agentColNames = new Set(agentCols.map((c) => c["name"] as string));
-  if (!agentColNames.has("config_fail_count")) {
-    sql.exec(`ALTER TABLE agents ADD COLUMN config_fail_count INTEGER NOT NULL DEFAULT 0`);
-  }
-  if (!agentColNames.has("config_last_failed_hash")) {
-    sql.exec(`ALTER TABLE agents ADD COLUMN config_last_failed_hash TEXT`);
-  }
-
-  // Migration 6: add expires_at to pending_devices for GC.
-  const pendingDeviceCols = sql.exec(`PRAGMA table_info(pending_devices)`).toArray();
-  if (!pendingDeviceCols.some((c) => c["name"] === "expires_at")) {
-    sql.exec(`ALTER TABLE pending_devices ADD COLUMN expires_at INTEGER`);
-  }
-}
+/** @deprecated Use {@link runMigrations} instead. Alias kept for backward compatibility. */
+export const initSchema = runMigrations;
 
 // ─── Component Inventory ────────────────────────────────────────────
 
@@ -235,14 +313,14 @@ export function getFleetComponentInventory(
   tenantId: string,
   configId: string,
 ): FleetComponentGroup[] {
-  const rows = sql
-    .exec(
-      `SELECT instance_uid, available_components FROM agents
-       WHERE tenant_id = ? AND config_id = ? AND status != 'disconnected'`,
-      tenantId,
-      configId,
-    )
-    .toArray() as Array<{ instance_uid: string; available_components: string | null }>;
+  const compiled = doDb
+    .selectFrom("agents")
+    .select(["instance_uid", "available_components"])
+    .where("tenant_id", "=", tenantId)
+    .where("config_id", "=", configId)
+    .where("status", "!=", "disconnected")
+    .compile();
+  const rows = execQuery<Pick<AgentsTable, "instance_uid" | "available_components">>(sql, compiled);
 
   const groups = new Map<string, FleetComponentGroup>();
   for (const row of rows) {
@@ -268,13 +346,16 @@ export function getFleetComponentInventory(
  * encoding on read; the next `set-desired-config` write upgrades the row.
  */
 export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
-  const row = sql
-    .exec(
-      `SELECT desired_config_hash, desired_config_content, desired_config_bytes
-       FROM do_config WHERE id = 1`,
-    )
-    .one();
-  const stored = row["desired_config_bytes"];
+  const compiled = doDb
+    .selectFrom("do_config")
+    .select(["desired_config_hash", "desired_config_content", "desired_config_bytes"])
+    .where("id", "=", 1)
+    .compile();
+  const row = execQueryOne<
+    Pick<DoConfigTable, "desired_config_hash" | "desired_config_content" | "desired_config_bytes">
+  >(sql, compiled);
+  if (!row) return { hash: null, content: null, bytes: null };
+  const stored = row.desired_config_bytes;
   let bytes: Uint8Array | null = null;
   if (stored instanceof Uint8Array) {
     bytes = stored;
@@ -282,8 +363,8 @@ export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
     bytes = new Uint8Array(stored);
   }
   return {
-    hash: (row["desired_config_hash"] as string) ?? null,
-    content: (row["desired_config_content"] as string) ?? null,
+    hash: row.desired_config_hash ?? null,
+    content: row.desired_config_content ?? null,
     bytes,
   };
 }
@@ -297,16 +378,16 @@ export function loadDesiredConfig(sql: SqlStorage): DesiredConfig {
  */
 export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string | null): void {
   const encoded = content === null ? null : new TextEncoder().encode(content);
-  sql.exec(
-    `UPDATE do_config
-       SET desired_config_hash = ?,
-           desired_config_content = ?,
-           desired_config_bytes = ?
-       WHERE id = 1`,
-    hash,
-    content,
-    encoded,
-  );
+  const compiled = doDb
+    .updateTable("do_config")
+    .set({
+      desired_config_hash: hash,
+      desired_config_content: content,
+      desired_config_bytes: encoded,
+    })
+    .where("id", "=", 1)
+    .compile();
+  execMutation(sql, compiled);
 }
 
 // Identity is derived from `ctx.id.name` at the call site (see ConfigDO's
@@ -317,7 +398,12 @@ export function saveDesiredConfig(sql: SqlStorage, hash: string, content: string
 // truth for identity any more.
 export function saveDoIdentity(sql: SqlStorage, tenantId: string, configId: string): void {
   if (!tenantId || !configId) return;
-  sql.exec(`UPDATE do_config SET tenant_id = ?, config_id = ? WHERE id = 1`, tenantId, configId);
+  const compiled = doDb
+    .updateTable("do_config")
+    .set({ tenant_id: tenantId, config_id: configId })
+    .where("id", "=", 1)
+    .compile();
+  execMutation(sql, compiled);
 }
 
 // `DoPolicy` lives in `./agent-state-repo-interface.ts` as the canonical
@@ -335,31 +421,40 @@ export function isValidPositiveInt(value: unknown): value is number {
 export const isValidMaxAgents = isValidPositiveInt;
 
 export function loadDoPolicy(sql: SqlStorage): DoPolicy {
-  const row = sql
-    .exec(`SELECT max_agents_per_config, auto_unenroll_after_days FROM do_config WHERE id = 1`)
-    .one();
+  const compiled = doDb
+    .selectFrom("do_config")
+    .select(["max_agents_per_config", "auto_unenroll_after_days"])
+    .where("id", "=", 1)
+    .compile();
+  const row = execQueryOne<
+    Pick<DoConfigTable, "max_agents_per_config" | "auto_unenroll_after_days">
+  >(sql, compiled);
 
-  const rawMax = row["max_agents_per_config"];
   let maxAgents: number | null = null;
-  if (rawMax !== null && rawMax !== undefined) {
-    if (isValidMaxAgents(rawMax)) {
-      maxAgents = rawMax;
-    } else {
-      console.warn(
-        `[do-policy] discarding invalid max_agents_per_config: ${typeof rawMax}=${String(rawMax).slice(0, 32)}`,
-      );
+  if (row) {
+    const rawMax = row.max_agents_per_config;
+    if (rawMax !== null && rawMax !== undefined) {
+      if (isValidMaxAgents(rawMax)) {
+        maxAgents = rawMax;
+      } else {
+        console.warn(
+          `[do-policy] discarding invalid max_agents_per_config: ${typeof rawMax}=${String(rawMax).slice(0, 32)}`,
+        );
+      }
     }
   }
 
-  const rawUnenroll = row["auto_unenroll_after_days"];
   let autoUnenroll: number | null = null;
-  if (rawUnenroll !== null && rawUnenroll !== undefined) {
-    if (isValidPositiveInt(rawUnenroll)) {
-      autoUnenroll = rawUnenroll as number;
-    } else {
-      console.warn(
-        `[do-policy] discarding invalid auto_unenroll_after_days: ${typeof rawUnenroll}=${String(rawUnenroll).slice(0, 32)}`,
-      );
+  if (row) {
+    const rawUnenroll = row.auto_unenroll_after_days;
+    if (rawUnenroll !== null && rawUnenroll !== undefined) {
+      if (isValidPositiveInt(rawUnenroll)) {
+        autoUnenroll = rawUnenroll;
+      } else {
+        console.warn(
+          `[do-policy] discarding invalid auto_unenroll_after_days: ${typeof rawUnenroll}=${String(rawUnenroll).slice(0, 32)}`,
+        );
+      }
     }
   }
 
@@ -421,38 +516,43 @@ export function loadAgentState(
   configId: string,
   desiredConfigHash: string | null,
 ): AgentState {
-  const row = sql.exec(`SELECT * FROM agents WHERE instance_uid = ?`, instanceUid).toArray()[0];
+  const compiled = doDb
+    .selectFrom("agents")
+    .selectAll()
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  const row = execQueryOne<AgentsTable>(sql, compiled);
 
   if (row) {
-    const effectiveHash = (row["effective_config_hash"] as string) ?? null;
+    const effectiveHash = row.effective_config_hash ?? null;
     return {
-      instance_uid: hexToUint8Array(row["instance_uid"] as string),
-      tenant_id: row["tenant_id"] as string,
-      config_id: row["config_id"] as string,
-      sequence_num: row["sequence_num"] as number,
-      generation: row["generation"] as number,
-      healthy: (row["healthy"] as number) === 1,
-      status: row["status"] as string,
-      last_error: row["last_error"] as string,
-      current_config_hash: row["current_config_hash"]
-        ? hexToUint8Array(row["current_config_hash"] as string)
+      instance_uid: hexToUint8Array(row.instance_uid),
+      tenant_id: row.tenant_id,
+      config_id: row.config_id,
+      sequence_num: row.sequence_num,
+      generation: row.generation,
+      healthy: row.healthy === 1,
+      status: row.status,
+      last_error: row.last_error,
+      current_config_hash: row.current_config_hash
+        ? hexToUint8Array(row.current_config_hash)
         : null,
       desired_config_hash: desiredConfigHash ? hexToUint8Array(desiredConfigHash) : null,
       effective_config_hash: effectiveHash,
       effective_config_body: null,
-      last_seen_at: row["last_seen_at"] as number,
-      connected_at: row["connected_at"] as number,
-      agent_description: row["agent_description"] as string | null,
-      capabilities: (row["capabilities"] as number) ?? 0,
-      component_health_map: row["component_health_map"]
-        ? (safeJsonParse(row["component_health_map"]) as Record<string, unknown>)
+      last_seen_at: row.last_seen_at,
+      connected_at: row.connected_at,
+      agent_description: row.agent_description,
+      capabilities: row.capabilities ?? 0,
+      component_health_map: row.component_health_map
+        ? (safeJsonParse(row.component_health_map) as Record<string, unknown>)
         : null,
-      available_components: row["available_components"]
-        ? (safeJsonParse(row["available_components"]) as Record<string, unknown>)
+      available_components: row.available_components
+        ? (safeJsonParse(row.available_components) as Record<string, unknown>)
         : null,
-      config_fail_count: (row["config_fail_count"] as number) ?? 0,
-      config_last_failed_hash: row["config_last_failed_hash"]
-        ? hexToUint8Array(row["config_last_failed_hash"] as string)
+      config_fail_count: row.config_fail_count ?? 0,
+      config_last_failed_hash: row.config_last_failed_hash
+        ? hexToUint8Array(row.config_last_failed_hash)
         : null,
     };
   }
@@ -612,14 +712,26 @@ export function updateAgentPartial(
   sql.exec(`UPDATE agents SET ${setClauses.join(", ")} WHERE instance_uid = ?`, ...params);
 }
 export function getAgentCount(sql: SqlStorage): number {
-  return sql.exec("SELECT COUNT(*) as count FROM agents").one()["count"] as number;
+  // sql.fn.countAll() compiles to COUNT(*) — no raw SQL needed.
+  const compiled = doDb
+    .selectFrom("agents")
+    .select(doDb.fn.countAll<number>().as("count"))
+    .compile();
+  const row = execQueryOne<{ count: number }>(sql, compiled);
+  return row?.count ?? 0;
 }
 
 /**
  * Check if a specific agent exists.
  */
 export function agentExists(sql: SqlStorage, instanceUid: string): boolean {
-  return sql.exec("SELECT 1 FROM agents WHERE instance_uid = ?", instanceUid).toArray().length > 0;
+  const compiled = doDb
+    .selectFrom("agents")
+    .select(doDb.fn.countAll<number>().as("cnt"))
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  const row = execQueryOne<{ cnt: number }>(sql, compiled);
+  return (row?.cnt ?? 0) > 0;
 }
 
 /**
@@ -627,11 +739,13 @@ export function agentExists(sql: SqlStorage, instanceUid: string): boolean {
  * Used to increment on reconnect.
  */
 export function getAgentGeneration(sql: SqlStorage, instanceUid: string): number {
-  const rows = sql
-    .exec("SELECT generation FROM agents WHERE instance_uid = ?", instanceUid)
-    .toArray();
-  if (rows.length === 0) return 0;
-  return (rows[0]!["generation"] as number) ?? 0;
+  const compiled = doDb
+    .selectFrom("agents")
+    .select("generation")
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  const row = execQueryOne<Pick<AgentsTable, "generation">>(sql, compiled);
+  return row?.generation ?? 0;
 }
 
 /**
@@ -662,18 +776,26 @@ export function markDisconnected(
   sequenceNum?: number,
 ): void {
   if (sequenceNum !== undefined) {
-    sql.exec(
-      `UPDATE agents SET status = 'disconnected', last_seen_at = ?, sequence_num = ? WHERE instance_uid = ?`,
-      lastSeenAt ?? Date.now(),
-      sequenceNum,
-      instanceUid,
-    );
+    const compiled = doDb
+      .updateTable("agents")
+      .set({
+        status: "disconnected",
+        last_seen_at: lastSeenAt ?? Date.now(),
+        sequence_num: sequenceNum,
+      })
+      .where("instance_uid", "=", instanceUid)
+      .compile();
+    execMutation(sql, compiled);
   } else {
-    sql.exec(
-      `UPDATE agents SET status = 'disconnected', last_seen_at = ? WHERE instance_uid = ?`,
-      lastSeenAt ?? Date.now(),
-      instanceUid,
-    );
+    const compiled = doDb
+      .updateTable("agents")
+      .set({
+        status: "disconnected",
+        last_seen_at: lastSeenAt ?? Date.now(),
+      })
+      .where("instance_uid", "=", instanceUid)
+      .compile();
+    execMutation(sql, compiled);
   }
 }
 
@@ -1035,11 +1157,13 @@ export function sweepStaleAgents(
  */
 export function autoUnenrollStaleAgents(sql: SqlStorage, days: number): number {
   const cutoffMs = Date.now() - days * 86_400_000;
-  const result = sql.exec(
-    `DELETE FROM agents WHERE status = 'disconnected' AND last_seen_at > 0 AND last_seen_at < ?`,
-    cutoffMs,
-  );
-  return result.rowsWritten;
+  const compiled = doDb
+    .deleteFrom("agents")
+    .where("status", "=", "disconnected")
+    .where("last_seen_at", ">", 0)
+    .where("last_seen_at", "<", cutoffMs)
+    .compile();
+  return execMutationCount(sql, compiled);
 }
 
 // ─── Alarm Sweep Tracking ───────────────────────────────────────────
@@ -1072,30 +1196,33 @@ export function recordSweep(sql: SqlStorage, result: SweepResult): void {
 }
 
 export function getSweepStats(sql: SqlStorage): SweepStats {
-  const row = sql
-    .exec(
-      `SELECT
-        last_sweep_at,
-        last_sweep_stale_count,
-        last_sweep_active_socket_count,
-        last_sweep_duration_ms,
-        last_stale_sweep_at,
-        total_sweeps,
-        total_stale_swept,
-        sweeps_with_stale
-       FROM do_config WHERE id = 1`,
-    )
-    .one();
-  return {
-    last_sweep_at: row["last_sweep_at"] as number,
-    last_sweep_stale_count: row["last_sweep_stale_count"] as number,
-    last_sweep_active_socket_count: row["last_sweep_active_socket_count"] as number,
-    last_sweep_duration_ms: row["last_sweep_duration_ms"] as number,
-    last_stale_sweep_at: row["last_stale_sweep_at"] as number,
-    total_sweeps: row["total_sweeps"] as number,
-    total_stale_swept: row["total_stale_swept"] as number,
-    sweeps_with_stale: row["sweeps_with_stale"] as number,
-  };
+  const compiled = doDb
+    .selectFrom("do_config")
+    .select([
+      "last_sweep_at",
+      "last_sweep_stale_count",
+      "last_sweep_active_socket_count",
+      "last_sweep_duration_ms",
+      "last_stale_sweep_at",
+      "total_sweeps",
+      "total_stale_swept",
+      "sweeps_with_stale",
+    ])
+    .where("id", "=", 1)
+    .compile();
+  const row = execQueryOne<SweepStats>(sql, compiled);
+  return (
+    row ?? {
+      last_sweep_at: 0,
+      last_sweep_stale_count: 0,
+      last_sweep_active_socket_count: 0,
+      last_sweep_duration_ms: 0,
+      last_stale_sweep_at: 0,
+      total_sweeps: 0,
+      total_stale_swept: 0,
+      sweeps_with_stale: 0,
+    }
+  );
 }
 
 // ─── Pending Devices (DO-local SQLite for __pending__ DOs) ─────────────
@@ -1174,23 +1301,24 @@ export function upsertPendingDevice(
 }
 
 export function getPendingDevice(sql: SqlStorage, instanceUid: string): PendingDeviceInfo | null {
-  const row = sql
-    .exec(`SELECT * FROM pending_devices WHERE instance_uid = ?`, instanceUid)
-    .toArray()[0];
-  if (!row) return null;
-  return {
-    instance_uid: row["instance_uid"] as string,
-    tenant_id: row["tenant_id"] as string,
-    display_name: row["display_name"] as string | null,
-    source_ip: row["source_ip"] as string | null,
-    geo_country: row["geo_country"] as string | null,
-    geo_city: row["geo_city"] as string | null,
-    geo_lat: row["geo_lat"] as number | null,
-    geo_lon: row["geo_lon"] as number | null,
-    agent_description: row["agent_description"] as string | null,
-    connected_at: row["connected_at"] as number,
-    last_seen_at: row["last_seen_at"] as number,
-  };
+  const compiled = doDb
+    .selectFrom("pending_devices")
+    .select([
+      "instance_uid",
+      "tenant_id",
+      "display_name",
+      "source_ip",
+      "geo_country",
+      "geo_city",
+      "geo_lat",
+      "geo_lon",
+      "agent_description",
+      "connected_at",
+      "last_seen_at",
+    ])
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  return execQueryOne<PendingDeviceInfo>(sql, compiled);
 }
 
 export function listPendingDevices(
@@ -1198,26 +1326,26 @@ export function listPendingDevices(
   tenantId: string,
   limit = 100,
 ): PendingDeviceInfo[] {
-  const rows = sql
-    .exec(
-      `SELECT * FROM pending_devices WHERE tenant_id = ? ORDER BY last_seen_at DESC LIMIT ?`,
-      tenantId,
-      limit,
-    )
-    .toArray();
-  return rows.map((row) => ({
-    instance_uid: row["instance_uid"] as string,
-    tenant_id: row["tenant_id"] as string,
-    display_name: row["display_name"] as string | null,
-    source_ip: row["source_ip"] as string | null,
-    geo_country: row["geo_country"] as string | null,
-    geo_city: row["geo_city"] as string | null,
-    geo_lat: row["geo_lat"] as number | null,
-    geo_lon: row["geo_lon"] as number | null,
-    agent_description: row["agent_description"] as string | null,
-    connected_at: row["connected_at"] as number,
-    last_seen_at: row["last_seen_at"] as number,
-  }));
+  const compiled = doDb
+    .selectFrom("pending_devices")
+    .select([
+      "instance_uid",
+      "tenant_id",
+      "display_name",
+      "source_ip",
+      "geo_country",
+      "geo_city",
+      "geo_lat",
+      "geo_lon",
+      "agent_description",
+      "connected_at",
+      "last_seen_at",
+    ])
+    .where("tenant_id", "=", tenantId)
+    .orderBy("last_seen_at", "desc")
+    .limit(limit)
+    .compile();
+  return execQuery<PendingDeviceInfo>(sql, compiled);
 }
 
 // Deletes only the pending_devices row. pending_assignments has its own
@@ -1225,7 +1353,11 @@ export function listPendingDevices(
 // outlive deletePendingDevice on the assign path. Use deletePendingAssignment
 // (below) when you also need to drop the assignment row.
 export function deletePendingDevice(sql: SqlStorage, instanceUid: string): void {
-  sql.exec(`DELETE FROM pending_devices WHERE instance_uid = ?`, instanceUid);
+  const compiled = doDb
+    .deleteFrom("pending_devices")
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  execMutation(sql, compiled);
 }
 
 export function upsertPendingAssignment(
@@ -1257,21 +1389,20 @@ export function getPendingAssignment(
   sql: SqlStorage,
   instanceUid: string,
 ): PendingAssignment | null {
-  const row = sql
-    .exec(`SELECT * FROM pending_assignments WHERE instance_uid = ?`, instanceUid)
-    .toArray()[0];
-  if (!row) return null;
-  return {
-    instance_uid: row["instance_uid"] as string,
-    tenant_id: row["tenant_id"] as string,
-    target_config_id: row["target_config_id"] as string,
-    assigned_at: row["assigned_at"] as number,
-    assigned_by: row["assigned_by"] as string | null,
-  };
+  const compiled = doDb
+    .selectFrom("pending_assignments")
+    .selectAll()
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  return execQueryOne<PendingAssignment>(sql, compiled);
 }
 
 export function deletePendingAssignment(sql: SqlStorage, instanceUid: string): void {
-  sql.exec(`DELETE FROM pending_assignments WHERE instance_uid = ?`, instanceUid);
+  const compiled = doDb
+    .deleteFrom("pending_assignments")
+    .where("instance_uid", "=", instanceUid)
+    .compile();
+  execMutation(sql, compiled);
 }
 
 /**

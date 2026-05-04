@@ -6,6 +6,7 @@ import type {
   $ZodIssueInvalidStringFormat,
 } from "zod/v4/core";
 import type { ValidationErrorDetail } from "@o11yfleet/core/api";
+import { zValidator } from "@hono/zod-validator";
 import { ApiError, parseJsonBody } from "./errors.js";
 
 export class ValidationError extends ApiError {
@@ -28,7 +29,22 @@ export async function validateJsonBody<Schema extends z.ZodTypeAny>(
   return parsed.data;
 }
 
-function validationErrorFromZod(error: z.ZodError): ValidationError {
+/**
+ * Hono middleware that validates JSON request bodies using the given Zod schema.
+ * On failure, throws a ValidationError matching our existing API error format.
+ * Usage: `app.post('/path', jsonValidator(schema), (c) => { const body = c.req.valid('json'); })`
+ */
+export function jsonValidator<T extends z.ZodTypeAny>(schema: T) {
+  return zValidator("json", schema, (result) => {
+    if (!result.success) {
+      throw validationErrorFromZod(result.error);
+    }
+  });
+}
+
+function validationErrorFromZod(error: {
+  readonly issues: readonly z.ZodIssue[];
+}): ValidationError {
   const issue = error.issues[0];
   if (!issue) {
     return new ValidationError("Invalid request body", "body", "invalid_value");

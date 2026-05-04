@@ -149,6 +149,28 @@ export interface DebugQueryResult {
   response_bytes_estimate?: number;
 }
 
+// ─── Compatibility check types ─────────────────────────────────────
+
+export interface CheckCompatibilityParams {
+  yamlConfig: string;
+  override?: boolean;
+}
+
+export interface CheckCompatibilityResult {
+  compatible: boolean;
+  override: boolean;
+  missingComponents: Array<{ kind: string; name: string }>;
+  compatibleAgents: number;
+  incompatibleAgents: number;
+  unknownAgents: number;
+  totalAgents: number;
+  perGroup: Array<{
+    availableComponents: string;
+    agentCount: number;
+    missingComponents: Array<{ kind: string; name: string }>;
+  }>;
+}
+
 // ─── Pending device types ─────────────────────────────────────────
 
 export interface PendingDevicesResult {

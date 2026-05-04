@@ -7,9 +7,9 @@ import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./origins.js";
 
 /**
  * Build CORS headers from an already-extracted origin string.
- * Preferred in Hono middleware where the origin is already available from context.
+ * Used internally by getCorsHeaders; Hono apps use hono/cors middleware instead.
  */
-export function getCorsHeadersForOrigin(origin: string, env: Env): Record<string, string> {
+function getCorsHeadersForOrigin(origin: string, env: Env): Record<string, string> {
   const allowed = isAllowedCorsOrigin(origin, env.ENVIRONMENT);
   return {
     "Access-Control-Allow-Origin": allowed ? origin : PRODUCTION_ORIGINS[0]!,

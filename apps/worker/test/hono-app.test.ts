@@ -35,12 +35,12 @@ describe("Hono v1App", () => {
   it("sets CORS headers on responses", async () => {
     const res = await v1App.request(
       "/api/v1/tenant",
-      { headers: { Origin: "https://o11yfleet-site.pages.dev" } },
+      { headers: { Origin: "https://app.o11yfleet.com" } },
       stubEnv(),
       stubCtx(),
     );
-    expect(res.headers.get("Access-Control-Allow-Origin")).toBeTruthy();
-    expect(res.headers.get("Vary")).toBe("Origin");
+    expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://app.o11yfleet.com");
+    expect(res.headers.get("Vary")).toContain("Origin");
   });
 
   it("sets security headers on responses", async () => {

@@ -1,6 +1,7 @@
 // Configuration CRUD, versions, YAML content, and diff routes
 
 import { Hono } from "hono";
+import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { V1Env } from "./shared.js";
 import { withAudit, withAuditCreate, getOwnedConfig } from "./shared.js";
@@ -19,7 +20,7 @@ import {
 import type { AuditCreateResult } from "../../audit/recorder.js";
 import { jsonError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
-import { validateJsonBody } from "../../shared/validation.js";
+import { jsonValidator } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { diffLines } from "diff";
 import { getDb } from "../../db/client.js";
@@ -34,12 +35,10 @@ export async function handleListConfigurations(env: Env, tenantId: string): Prom
 }
 
 export async function handleCreateConfiguration(
-  request: Request,
+  body: z.output<typeof createConfigurationRequestSchema>,
   env: Env,
   tenantId: string,
 ): Promise<AuditCreateResult> {
-  const body = await validateJsonBody(request, createConfigurationRequestSchema);
-
   const id = crypto.randomUUID();
   // Atomic create-with-quota check via INSERT ... SELECT. Splitting this
   // into a separate count + insert would be racy under concurrent creates;
@@ -136,7 +135,7 @@ export async function handleGetConfiguration(
 }
 
 export async function handleUpdateConfiguration(
-  request: Request,
+  body: z.output<typeof updateConfigurationRequestSchema>,
   env: Env,
   tenantId: string,
   configId: string,
@@ -144,7 +143,6 @@ export async function handleUpdateConfiguration(
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
 
-  const body = await validateJsonBody(request, updateConfigurationRequestSchema);
   const set: {
     name?: string;
     description?: string | null;
@@ -439,12 +437,13 @@ configRoutes.get("/configurations", async (c) => {
   return handleListConfigurations(c.env, c.get("tenantId"));
 });
 
-configRoutes.post("/configurations", async (c) => {
+configRoutes.post("/configurations", jsonValidator(createConfigurationRequestSchema), async (c) => {
   const audit = c.get("audit");
+  const body = c.req.valid("json");
   return withAuditCreate(
     audit,
     { action: "configuration.create", resource_type: "configuration" },
-    () => handleCreateConfiguration(c.req.raw, c.env, c.get("tenantId")),
+    () => handleCreateConfiguration(body, c.env, c.get("tenantId")),
   );
 });
 
@@ -452,14 +451,19 @@ configRoutes.get("/configurations/:id", async (c) => {
   return handleGetConfiguration(c.env, c.get("tenantId"), c.req.param("id"));
 });
 
-configRoutes.put("/configurations/:id", async (c) => {
-  const configId = c.req.param("id");
-  return withAudit(
-    c.get("audit"),
-    { action: "configuration.update", resource_type: "configuration", resource_id: configId },
-    () => handleUpdateConfiguration(c.req.raw, c.env, c.get("tenantId"), configId),
-  );
-});
+configRoutes.put(
+  "/configurations/:id",
+  jsonValidator(updateConfigurationRequestSchema),
+  async (c) => {
+    const configId = c.req.param("id");
+    const body = c.req.valid("json");
+    return withAudit(
+      c.get("audit"),
+      { action: "configuration.update", resource_type: "configuration", resource_id: configId },
+      () => handleUpdateConfiguration(body, c.env, c.get("tenantId"), configId),
+    );
+  },
+);
 
 configRoutes.delete("/configurations/:id", async (c) => {
   const configId = c.req.param("id");

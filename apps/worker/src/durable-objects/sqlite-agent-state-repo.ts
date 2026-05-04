@@ -12,7 +12,7 @@ import type {
   SweepStats,
 } from "./agent-state-repo-interface.js";
 import {
-  initSchema,
+  runMigrations,
   loadAgentState,
   saveAgentState,
   updateAgentPartial,
@@ -41,7 +41,7 @@ export class SqliteAgentStateRepo implements AgentStateRepository {
   constructor(private readonly sql: SqlStorage) {}
 
   initSchema(): void {
-    initSchema(this.sql);
+    runMigrations(this.sql);
   }
 
   loadAgentState(

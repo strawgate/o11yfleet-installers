@@ -126,10 +126,8 @@ describe("Tiered Persistence", () => {
     await runInDurableObject(stub, async (instance: ConfigDurableObject) => {
       const sql = instance.ctx.storage.sql;
       // Trigger schema initialization
-      const { initSchema } = await import("../src/durable-objects/agent-state-repo.js");
-      initSchema(sql);
-
-      // Verify no indexes exist on agents table
+      const { runMigrations } = await import("../src/durable-objects/agent-state-repo.js");
+      runMigrations(sql);
       const indexes = sql
         .exec(`SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name = 'agents'`)
         .toArray();
@@ -147,8 +145,8 @@ describe("Tiered Persistence", () => {
 
     await runInDurableObject(stub, async (instance: ConfigDurableObject) => {
       const sql = instance.ctx.storage.sql;
-      const { initSchema } = await import("../src/durable-objects/agent-state-repo.js");
-      initSchema(sql);
+      const { runMigrations } = await import("../src/durable-objects/agent-state-repo.js");
+      runMigrations(sql);
 
       const cols = sql.exec(`PRAGMA table_info(agents)`).toArray();
       const colNames = cols.map((c) => c["name"] as string);
@@ -212,9 +210,9 @@ describe("Tiered Persistence", () => {
         .filter((i) => !(i["name"] as string).startsWith("sqlite_autoindex"));
       expect(beforeIndexes.length).toBe(3);
 
-      // Run migration via initSchema (which calls migrateSchema)
-      const { initSchema } = await import("../src/durable-objects/agent-state-repo.js");
-      initSchema(sql);
+      // Run migrations (V7 drops legacy indexes)
+      const { runMigrations } = await import("../src/durable-objects/agent-state-repo.js");
+      runMigrations(sql);
 
       // Verify indexes are dropped after migration
       const afterIndexes = sql

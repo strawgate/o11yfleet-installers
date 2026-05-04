@@ -1,6 +1,7 @@
 // Enrollment token lifecycle routes
 
 import { Hono } from "hono";
+import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { V1Env } from "./shared.js";
 import { withAudit, withAuditCreate, getOwnedConfig } from "./shared.js";
@@ -12,7 +13,7 @@ import { generateEnrollmentToken, hashEnrollmentToken } from "@o11yfleet/core/au
 import type { AuditCreateResult } from "../../audit/recorder.js";
 import { jsonError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
-import { validateJsonBody } from "../../shared/validation.js";
+import { jsonValidator } from "../../shared/validation.js";
 import { sql } from "kysely";
 import { getDb } from "../../db/client.js";
 import { findTenantById } from "../../shared/db-helpers.js";
@@ -21,7 +22,7 @@ import { PLAN_DEFINITIONS, normalizePlan } from "../../shared/plans.js";
 // ─── Handlers ───────────────────────────────────────────────────────
 
 export async function handleCreateEnrollmentToken(
-  request: Request,
+  body: z.output<typeof createEnrollmentTokenRequestSchema>,
   env: Env,
   tenantId: string,
   configId: string,
@@ -43,8 +44,6 @@ export async function handleCreateEnrollmentToken(
       resource_id: null,
     };
   }
-
-  const body = await validateJsonBody(request, createEnrollmentTokenRequestSchema);
 
   let expiresInSeconds: number | undefined;
   if (body.expires_in_hours !== null && body.expires_in_hours !== undefined) {
@@ -154,18 +153,23 @@ export async function handleRevokeEnrollmentToken(
 
 export const enrollmentTokenRoutes = new Hono<V1Env>();
 
-enrollmentTokenRoutes.post("/configurations/:id/enrollment-token", async (c) => {
-  const configId = c.req.param("id");
-  return withAuditCreate(
-    c.get("audit"),
-    {
-      action: "enrollment_token.create",
-      resource_type: "enrollment_token",
-      metadata: { config_id: configId },
-    },
-    () => handleCreateEnrollmentToken(c.req.raw, c.env, c.get("tenantId"), configId),
-  );
-});
+enrollmentTokenRoutes.post(
+  "/configurations/:id/enrollment-token",
+  jsonValidator(createEnrollmentTokenRequestSchema),
+  async (c) => {
+    const configId = c.req.param("id");
+    const body = c.req.valid("json");
+    return withAuditCreate(
+      c.get("audit"),
+      {
+        action: "enrollment_token.create",
+        resource_type: "enrollment_token",
+        metadata: { config_id: configId },
+      },
+      () => handleCreateEnrollmentToken(body, c.env, c.get("tenantId"), configId),
+    );
+  },
+);
 
 enrollmentTokenRoutes.get("/configurations/:id/enrollment-tokens", async (c) => {
   return handleListEnrollmentTokens(c.env, c.get("tenantId"), c.req.param("id"));

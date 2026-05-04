@@ -12,7 +12,8 @@ import {
   type AuthSeedResponse,
 } from "@o11yfleet/core/api";
 import { typedJsonResponse } from "../shared/responses.js";
-import { base64urlDecode, base64urlEncode } from "@o11yfleet/core/auth";
+import { base64urlEncode } from "@o11yfleet/core/auth";
+import { SignJWT, jwtVerify } from "jose";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits, normalizePlan, type PlanId } from "../shared/plans.js";
 import { ApiError, jsonApiError, jsonError } from "../shared/errors.js";
@@ -34,13 +35,13 @@ import {
   type AuditContext,
 } from "../audit/recorder.js";
 import { SESSION_TTL_MS, generateSessionId } from "../shared/sessions.js";
+import { parse as parseCookies } from "cookie";
+import { GitHub as ArcticGitHub, OAuth2RequestError } from "arctic";
 
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const OAUTH_STATE_COOKIE = "fp_oauth_state";
 const GITHUB_API_VERSION = "2026-03-10";
 const SELF_SERVICE_PLANS = new Set<PlanId>(["hobby", "pro", "starter", "growth"]);
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 interface OAuthState {
   v: 1;
@@ -48,14 +49,6 @@ interface OAuthState {
   nonce: string;
   plan?: PlanId;
   returnTo?: string;
-  iat: number;
-  exp: number;
-}
-
-interface GitHubTokenResponse {
-  access_token?: string;
-  error?: string;
-  error_description?: string;
 }
 
 interface GitHubUser {
@@ -124,30 +117,17 @@ function randomBase64url(byteLength = 32): string {
 function getCookie(request: Request, name: string): string | null {
   const header = request.headers.get("Cookie");
   if (!header) return null;
-  const match = header.match(new RegExp(`(?:^|;\\s*)${name}=([^;]*)`));
-  return match ? decodeURIComponent(match[1]!) : null;
-}
-
-const hmacKeyPromiseCache = new Map<string, Promise<CryptoKey>>();
-
-async function hmacKey(secret: string): Promise<CryptoKey> {
-  let promise = hmacKeyPromiseCache.get(secret);
-  if (promise) return promise;
-  promise = crypto.subtle.importKey(
-    "raw",
-    encoder.encode(secret),
-    { name: "HMAC", hash: "SHA-256" },
-    false,
-    ["sign", "verify"],
-  );
-  hmacKeyPromiseCache.set(secret, promise);
-  return promise;
+  const cookies = parseCookies(header);
+  return cookies[name] ?? null;
 }
 
 async function signState(state: OAuthState, secret: string): Promise<string> {
-  const payload = base64urlEncode(encoder.encode(JSON.stringify(state)));
-  const sig = await crypto.subtle.sign("HMAC", await hmacKey(secret), encoder.encode(payload));
-  return `${payload}.${base64urlEncode(new Uint8Array(sig))}`;
+  const key = new TextEncoder().encode(secret);
+  return new SignJWT({ ...state })
+    .setProtectedHeader({ alg: "HS256" })
+    .setIssuedAt()
+    .setExpirationTime("10m")
+    .sign(key);
 }
 
 async function verifyState(
@@ -155,18 +135,10 @@ async function verifyState(
   secret: string,
   kind: OAuthState["kind"],
 ): Promise<OAuthState> {
-  const [payload, signature, extra] = token.split(".");
-  if (!payload || !signature || extra) throw new Error("Invalid state");
-  const valid = await crypto.subtle.verify(
-    "HMAC",
-    await hmacKey(secret),
-    base64urlDecode(signature),
-    encoder.encode(payload),
-  );
-  if (!valid) throw new Error("Invalid state signature");
-  const state = JSON.parse(decoder.decode(base64urlDecode(payload))) as OAuthState;
+  const key = new TextEncoder().encode(secret);
+  const { payload } = await jwtVerify(token, key);
+  const state = payload as unknown as OAuthState;
   if (state.v !== 1 || state.kind !== kind) throw new Error("Invalid state kind");
-  if (state.exp < Date.now()) throw new Error("State expired");
   return state;
 }
 
@@ -551,7 +523,8 @@ async function handleMe(request: Request, env: Env): Promise<Response> {
 
 async function handleGitHubStart(request: Request, env: Env): Promise<Response> {
   const clientId = githubClientId(env);
-  if (!clientId) {
+  const clientSecret = githubClientSecret(env);
+  if (!clientId || !clientSecret) {
     return githubAuthNotConfiguredResponse(request, env, "GitHub App client ID is not configured", {
       code: "github_auth_not_configured",
     });
@@ -568,15 +541,11 @@ async function handleGitHubStart(request: Request, env: Env): Promise<Response> 
     nonce: randomBase64url(24),
     plan,
     returnTo: safeReturnTo(url.searchParams.get("return_to"), siteOrigin, fallbackPath),
-    iat: Date.now(),
-    exp: Date.now() + OAUTH_STATE_TTL_MS,
   };
   const signedState = await signState(state, env.O11YFLEET_CLAIM_HMAC_SECRET);
   const callbackUrl = `${requestOrigin(request)}/auth/github/callback`;
-  const authorizeUrl = new URL("https://github.com/login/oauth/authorize");
-  authorizeUrl.searchParams.set("client_id", clientId);
-  authorizeUrl.searchParams.set("redirect_uri", callbackUrl);
-  authorizeUrl.searchParams.set("state", signedState);
+  const github = new ArcticGitHub(clientId, clientSecret, callbackUrl);
+  const authorizeUrl = github.createAuthorizationURL(signedState, ["user:email"]);
 
   return new Response(null, {
     status: 302,
@@ -622,14 +591,21 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
     return jsonError("Invalid GitHub login cookie", 400);
   }
 
-  const token = await exchangeGitHubCode(
-    code,
-    clientId,
-    clientSecret,
-    `${requestOrigin(request)}/auth/github/callback`,
-  );
-  const profile = await fetchGitHubProfile(token);
-  const email = await fetchGitHubPrimaryEmail(token);
+  const callbackUrl = `${requestOrigin(request)}/auth/github/callback`;
+  const github = new ArcticGitHub(clientId, clientSecret, callbackUrl);
+  let accessToken: string;
+  try {
+    const tokens = await github.validateAuthorizationCode(code);
+    accessToken = tokens.accessToken();
+  } catch (err) {
+    const message =
+      err instanceof OAuth2RequestError
+        ? (err.description ?? err.code)
+        : "GitHub token exchange failed";
+    throw new ApiError(message, 502);
+  }
+  const profile = await fetchGitHubProfile(accessToken);
+  const email = await fetchGitHubPrimaryEmail(accessToken);
   const user = await findOrCreateGitHubUser(env, profile, email, state.plan ?? "starter");
 
   // Fetch tenant status for the response
@@ -649,36 +625,6 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
     { ...user, tenant_status: tenantStatus },
     tenantStatus === "pending" ? undefined : state.returnTo,
   );
-}
-
-async function exchangeGitHubCode(
-  code: string,
-  clientId: string,
-  clientSecret: string,
-  redirectUri: string,
-): Promise<string> {
-  const body = new URLSearchParams({
-    client_id: clientId,
-    client_secret: clientSecret,
-    code,
-    redirect_uri: redirectUri,
-  });
-  const res = await fetch("https://github.com/login/oauth/access_token", {
-    method: "POST",
-    headers: {
-      Accept: "application/json",
-      "Content-Type": "application/x-www-form-urlencoded",
-    },
-    body,
-  });
-  const parsed = (await res.json()) as GitHubTokenResponse;
-  if (!res.ok || !parsed.access_token) {
-    throw new ApiError(
-      parsed.error_description ?? parsed.error ?? "GitHub token exchange failed",
-      502,
-    );
-  }
-  return parsed.access_token;
 }
 
 async function fetchGitHubProfile(token: string): Promise<GitHubUser> {
@@ -850,8 +796,6 @@ async function handleGitHubManifestStart(request: Request, env: Env): Promise<Re
     v: 1,
     kind: "github_manifest",
     nonce: randomBase64url(24),
-    iat: Date.now(),
-    exp: Date.now() + OAUTH_STATE_TTL_MS,
   };
   const signedState = await signState(state, env.O11YFLEET_CLAIM_HMAC_SECRET);
   // Canonical manifest lives in infra/github-app/o11yfleet.json so the

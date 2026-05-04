@@ -7,13 +7,17 @@
 // Architecture:
 //   index.ts handleRequest()
 //     └─ /api/admin/*  →  adminApp.fetch(request, env, ctx)
+//         ├─ middleware: secureHeaders (hono built-in)
+//         ├─ middleware: cors (hono built-in, origin allowlist)
 //         ├─ middleware: CSRF guard
 //         ├─ middleware: admin auth (session role=admin OR OIDC for POST /tenants)
-//         ├─ middleware: CORS + security headers (after handler)
 //         ├─ onError: ApiError / AiApiError → JSON
 //         └─ adminRouter: all /api/admin/* route handlers
 
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import type { Env } from "./index.js";
 import type { AuditContext } from "./audit/recorder.js";
 import { adminRouter } from "./routes/admin/index.js";
@@ -23,12 +27,8 @@ import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/o
 import { timingSafeEqual } from "./utils/crypto.js";
 import { ApiError } from "./shared/errors.js";
 import { AiApiError } from "./ai/guidance.js";
-import {
-  getCorsHeadersForOrigin as getCorsHeaders,
-  addSecurityHeaders,
-  CSRF_SAFE_METHODS,
-  isTrustedOrigin,
-} from "./shared/http.js";
+import { CSRF_SAFE_METHODS, isTrustedOrigin } from "./shared/http.js";
+import { isAllowedCorsOrigin } from "./shared/origins.js";
 
 /** Hono context variables set by admin middleware, available to all handlers. */
 export interface AdminAppVariables {
@@ -39,17 +39,12 @@ export interface AdminAppVariables {
 function jsonErrorResponse(
   message: string,
   status: number,
-  origin: string,
-  env: Env,
   extra?: Record<string, unknown>,
 ): Response {
-  const corsHeaders = getCorsHeaders(origin, env);
-  return addSecurityHeaders(
-    new Response(JSON.stringify({ error: message, ...extra }), {
-      status,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    }),
-  );
+  return new Response(JSON.stringify({ error: message, ...extra }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // ─── Build the Hono app ─────────────────────────────────────────────
@@ -58,17 +53,38 @@ type AdminHonoEnv = { Bindings: Env; Variables: AdminAppVariables };
 
 const app = new Hono<AdminHonoEnv>();
 
+// ─── Security + CORS middleware (hono built-in) ─────────────────────
+
+app.use(
+  "*",
+  secureHeaders({
+    strictTransportSecurity: "max-age=63072000; includeSubDomains",
+    xFrameOptions: "DENY",
+    referrerPolicy: "strict-origin-when-cross-origin",
+    permissionsPolicy: { camera: [], microphone: [], geolocation: [] },
+  }),
+);
+
+app.use(
+  "*",
+  cors({
+    origin: (origin, c) => {
+      return isAllowedCorsOrigin(origin, c.env.ENVIRONMENT) ? origin : null;
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Tenant-Id", "X-Request-Id"],
+    exposeHeaders: ["X-Request-Id"],
+    credentials: true,
+    maxAge: 86400,
+  }),
+);
+
 // ─── CSRF guard ─────────────────────────────────────────────────────
 
 app.use("*", async (c, next) => {
   const hasCookie = /(?:^|;\s*)fp_session=/.test(c.req.header("Cookie") ?? "");
   if (!CSRF_SAFE_METHODS.has(c.req.method) && hasCookie && !isTrustedOrigin(c.req.raw, c.env)) {
-    return jsonErrorResponse(
-      "Forbidden — origin not allowed",
-      403,
-      c.req.header("Origin") ?? "",
-      c.env,
-    );
+    return jsonErrorResponse("Forbidden — origin not allowed", 403);
   }
   return next();
 });
@@ -76,8 +92,6 @@ app.use("*", async (c, next) => {
 // ─── Admin auth middleware ───────────────────────────────────────────
 
 app.use("*", async (c, next) => {
-  const origin = c.req.header("Origin") ?? "";
-
   // Session auth (cookie) — non-fatal if D1 is overloaded
   let sessionAuth: Awaited<ReturnType<typeof authenticate>> = null;
   try {
@@ -122,7 +136,7 @@ app.use("*", async (c, next) => {
       : oidcClaims
         ? { error: "OIDC scope insufficient", code: "oidc_scope_insufficient" }
         : { error: "Admin access required", oidc_error: oidcError };
-    return jsonErrorResponse(body.error, 403, origin, c.env, body);
+    return jsonErrorResponse(body.error, 403, body);
   }
 
   // Build audit actor
@@ -140,35 +154,24 @@ app.use("*", async (c, next) => {
   return next();
 });
 
-// ─── CORS + security headers (after handler) ────────────────────────
-
-app.use("*", async (c, next) => {
-  await next();
-
-  const origin = c.req.header("Origin") ?? "";
-  const corsHeaders = getCorsHeaders(origin, c.env);
-  for (const [k, v] of Object.entries(corsHeaders)) {
-    c.res.headers.set(k, v);
-  }
-  addSecurityHeaders(c.res);
-});
-
 // ─── Error handling ─────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  const origin = c.req.header("Origin") ?? "";
   if (err instanceof ApiError) {
-    return jsonErrorResponse(err.message, err.status, origin, c.env, {
+    return jsonErrorResponse(err.message, err.status, {
       ...(err.code ? { code: err.code } : {}),
       ...(err.field ? { field: err.field } : {}),
       ...(err.detail ? { detail: err.detail } : {}),
     });
   }
   if (err instanceof AiApiError) {
-    return jsonErrorResponse(err.message, err.status, origin, c.env);
+    return jsonErrorResponse(err.message, err.status);
+  }
+  if (err instanceof HTTPException) {
+    return jsonErrorResponse(err.message, err.status);
   }
   console.error("Admin API error:", c.req.path, err);
-  return jsonErrorResponse("Internal server error", 500, origin, c.env);
+  return jsonErrorResponse("Internal server error", 500);
 });
 
 // ─── Mount admin route group under /api/admin ───────────────────────

@@ -1,6 +1,7 @@
 // Tenant CRUD, team, overview, audit logs, and AI guidance routes
 
 import { Hono } from "hono";
+import type { z } from "zod";
 import type { Env } from "../../index.js";
 import type { V1Env } from "./shared.js";
 import { withAudit } from "./shared.js";
@@ -16,7 +17,7 @@ import {
 import { handleTenantGuidanceRequest, handleTenantChatRequest } from "../../ai/guidance.js";
 import { jsonError } from "../../shared/errors.js";
 import { typedJsonResponse } from "../../shared/responses.js";
-import { validateJsonBody } from "../../shared/validation.js";
+import { jsonValidator } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
 import { getDb } from "../../db/client.js";
 import { compileForBatch } from "../../db/queries.js";
@@ -90,11 +91,10 @@ export async function handleDeleteTenant(env: Env, tenantId: string): Promise<Re
 }
 
 export async function handleUpdateTenant(
-  request: Request,
+  body: z.output<typeof updateTenantRequestSchema>,
   env: Env,
   tenantId: string,
 ): Promise<Response> {
-  const body = await validateJsonBody(request, updateTenantRequestSchema);
   const set: {
     name?: string;
     geo_enabled?: 0 | 1;
@@ -232,13 +232,14 @@ tenantRoutes.get("/tenant", async (c) => {
   return handleGetTenant(c.env, c.get("tenantId"));
 });
 
-tenantRoutes.put("/tenant", async (c) => {
+tenantRoutes.put("/tenant", jsonValidator(updateTenantRequestSchema), async (c) => {
   const audit = c.get("audit");
   const tenantId = c.get("tenantId");
+  const body = c.req.valid("json");
   return withAudit(
     audit,
     { action: "tenant.update", resource_type: "tenant", resource_id: tenantId },
-    () => handleUpdateTenant(c.req.raw, c.env, tenantId),
+    () => handleUpdateTenant(body, c.env, tenantId),
   );
 });
 

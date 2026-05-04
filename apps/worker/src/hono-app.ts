@@ -7,13 +7,17 @@
 // Architecture:
 //   index.ts handleRequest()
 //     └─ /api/v1/*  →  v1App.fetch(request, env, ctx)
+//         ├─ middleware: secureHeaders (hono built-in)
+//         ├─ middleware: cors (hono built-in, origin allowlist)
 //         ├─ middleware: CSRF guard
 //         ├─ middleware: auth (resolves tenantId + audit context)
-//         ├─ middleware: CORS + security headers (after handler)
 //         ├─ onError: ApiError / AiApiError → JSON
 //         └─ v1Router: all /api/v1/* route handlers
 
 import { Hono } from "hono";
+import { HTTPException } from "hono/http-exception";
+import { cors } from "hono/cors";
+import { secureHeaders } from "hono/secure-headers";
 import type { Env } from "./index.js";
 import type { AuditContext } from "./audit/recorder.js";
 import { v1Router } from "./routes/v1/index.js";
@@ -23,12 +27,8 @@ import { isApiKey, verifyApiKey } from "@o11yfleet/core/auth";
 import { timingSafeEqual } from "./utils/crypto.js";
 import { ApiError } from "./shared/errors.js";
 import { AiApiError } from "./ai/guidance.js";
-import {
-  getCorsHeadersForOrigin as getCorsHeaders,
-  addSecurityHeaders,
-  CSRF_SAFE_METHODS,
-  isTrustedOrigin,
-} from "./shared/http.js";
+import { CSRF_SAFE_METHODS, isTrustedOrigin } from "./shared/http.js";
+import { isAllowedCorsOrigin } from "./shared/origins.js";
 
 /** Hono context variables set by middleware, available to all handlers. */
 export interface AppVariables {
@@ -41,17 +41,12 @@ export interface AppVariables {
 function jsonErrorResponse(
   message: string,
   status: number,
-  origin: string,
-  env: Env,
   extra?: Record<string, unknown>,
 ): Response {
-  const corsHeaders = getCorsHeaders(origin, env);
-  return addSecurityHeaders(
-    new Response(JSON.stringify({ error: message, ...extra }), {
-      status,
-      headers: { "Content-Type": "application/json", ...corsHeaders },
-    }),
-  );
+  return new Response(JSON.stringify({ error: message, ...extra }), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  });
 }
 
 // ─── Build the Hono app ─────────────────────────────────────────────
@@ -60,17 +55,38 @@ type V1HonoEnv = { Bindings: Env; Variables: AppVariables };
 
 const app = new Hono<V1HonoEnv>();
 
+// ─── Security + CORS middleware (hono built-in) ─────────────────────
+
+app.use(
+  "*",
+  secureHeaders({
+    strictTransportSecurity: "max-age=63072000; includeSubDomains",
+    xFrameOptions: "DENY",
+    referrerPolicy: "strict-origin-when-cross-origin",
+    permissionsPolicy: { camera: [], microphone: [], geolocation: [] },
+  }),
+);
+
+app.use(
+  "*",
+  cors({
+    origin: (origin, c) => {
+      return isAllowedCorsOrigin(origin, c.env.ENVIRONMENT) ? origin : null;
+    },
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization", "X-Tenant-Id", "X-Request-Id"],
+    exposeHeaders: ["X-Request-Id"],
+    credentials: true,
+    maxAge: 86400,
+  }),
+);
+
 // ─── CSRF guard ─────────────────────────────────────────────────────
 
 app.use("*", async (c, next) => {
   const hasCookie = /(?:^|;\s*)fp_session=/.test(c.req.header("Cookie") ?? "");
   if (!CSRF_SAFE_METHODS.has(c.req.method) && hasCookie && !isTrustedOrigin(c.req.raw, c.env)) {
-    return jsonErrorResponse(
-      "Forbidden — origin not allowed",
-      403,
-      c.req.header("Origin") ?? "",
-      c.env,
-    );
+    return jsonErrorResponse("Forbidden — origin not allowed", 403);
   }
   return next();
 });
@@ -84,7 +100,6 @@ app.use("*", async (c, next) => {
 
   const auth = c.req.header("Authorization");
   const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
-  const origin = c.req.header("Origin") ?? "";
 
   if (token) {
     if (isApiKey(token)) {
@@ -93,12 +108,7 @@ app.use("*", async (c, next) => {
         apiKeyTenantId = claim.tenant_id;
         apiKeyJti = claim.jti;
       } catch (err) {
-        return jsonErrorResponse(
-          err instanceof Error ? err.message : "Invalid API key",
-          401,
-          origin,
-          c.env,
-        );
+        return jsonErrorResponse(err instanceof Error ? err.message : "Invalid API key", 401);
       }
     } else if (
       c.env.O11YFLEET_API_BEARER_SECRET &&
@@ -128,7 +138,7 @@ app.use("*", async (c, next) => {
   }
 
   if (!tenantId) {
-    return jsonErrorResponse("Authentication required", 401, origin, c.env);
+    return jsonErrorResponse("Authentication required", 401);
   }
 
   // Build audit actor
@@ -160,35 +170,24 @@ app.use("*", async (c, next) => {
   return next();
 });
 
-// ─── CORS + security headers (after handler) ────────────────────────
-
-app.use("*", async (c, next) => {
-  await next();
-
-  const origin = c.req.header("Origin") ?? "";
-  const corsHeaders = getCorsHeaders(origin, c.env);
-  for (const [k, v] of Object.entries(corsHeaders)) {
-    c.res.headers.set(k, v);
-  }
-  addSecurityHeaders(c.res);
-});
-
 // ─── Error handling ─────────────────────────────────────────────────
 
 app.onError((err, c) => {
-  const origin = c.req.header("Origin") ?? "";
   if (err instanceof ApiError) {
-    return jsonErrorResponse(err.message, err.status, origin, c.env, {
+    return jsonErrorResponse(err.message, err.status, {
       ...(err.code ? { code: err.code } : {}),
       ...(err.field ? { field: err.field } : {}),
       ...(err.detail ? { detail: err.detail } : {}),
     });
   }
   if (err instanceof AiApiError) {
-    return jsonErrorResponse(err.message, err.status, origin, c.env);
+    return jsonErrorResponse(err.message, err.status);
+  }
+  if (err instanceof HTTPException) {
+    return jsonErrorResponse(err.message, err.status);
   }
   console.error("V1 API error:", c.req.path, err);
-  return jsonErrorResponse("Internal server error", 500, origin, c.env);
+  return jsonErrorResponse("Internal server error", 500);
 });
 
 // ─── Mount v1 route group under /api/v1 ─────────────────────────────

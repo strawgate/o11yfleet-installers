@@ -82,6 +82,8 @@ import type {
   DebugTablesResult,
   DebugQueryParams,
   DebugQueryResult,
+  CheckCompatibilityParams,
+  CheckCompatibilityResult,
   PendingDevicesResult,
   AssignPendingDeviceParams,
   AssignPendingDeviceResult,
@@ -315,6 +317,12 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   }
 
   // ─── HTTP Dispatch ────────────────────────────────────────────────
+  //
+  // @deprecated — All non-WebSocket routes below are retained only for
+  // backward compatibility with existing unit tests that call
+  // `stub.fetch("http://internal/...")`.  Production callers should use
+  // the typed RPC methods (rpcGetStats, rpcListAgents, etc.) instead.
+  // These HTTP routes will be removed once tests are migrated to RPC.
 
   override async fetch(request: Request): Promise<Response> {
     this.ensureInit();
@@ -324,15 +332,14 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     // authoritative there; the SQL row is just a debug echo of it.
     const isPendingDo = this.getMyIdentity().config_id === PENDING_DO_CONFIG_ID;
 
+    // ── WebSocket upgrade — RPC cannot support this, fetch is required ──
     if (request.headers.get("Upgrade") === "websocket") {
       return this.handleWebSocket(request);
     }
 
-    // Lifecycle routes — invoked by the worker when the underlying
-    // resource (tenant or configuration) is created or updated. Both are
-    // POSTs so they can carry an optional policy body. Identity is
-    // *always* derived from `ctx.id.name`; any tenant_id/config_id in
-    // the body is ignored.
+    // ── Deprecated HTTP routes (test backward-compat only) ──────────
+
+    // Lifecycle routes
     if (url.pathname === "/init" && request.method === "POST") return this.handleInit(request);
     if (url.pathname === "/sync-policy" && request.method === "POST")
       return this.handleSyncPolicy(request);
@@ -1179,6 +1186,21 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
   async rpcDebugQuery(params: DebugQueryParams): Promise<DebugQueryResult> {
     this.ensureInit();
     return debugQueryData(this.ctx.storage.sql, params);
+  }
+
+  // ── Compatibility Check ──
+
+  async rpcCheckCompatibility(params: CheckCompatibilityParams): Promise<CheckCompatibilityResult> {
+    this.ensureInit();
+    if (typeof params.yamlConfig !== "string") {
+      throw new RpcError("yamlConfig must be a string", 400);
+    }
+    const forceOverride = params.override === true;
+    const { tenant_id, config_id } = this.getMyIdentity();
+    const inventory = this.repo.getFleetComponentInventory(tenant_id, config_id);
+    const declarations = extractComponentDeclarations(params.yamlConfig);
+    const compat = validateFleetCompatibility(declarations, inventory);
+    return { ...compat, override: forceOverride };
   }
 
   // ── Pending Devices ──

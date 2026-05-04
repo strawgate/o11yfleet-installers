@@ -9,7 +9,7 @@ import { generateApiKey, hashEnrollmentToken } from "@o11yfleet/core/auth";
 import type { AuditCreateResult } from "../../audit/recorder.js";
 import { jsonError } from "../../shared/errors.js";
 import { parseRpcError } from "../../durable-objects/rpc-types.js";
-import { validateJsonBody } from "../../shared/validation.js";
+import { jsonValidator } from "../../shared/validation.js";
 import { sql } from "kysely";
 import { z } from "zod";
 import { getDb } from "../../db/client.js";
@@ -22,12 +22,10 @@ const createApiKeyRequestSchema = z.object({
 });
 
 export async function handleCreateApiKey(
-  request: Request,
+  body: z.output<typeof createApiKeyRequestSchema>,
   env: Env,
   tenantId: string,
 ): Promise<AuditCreateResult> {
-  const body = await validateJsonBody(request, createApiKeyRequestSchema);
-
   const result = await generateApiKey({
     tenant_id: tenantId,
     secret: env.O11YFLEET_CLAIM_HMAC_SECRET,
@@ -68,11 +66,10 @@ export async function handleListPendingTokens(env: Env, tenantId: string): Promi
 }
 
 export async function handleCreatePendingToken(
-  request: Request,
+  body: z.output<typeof createPendingTokenRequestSchema>,
   env: Env,
   tenantId: string,
 ): Promise<AuditCreateResult> {
-  const body = await validateJsonBody(request, createPendingTokenRequestSchema);
   const label = body.label ?? null;
   const targetConfigId = body.target_config_id ?? null;
 
@@ -177,19 +174,16 @@ export async function handleListPendingDevices(env: Env, tenantId: string): Prom
   }
 }
 
+const assignPendingDeviceRequestSchema = z.object({
+  config_id: z.string().min(1),
+});
+
 export async function handleAssignPendingDevice(
-  request: Request,
+  body: z.output<typeof assignPendingDeviceRequestSchema>,
   env: Env,
   tenantId: string,
   deviceUid: string,
 ): Promise<Response> {
-  const body = await validateJsonBody(
-    request,
-    z.object({
-      config_id: z.string().min(1),
-    }),
-  );
-
   const config = await getOwnedConfig(env, tenantId, body.config_id);
   if (!config) return jsonError("Configuration not found", 404);
 
@@ -214,11 +208,12 @@ export async function handleAssignPendingDevice(
 
 export const pendingRoutes = new Hono<V1Env>();
 
-pendingRoutes.post("/api-keys", async (c) => {
+pendingRoutes.post("/api-keys", jsonValidator(createApiKeyRequestSchema), async (c) => {
+  const body = c.req.valid("json");
   return withAuditCreate(
     c.get("audit"),
     { action: "api_key.create", resource_type: "api_key" },
-    () => handleCreateApiKey(c.req.raw, c.env, c.get("tenantId")),
+    () => handleCreateApiKey(body, c.env, c.get("tenantId")),
   );
 });
 
@@ -226,11 +221,12 @@ pendingRoutes.get("/pending-tokens", async (c) => {
   return handleListPendingTokens(c.env, c.get("tenantId"));
 });
 
-pendingRoutes.post("/pending-tokens", async (c) => {
+pendingRoutes.post("/pending-tokens", jsonValidator(createPendingTokenRequestSchema), async (c) => {
+  const body = c.req.valid("json");
   return withAuditCreate(
     c.get("audit"),
     { action: "pending_token.create", resource_type: "pending_token" },
-    () => handleCreatePendingToken(c.req.raw, c.env, c.get("tenantId")),
+    () => handleCreatePendingToken(body, c.env, c.get("tenantId")),
   );
 });
 
@@ -247,11 +243,16 @@ pendingRoutes.get("/pending-devices", async (c) => {
   return handleListPendingDevices(c.env, c.get("tenantId"));
 });
 
-pendingRoutes.post("/pending-devices/:deviceUid/assign", async (c) => {
-  const deviceUid = c.req.param("deviceUid");
-  return withAudit(
-    c.get("audit"),
-    { action: "pending_device.assign", resource_type: "pending_device", resource_id: deviceUid },
-    () => handleAssignPendingDevice(c.req.raw, c.env, c.get("tenantId"), deviceUid),
-  );
-});
+pendingRoutes.post(
+  "/pending-devices/:deviceUid/assign",
+  jsonValidator(assignPendingDeviceRequestSchema),
+  async (c) => {
+    const deviceUid = c.req.param("deviceUid");
+    const body = c.req.valid("json");
+    return withAudit(
+      c.get("audit"),
+      { action: "pending_device.assign", resource_type: "pending_device", resource_id: deviceUid },
+      () => handleAssignPendingDevice(body, c.env, c.get("tenantId"), deviceUid),
+    );
+  },
+);
