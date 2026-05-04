@@ -264,7 +264,8 @@ describe("Agent Detail Endpoint (enriched)", () => {
     expect(typeof detail.desired_config_hash).toBe("string");
     expect(detail.uptime_ms).toBeGreaterThan(0);
     expect(detail.agent_description).toBeDefined();
-    expect(detail.generation).toBe(2);
+    // Generation is 3 because connectWithEnrollment forces a reconnect after enrollment
+    expect(detail.generation).toBe(3);
     expect(detail.capabilities).toBeGreaterThan(0);
 
     ws.close();
