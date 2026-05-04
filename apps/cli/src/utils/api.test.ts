@@ -24,11 +24,11 @@ describe("apiRequest", () => {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({ id: "123", name: "Test" }),
+        text: vi.fn().mockResolvedValue('{"id":"123","name":"Test"}'),
       }),
     );
 
-    const result = await apiRequest("/api/test");
+    const result = await apiRequest<{ id: string; name: string }>("/api/test");
 
     expect(result.data).toEqual({ id: "123", name: "Test" });
     expect(result.error).toBeUndefined();
@@ -46,7 +46,7 @@ describe("apiRequest", () => {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({}),
+        text: vi.fn().mockResolvedValue("{}"),
       }),
     );
 
@@ -73,7 +73,7 @@ describe("apiRequest", () => {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({}),
+        text: vi.fn().mockResolvedValue("{}"),
       }),
     );
 
@@ -97,7 +97,7 @@ describe("apiRequest", () => {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({}),
+        text: vi.fn().mockResolvedValue("{}"),
       }),
     );
 
@@ -123,7 +123,7 @@ describe("apiRequest", () => {
         ok: true,
         status: 200,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({}),
+        text: vi.fn().mockResolvedValue("{}"),
       }),
     );
 
@@ -146,7 +146,7 @@ describe("apiRequest", () => {
         status: 404,
         statusText: "Not Found",
         headers: { get: () => "application/json" },
-        json: vi.fn().mockResolvedValue({ error: "Resource not found" }),
+        text: vi.fn().mockResolvedValue('{"error":"Resource not found"}'),
       }),
     );
 
@@ -188,7 +188,6 @@ describe("apiRequest", () => {
         ok: false,
         status: 400,
         headers: { get: () => "application/json" },
-        json: vi.fn().mockRejectedValue(new Error("Invalid JSON")),
         text: vi.fn().mockResolvedValue("Raw error text"),
       }),
     );
@@ -197,6 +196,68 @@ describe("apiRequest", () => {
 
     expect(result.error).toBe("Raw error text");
     expect(result.status).toBe(400);
+  });
+
+  it("returns plain-text data on successful non-JSON response", async () => {
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "text/plain" },
+        text: vi.fn().mockResolvedValue("Config uploaded"),
+      }),
+    );
+
+    const result = await apiRequest<string>("/api/test");
+
+    expect(result.data).toBe("Config uploaded");
+    expect(result.error).toBeUndefined();
+    expect(result.status).toBe(200);
+  });
+
+  it("warns once when both API key and session are present", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    vi.stubEnv("O11YFLEET_API_KEY", "env-api-key");
+    vi.spyOn(configModule, "getSession").mockResolvedValueOnce({
+      cookie: "session-abc",
+      token: undefined,
+    });
+
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: vi.fn().mockResolvedValue("{}"),
+      }),
+    );
+
+    // First call should warn
+    await apiRequest("/api/test");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    // Reset session mock and make another call
+    vi.spyOn(configModule, "getSession").mockResolvedValueOnce({
+      cookie: "session-abc",
+      token: undefined,
+    });
+
+    global.fetch = vi.fn().mockResolvedValueOnce(
+      mockResponse({
+        ok: true,
+        status: 200,
+        headers: { get: () => "application/json" },
+        text: vi.fn().mockResolvedValue("{}"),
+      }),
+    );
+
+    // Second call should not warn
+    await apiRequest("/api/test");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+
+    warnSpy.mockRestore();
+    vi.unstubAllEnvs();
   });
 });
 

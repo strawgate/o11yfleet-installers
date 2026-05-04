@@ -6,6 +6,9 @@ import { getApiUrl, getSession, getTenantId } from "./config.js";
 import { output } from "./output.js";
 import { getCommandName } from "./command-name.js";
 
+// Track if we've already warned about credential precedence to avoid flooding stderr
+let warnedApiKeyPrecedence = false;
+
 export interface ApiResponse<T> {
   data?: T;
   error?: string;
@@ -23,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T = unknown>(
+export async function apiRequest<T>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
@@ -38,6 +41,13 @@ export async function apiRequest<T = unknown>(
   // Auth: prefer token env var or stored token, fall back to session cookie
   if (process.env.O11YFLEET_API_KEY) {
     headers["Authorization"] = `Bearer ${process.env.O11YFLEET_API_KEY}`;
+    // Warn once per process when both API key and session are present
+    if (!warnedApiKeyPrecedence && (session.token || session.cookie)) {
+      console.warn(
+        "Warning: Both O11YFLEET_API_KEY and a session are present. API key takes precedence.",
+      );
+      warnedApiKeyPrecedence = true;
+    }
   } else if (session.token) {
     headers["Authorization"] = `Bearer ${session.token}`;
   } else if (session.cookie) {
@@ -62,26 +72,29 @@ export async function apiRequest<T = unknown>(
     };
   }
 
+  // Read body once as text, then parse appropriately
+  const text = await resp.text();
   let data: T | undefined;
   let error: string | undefined;
 
   const contentType = resp.headers.get("content-type") || "";
   if (contentType.includes("application/json")) {
     try {
-      const json = (await resp.json()) as { error?: string };
+      const json = JSON.parse(text) as { error?: string };
       if (!resp.ok) {
         error = json.error || resp.statusText;
       } else {
         data = json as T;
       }
     } catch {
-      error = await resp.text();
+      error = text || resp.statusText;
     }
   } else {
-    const text = await resp.text();
     if (!resp.ok) {
       error = text || resp.statusText;
     } else {
+      // For plain-text responses on success, return the string directly.
+      // Callers expecting JSON should handle type mismatches appropriately.
       data = text as unknown as T;
     }
   }
