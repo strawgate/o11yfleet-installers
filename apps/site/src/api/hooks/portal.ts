@@ -263,7 +263,7 @@ export function useCreateConfiguration() {
 export function useDeleteConfiguration() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: string) => apiDel(`/api/v1/configurations/${id}`),
+    mutationFn: (id: string) => apiDel(`/api/v1/configurations/${encodeURIComponent(id)}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["configurations"] });
       void qc.invalidateQueries({ queryKey: ["overview"] });
@@ -286,7 +286,9 @@ export function useDeleteEnrollmentToken(configId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (tokenId: string) =>
-      apiDel(`/api/v1/configurations/${configId}/enrollment-tokens/${tokenId}`),
+      apiDel(
+        `/api/v1/configurations/${encodeURIComponent(configId)}/enrollment-tokens/${encodeURIComponent(tokenId)}`,
+      ),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["configuration", configId, "tokens"] });
     },
@@ -453,7 +455,7 @@ export function useCreatePendingToken() {
 export function useRevokePendingToken() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (tokenId: string) => apiDel(`/api/v1/pending-tokens/${tokenId}`),
+    mutationFn: (tokenId: string) => apiDel(`/api/v1/pending-tokens/${encodeURIComponent(tokenId)}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["pending-tokens"] });
     },

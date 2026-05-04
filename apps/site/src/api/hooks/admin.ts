@@ -204,7 +204,7 @@ export function useUpdateAdminTenant(id: string) {
 export function useDeleteAdminTenant(id: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiDel(`/api/admin/tenants/${id}`),
+    mutationFn: () => apiDel(`/api/admin/tenants/${encodeURIComponent(id)}`),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["admin", "tenants"] });
       void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
