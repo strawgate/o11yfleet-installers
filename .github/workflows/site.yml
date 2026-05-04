@@ -55,7 +55,7 @@ jobs:
         run: just site-build ${{ inputs.environment }}
 
       - name: Deploy static site Worker
-        run: just tf-apply-site ${{ inputs.environment }}
+        run: just deploy-site ${{ inputs.environment }}
 
       - name: Resolve site smoke targets
         id: site-smoke
