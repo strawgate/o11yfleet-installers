@@ -73,13 +73,10 @@ export function computeConfigMetrics(
         config_pending++;
       }
     } else {
-      // No desired config to compare against — every agent is trivially
-      // "up to date" because there's nothing to be behind on. NB: this
-      // semantic ("disconnected agents are also up-to-date when no desired
-      // config exists") is preserved for backwards compatibility with
-      // existing dashboards; the audit (#652 item 3) flagged it as
-      // potentially misleading and left the call to a future PR.
-      config_up_to_date++;
+      // When no desired config, only count connected agents as up-to-date
+      if (agent.status === "connected") {
+        config_up_to_date++;
+      }
     }
 
     if (agent.last_error && agent.last_error !== "") {

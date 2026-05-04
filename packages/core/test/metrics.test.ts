@@ -93,8 +93,12 @@ describe("computeConfigMetrics", () => {
     expect(result.config_pending).toBe(2);
   });
 
-  it("marks all as up_to_date when no desired config", () => {
-    const agents = makeAgents({ current_config_hash: "abc123" }, { current_config_hash: null });
+  it("marks only connected agents as up_to_date when no desired config", () => {
+    const agents = makeAgents(
+      { status: "connected", current_config_hash: "abc123" },
+      { status: "connected", current_config_hash: null },
+      { status: "disconnected", current_config_hash: "abc123" },
+    );
     const result = computeConfigMetrics(agents, null);
     expect(result.config_up_to_date).toBe(2);
     expect(result.config_pending).toBe(0);
