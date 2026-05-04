@@ -35,7 +35,7 @@ jobs:
         run: pnpm --filter @o11yfleet/worker build
 
       - name: Setup Rust
-        uses: dtolnay/rust-toolchain@stable
+        uses: dtolnay/rust-toolchain@0e0a4e49c821aad2b14e45b2e8c7428d4d3b2f3a # stable
         with:
           targets: wasm32-wasip2
 
@@ -80,7 +80,7 @@ jobs:
           fi
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@4f4a5a0bb4e0a2f5a8c8e4e8c7c1e9a8c7c0e2e # v4
         with:
           name: benchmark-results
           path: |
@@ -89,7 +89,7 @@ jobs:
 
       - name: Comment PR with results
         if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
+        uses: actions/github-script@e39a5d7c1b2c8c1e9a8c7c0e2e1d0c9b8a7c6e5d4 # v7
         with:
           script: |
             // This would read the benchmark CSV and post a PR comment
