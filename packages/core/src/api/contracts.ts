@@ -64,6 +64,9 @@ export const validationErrorResponseSchema = apiErrorResponseSchema.extend({
 });
 export type ValidationErrorResponse = z.infer<typeof validationErrorResponseSchema>;
 
+export const tenantStatusSchema = z.enum(["pending", "active", "suspended"]);
+export type TenantStatus = z.infer<typeof tenantStatusSchema>;
+
 export const authUserSchema = z
   .object({
     id: z.string().optional(),
@@ -74,6 +77,11 @@ export const authUserSchema = z
     role: z.enum(["member", "admin"]).or(z.string()).optional(),
     tenant_id: z.string().nullable().optional(),
     tenantId: z.string().nullable().optional(),
+    // tenantStatus is included in the /auth/login response so the portal
+    // can route to /pending-approval when a user logs in before their
+    // tenant is approved. Optional so admin-scoped /me responses (no
+    // tenant binding) and other consumers don't need to provide it.
+    tenantStatus: tenantStatusSchema.optional(),
     isImpersonation: z.boolean().optional(),
   })
   .passthrough()
@@ -102,8 +110,46 @@ export const authLoginResponseSchema = z
   .strict();
 export type AuthLoginResponse = z.infer<typeof authLoginResponseSchema>;
 
-export const tenantStatusSchema = z.enum(["pending", "active", "suspended"]);
-export type TenantStatus = z.infer<typeof tenantStatusSchema>;
+/**
+ * Shape of the user object returned by /auth/me. Mirrors the worker's
+ * AuthContext: includes tenantStatus, isImpersonation, impersonatorUserId
+ * (which authUserSchema doesn't model explicitly). Strict — AuthContext
+ * is internally defined and we don't carry extra fields through this
+ * surface, so a strict schema catches drift.
+ */
+export const authMeUserSchema = z.object({
+  userId: z.string(),
+  email: z.string().email(),
+  displayName: z.string().optional(),
+  tenantId: z.string().nullable(),
+  tenantStatus: tenantStatusSchema,
+  role: z.enum(["member", "admin"]).or(z.string()),
+  isImpersonation: z.boolean(),
+  impersonatorUserId: z.string().nullable(),
+});
+export type AuthMeUser = z.infer<typeof authMeUserSchema>;
+
+export const authMeResponseSchema = z.object({
+  user: authMeUserSchema,
+});
+export type AuthMeResponse = z.infer<typeof authMeResponseSchema>;
+
+/** /auth/logout — simple ack. */
+export const authLogoutResponseSchema = z
+  .object({
+    ok: z.literal(true),
+  })
+  .strict();
+export type AuthLogoutResponse = z.infer<typeof authLogoutResponseSchema>;
+
+/** /auth/seed — dev-only seed result. */
+export const authSeedResponseSchema = z
+  .object({
+    seeded: z.array(z.string()),
+    tenantId: idSchema,
+  })
+  .strict();
+export type AuthSeedResponse = z.infer<typeof authSeedResponseSchema>;
 
 export const tenantSchema = z
   .object({

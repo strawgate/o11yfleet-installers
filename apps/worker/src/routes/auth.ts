@@ -1,7 +1,17 @@
 // Auth routes — login, logout, session management, seed accounts
 
 import type { Env } from "../index.js";
-import { authLoginRequestSchema } from "@o11yfleet/core/api";
+import {
+  authLoginRequestSchema,
+  authLoginResponseSchema,
+  authLogoutResponseSchema,
+  authMeResponseSchema,
+  authSeedResponseSchema,
+  type AuthLoginResponse,
+  type AuthMeResponse,
+  type AuthSeedResponse,
+} from "@o11yfleet/core/api";
+import { typedJsonResponse } from "../shared/responses.js";
 import { base64urlDecode, base64urlEncode } from "@o11yfleet/core/auth";
 import { timingSafeEqual } from "../utils/crypto.js";
 import { getPlanLimits, normalizePlan, type PlanId } from "../shared/plans.js";
@@ -229,7 +239,7 @@ async function createSessionResponse(
     display_name: string;
     role: string;
     tenant_id: string | null;
-    tenant_status?: string;
+    tenant_status?: TenantApprovalStatus;
   },
   redirectTo?: string,
 ): Promise<Response> {
@@ -257,19 +267,22 @@ async function createSessionResponse(
     headers.set("Location", redirectTo);
     return new Response(null, { status: 302, headers });
   }
-  return Response.json(
-    {
-      user: {
-        userId: user.id,
-        email: user.email,
-        displayName: user.display_name,
-        role: user.role,
-        tenantId: user.tenant_id,
-        tenantStatus: user.tenant_status ?? "pending",
-      },
+  const payload: AuthLoginResponse = {
+    user: {
+      userId: user.id,
+      // authUserSchema requires either id or userId; we set userId.
+      // The transform on authUserSchema fills in `id` for us, but
+      // since we send the raw outgoing payload, set both for clarity.
+      id: user.id,
+      email: user.email,
+      displayName: user.display_name,
+      role: user.role,
+      tenantId: user.tenant_id,
+      // tenantStatus flows through authUserSchema's passthrough().
+      tenantStatus: user.tenant_status ?? "pending",
     },
-    { headers },
-  );
+  };
+  return typedJsonResponse(authLoginResponseSchema, payload, env, { headers });
 }
 
 function githubClientId(env: Env): string | null {
@@ -472,10 +485,9 @@ async function handleLogout(request: Request, env: Env, ctx?: ExecutionContext):
       );
     }
   }
-  return Response.json(
-    { ok: true },
-    { headers: { "Set-Cookie": clearSessionCookie(env, request) } },
-  );
+  return typedJsonResponse(authLogoutResponseSchema, { ok: true }, env, {
+    headers: { "Set-Cookie": clearSessionCookie(env, request) },
+  });
 }
 
 function recordAuthEvent(
@@ -533,7 +545,8 @@ function buildAuthAuditContext(
 async function handleMe(request: Request, env: Env): Promise<Response> {
   const auth = await authenticate(request, env);
   if (!auth) return jsonError("Not authenticated", 401);
-  return Response.json({ user: auth });
+  const payload: AuthMeResponse = { user: auth };
+  return typedJsonResponse(authMeResponseSchema, payload, env);
 }
 
 async function handleGitHubStart(request: Request, env: Env): Promise<Response> {
@@ -620,14 +633,14 @@ async function handleGitHubCallback(request: Request, env: Env): Promise<Respons
   const user = await findOrCreateGitHubUser(env, profile, email, state.plan ?? "starter");
 
   // Fetch tenant status for the response
-  let tenantStatus = "pending";
+  let tenantStatus: TenantApprovalStatus = "pending";
   if (user.tenant_id) {
     const tenant = await getDb(env.FP_DB)
       .selectFrom("tenants")
       .select("status")
       .where("id", "=", user.tenant_id)
       .executeTakeFirst();
-    tenantStatus = tenant?.status ?? "pending";
+    tenantStatus = (tenant?.status as TenantApprovalStatus | null) ?? "pending";
   }
 
   return createSessionResponse(
@@ -1165,5 +1178,6 @@ async function handleSeed(request: Request, env: Env): Promise<Response> {
     results.push(`Updated admin user password: ${adminEmail}`);
   }
 
-  return Response.json({ seeded: results, tenantId });
+  const payload: AuthSeedResponse = { seeded: results, tenantId };
+  return typedJsonResponse(authSeedResponseSchema, payload, env);
 }

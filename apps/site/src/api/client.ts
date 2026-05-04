@@ -282,7 +282,6 @@ export type LoginResponse = AuthLoginResponse;
 
 export interface User extends AuthUser {
   id: string;
-  tenantStatus?: string;
 }
 
 export function normalizeUser(raw: AuthUser): User {
@@ -298,7 +297,7 @@ export function normalizeUser(raw: AuthUser): User {
     tenant_id: raw.tenant_id,
     tenantId: raw.tenantId ?? raw.tenant_id,
     isImpersonation: raw.isImpersonation,
-    tenantStatus: (raw as Record<string, unknown>)["tenantStatus"] as string | undefined,
+    tenantStatus: raw.tenantStatus,
   };
 }
 
