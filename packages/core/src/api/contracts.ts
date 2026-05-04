@@ -438,3 +438,127 @@ export const agentPageSchema = z.object({
   }),
 });
 export type AgentPage = z.infer<typeof agentPageSchema>;
+
+// ─── Configuration versions, tokens, diff ───────────────────────────
+
+export const configVersionSchema = z
+  .object({
+    id: z.string(),
+    version: z.number(),
+    config_hash: z.string().optional(),
+    size_bytes: z.number().optional(),
+    created_at: z.string().optional(),
+  })
+  .passthrough();
+export type ConfigVersion = z.infer<typeof configVersionSchema>;
+
+export const enrollmentTokenSchema = z
+  .object({
+    id: z.string(),
+    token: z.string().optional(),
+    created_at: z.string().optional(),
+  })
+  .passthrough();
+export type EnrollmentToken = z.infer<typeof enrollmentTokenSchema>;
+
+const versionDiffSideSchema = z.object({
+  id: z.string(),
+  config_hash: z.string(),
+  size_bytes: z.number(),
+  created_at: z.string(),
+});
+
+export const configurationVersionDiffSchema = z.object({
+  available: z.boolean(),
+  reason: z.string().optional(),
+  versions_seen: z.number().optional(),
+  latest: versionDiffSideSchema.optional(),
+  previous: versionDiffSideSchema.optional(),
+  diff: z
+    .object({
+      previous_line_count: z.number(),
+      latest_line_count: z.number(),
+      line_count_delta: z.number(),
+      size_bytes_delta: z.number(),
+      added_lines: z.number(),
+      removed_lines: z.number(),
+    })
+    .optional(),
+});
+export type ConfigurationVersionDiff = z.infer<typeof configurationVersionDiffSchema>;
+
+// ─── Rollout cohort ──────────────────────────────────────────────────
+
+export const rolloutCohortSummarySchema = z.object({
+  total_agents: z.number(),
+  connected_agents: z.number(),
+  healthy_agents: z.number(),
+  drifted_agents: z.number(),
+  desired_config_hash: z.string().nullable(),
+  status_counts: z.record(z.string(), z.number()),
+  current_hash_counts: z.array(z.object({ value: z.string(), count: z.number() })),
+});
+export type RolloutCohortSummary = z.infer<typeof rolloutCohortSummarySchema>;
+
+// ─── Team ────────────────────────────────────────────────────────────
+
+export const teamMemberSchema = z
+  .object({
+    id: z.string(),
+    email: z.string(),
+    role: z.string().optional(),
+  })
+  .passthrough();
+export type TeamMember = z.infer<typeof teamMemberSchema>;
+
+// ─── Fleet command results ──────────────────────────────────────────
+
+export const restartFleetResultSchema = z.object({
+  restarted: z.number(),
+  skipped_no_cap: z.number(),
+});
+export type RestartFleetResult = z.infer<typeof restartFleetResultSchema>;
+
+export const disconnectFleetResultSchema = z.object({
+  disconnected: z.number(),
+});
+export type DisconnectFleetResult = z.infer<typeof disconnectFleetResultSchema>;
+
+export const restartAgentResultSchema = z.object({
+  restarted: z.boolean(),
+  reason: z.string().optional(),
+});
+export type RestartAgentResult = z.infer<typeof restartAgentResultSchema>;
+
+export const disconnectAgentResultSchema = z.object({
+  disconnected: z.boolean(),
+});
+export type DisconnectAgentResult = z.infer<typeof disconnectAgentResultSchema>;
+
+// ─── Pending devices and tokens ─────────────────────────────────────
+
+export const pendingDeviceSchema = z.object({
+  instance_uid: z.string(),
+  tenant_id: z.string(),
+  display_name: z.string().nullable(),
+  source_ip: z.string().nullable(),
+  geo_country: z.string().nullable(),
+  geo_city: z.string().nullable(),
+  geo_lat: z.number().nullable(),
+  geo_lon: z.number().nullable(),
+  agent_description: z.string().nullable(),
+  connected_at: z.number(),
+  last_seen_at: z.number(),
+});
+export type PendingDevice = z.infer<typeof pendingDeviceSchema>;
+
+export const pendingTokenSchema = z.object({
+  id: z.string(),
+  token: z.string().optional(),
+  label: z.string().nullable(),
+  target_config_id: z.string().nullable(),
+  expires_at: z.string().nullable(),
+  revoked_at: z.string().nullable(),
+  created_at: z.string(),
+});
+export type PendingToken = z.infer<typeof pendingTokenSchema>;

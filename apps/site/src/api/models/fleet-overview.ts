@@ -1,13 +1,6 @@
 import type { Configuration, Overview } from "@/api/hooks/portal";
 import { observed, unavailable, type Observed } from "./observed";
 
-type LegacyOverviewFields = {
-  agents?: unknown;
-  metrics_observed_at?: unknown;
-  observed_at?: unknown;
-  snapshot_at?: unknown;
-};
-
 export interface FleetOverviewView {
   configurations: {
     rows: Configuration[];
@@ -23,43 +16,41 @@ export interface FleetOverviewView {
   };
 }
 
+/**
+ * Adapt the typed `OverviewResponse` into the view-model the portal pages
+ * consume — wrapping each metric in `Observed<number>` with status/warning so
+ * the UI can render "unavailable" badges, error states, and freshness in one
+ * pass. This is *not* shape defense — the response shape is enforced by
+ * `overviewResponseSchema`. It's mapping flat numbers into a state-aware
+ * presentation primitive.
+ */
 export function normalizeFleetOverview(payload: Overview): FleetOverviewView {
-  const rows = Array.isArray(payload.configurations) ? payload.configurations : [];
-  const legacy = legacyOverviewFields(payload);
-  const observedAt = timestampValue(
-    legacy.metrics_observed_at ?? legacy.observed_at ?? legacy.snapshot_at,
-  );
+  const rows = payload.configurations;
   const metricsWarning = stringValue(payload.metrics_error);
   const metricsStatus = metricsObservationStatus(payload);
 
   return {
     configurations: {
       rows,
-      total: observed(numberValue(payload.configs_count) ?? rows.length, {
-        observed_at: observedAt,
-      }),
+      total: observed(payload.configs_count, { observed_at: null }),
     },
     agents: {
-      total: observedMetric(numberValue(payload.total_agents ?? legacy.agents), {
+      total: observedMetric(payload.total_agents, {
         status: metricsStatus,
-        observedAt,
         warning: metricsWarning,
       }),
-      connected: observedMetric(numberValue(payload.connected_agents), {
+      connected: observedMetric(payload.connected_agents, {
         status: metricsStatus,
-        observedAt,
         warning: metricsWarning,
       }),
-      healthy: observedMetric(numberValue(payload.healthy_agents), {
+      healthy: observedMetric(payload.healthy_agents, {
         status: metricsStatus,
-        observedAt,
         warning: metricsWarning,
       }),
     },
     rollouts: {
-      active: observedMetric(numberValue(payload.active_rollouts), {
+      active: observedMetric(payload.active_rollouts ?? null, {
         status: metricsStatus !== "ok" ? metricsStatus : undefined,
-        observedAt,
         warning: metricsWarning,
       }),
     },
@@ -70,20 +61,19 @@ function observedMetric(
   value: number | null,
   options: {
     status?: "ok" | "partial" | "missing" | "unavailable" | "error";
-    observedAt: string | null;
     warning: string | null;
   },
 ): Observed<number> {
   if (value === null) {
     const status = options.status && options.status !== "ok" ? options.status : "missing";
     return unavailable(status, {
-      observed_at: options.observedAt,
+      observed_at: null,
       warnings: options.warning ? [options.warning] : undefined,
     });
   }
   return observed(value, {
     status: options.status && options.status !== "missing" ? options.status : "ok",
-    observed_at: options.observedAt,
+    observed_at: null,
     warnings: options.warning ? [options.warning] : undefined,
   });
 }
@@ -91,39 +81,11 @@ function observedMetric(
 function metricsObservationStatus(
   payload: Overview,
 ): "ok" | "partial" | "missing" | "unavailable" | "error" {
-  const legacy = legacyOverviewFields(payload);
-  if (typeof payload.metrics_error === "string" && payload.metrics_error.length > 0) {
-    return "error";
-  }
+  if (payload.metrics_error) return "error";
   if (payload.metrics_source === "unavailable") return "unavailable";
-  if (
-    typeof payload.total_agents === "number" ||
-    typeof legacy.agents === "number" ||
-    typeof payload.connected_agents === "number" ||
-    typeof payload.healthy_agents === "number"
-  ) {
-    return "ok";
-  }
-  return "missing";
-}
-
-function numberValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return "ok";
 }
 
 function stringValue(value: unknown): string | null {
   return typeof value === "string" && value.length > 0 ? value : null;
-}
-
-function timestampValue(value: unknown): string | null {
-  const text = stringValue(value);
-  if (text) return text;
-  if (typeof value !== "number" || !Number.isFinite(value)) return null;
-  const timestampMs = value < 10_000_000_000 ? value * 1000 : value;
-  const date = new Date(timestampMs);
-  return Number.isFinite(date.getTime()) ? date.toISOString() : null;
-}
-
-function legacyOverviewFields(payload: Overview): Overview & LegacyOverviewFields {
-  return payload as Overview & LegacyOverviewFields;
 }

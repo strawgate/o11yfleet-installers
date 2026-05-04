@@ -9,6 +9,17 @@ import type {
   AgentDescriptionResponse as AgentDescription,
   AuditLogListResponse,
   ConfigStats,
+  ConfigVersion,
+  ConfigurationVersionDiff,
+  DisconnectAgentResult,
+  DisconnectFleetResult,
+  EnrollmentToken,
+  PendingDevice,
+  PendingToken,
+  RestartAgentResult,
+  RestartFleetResult,
+  RolloutCohortSummary,
+  TeamMember,
   Tenant,
 } from "@o11yfleet/core/api";
 
@@ -24,71 +35,15 @@ export type {
   AgentPage,
   AgentDescription,
   ConfigStats,
+  ConfigVersion,
+  ConfigurationVersionDiff,
+  EnrollmentToken,
+  PendingDevice,
+  PendingToken,
+  RolloutCohortSummary,
+  TeamMember,
   Tenant,
 };
-
-/* ------------------------------------------------------------------ */
-/*  Local types (no shared schema yet)                                */
-/* ------------------------------------------------------------------ */
-
-export interface ConfigVersion {
-  id: string;
-  version: number;
-  config_hash?: string;
-  size_bytes?: number;
-  created_at?: string;
-  [key: string]: unknown;
-}
-
-export interface EnrollmentToken {
-  id: string;
-  token?: string;
-  created_at?: string;
-  [key: string]: unknown;
-}
-
-export interface ConfigurationVersionDiff {
-  available: boolean;
-  reason?: string;
-  versions_seen?: number;
-  latest?: {
-    id: string;
-    config_hash: string;
-    size_bytes: number;
-    created_at: string;
-  };
-  previous?: {
-    id: string;
-    config_hash: string;
-    size_bytes: number;
-    created_at: string;
-  };
-  diff?: {
-    previous_line_count: number;
-    latest_line_count: number;
-    line_count_delta: number;
-    size_bytes_delta: number;
-    added_lines: number;
-    removed_lines: number;
-  };
-}
-
-export interface RolloutCohortSummary {
-  total_agents: number;
-  connected_agents: number;
-  healthy_agents: number;
-  drifted_agents: number;
-  desired_config_hash: string | null;
-  status_counts: Record<string, number>;
-  current_hash_counts: Array<{ value: string; count: number }>;
-}
-
-export interface TeamMember {
-  id: string;
-  email: string;
-  role?: string;
-  [key: string]: unknown;
-}
 
 function unwrapList<T>(value: T[] | Record<string, unknown>, key: string): T[] {
   if (Array.isArray(value)) return value;
@@ -365,14 +320,7 @@ export function useRolloutConfig(configId: string) {
   });
 }
 
-export interface RestartFleetResult {
-  restarted: number;
-  skipped_no_cap: number;
-}
-
-export interface DisconnectFleetResult {
-  disconnected: number;
-}
+export type { RestartFleetResult, DisconnectFleetResult };
 
 export function useRestartConfiguration(configId: string) {
   const qc = useQueryClient();
@@ -407,7 +355,7 @@ export function useRestartAgent(configId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (instanceUid: string) =>
-      apiPost<{ restarted: boolean; reason?: string }>(
+      apiPost<RestartAgentResult>(
         `/api/v1/configurations/${configId}/agents/${instanceUid}/restart`,
         {},
       ),
@@ -425,7 +373,7 @@ export function useDisconnectAgent(configId: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (instanceUid: string) =>
-      apiPost<{ disconnected: boolean }>(
+      apiPost<DisconnectAgentResult>(
         `/api/v1/configurations/${configId}/agents/${instanceUid}/disconnect`,
         {},
       ),
@@ -462,30 +410,6 @@ export function useDeleteTenant() {
 /* ------------------------------------------------------------------ */
 /*  Pending Devices & Tokens                                           */
 /* ------------------------------------------------------------------ */
-
-export interface PendingDevice {
-  instance_uid: string;
-  tenant_id: string;
-  display_name: string | null;
-  source_ip: string | null;
-  geo_country: string | null;
-  geo_city: string | null;
-  geo_lat: number | null;
-  geo_lon: number | null;
-  agent_description: string | null;
-  connected_at: number;
-  last_seen_at: number;
-}
-
-export interface PendingToken {
-  id: string;
-  token?: string;
-  label: string | null;
-  target_config_id: string | null;
-  expires_at: string | null;
-  revoked_at: string | null;
-  created_at: string;
-}
 
 export function usePendingDevices() {
   return useQuery({

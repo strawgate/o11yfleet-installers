@@ -19,10 +19,12 @@ import {
   createEnrollmentTokenResponseSchema,
   tenantSchema,
   configurationSchema,
+  overviewResponseSchema,
   type Tenant,
   type Configuration,
   type ConfigurationWithStats,
   type ConfigStats,
+  type OverviewResponse,
   createPendingTokenRequestSchema,
 } from "@o11yfleet/core/api";
 import {
@@ -1280,7 +1282,7 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     return { ...config, stats } as ConfigurationWithStats;
   });
 
-  return Response.json({
+  const payload: OverviewResponse = {
     tenant,
     total_agents: totals.totalAgents,
     connected_agents: totals.connectedAgents,
@@ -1289,7 +1291,8 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     configurations: configStats,
     metrics_source: metricsSource,
     metrics_error: metricsError,
-  });
+  };
+  return typedJsonResponse(overviewResponseSchema, payload);
 }
 
 // ─── Update Tenant ──────────────────────────────────────────────────
