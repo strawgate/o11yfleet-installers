@@ -378,6 +378,12 @@ export async function connectWithEnrollment(
      * Signature: (instanceUid: string, doStub: DurableObjectStub) => Promise<void>
      */
     doAction?: (instanceUid: string, doStub: ReturnType<typeof env.CONFIG_DO.get>) => Promise<void>;
+    /**
+     * Pass `false` to skip the default effective_config in the initial hello.
+     * Useful when a test wants to assert behavior for an agent that has
+     * NOT yet reported its effective config (e.g. drift logic edge cases).
+     */
+    includeEffectiveConfig?: boolean;
   } = {},
 ): Promise<{
   ws: WebSocket;
@@ -397,7 +403,13 @@ export async function connectWithEnrollment(
   // buildHello() defaults include CONFIGURABLE_CAPABILITIES (ReportsStatus,
   // AcceptsRemoteConfig, ReportsEffectiveConfig, ReportsHealth,
   // ReportsRemoteConfig) which is the expected capability set for enrollment.
-  ws.send(encodeFrame(buildHello()));
+  ws.send(
+    encodeFrame(
+      buildHello({
+        includeEffectiveConfig: opts.includeEffectiveConfig,
+      }),
+    ),
+  );
 
   // Receive OpAMP binary response (server accepts enrollment and sends response).
   // The DO may close this socket and request reconnect via AgentIdentification.

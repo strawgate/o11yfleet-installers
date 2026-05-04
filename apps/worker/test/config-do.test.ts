@@ -10,10 +10,12 @@ import {
   connectWithEnrollment,
   connectWithClaim,
   sendHello,
+  O11YFLEET_CLAIM_HMAC_SECRET,
   type AssignmentClaim,
 } from "./helpers.js";
 import { buildDisconnect } from "@o11yfleet/test-utils";
 import { encodeFrame } from "@o11yfleet/core/codec";
+import { verifyClaim } from "@o11yfleet/core/auth";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
@@ -778,6 +780,62 @@ describe("isAgentConnected via agent detail endpoint", () => {
     expect(sweep.swept).toBe(0);
 
     ws.close();
+  });
+});
+
+// ─── Enrollment response shape (regression for OpAMP enrollment dance) ───
+
+describe("Enrollment response", () => {
+  // Regression: the DO used to ws.close(1000, "Reconnect with new
+  // instance_uid") immediately after sending the enrollment response.
+  // That close beat the data frame to opamp-go's processing pipeline
+  // — connection_settings.opamp.headers (containing the assignment
+  // claim) was lost, the agent kept reconnecting with the original
+  // fp_enroll_ token, and the server kept treating each reconnect as
+  // a fresh enrollment. Real otelcol-contrib v0.123.0 would loop
+  // forever, flooding logs with "Cannot write WS message: websocket:
+  // close sent." Per OpAMP §3.2.4 the agent reconnects on its own when
+  // it receives ConnectionSettingsOffers — the force-close was
+  // redundant for spec-compliant clients and harmful when send/close
+  // ordering matters.
+  it("leaves the enrollment WebSocket OPEN after the first response", async () => {
+    const tenant = await createTenant("Enroll Open Corp");
+    const config = await createConfig(tenant.id, "enroll-open-config");
+    const token = await createEnrollmentToken(config.id);
+
+    const { ws } = await connectWithEnrollment(token.token);
+
+    // The DO must NOT force-close the WS after sending the enrollment
+    // response. If this assertion ever flips back to CLOSED/CLOSING,
+    // real opamp-go clients will lose the assignment claim and loop.
+    expect(ws.readyState).toBe(WebSocket.OPEN);
+
+    ws.close();
+  });
+
+  // The enrollment response must include the assignment claim in
+  // connection_settings.opamp.headers as `Authorization: Bearer
+  // <claim>`. Real opamp-go clients and our fake-collector both rely
+  // on this exact placement to learn the new credentials for
+  // subsequent reconnects.
+  it("delivers the assignment claim via connection_settings.opamp.headers", async () => {
+    const tenant = await createTenant("Enroll Claim Corp");
+    const config = await createConfig(tenant.id, "enroll-claim-config");
+    const token = await createEnrollmentToken(config.id);
+
+    const { enrollment } = await connectWithEnrollment(token.token);
+
+    // connectWithEnrollment surfaces the claim it pulled from the
+    // first response — verify it's actually a signed assignment claim
+    // (not the original fp_enroll_ token). Assignment claims are
+    // base64url-encoded JSON+HMAC; they don't start with `fp_enroll_`
+    // and they decode through `verifyClaim`.
+    expect(enrollment.assignment_claim).toBeDefined();
+    expect(enrollment.assignment_claim).not.toMatch(/^fp_enroll_/);
+    const claim = await verifyClaim(enrollment.assignment_claim, O11YFLEET_CLAIM_HMAC_SECRET);
+    expect(claim.tenant_id).toBe(tenant.id);
+    expect(claim.config_id).toBe(config.id);
+    expect(claim.instance_uid).toBe(enrollment.instance_uid);
   });
 });
 

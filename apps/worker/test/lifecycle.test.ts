@@ -264,8 +264,13 @@ describe("Agent Detail Endpoint (enriched)", () => {
     expect(typeof detail.desired_config_hash).toBe("string");
     expect(detail.uptime_ms).toBeGreaterThan(0);
     expect(detail.agent_description).toBeDefined();
-    // Generation is 3 because connectWithEnrollment forces a reconnect after enrollment
-    expect(detail.generation).toBe(3);
+    // Generation is 2 (one bump on the original WS connect, one bump on the
+    // enrollment-response handler running). Was 3 when the DO force-closed
+    // the enrollment WS and the test helper had to reconnect; that close
+    // was removed because it broke real opamp-go clients that couldn't
+    // process connection_settings before the close arrived. See
+    // config-do.ts comment around `if (isEnrollment)`.
+    expect(detail.generation).toBe(2);
     expect(detail.capabilities).toBeGreaterThan(0);
 
     ws.close();
@@ -320,6 +325,48 @@ describe("Agent Detail Endpoint (enriched)", () => {
     expect(detail.desired_config_hash).toBe("abcabcabcabc");
     // Agent hasn't applied the new config yet, so it's drifted
     expect(detail.is_drifted).toBe(true);
+
+    ws.close();
+  });
+
+  // Regression for the drift-logic bug surfaced by the end-to-end
+  // onboarding audit: agents that have JUST enrolled have a desired
+  // config but haven't reported their effective config yet (the agent
+  // hasn't echoed back which config it's actually running). Treating
+  // the absence of effective state as "drifted" lit a false-alarm
+  // CONFIG DRIFT badge on every freshly-enrolled agent. The
+  // distinction matters: drift means "agent's config differs from
+  // desired"; null effective means "we don't know yet."
+  it("returns is_drifted=false when effective_config_hash is null (not yet reported)", async () => {
+    const tenant = await createTenant("Detail Null Drift Corp");
+    const config = await createConfig(tenant.id, "detail-null-drift-config");
+    const token = await createEnrollmentToken(config.id);
+
+    // Connect WITHOUT including effective_config in the hello, so the
+    // server stores the agent with effective_config_hash=null.
+    const { ws, enrollment } = await connectWithEnrollment(token.token, {
+      includeEffectiveConfig: false,
+    });
+    const uid = enrollment.instance_uid;
+
+    // Push a desired config — different from anything the agent has
+    // reported (which is nothing, effective is null).
+    const doId = env.CONFIG_DO.idFromName(`${tenant.id}:${config.id}`);
+    const stub = env.CONFIG_DO.get(doId);
+    await stub.fetch("http://internal/command/set-desired-config", {
+      method: "POST",
+      body: JSON.stringify({ config_hash: "abcabcabcabc", config_content: "pipelines: {}" }),
+      headers: { "Content-Type": "application/json" },
+    });
+
+    const res = await stub.fetch(`http://internal/agents/${uid}`);
+    const detail = (await res.json()) as Record<string, unknown>;
+    expect(detail.desired_config_hash).toBe("abcabcabcabc");
+    expect(detail.effective_config_hash).toBeNull();
+    // The fix: null effective is "haven't heard from the agent yet,"
+    // NOT "drifted." If this regresses, every newly-enrolled agent
+    // will show CONFIG DRIFT in the portal.
+    expect(detail.is_drifted).toBe(false);
 
     ws.close();
   });
