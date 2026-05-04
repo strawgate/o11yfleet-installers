@@ -8,7 +8,7 @@
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "oxlint src",
+    "lint": "oxlint --jsx-a11y-plugin --react-plugin src",
     "test": "tsx --test test/*.test.mjs test/*.test.ts test/*.test.tsx",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.test.json"
   },

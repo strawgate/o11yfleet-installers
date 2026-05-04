@@ -97,9 +97,16 @@ function HeaderCell<T>({
         )}
       </Group>
       {enableResizing && header.column.getCanResize() && (
+        // Column resize handle: pointer/touch-only by design, no keyboard
+        // equivalent. ARIA "separator" + aria-hidden so SR users skip it
+        // entirely. Prefer this over silencing the lint rule.
         <div
           className={classes["resizer"]}
           data-resizing={header.column.getIsResizing() || undefined}
+          role="separator"
+          aria-hidden="true"
+          aria-orientation="vertical"
+          tabIndex={-1}
           onMouseDown={header.getResizeHandler()}
           onTouchStart={header.getResizeHandler()}
           onClick={(e) => e.stopPropagation()}
