@@ -4,12 +4,23 @@ import { Activity, Box as BoxIcon, FileText, KeyRound, Plug, Search, Users } fro
 
 type EmptyStateIcon = "box" | "plug" | "key" | "users" | "file" | "activity" | "search";
 
-interface EmptyStateProps {
+export interface EmptyStateProps {
+  /** Icon to display (defaults to "box") */
   icon?: EmptyStateIcon;
-  title: string;
-  description?: string;
-  children?: ReactNode;
+  /** Main title text (defaults to "No results") */
+  title?: string;
+  /** Optional description text */
+  description?: ReactNode;
+  /** Action elements (buttons, links) - can also pass as children */
+  actions?: ReactNode;
+  /** Height constraint for table-like containers */
+  height?: number | string;
+  /** Additional CSS class */
   className?: string;
+  /** Make it a simple text-only version without icon */
+  simple?: boolean;
+  /** Alternative way to pass action elements */
+  children?: ReactNode;
 }
 
 const icons = {
@@ -28,19 +39,25 @@ const icons = {
  */
 export function EmptyState({
   icon = "box",
-  title,
+  title = "No results",
   description,
-  children,
+  actions,
+  height,
   className,
+  simple = false,
+  children,
 }: EmptyStateProps) {
   const Icon = icons[icon];
+  const actionContent = actions ?? children;
 
   return (
-    <Center className={className} py="xl" px="md">
+    <Center className={className} h={height} py="xl" px="md">
       <Stack gap="xs" align="center" maw="32rem" style={{ textAlign: "center" }}>
-        <ThemeIcon variant="default" radius="xl" size="lg" c="dimmed">
-          <Icon size={16} />
-        </ThemeIcon>
+        {!simple && (
+          <ThemeIcon variant="default" radius="xl" size="lg" c="dimmed">
+            <Icon size={16} />
+          </ThemeIcon>
+        )}
         <Stack gap={2}>
           <Text size="sm" fw={500}>
             {title}
@@ -51,10 +68,10 @@ export function EmptyState({
             </Text>
           ) : null}
         </Stack>
-        {children ? (
+        {actionContent ? (
           <Box>
             <Group gap="xs" justify="center" wrap="wrap">
-              {children}
+              {actionContent}
             </Group>
           </Box>
         ) : null}

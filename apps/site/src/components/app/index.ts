@@ -1,4 +1,5 @@
 export { EmptyState } from "./EmptyState";
+export { ErrorState } from "./ErrorState";
 export { MetricCard } from "./MetricCard";
 export { ObservationBadge } from "./ObservationBadge";
 export { PageHeader } from "./PageHeader";
