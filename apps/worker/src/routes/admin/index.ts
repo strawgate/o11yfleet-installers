@@ -16,7 +16,12 @@ import {
   adminUpdateTenantRequestSchema,
   adminApproveTenantRequestSchema,
   adminBulkApproveRequestSchema,
+  adminBulkApproveResponseSchema,
+  adminSettingsSchema,
+  tenantSchema,
+  type Tenant,
 } from "@o11yfleet/core/api";
+import { typedJsonResponse } from "../../shared/responses.js";
 import {
   AiApiError,
   handleAdminChatRequest,
@@ -489,7 +494,7 @@ async function handleListTenants(env: Env, url: URL): Promise<Response> {
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-  return Response.json(tenant);
+  return typedJsonResponse(tenantSchema, tenant as Tenant, env);
 }
 
 async function handleUpdateTenant(request: Request, env: Env, tenantId: string): Promise<Response> {
@@ -547,7 +552,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .returningAll()
     .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
-  return Response.json(updated);
+  return typedJsonResponse(tenantSchema, updated as Tenant, env);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
@@ -1310,13 +1315,15 @@ async function handleBulkApproveTenants(request: Request, env: Env): Promise<Res
     }
   }
 
-  return Response.json({ approved, failed });
+  return typedJsonResponse(adminBulkApproveResponseSchema, { approved, failed }, env);
 }
 
 // ─── Admin Settings ─────────────────────────────────────────────────
 
 async function handleGetSettings(env: Env): Promise<Response> {
-  return Response.json({
-    auto_approve_signups: isAutoApproveEnabled(env),
-  });
+  return typedJsonResponse(
+    adminSettingsSchema,
+    { auto_approve_signups: isAutoApproveEnabled(env) },
+    env,
+  );
 }
