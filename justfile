@@ -127,6 +127,36 @@ test-ui:
     cd tests/ui && pnpm run test:e2e
 
 [group: 'ci']
+test-ui-smoke:
+    # Run smoke tests only (page loads, fast)
+    cd tests/ui && pnpm run test:e2e --grep "smoke"
+
+[group: 'ci']
+test-ui-flows:
+    # Run interaction/flow tests
+    cd tests/ui && pnpm run test:e2e --grep "flows|error states|navigation|form|table|responsive"
+
+[group: 'ci']
+test-ui-screenshots:
+    # Capture screenshots for smoke tests only
+    cd tests/ui && PLAYWRIGHT_CAPTURE_ALL_SCREENSHOTS=1 pnpm run test:e2e --grep "smoke"
+
+[group: 'ci']
+test-ui-ai-screenshots:
+    # Capture AI-optimized screenshots (with content waits)
+    cd tests/ui && PLAYWRIGHT_CAPTURE_ALL_SCREENSHOTS=1 pnpm run test:e2e --grep "screenshots for AI"
+
+[group: 'ci']
+test-ui-ai-audit:
+    # Capture full AI audit: screenshots + DOM snapshots + a11y trees
+    cd tests/ui && pnpm run test:e2e --grep "AI audit"
+
+[group: 'ci']
+test-ui-ui:
+    # Open Playwright debug UI
+    cd tests/ui && pnpm exec playwright test --ui
+
+[group: 'ci']
 typegen-check:
     pnpm --filter @o11yfleet/worker typegen:check
 
