@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link } from "react-router-dom";
 import {
   Alert,
@@ -52,7 +52,12 @@ export default function GettingStartedPage() {
 
   const tokenConfigId = selectedConfigId || "__none__";
   const createToken = useCreateEnrollmentToken(tokenConfigId);
-  const stats = useConfigurationStats(step >= 3 ? selectedConfigId : undefined);
+  // Polls stats every 5s while step 3 is open and we haven't seen the
+  // collector connect yet. TanStack Query's refetchInterval handles
+  // dedup + lifecycle; previously this was a manual setInterval (#781).
+  const stats = useConfigurationStats(step >= 3 ? selectedConfigId : undefined, {
+    refetchInterval: step === 3 && !connected ? 5000 : false,
+  });
   const agentMetrics = useMemo(() => configurationAgentMetrics(stats.data, [], null), [stats.data]);
 
   useEffect(() => {
@@ -67,16 +72,6 @@ export default function GettingStartedPage() {
       setConnected(true);
     }
   }, [agentMetrics.connectedAgents, step, stats.data]);
-
-  const refetchStats = useCallback(() => {
-    void stats.refetch();
-  }, [stats]);
-
-  useEffect(() => {
-    if (step !== 3 || connected) return;
-    const interval = setInterval(refetchStats, 5000);
-    return () => clearInterval(interval);
-  }, [step, connected, refetchStats]);
 
   if (isLoading) return <LoadingSpinner />;
   if (error) return <ErrorState error={error} retry={() => void refetch()} />;

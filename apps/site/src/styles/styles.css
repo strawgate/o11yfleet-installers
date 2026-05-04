@@ -874,58 +874,14 @@ p {
   outline-offset: 2px;
 }
 
-/* ------------------------------------------------------------------ */
-/*  Restored from pre-#683 (still referenced by JSX or shipped HTML)  */
-/* ------------------------------------------------------------------ */
+/* ----------------------------------------------------------------------------
+   .tag / .dot / .win families are NOT consumed by apps/site/src — they're
+   used by static `apps/site/public/docs/*.html` pages that link this same
+   stylesheet directly via `<link rel="stylesheet" href="../styles.css">`.
+   Keep them here until docs HTML moves to its own stylesheet.
+   ---------------------------------------------------------------------------- */
 
-.kbd {
-  font-family: var(--font-mono);
-  font-size: 11px;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--surface-2);
-  border: 1px solid var(--line);
-  color: var(--fg-2);
-}
-
-.divider {
-  height: 1px;
-  background: var(--line);
-  width: 100%;
-}
-
-.muted {
-  color: var(--fg-3);
-}
-.muted-2 {
-  color: var(--fg-4);
-}
-
-.row-sb {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-}
-
-.stack {
-  display: flex;
-  flex-direction: column;
-}
-.stack-2 > * + * {
-  margin-top: 8px;
-}
-.stack-3 > * + * {
-  margin-top: 12px;
-}
-.stack-4 > * + * {
-  margin-top: 16px;
-}
-.stack-6 > * + * {
-  margin-top: 24px;
-}
-
-/* ---------- Tags / chips ---------- */
+/* ---------- Tags / chips (docs HTML) ---------- */
 .tag {
   display: inline-flex;
   align-items: center;
@@ -959,7 +915,7 @@ p {
   color: var(--fg-2);
 }
 
-/* ---------- Status dots ---------- */
+/* ---------- Status dots (docs HTML) ---------- */
 .dot {
   width: 7px;
   height: 7px;
@@ -977,29 +933,8 @@ p {
 .dot-err {
   background: var(--err);
 }
-.dot-pulse {
-  position: relative;
-}
-.dot-pulse::after {
-  content: "";
-  position: absolute;
-  inset: -2px;
-  border-radius: 50%;
-  border: 1px solid var(--accent);
-  animation: pulse 1.6s ease-out infinite;
-}
-@keyframes pulse {
-  0% {
-    transform: scale(0.8);
-    opacity: 1;
-  }
-  100% {
-    transform: scale(2.4);
-    opacity: 0;
-  }
-}
 
-/* ---------- Window / mockup chrome ---------- */
+/* ---------- Window / mockup chrome (docs HTML) ---------- */
 .win {
   background: var(--bg-elev);
   border: 1px solid var(--line);
@@ -1037,43 +972,6 @@ p {
 }
 .win-body {
   padding: 18px;
-}
-
-/* ---------- Tables (mock collector inventory) ---------- */
-.collector-table {
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 13px;
-}
-.collector-table th,
-.collector-table td {
-  text-align: left;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
-}
-.collector-table th {
-  font-family: var(--font-mono);
-  font-weight: 500;
-  font-size: 11px;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--fg-4);
-  background: var(--surface-2);
-}
-.collector-table tbody tr:last-child td {
-  border-bottom: none;
-}
-.collector-table tbody tr:hover td {
-  background: var(--surface-2);
-}
-.collector-table .name {
-  font-family: var(--font-mono);
-  color: var(--fg);
-}
-.collector-table .meta {
-  color: var(--fg-3);
-  font-family: var(--font-mono);
-  font-size: 12px;
 }
 
 /* ---------- YAML diff ---------- */

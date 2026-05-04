@@ -208,11 +208,15 @@ export function useConfigurationTokens(id: string | undefined) {
 
 // Cheap for one active Config DO. Prefer `useOverview` for page-level dashboards because overview
 // reads very cheap metrics snapshots and intentionally does not fan out across Config DOs.
-export function useConfigurationStats(id: string | undefined) {
+export function useConfigurationStats(
+  id: string | undefined,
+  options?: { refetchInterval?: number | false },
+) {
   return useQuery({
     queryKey: ["configuration", id, "stats"],
     queryFn: () => apiGet<ConfigStats>(`/api/v1/configurations/${id}/stats`),
     enabled: !!id,
+    refetchInterval: options?.refetchInterval,
   });
 }
 
