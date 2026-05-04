@@ -20,6 +20,7 @@ import { adminRouter } from "./routes/admin/index.js";
 import { authenticate } from "./routes/auth.js";
 import { adminAuditContext, systemActor, userActor } from "./audit/recorder.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
+import { timingSafeEqual } from "./utils/crypto.js";
 import { ApiError } from "./shared/errors.js";
 import { AiApiError } from "./ai/guidance.js";
 import {
@@ -107,9 +108,15 @@ app.use("*", async (c, next) => {
     oidcClaims && c.req.method === "POST" && new URL(c.req.url).pathname === "/api/admin/tenants";
 
   if (!isOidcProvision && sessionAuth?.role !== "admin") {
-    // Determine error body based on auth attempt
+    // Determine error body based on auth attempt.
+    // Only treat the bearer as an API secret if it actually matches the
+    // configured secret (timing-safe). This is used purely to pick the
+    // error message, but correctness still matters.
     const hasApiSecretBearer =
-      token !== null && !looksLikeJWT(token) && c.env.O11YFLEET_API_BEARER_SECRET !== null;
+      token !== null &&
+      !looksLikeJWT(token) &&
+      !!c.env.O11YFLEET_API_BEARER_SECRET &&
+      timingSafeEqual(token, c.env.O11YFLEET_API_BEARER_SECRET);
     const body = hasApiSecretBearer
       ? { error: "Admin session required", code: "admin_session_required" }
       : oidcClaims

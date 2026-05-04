@@ -26,6 +26,9 @@ export default defineConfig({
       "test/github-installation-token.test.ts",
       "test/github-check-runs.test.ts",
       "test/manifest-drift-check.test.ts",
+      // hono-app.test.ts only exercises auth-rejection paths (401/403/CORS)
+      // that return before any D1/R2/DO binding is touched, so it's safe
+      // to run in plain Node with stubbed Env/ExecutionContext.
       "test/hono-app.test.ts",
     ],
     coverage: {

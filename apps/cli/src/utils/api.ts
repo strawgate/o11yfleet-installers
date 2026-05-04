@@ -26,7 +26,7 @@ export class ApiError extends Error {
   }
 }
 
-export async function apiRequest<T>(
+export async function apiRequest<T = unknown>(
   path: string,
   options: RequestInit = {},
 ): Promise<ApiResponse<T>> {
@@ -41,12 +41,14 @@ export async function apiRequest<T>(
   // Auth: prefer token env var or stored token, fall back to session cookie
   if (process.env.O11YFLEET_API_KEY) {
     headers["Authorization"] = `Bearer ${process.env.O11YFLEET_API_KEY}`;
-    // Warn once per process when both API key and session are present
+    // Warn once per process when both API key and session are present.
+    // Set the flag synchronously before console.warn so concurrent callers
+    // can't all race past the check and warn multiple times.
     if (!warnedApiKeyPrecedence && (session.token || session.cookie)) {
+      warnedApiKeyPrecedence = true;
       console.warn(
         "Warning: Both O11YFLEET_API_KEY and a session are present. API key takes precedence.",
       );
-      warnedApiKeyPrecedence = true;
     }
   } else if (session.token) {
     headers["Authorization"] = `Bearer ${session.token}`;
