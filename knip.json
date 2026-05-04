@@ -1,0 +1,44 @@
+{
+  "$schema": "https://unpkg.com/knip@latest/schema.json",
+  "ignoreExportsUsedInFile": true,
+  "ignoreDependencies": ["cloudflare"],
+  "ignore": [
+    "scripts/**",
+    "infra/**",
+    "**/vitest.stryker.config.ts",
+    "**/bench/**"
+  ],
+  "exclude": ["enumMembers", "duplicates", "binaries"],
+  "workspaces": {
+    "packages/core": {
+      "ignoreDependencies": ["@bufbuild/buf", "@bufbuild/protoc-gen-es"]
+    },
+    "packages/db": {},
+    "packages/test-utils": {
+      "ignoreDependencies": ["vitest"]
+    },
+    "apps/worker": {
+      "ignore": ["src/instrumented.ts", "test/env.d.ts"]
+    },
+    "apps/site": {
+      "ignore": ["public/**", "test/**"],
+      "ignoreDependencies": [
+        "@codemirror/lang-yaml",
+        "@codemirror/language",
+        "@codemirror/lint",
+        "@codemirror/merge",
+        "@codemirror/state",
+        "@codemirror/theme-one-dark",
+        "@codemirror/view",
+        "@uiw/react-codemirror",
+        "@streamdown/cjk",
+        "@streamdown/code",
+        "@streamdown/math",
+        "@streamdown/mermaid",
+        "motion",
+        "react-router"
+      ]
+    }
+  },
+  "ignoreWorkspaces": ["experiments", "tests/*", "apps/cli"]
+}

@@ -44,8 +44,8 @@ export function GuidancePanel({
 
       {items.length > 0 ? (
         <div className="ai-items">
-          {items.map((item, index) => (
-            <GuidanceItemView key={`${item.target_key}:${item.headline}:${index}`} item={item} />
+          {items.map((item) => (
+            <GuidanceItemView key={`${item.target_key}:${item.headline}`} item={item} />
           ))}
         </div>
       ) : null}
@@ -65,8 +65,8 @@ function GuidanceItemView({ item }: { item: AiGuidanceItem }) {
       <p>{item.detail}</p>
       {item.evidence.length > 0 ? (
         <div className="ai-evidence">
-          {item.evidence.map((evidence, index) => (
-            <span key={`${evidence.label}:${evidence.value}:${index}`}>
+          {item.evidence.map((evidence) => (
+            <span key={`${evidence.label}:${evidence.value}`}>
               {evidence.label}: <strong>{evidence.value}</strong>
             </span>
           ))}

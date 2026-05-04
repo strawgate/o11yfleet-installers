@@ -11,6 +11,7 @@
     "test:dev-check": "tsx --test scripts/dev-check.test.ts scripts/with-local-env.test.ts",
     "fmt": "prettier --write .",
     "fmt:check": "prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .",
+    "knip": "knip --no-config-hints --max-issues 26",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -19,6 +20,7 @@
     "@vitest/coverage-istanbul": "^4.1.5",
     "@vitest/coverage-v8": "^4.1.5",
     "husky": "^9.1.7",
+    "knip": "^6.11.0",
     "oxlint": "^1.62.0",
     "oxlint-tsgolint": "^0.22.1",
     "prettier": "^3.5.0",

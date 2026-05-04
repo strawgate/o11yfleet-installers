@@ -10,6 +10,16 @@ import { setDesiredConfigRequestSchema } from "@o11yfleet/core/api";
 import type { AgentStateRepository } from "./agent-state-repo-interface.js";
 import { parseAttachment } from "./ws-attachment.js";
 import { STALE_AGENT_THRESHOLD_MS, SERVER_CAPABILITIES } from "./constants.js";
+import type {
+  SetDesiredConfigParams,
+  SetDesiredConfigResult,
+  SweepResult,
+  DisconnectResult,
+  RestartAllResult,
+  DisconnectAgentResult,
+  RestartAgentResult,
+} from "./rpc-types.js";
+import { RpcError } from "./rpc-types.js";
 
 export interface CommandContext {
   repo: AgentStateRepository;
@@ -264,4 +274,200 @@ export async function handleSweep(
     active_websockets: activeSocketCount,
     duration_ms: durationMs,
   });
+}
+
+// ─── Data-returning cores (called by RPC methods) ────────────────
+
+export async function setDesiredConfigData(
+  ctx: CommandContext,
+  body: SetDesiredConfigParams,
+): Promise<SetDesiredConfigResult> {
+  const parsed = setDesiredConfigRequestSchema.safeParse(body);
+  if (!parsed.success) {
+    throw new RpcError("Invalid request body", 400);
+  }
+
+  ctx.repo.saveDesiredConfig(parsed.data.config_hash, parsed.data.config_content ?? null);
+  ctx.invalidateDesiredConfigCache();
+
+  const sockets = ctx.getWebSockets();
+  const desiredHashBytes = hexToUint8Array(parsed.data.config_hash);
+  let pushed = 0;
+  let failed = 0;
+  let skippedNoCap = 0;
+
+  const configMap = buildConfigMap(parsed.data.config_content ?? null);
+
+  const broadcastTemplate: Omit<ServerToAgent, "instance_uid"> = {
+    flags: 0,
+    capabilities: SERVER_CAPABILITIES,
+    remote_config: {
+      config: { config_map: configMap },
+      config_hash: desiredHashBytes,
+    },
+  };
+
+  const protoBroadcast = prepareBroadcastMessage(broadcastTemplate);
+
+  let batchCount = 0;
+  for (const ws of sockets) {
+    const attachment = parseAttachment(ws.deserializeAttachment());
+    if (!attachment) continue;
+
+    if (
+      attachment.capabilities !== undefined &&
+      !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
+    ) {
+      skippedNoCap++;
+      continue;
+    }
+
+    try {
+      const uid = hexToUint8Array(attachment.instance_uid);
+      ws.send(protoBroadcast(uid));
+      pushed++;
+    } catch {
+      failed++;
+    }
+    batchCount++;
+    if (batchCount % 1000 === 0) {
+      await new Promise<void>((r) => {
+        setTimeout(r, 0);
+      });
+    }
+  }
+
+  await ctx.ensureAlarm();
+  return { pushed, failed, skipped_no_cap: skippedNoCap, config_hash: parsed.data.config_hash };
+}
+
+export function disconnectAllData(ctx: CommandContext): DisconnectResult {
+  const sockets = ctx.getWebSockets();
+  let closed = 0;
+  let failed = 0;
+  for (const ws of sockets) {
+    try {
+      ws.close(4001, "Server-initiated disconnect");
+      closed++;
+    } catch {
+      failed++;
+    }
+  }
+  return { disconnected: closed, failed };
+}
+
+export function disconnectAgentData(ctx: CommandContext, instanceUid: string): DisconnectAgentResult {
+  const ws = findSocketByInstanceUid(ctx, instanceUid);
+  if (!ws) {
+    throw new RpcError("agent_not_connected", 404, { disconnected: false, reason: "agent_not_connected" });
+  }
+  try {
+    ws.close(4001, "Server-initiated disconnect");
+  } catch {
+    /* already closed */
+  }
+  return { disconnected: true };
+}
+
+export function restartAgentData(ctx: CommandContext, instanceUid: string): RestartAgentResult {
+  const ws = findSocketByInstanceUid(ctx, instanceUid);
+  if (!ws) {
+    throw new RpcError("agent_not_connected", 404, { restarted: false, reason: "agent_not_connected" });
+  }
+  const attachment = parseAttachment(ws.deserializeAttachment());
+  if (!attachment) {
+    throw new RpcError("attachment_missing", 500, { restarted: false, reason: "attachment_missing" });
+  }
+  if (
+    attachment.capabilities !== undefined &&
+    !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+  ) {
+    throw new RpcError("capability_not_advertised", 409, { restarted: false, reason: "capability_not_advertised" });
+  }
+  try {
+    const msg: ServerToAgent = {
+      instance_uid: hexToUint8Array(attachment.instance_uid),
+      flags: 0,
+      capabilities: SERVER_CAPABILITIES,
+      command: { type: CommandType.Restart },
+    };
+    ws.send(encodeServerToAgent(msg));
+  } catch {
+    throw new RpcError("send_failed", 502, { restarted: false, reason: "send_failed" });
+  }
+  return { restarted: true };
+}
+
+export function restartAllData(ctx: CommandContext): RestartAllResult {
+  const sockets = ctx.getWebSockets();
+  let sent = 0;
+  let failed = 0;
+  let skippedNoCap = 0;
+  for (const ws of sockets) {
+    try {
+      const attachment = parseAttachment(ws.deserializeAttachment());
+      if (!attachment) continue;
+      if (
+        attachment.capabilities !== undefined &&
+        !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+      ) {
+        skippedNoCap++;
+        continue;
+      }
+      const msg: ServerToAgent = {
+        instance_uid: hexToUint8Array(attachment.instance_uid),
+        flags: 0,
+        capabilities: SERVER_CAPABILITIES,
+        command: { type: CommandType.Restart },
+      };
+      ws.send(encodeServerToAgent(msg));
+      sent++;
+    } catch {
+      failed++;
+    }
+  }
+  return { restarted: sent, failed, skipped_no_cap: skippedNoCap };
+}
+
+export async function sweepData(
+  ctx: CommandContext,
+  isConnected: (uid: string) => boolean,
+  emitMetrics: () => void,
+): Promise<SweepResult> {
+  const start = Date.now();
+
+  const policy = ctx.repo.loadDoPolicy();
+  const unenrolled =
+    policy.auto_unenroll_after_days !== null
+      ? ctx.repo.autoUnenrollStaleAgents(policy.auto_unenroll_after_days)
+      : 0;
+
+  const staleUids = ctx.repo.sweepStaleAgents(STALE_AGENT_THRESHOLD_MS, isConnected);
+  const activeSocketCount = ctx.getWebSockets().length;
+
+  const durationMs = Date.now() - start;
+  ctx.repo.recordSweep({
+    staleCount: staleUids.length,
+    activeSocketCount,
+    durationMs,
+  });
+
+  const { tenant_id: tenantId, config_id: configId } = ctx.identity;
+
+  try {
+    ctx.analytics?.writeDataPoint({
+      blobs: ["stale_sweep", tenantId, configId],
+      doubles: [Date.now(), staleUids.length, activeSocketCount, durationMs, unenrolled],
+      indexes: [tenantId],
+    });
+  } catch {
+    // Analytics write failure should never block stale reconciliation.
+  }
+  try {
+    emitMetrics();
+  } catch {
+    // Metrics writes are best-effort and should not block stale reconciliation.
+  }
+
+  return { swept: staleUids.length, unenrolled, active_websockets: activeSocketCount, duration_ms: durationMs };
 }

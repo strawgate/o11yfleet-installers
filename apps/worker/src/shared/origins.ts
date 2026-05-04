@@ -37,6 +37,8 @@ export function deploymentEnvironment(environment?: string | null): DeploymentEn
     case "staging":
     case "production":
       return environment;
+    case null:
+    case undefined:
     default:
       return "production";
   }

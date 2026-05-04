@@ -1,6 +1,8 @@
 // o11yfleet Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
+import type { ConfigDurableObject } from "./durable-objects/config-do.js";
+import type { SweepResult } from "./durable-objects/rpc-types.js";
 import { PENDING_DO_CONFIG_ID } from "./durable-objects/constants.js";
 export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
@@ -17,7 +19,7 @@ import type { AuditEvent } from "@o11yfleet/core/audit";
 export interface Env {
   FP_DB: D1Database;
   FP_CONFIGS: R2Bucket;
-  CONFIG_DO: DurableObjectNamespace;
+  CONFIG_DO: DurableObjectNamespace<ConfigDurableObject>;
   CONFIG_VALIDATION: Workflow;
   FP_ANALYTICS?: AnalyticsEngineDataset;
   /** Audit log queue. Producer: each mutating handler. Consumer: queue() in this Worker. */
@@ -113,30 +115,6 @@ function tenantPlanBucket(plan: string): TenantPlanBucket {
       return "paid";
     default:
       return "paid";
-  }
-}
-
-async function withTimeout<T>(
-  start: (signal: AbortSignal) => Promise<T>,
-  timeoutMs: number,
-  message: string,
-): Promise<T> {
-  const controller = new AbortController();
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
-    timer = setTimeout(() => {
-      controller.abort(message);
-    }, timeoutMs);
-    return await start(controller.signal);
-  } catch (err) {
-    if (controller.signal.aborted) {
-      throw new Error(message);
-    }
-    throw err;
-  } finally {
-    if (timer !== undefined) {
-      clearTimeout(timer);
-    }
   }
 }
 
@@ -277,20 +255,20 @@ export default {
       const doName = `${config.tenant_id}:${config.id}`;
       const doId = env.CONFIG_DO.idFromName(doName);
       const stub = env.CONFIG_DO.get(doId);
-      const resp = await withTimeout(
-        (signal) => stub.fetch(new Request("http://do/command/sweep", { method: "POST", signal })),
-        CRON_SWEEP_TIMEOUT_MS,
-        `[cron] sweep timed out for ${doName}`,
-      );
-      if (!resp.ok) {
-        const body = await resp.text().catch(() => "");
-        throw new Error(`[cron] sweep failed for ${doName}: HTTP ${resp.status} ${body}`);
-      }
-      return resp.json<{ swept: number }>();
+      const result: SweepResult = await Promise.race([
+        stub.rpcSweep(),
+        new Promise<never>((_, reject) => {
+          setTimeout(
+            () => reject(new Error(`[cron] sweep timed out for ${doName}`)),
+            CRON_SWEEP_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      return result;
     });
 
     const swept = results
-      .filter((r): r is PromiseFulfilledResult<{ swept: number }> => r.status === "fulfilled")
+      .filter((r): r is PromiseFulfilledResult<SweepResult> => r.status === "fulfilled")
       .reduce((sum, r) => sum + r.value.swept, 0);
     const failed = results.filter((r) => r.status === "rejected").length;
 

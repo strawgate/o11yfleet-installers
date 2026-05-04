@@ -39,6 +39,8 @@ import {
   handleTenantGuidanceRequest,
 } from "../../ai/guidance.js";
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
+import { parseRpcError } from "../../durable-objects/rpc-types.js";
+import type { ConfigStatsResult } from "../../durable-objects/rpc-types.js";
 import { typedJsonResponse } from "../../shared/responses.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
@@ -949,23 +951,24 @@ async function handleListAgents(
   configId: string,
   url: URL,
 ): Promise<Response> {
-  // DO name = tenantId:configId — wrong tenant gets an empty DO, no data leak.
-  // Skip D1 ownership check to avoid D1 failures under burst load.
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  const source = new URL("http://internal/agents");
-  const allowed = ["limit", "cursor", "q", "status", "health", "sort"];
-  for (const key of allowed) {
-    const value = url.searchParams.get(key);
-    if (value !== null) source.searchParams.set(key, value);
-  }
-  return stub.fetch(new Request(source.toString()));
+  const result = await stub.rpcListAgents({
+    limit: Number(url.searchParams.get("limit") ?? 50) || 50,
+    cursor: url.searchParams.get("cursor") ?? undefined,
+    q: url.searchParams.get("q") ?? undefined,
+    status: url.searchParams.get("status") ?? undefined,
+    health: url.searchParams.get("health") ?? undefined,
+    sort: url.searchParams.get("sort") ?? undefined,
+  });
+  return Response.json(result);
 }
 
 async function handleGetStats(env: Env, tenantId: string, configId: string): Promise<Response> {
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(new Request("http://internal/stats"));
+  const result = await stub.rpcGetStats();
+  return Response.json(result);
 }
 
 async function handleDisconnect(env: Env, tenantId: string, configId: string): Promise<Response> {
@@ -973,7 +976,8 @@ async function handleDisconnect(env: Env, tenantId: string, configId: string): P
   if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(new Request("http://internal/command/disconnect", { method: "POST" }));
+  const result = await stub.rpcDisconnectAll();
+  return Response.json(result);
 }
 
 async function handleRestart(env: Env, tenantId: string, configId: string): Promise<Response> {
@@ -981,7 +985,8 @@ async function handleRestart(env: Env, tenantId: string, configId: string): Prom
   if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(new Request("http://internal/command/restart", { method: "POST" }));
+  const result = await stub.rpcRestartAll();
+  return Response.json(result);
 }
 
 async function handleDisconnectAgentRoute(
@@ -997,9 +1002,14 @@ async function handleDisconnectAgentRoute(
   if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(
-    new Request(`http://internal/command/disconnect-agent/${instanceUid}`, { method: "POST" }),
-  );
+  try {
+    const result = await stub.rpcDisconnectAgent(instanceUid);
+    return Response.json(result);
+  } catch (err) {
+    const rpcErr = parseRpcError(err);
+    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    throw err;
+  }
 }
 
 async function handleRestartAgentRoute(
@@ -1015,9 +1025,14 @@ async function handleRestartAgentRoute(
   if (!config) return jsonError("Configuration not found", 404);
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  return stub.fetch(
-    new Request(`http://internal/command/restart-agent/${instanceUid}`, { method: "POST" }),
-  );
+  try {
+    const result = await stub.rpcRestartAgent(instanceUid);
+    return Response.json(result);
+  } catch (err) {
+    const rpcErr = parseRpcError(err);
+    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    throw err;
+  }
 }
 
 function isValidInstanceUid(uid: string): boolean {
@@ -1032,39 +1047,21 @@ async function handleRolloutCohortSummary(
 ): Promise<Response> {
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  let statsResponse: Response;
   try {
-    statsResponse = await stub.fetch(new Request("http://internal/stats"));
+    const stats = (await stub.rpcGetStats()) as ConfigStatsResult;
+    return Response.json({
+      total_agents: stats.total_agents,
+      connected_agents: stats.connected_agents,
+      healthy_agents: stats.healthy_agents,
+      drifted_agents: stats.drifted_agents ?? 0,
+      desired_config_hash: stats.desired_config_hash ?? null,
+      status_counts: stats.status_counts ?? {},
+      current_hash_counts: stats.current_hash_counts ?? [],
+    });
   } catch (error) {
-    console.error("rollout cohort summary DO fetch threw", error);
+    console.error("rollout cohort summary RPC call failed", error);
     return jsonError("Rollout cohort summary unavailable", 502);
   }
-  const failedResponse = await failedDoResponse([["stats", statsResponse]]);
-  if (failedResponse) {
-    console.error("rollout cohort summary DO fetch failed", failedResponse);
-    return jsonError("Rollout cohort summary unavailable", 502);
-  }
-  const stats = (await statsResponse.json()) as Record<string, unknown>;
-  const desiredHash = stringValue(stats["desired_config_hash"]) ?? null;
-  const statusCountsRaw = stats["status_counts"];
-  const status_counts =
-    statusCountsRaw && typeof statusCountsRaw === "object" && !Array.isArray(statusCountsRaw)
-      ? (statusCountsRaw as Record<string, number>)
-      : {};
-  const hashCountsRaw = stats["current_hash_counts"];
-  const current_hash_counts = Array.isArray(hashCountsRaw)
-    ? (hashCountsRaw as Array<{ value: string; count: number }>)
-    : [];
-
-  return Response.json({
-    total_agents: numberValue(stats["total_agents"]) ?? 0,
-    connected_agents: numberValue(stats["connected_agents"]) ?? 0,
-    healthy_agents: numberValue(stats["healthy_agents"]) ?? 0,
-    drifted_agents: numberValue(stats["drifted_agents"]) ?? 0,
-    desired_config_hash: desiredHash,
-    status_counts,
-    current_hash_counts,
-  });
 }
 
 // ─── Rollout Handler ────────────────────────────────────────────────
@@ -1089,38 +1086,16 @@ async function handleRollout(
   const r2Obj = await env.FP_CONFIGS.get(r2Key);
   const configContent = r2Obj ? await r2Obj.text() : null;
 
-  return stub.fetch(
-    new Request("http://internal/command/set-desired-config", {
-      method: "POST",
-      body: JSON.stringify({
-        config_hash: config["current_config_hash"],
-        config_content: configContent,
-      }),
-      headers: {
-        "Content-Type": "application/json",
-        "x-fp-tenant-id": tenantId,
-        "x-fp-config-id": configId,
-      },
-    }),
-  );
+  const result = await stub.rpcSetDesiredConfig({
+    config_hash: config["current_config_hash"],
+    config_content: configContent,
+  });
+  return Response.json(result);
 }
 
 async function getR2Text(env: Env, r2Key: string): Promise<string | null> {
   const object = await env.FP_CONFIGS.get(r2Key);
   return object ? object.text() : null;
-}
-
-async function failedDoResponse(responses: Array<[string, Response]>) {
-  for (const [name, response] of responses) {
-    if (!response.ok) {
-      return {
-        name,
-        status: response.status,
-        body: await response.text().catch(() => "<unreadable>"),
-      };
-    }
-  }
-  return null;
 }
 
 function versionSummary(version: {
@@ -1194,14 +1169,6 @@ function utf8ByteLength(str: string): number {
     }
   }
   return len;
-}
-function stringValue(value: unknown): string | null {
-  return typeof value === "string" && value.trim() !== "" ? value.trim() : null;
-}
-
-function numberValue(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) return value;
-  return null;
 }
 
 // ─── Overview (aggregate stats) ─────────────────────────────────────
@@ -1335,14 +1302,9 @@ async function handleGetAgent(
 ): Promise<Response> {
   const doId = env.CONFIG_DO.idFromName(getDoName(tenantId, configId));
   const stub = env.CONFIG_DO.get(doId);
-  const agentResp = await stub.fetch(
-    new Request(`http://internal/agents/${encodeURIComponent(agentUid)}`),
-  );
-  if (agentResp.status === 404) {
-    await agentResp.body?.cancel();
-    return jsonError("Agent not found", 404);
-  }
-  return agentResp;
+  const result = await stub.rpcGetAgent(agentUid);
+  if (!result) return jsonError("Agent not found", 404);
+  return Response.json(result);
 }
 
 // ─── Pending Token Handlers ────────────────────────────────────────
@@ -1498,16 +1460,15 @@ async function handleListPendingDevices(env: Env, tenantId: string): Promise<Res
   const doName = `${tenantId}:__pending__`;
   const doId = env.CONFIG_DO.idFromName(doName);
   const stub = env.CONFIG_DO.get(doId);
-  const resp = await stub.fetch(
-    new Request("http://internal/pending-devices", {
-      headers: { "x-fp-tenant-id": tenantId },
-    }),
-  );
-  if (!resp.ok) {
-    await resp.body?.cancel();
+  try {
+    const result = await stub.rpcListPendingDevices();
+    return Response.json(result);
+  } catch (err) {
+    const rpcErr = parseRpcError(err);
+    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    console.error("Failed to fetch pending devices", err);
     return jsonError("Failed to fetch pending devices", 502);
   }
-  return resp;
 }
 
 async function handleAssignPendingDevice(
@@ -1529,21 +1490,16 @@ async function handleAssignPendingDevice(
   const doName = `${tenantId}:__pending__`;
   const doId = env.CONFIG_DO.idFromName(doName);
   const stub = env.CONFIG_DO.get(doId);
-  const resp = await stub.fetch(
-    new Request(`http://internal/pending-devices/${encodeURIComponent(deviceUid)}/assign`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ config_id: body.config_id, assigned_by: "api" }),
-    }),
-  );
-  if (resp.status === 404) {
-    await resp.body?.cancel();
-    return jsonError("Pending device not found", 404);
-  }
-  if (!resp.ok) {
-    await resp.body?.cancel();
+  try {
+    const result = await stub.rpcAssignPendingDevice(deviceUid, {
+      config_id: body.config_id,
+      assigned_by: "api",
+    });
+    return Response.json(result);
+  } catch (err) {
+    const rpcErr = parseRpcError(err);
+    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    console.error("Failed to assign device", err);
     return jsonError("Failed to assign device", 502);
   }
-
-  return resp;
 }

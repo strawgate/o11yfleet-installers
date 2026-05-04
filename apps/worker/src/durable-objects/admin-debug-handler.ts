@@ -1,4 +1,6 @@
 import { adminDoQueryRequestSchema } from "@o11yfleet/core/api";
+import type { DebugTablesResult, DebugQueryParams, DebugQueryResult } from "./rpc-types.js";
+import { RpcError } from "./rpc-types.js";
 
 const MAX_DEBUG_QUERY_ROWS = 500;
 const MAX_DEBUG_SQL_LENGTH = 4_000;
@@ -140,6 +142,50 @@ export async function handleDebugQuery(sql: SqlStorage, request: Request): Promi
     return Response.json(
       { error: error instanceof Error ? error.message : "Query failed" },
       { status: 400 },
+    );
+  }
+}
+
+// ─── Data-returning cores (called by RPC methods) ────────────────
+
+export function debugTablesData(sql: SqlStorage): DebugTablesResult {
+  const rows = sql
+    .exec(
+      `SELECT name
+       FROM sqlite_master
+       WHERE type = 'table' AND name NOT LIKE 'sqlite_%'
+       ORDER BY name ASC`,
+    )
+    .toArray() as Array<{ name: string }>;
+  return { tables: rows.map((row) => row.name) };
+}
+
+export function debugQueryData(sql: SqlStorage, params: DebugQueryParams): DebugQueryResult {
+  const { sql: querySql, params: queryParams = [] } = params;
+  try {
+    const cursor = sql.exec(
+      readonlyDebugQuery(querySql),
+      ...queryParams.map((param) => normalizeDebugParam(param)),
+      MAX_DEBUG_QUERY_ROWS,
+    );
+    const rows: Array<Record<string, unknown>> = [];
+    let bytes = 2;
+    let truncated = false;
+    for (const row of cursor) {
+      const rowJson = JSON.stringify(row);
+      const rowBytes = new TextEncoder().encode(rowJson).byteLength + 1;
+      if (bytes + rowBytes > MAX_DEBUG_RESPONSE_BYTES) {
+        truncated = true;
+        break;
+      }
+      bytes += rowBytes;
+      rows.push(row as Record<string, unknown>);
+    }
+    return { rows, row_count: rows.length, truncated, response_bytes_estimate: bytes };
+  } catch (error) {
+    throw new RpcError(
+      error instanceof Error ? error.message : "Query failed",
+      400,
     );
   }
 }

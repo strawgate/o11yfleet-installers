@@ -346,9 +346,9 @@ service:
                 Every imported section is represented in the graph.
               </Alert>
             ) : (
-              importResult.warnings.map((warning, index) => (
+              importResult.warnings.map((warning) => (
                 <Alert
-                  key={`import-warning-${index}-${warning.code}`}
+                  key={`import-warning-${warning.code}-${warning.message}`}
                   color="yellow"
                   variant="light"
                   title={`Import warning: ${warning.code}`}

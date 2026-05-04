@@ -219,6 +219,7 @@ export default function DOViewerPage() {
                   </Table.Thead>
                   <Table.Tbody>
                     {rows.map((row, rowIndex) => (
+                      // eslint-disable-next-line react/no-array-index-key -- SQL result rows have no natural ID
                       <Table.Tr key={rowIndex}>
                         {columns.map((col) => (
                           <Table.Td key={col}>{buildDoCell(row[col])}</Table.Td>

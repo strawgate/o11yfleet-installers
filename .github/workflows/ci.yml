@@ -167,6 +167,10 @@ jobs:
         if: needs.changes.outputs.node == 'true'
         run: pnpm lint:type-aware
 
+      - name: Dead code detection (knip)
+        if: needs.changes.outputs.node == 'true'
+        run: pnpm knip
+
       - name: Dev-check script tests
         if: needs.changes.outputs.node == 'true'
         run: pnpm test:dev-check

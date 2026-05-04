@@ -162,6 +162,7 @@ export function DataTable<T>(props: DataTableProps<T>) {
       ) : isInitialLoading ? (
         <Stack gap={2} p="xs">
           {Array.from({ length: 6 }).map((_, i) => (
+            // eslint-disable-next-line react/no-array-index-key -- static placeholder array, items never reorder
             <Skeleton key={i} h={estimatedRowHeight} />
           ))}
         </Stack>

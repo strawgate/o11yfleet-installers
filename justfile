@@ -103,6 +103,7 @@ lint-scripts:
 check-all:
     pnpm turbo lint typecheck test
     pnpm lint:type-aware
+    pnpm knip
 
 # Lint all packages
 lint:
@@ -156,6 +157,7 @@ reproduce-check check:
         pnpm turbo lint
         pnpm lint:scripts
         pnpm lint:type-aware
+        pnpm knip
         pnpm test:dev-check
         pnpm prettier --cache --cache-location node_modules/.cache/prettier/.prettier-cache --check .
         pnpm --filter @o11yfleet/worker typegen:check

@@ -62,7 +62,7 @@ export function ShellNav({
         if (item.placeholder) {
           return (
             <MantineNavLink
-              key={item.id + i}
+              key={item.id}
               label={item.label}
               leftSection={item.icon}
               rightSection={item.badge ? <Badge size="xs">{item.badge}</Badge> : null}
@@ -73,7 +73,7 @@ export function ShellNav({
         }
         return (
           <MantineNavLink
-            key={item.id + i}
+            key={item.id}
             component={NavLink}
             to={item.href}
             label={item.label}

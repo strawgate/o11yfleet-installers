@@ -177,8 +177,8 @@ function ServiceCard({ service }: { service: AdminUsageService }) {
 
       {service.notes.length > 0 ? (
         <List size="sm" c="dimmed" mt="md">
-          {service.notes.map((note, index) => (
-            <List.Item key={`${note}-${index}`}>{note}</List.Item>
+          {service.notes.map((note) => (
+            <List.Item key={note}>{note}</List.Item>
           ))}
         </List>
       ) : null}
@@ -376,8 +376,8 @@ export default function UsagePage() {
           {data.pricing.source}
         </Text>
         <List size="sm" c="dimmed" mt="sm">
-          {data.pricing.notes.map((note, index) => (
-            <List.Item key={`${note}-${index}`}>{note}</List.Item>
+          {data.pricing.notes.map((note) => (
+            <List.Item key={note}>{note}</List.Item>
           ))}
         </List>
         <Text size="sm" c="dimmed" mt="md">

@@ -230,10 +230,13 @@ async function handleInstallation(ctx: HandlerContext): Promise<HandlerResult> {
     case "deleted":
       await deleteInstallation(ctx.env, id);
       break;
-    // suspend / other actions: the installation row stays around so the
-    // tenant link survives a temporary suspend; webhook lookups will
-    // still find the row but the workflow can choose to skip work for
-    // suspended installs once we surface that state.
+    case undefined:
+    default:
+      // suspend / other actions: the installation row stays around so the
+      // tenant link survives a temporary suspend; webhook lookups will
+      // still find the row but the workflow can choose to skip work for
+      // suspended installs once we surface that state.
+      break;
   }
   return { status: 202 };
 }

@@ -202,6 +202,8 @@ export function extractAgentIdentity(
       case "host.arch":
         result.hostArch = val;
         break;
+      default:
+        break;
     }
   }
 

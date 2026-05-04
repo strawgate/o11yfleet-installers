@@ -71,9 +71,9 @@ export function ValidationStrip({ validation, yamlPreviewError }: ValidationStri
               Errors ({validation.errors.length})
             </summary>
             <Stack gap="xs" mt="xs">
-              {validation.errors.map((issue, index) => (
+              {validation.errors.map((issue) => (
                 <IssueAlert
-                  key={`error-${index}-${issue.code}`}
+                  key={`error-${issue.code}-${issue.message}`}
                   color="red"
                   title={`Error: ${issue.code}`}
                   body={issue.message}
@@ -96,9 +96,9 @@ export function ValidationStrip({ validation, yamlPreviewError }: ValidationStri
               Warnings ({validation.warnings.length})
             </summary>
             <Stack gap="xs" mt="xs">
-              {validation.warnings.map((issue, index) => (
+              {validation.warnings.map((issue) => (
                 <IssueAlert
-                  key={`warning-${index}-${issue.code}`}
+                  key={`warning-${issue.code}-${issue.message}`}
                   color="yellow"
                   title={`Warning: ${issue.code}`}
                   body={issue.message}

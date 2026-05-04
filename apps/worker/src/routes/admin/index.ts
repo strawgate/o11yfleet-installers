@@ -37,6 +37,8 @@ import {
   normalizePlan,
 } from "../../shared/plans.js";
 import { jsonApiError, jsonError, ApiError } from "../../shared/errors.js";
+import type { ConfigDurableObject } from "../../durable-objects/config-do.js";
+import { parseRpcError } from "../../durable-objects/rpc-types.js";
 import { sessionCookie } from "../../shared/cookies.js";
 import { validateJsonBody } from "../../shared/validation.js";
 import { sql, type RawBuilder } from "kysely";
@@ -603,7 +605,7 @@ async function handleListTenantUsers(env: Env, tenantId: string): Promise<Respon
   return Response.json({ users });
 }
 
-async function getConfigDoStub(env: Env, configId: string): Promise<DurableObjectStub> {
+async function getConfigDoStub(env: Env, configId: string): Promise<DurableObjectStub<ConfigDurableObject>> {
   const config = await getDb(env.FP_DB)
     .selectFrom("configurations")
     .select(["id", "tenant_id"])
@@ -616,27 +618,21 @@ async function getConfigDoStub(env: Env, configId: string): Promise<DurableObjec
 
 async function handleDoTables(env: Env, configId: string): Promise<Response> {
   const stub = await getConfigDoStub(env, configId);
-  return stub.fetch(
-    new Request("http://internal/debug/tables", {
-      method: "GET",
-      headers: { "x-fp-admin-debug": "true" },
-    }),
-  );
+  const result = await stub.rpcDebugTables();
+  return Response.json(result);
 }
 
 async function handleDoQuery(request: Request, env: Env, configId: string): Promise<Response> {
   const body = await validateJsonBody(request, adminDoQueryRequestSchema);
   const stub = await getConfigDoStub(env, configId);
-  return stub.fetch(
-    new Request("http://internal/debug/query", {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        "x-fp-admin-debug": "true",
-      },
-      body: JSON.stringify(body),
-    }),
-  );
+  try {
+    const result = await stub.rpcDebugQuery({ sql: body.sql, params: body.params });
+    return Response.json(result);
+  } catch (err) {
+    const rpcErr = parseRpcError(err);
+    if (rpcErr) return jsonError(rpcErr.message, rpcErr.statusCode);
+    throw err;
+  }
 }
 
 // ─── Health Check ───────────────────────────────────────────────────

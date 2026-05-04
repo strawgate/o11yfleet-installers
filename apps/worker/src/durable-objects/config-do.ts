@@ -25,7 +25,7 @@ import type {
 import { SqliteAgentStateRepo } from "./sqlite-agent-state-repo.js";
 import { parseAttachment } from "./ws-attachment.js";
 import type { WSAttachment } from "./ws-attachment.js";
-import { handleDebugTables, handleDebugQuery } from "./admin-debug-handler.js";
+import { handleDebugTables, handleDebugQuery, debugTablesData, debugQueryData } from "./admin-debug-handler.js";
 import {
   handleSetDesiredConfig,
   handleDisconnectAll,
@@ -33,13 +33,50 @@ import {
   handleRestartCommand,
   handleRestartAgent,
   handleSweep,
+  setDesiredConfigData,
+  disconnectAllData,
+  disconnectAgentData,
+  restartAgentData,
+  restartAllData,
+  sweepData,
 } from "./command-handler.js";
 import type { CommandContext } from "./command-handler.js";
-import { handleGetStats, handleGetAgents, handleGetAgent } from "./query-handler.js";
+import {
+  handleGetStats,
+  handleGetAgents,
+  handleGetAgent,
+  getStatsData,
+  listAgentsData,
+  getAgentData,
+} from "./query-handler.js";
 import { handleFirstMessage } from "./opamp-session.js";
 import type { SessionContext } from "./opamp-session.js";
 import { parseConfigDoName, safeForLog, type ConfigDoIdentity } from "./do-name.js";
 import { initBodySchema, parseAndValidateBody, syncPolicyBodySchema } from "./policy-schemas.js";
+import type {
+  AgentListParams,
+  AgentListResult,
+  ConfigStatsResult,
+  AgentDetailResult,
+  SetDesiredConfigParams,
+  SetDesiredConfigResult,
+  SweepResult,
+  DisconnectResult,
+  RestartAllResult,
+  DisconnectAgentResult,
+  RestartAgentResult,
+  InitParams,
+  InitResult,
+  SyncPolicyParams,
+  SyncPolicyResult,
+  DebugTablesResult,
+  DebugQueryParams,
+  DebugQueryResult,
+  PendingDevicesResult,
+  AssignPendingDeviceParams,
+  AssignPendingDeviceResult,
+} from "./rpc-types.js";
+import { RpcError } from "./rpc-types.js";
 import {
   MAX_AGENTS_PER_CONFIG,
   ALARM_TICK_MS,
@@ -966,6 +1003,156 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       blobs: [tenant_id, config_id, FLEET_CONFIG_SNAPSHOT_INTERVAL],
       doubles: configMetricsToDoubles(metrics),
     });
+  }
+
+  // ─── Typed RPC Methods ──────────────────────────────────────────────
+  //
+  // These public async methods are the primary Worker→DO communication
+  // interface. Cloudflare DO RPC (compat date ≥ 2024-04-03) serializes
+  // params/return values automatically — no URL construction, no JSON
+  // parse/stringify, full TypeScript type safety on both sides.
+  //
+  // The fetch() handler above is retained only for WebSocket upgrades
+  // (which RPC cannot support) and as a temporary compatibility layer.
+
+  // ── Queries ──
+
+  async rpcGetStats(): Promise<ConfigStatsResult> {
+    this.ensureInit();
+    return getStatsData(
+      this.repo,
+      () => this.getDesiredConfig(),
+      this.ctx.getWebSockets().length,
+    );
+  }
+
+  async rpcListAgents(params: AgentListParams): Promise<AgentListResult> {
+    this.ensureInit();
+    return listAgentsData(this.repo, params);
+  }
+
+  async rpcGetAgent(uid: string): Promise<AgentDetailResult | null> {
+    this.ensureInit();
+    return getAgentData(
+      this.repo,
+      uid,
+      (u) => this.isAgentConnected(u),
+      () => this.getDesiredConfig(),
+    );
+  }
+
+  // ── Commands ──
+
+  async rpcSetDesiredConfig(body: SetDesiredConfigParams): Promise<SetDesiredConfigResult> {
+    this.ensureInit();
+    return setDesiredConfigData(this.commandCtx(), body);
+  }
+
+  async rpcSweep(): Promise<SweepResult> {
+    this.ensureInit();
+    return sweepData(
+      this.commandCtx(),
+      (uid) => this.isAgentConnected(uid),
+      () => this.emitMetrics(),
+    );
+  }
+
+  async rpcDisconnectAll(): Promise<DisconnectResult> {
+    this.ensureInit();
+    return disconnectAllData(this.commandCtx());
+  }
+
+  async rpcRestartAll(): Promise<RestartAllResult> {
+    this.ensureInit();
+    return restartAllData(this.commandCtx());
+  }
+
+  async rpcDisconnectAgent(uid: string): Promise<DisconnectAgentResult> {
+    this.ensureInit();
+    return disconnectAgentData(this.commandCtx(), uid);
+  }
+
+  async rpcRestartAgent(uid: string): Promise<RestartAgentResult> {
+    this.ensureInit();
+    return restartAgentData(this.commandCtx(), uid);
+  }
+
+  // ── Lifecycle ──
+
+  async rpcInit(body: InitParams): Promise<InitResult> {
+    this.ensureInit();
+    const identity = this.getMyIdentity();
+
+    if (body.max_agents_per_config !== undefined) {
+      this.repo.saveDoPolicy({ max_agents_per_config: body.max_agents_per_config });
+      this.cachedPolicy = null;
+    }
+
+    return {
+      tenant_id: identity.tenant_id,
+      config_id: identity.config_id,
+      policy: this.getPolicy(),
+      initialized: true,
+    };
+  }
+
+  async rpcSyncPolicy(body: SyncPolicyParams): Promise<SyncPolicyResult> {
+    this.ensureInit();
+    if (body.max_agents_per_config !== undefined) {
+      this.repo.saveDoPolicy({ max_agents_per_config: body.max_agents_per_config });
+      this.cachedPolicy = null;
+    }
+    return { policy: this.getPolicy() };
+  }
+
+  // ── Debug ──
+
+  async rpcDebugTables(): Promise<DebugTablesResult> {
+    this.ensureInit();
+    return debugTablesData(this.ctx.storage.sql);
+  }
+
+  async rpcDebugQuery(params: DebugQueryParams): Promise<DebugQueryResult> {
+    this.ensureInit();
+    return debugQueryData(this.ctx.storage.sql, params);
+  }
+
+  // ── Pending Devices ──
+
+  async rpcListPendingDevices(): Promise<PendingDevicesResult> {
+    this.ensureInit();
+    const identity = this.getMyIdentity();
+    if (!identity.tenant_id) throw new RpcError("Missing tenant", 400);
+    const { listPendingDevices } = await import("./agent-state-repo.js");
+    return { devices: listPendingDevices(this.ctx.storage.sql, identity.tenant_id, 1000) };
+  }
+
+  async rpcAssignPendingDevice(
+    uid: string,
+    body: AssignPendingDeviceParams,
+  ): Promise<AssignPendingDeviceResult> {
+    this.ensureInit();
+    const identity = this.getMyIdentity();
+    const { upsertPendingAssignment, getPendingDevice, deletePendingDevice } =
+      await import("./agent-state-repo.js");
+
+    const device = getPendingDevice(this.ctx.storage.sql, uid);
+    if (!device) throw new RpcError("Pending device not found", 404);
+
+    if (identity.tenant_id !== device.tenant_id) {
+      throw new RpcError("Tenant mismatch", 403, { device_tenant: device.tenant_id });
+    }
+
+    upsertPendingAssignment(this.ctx.storage.sql, {
+      instance_uid: uid,
+      tenant_id: device.tenant_id,
+      target_config_id: body.config_id,
+      assigned_by: body.assigned_by ?? null,
+    });
+
+    deletePendingDevice(this.ctx.storage.sql, uid);
+
+    return { instance_uid: uid, target_config_id: body.config_id, assigned: true };
   }
 
   // ─── Live Collector Telemetry (Phase 1) ─────────────────────────────────────
