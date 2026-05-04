@@ -57,6 +57,18 @@ const PortalLayout = lazy(() => import("@/layouts/PortalLayout"));
 const OverviewPage = lazyPage(() => import("@/pages/portal/OverviewPage"), "Overview");
 const AgentsPage = lazyPage(() => import("@/pages/portal/AgentsPage"), "Agents");
 const AgentDetailPage = lazyPage(() => import("@/pages/portal/AgentDetailPage"), "Agent Detail");
+const AgentDetailOverviewTab = lazyPage(
+  () => import("@/pages/portal/AgentDetailPage/OverviewTab"),
+  "Agent Overview",
+);
+const AgentDetailPipelineTab = lazyPage(
+  () => import("@/pages/portal/AgentDetailPage/PipelineTab"),
+  "Agent Pipeline",
+);
+const AgentDetailConfigTab = lazyPage(
+  () => import("@/pages/portal/AgentDetailPage/ConfigTab"),
+  "Agent Configuration",
+);
 const ConfigurationsPage = lazyPage(
   () => import("@/pages/portal/ConfigurationsPage"),
   "Configurations",
@@ -177,7 +189,12 @@ export function AppRoutes() {
           <Route index element={<Navigate to="/portal/overview" replace />} />
           <Route path="overview" element={<OverviewPage />} />
           <Route path="agents" element={<AgentsPage />} />
-          <Route path="agents/:configId/:agentUid" element={<AgentDetailPage />} />
+          <Route path="agents/:configId/:agentUid" element={<AgentDetailPage />}>
+            <Route index element={<Navigate to="overview" replace />} />
+            <Route path="overview" element={<AgentDetailOverviewTab />} />
+            <Route path="pipeline" element={<AgentDetailPipelineTab />} />
+            <Route path="config" element={<AgentDetailConfigTab />} />
+          </Route>
           <Route path="configurations" element={<ConfigurationsPage />} />
           <Route path="configurations/:id" element={<ConfigurationDetailPage />} />
           <Route path="builder" element={<BuilderPage />} />

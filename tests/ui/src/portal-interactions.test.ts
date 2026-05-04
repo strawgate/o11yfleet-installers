@@ -58,17 +58,55 @@ test.describe("portal interactions", () => {
     expect(runtime.errors).toEqual([]);
   });
 
-  test("AgentDetailPage: switching tabs updates the active panel", async ({ page }) => {
+  test("AgentDetailPage: switching tabs updates the active panel and URL", async ({ page }) => {
     const runtime = collectRuntimeErrors(page);
     await mockPortal(page);
     await page.goto(`${UI_URL}/portal/agents/${CONFIG_ID}/${AGENT_UID}`);
 
     await expect(page.getByRole("heading", { name: "demo-host" })).toBeVisible();
 
-    for (const label of ["Pipeline", "Configuration", "Overview"]) {
+    // Bare path redirects to the default tab.
+    await expect(page).toHaveURL(new RegExp(`/portal/agents/${CONFIG_ID}/${AGENT_UID}/overview$`));
+
+    const tabPaths: Record<string, string> = {
+      Pipeline: "pipeline",
+      Configuration: "config",
+      Overview: "overview",
+    };
+    for (const [label, slug] of Object.entries(tabPaths)) {
       await page.getByRole("tab", { name: label }).click();
       await expect(page.getByRole("tab", { name: label, selected: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/portal/agents/${CONFIG_ID}/${AGENT_UID}/${slug}$`));
     }
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("AgentDetailPage: deep link to /pipeline activates Pipeline tab", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    await mockPortal(page);
+    await page.goto(`${UI_URL}/portal/agents/${CONFIG_ID}/${AGENT_UID}/pipeline`);
+
+    await expect(page.getByRole("heading", { name: "demo-host" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Pipeline", selected: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Pipeline Flow" })).toBeVisible();
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("AgentDetailPage: keyboard arrow keys cycle tabs and update URL", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    await mockPortal(page);
+    await page.goto(`${UI_URL}/portal/agents/${CONFIG_ID}/${AGENT_UID}/overview`);
+
+    await expect(page.getByRole("heading", { name: "demo-host" })).toBeVisible();
+    await page.getByRole("tab", { name: "Overview" }).focus();
+
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Pipeline", selected: true })).toBeVisible();
+    await expect(page).toHaveURL(new RegExp(`/portal/agents/${CONFIG_ID}/${AGENT_UID}/pipeline$`));
 
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
