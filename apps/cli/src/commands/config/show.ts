@@ -10,7 +10,7 @@ interface ShowConfigOptions {
 }
 
 export async function showConfig(opts: ShowConfigOptions): Promise<void> {
-  const resp = await apiRequest(`/api/v1/configurations/${opts.configId}`);
+  const resp = await apiRequest(`/api/v1/configurations/${encodeURIComponent(opts.configId)}`);
 
   if (resp.error) {
     output.error(`Failed to get config: ${resp.error}`);

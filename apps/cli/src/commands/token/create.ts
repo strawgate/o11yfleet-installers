@@ -21,11 +21,14 @@ export async function createToken(opts: CreateTokenOptions): Promise<void> {
     }
   }
 
-  const resp = await apiRequest(`/api/v1/configurations/${opts.configId}/enrollment-token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  const resp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/enrollment-token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
 
   if (resp.error) {
     output.error(`Failed to create token: ${resp.error}`);

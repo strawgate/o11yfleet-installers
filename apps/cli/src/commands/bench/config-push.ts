@@ -39,11 +39,14 @@ export async function benchConfigPush(opts: BenchConfigPushOptions): Promise<voi
 
   // Measure upload
   const uploadStart = performance.now();
-  const uploadResp = await apiRequest(`/api/v1/configurations/${opts.configId}/versions`, {
-    method: "POST",
-    headers: { "Content-Type": "text/plain" },
-    body: configYaml,
-  });
+  const uploadResp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/versions`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "text/plain" },
+      body: configYaml,
+    },
+  );
   const uploadMs = performance.now() - uploadStart;
 
   if (uploadResp.error || !uploadResp.data) {
@@ -53,10 +56,13 @@ export async function benchConfigPush(opts: BenchConfigPushOptions): Promise<voi
 
   // Measure rollout
   const rolloutStart = performance.now();
-  const rolloutResp = await apiRequest(`/api/v1/configurations/${opts.configId}/rollout`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-  });
+  const rolloutResp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/rollout`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+    },
+  );
   const rolloutMs = performance.now() - rolloutStart;
 
   if (rolloutResp.error) {

@@ -13,11 +13,14 @@ interface BenchEnrollmentOptions {
 
 export async function benchEnrollment(opts: BenchEnrollmentOptions): Promise<void> {
   // Create enrollment token
-  const tokenResp = await apiRequest(`/api/v1/configurations/${opts.configId}/enrollment-token`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ label: "bench-token" }),
-  });
+  const tokenResp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/enrollment-token`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "bench-token" }),
+    },
+  );
 
   if (tokenResp.error || !tokenResp.data) {
     output.error("Failed to create enrollment token");
@@ -26,7 +29,9 @@ export async function benchEnrollment(opts: BenchEnrollmentOptions): Promise<voi
 
   // Measure stats fetch
   const start = performance.now();
-  const statsResp = await apiRequest(`/api/v1/configurations/${opts.configId}/stats`);
+  const statsResp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/stats`,
+  );
   const elapsed = performance.now() - start;
 
   if (statsResp.error || !statsResp.data) {

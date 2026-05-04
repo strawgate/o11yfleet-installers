@@ -10,7 +10,9 @@ interface ListTokensOptions {
 }
 
 export async function listTokens(opts: ListTokensOptions): Promise<void> {
-  const resp = await apiRequest(`/api/v1/configurations/${opts.configId}/enrollment-tokens`);
+  const resp = await apiRequest(
+    `/api/v1/configurations/${encodeURIComponent(opts.configId)}/enrollment-tokens`,
+  );
 
   if (resp.error) {
     output.error(`Failed to list tokens: ${resp.error}`);
