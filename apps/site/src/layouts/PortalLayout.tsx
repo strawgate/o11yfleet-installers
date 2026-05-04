@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router";
 import {
   Alert,
   AppShell,

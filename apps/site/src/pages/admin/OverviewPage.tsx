@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { useMemo } from "react";
 import { Badge, Button, Card, Group, SimpleGrid, Stack, Table, Text, Title } from "@mantine/core";
 import { useAdminHealth, useAdminOverview, useAdminTenantsPage } from "../../api/hooks/admin";

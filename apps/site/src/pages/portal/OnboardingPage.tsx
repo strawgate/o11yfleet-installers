@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Button, Card, Stack, Text, Title } from "@mantine/core";
 import { PageHeader, PageShell } from "@/components/app";
 

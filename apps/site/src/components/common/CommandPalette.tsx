@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router";
 import { Spotlight } from "@mantine/spotlight";
 import "@mantine/spotlight/styles.css";
 import { Bot, ArrowRight } from "lucide-react";

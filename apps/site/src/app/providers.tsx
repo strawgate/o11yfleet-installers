@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { BrowserRouter } from "react-router-dom";
+import { BrowserRouter } from "react-router";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { MantineProvider } from "@mantine/core";
 import { ModalsProvider } from "@mantine/modals";

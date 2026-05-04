@@ -1,5 +1,5 @@
 import { lazy, Suspense, type ComponentType } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router";
 import MarketingLayout from "@/layouts/MarketingLayout";
 
 import HomePage from "@/pages/marketing/HomePage";

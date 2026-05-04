@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Button, Card, Group, Progress, SimpleGrid, Stack, Text, Title } from "@mantine/core";
 import { useOverview, useTenant } from "@/api/hooks/portal";
 import { PageHeader, PageShell, StatusBadge } from "@/components/app";

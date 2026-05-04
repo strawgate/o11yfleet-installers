@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Alert, Button, Code, Group, Stack } from "@mantine/core";
 import { CopyButton } from "../../components/common/CopyButton";
 import { EmptyState } from "@/components/app";

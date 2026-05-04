@@ -21,7 +21,7 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { MemoryRouter, Route, Routes } from "react-router";
 
 import MarketingLayout from "../src/layouts/MarketingLayout";
 import { LoadingSpinner } from "../src/components/common/LoadingSpinner";

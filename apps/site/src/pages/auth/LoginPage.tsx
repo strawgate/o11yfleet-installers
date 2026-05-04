@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { apiUrl, login as apiLogin } from "@/api/client";
 import { GitHubMark } from "@/components/common/GitHubMark";

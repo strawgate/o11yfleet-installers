@@ -1,5 +1,5 @@
 import { useEffect, useCallback, useMemo, useState } from "react";
-import { Outlet, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Outlet, NavLink, useLocation, useNavigate } from "react-router";
 import { Anchor, AppShell, Badge, Box, Burger, Group, Stack, Text } from "@mantine/core";
 import { Activity, Building2, Code2, CreditCard, Database, House, LifeBuoy } from "lucide-react";
 import { useAuth, useLogout } from "@/api/hooks/auth";

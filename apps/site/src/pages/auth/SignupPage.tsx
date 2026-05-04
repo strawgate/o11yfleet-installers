@@ -1,4 +1,4 @@
-import { Link, useSearchParams } from "react-router-dom";
+import { Link, useSearchParams } from "react-router";
 import { apiUrl } from "@/api/client";
 import { GitHubMark } from "@/components/common/GitHubMark";
 import { Logo } from "@/components/common/Logo";

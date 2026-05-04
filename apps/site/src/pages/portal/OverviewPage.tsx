@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { ArrowRight } from "lucide-react";
 import { useOverview, type Configuration } from "@/api/hooks/portal";
 import { usePortalGuidance } from "@/api/hooks/ai";

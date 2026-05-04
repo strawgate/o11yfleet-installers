@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router";
 import { Alert, Anchor, Button, PasswordInput, Stack, TextInput } from "@mantine/core";
 import { useLogin } from "../../api/hooks/auth";
 import { Logo } from "@/components/common/Logo";

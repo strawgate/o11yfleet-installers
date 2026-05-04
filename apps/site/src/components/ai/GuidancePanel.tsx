@@ -1,4 +1,4 @@
-import { Link } from "react-router-dom";
+import { Link } from "react-router";
 import { Button } from "@mantine/core";
 import type { AiGuidanceItem, AiGuidanceResponse } from "@o11yfleet/core/ai";
 import { GuidanceBadge } from "./GuidanceBadge";
