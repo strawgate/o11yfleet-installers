@@ -1,7 +1,18 @@
 import { useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-import { ActionIcon, Badge, Button, Group, Modal, Stack, Textarea, TextInput } from "@mantine/core";
+import {
+  ActionIcon,
+  Anchor,
+  Badge,
+  Button,
+  Group,
+  Modal,
+  Stack,
+  Text,
+  Textarea,
+  TextInput,
+} from "@mantine/core";
 import { useForm } from "@mantine/form";
 import { zodResolver } from "mantine-form-zod-resolver";
 import { notifications } from "@mantine/notifications";
@@ -115,21 +126,18 @@ function configurationColumns(): ColumnDef<Configuration>[] {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <Link
-          className="font-medium text-foreground hover:text-primary"
-          to={configurationPath(row.original)}
-        >
+        <Anchor component={Link} to={configurationPath(row.original)} fw={500}>
           {row.original.name}
-        </Link>
+        </Anchor>
       ),
     },
     {
       id: "config_hash",
       header: "Config hash",
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">
+        <Text size="xs" c="dimmed" ff="monospace">
           {trunc(row.original.current_config_hash ?? undefined, 12)}
-        </span>
+        </Text>
       ),
     },
     {
@@ -141,14 +149,18 @@ function configurationColumns(): ColumnDef<Configuration>[] {
       accessorKey: "description",
       header: "Description",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{trunc(row.original.description, 40)}</span>
+        <Text size="sm" c="dimmed">
+          {trunc(row.original.description, 40)}
+        </Text>
       ),
     },
     {
       accessorKey: "updated_at",
       header: "Updated",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{relTime(row.original.updated_at)}</span>
+        <Text size="sm" c="dimmed">
+          {relTime(row.original.updated_at)}
+        </Text>
       ),
     },
     {

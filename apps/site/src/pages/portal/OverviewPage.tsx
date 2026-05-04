@@ -6,7 +6,7 @@ import { usePortalGuidance } from "@/api/hooks/ai";
 import { normalizeFleetOverview } from "@/api/models/fleet-overview";
 import type { Observed } from "@/api/models/observed";
 import { GuidancePanel, GuidanceSlot } from "@/components/ai";
-import { ActionIcon, Box, Button, Group, Title } from "@mantine/core";
+import { ActionIcon, Anchor, Box, Button, Group, Text, Title } from "@mantine/core";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { LoadingSpinner } from "@/components/common/LoadingSpinner";
@@ -218,12 +218,9 @@ function recentConfigurationColumns(): ColumnDef<Configuration>[] {
       accessorKey: "name",
       header: "Name",
       cell: ({ row }) => (
-        <Link
-          className="font-medium text-foreground hover:text-primary"
-          to={configurationPath(row.original)}
-        >
+        <Anchor component={Link} to={configurationPath(row.original)} fw={500}>
           {row.original.name}
-        </Link>
+        </Anchor>
       ),
     },
     {
@@ -235,16 +232,18 @@ function recentConfigurationColumns(): ColumnDef<Configuration>[] {
       id: "desired_config",
       header: "Desired config",
       cell: ({ row }) => (
-        <span className="font-mono text-xs text-muted-foreground">
+        <Text size="xs" c="dimmed" ff="monospace">
           {hashLabel(row.original.current_config_hash ?? undefined)}
-        </span>
+        </Text>
       ),
     },
     {
       accessorKey: "updated_at",
       header: "Updated",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{relTime(row.original.updated_at)}</span>
+        <Text size="sm" c="dimmed">
+          {relTime(row.original.updated_at)}
+        </Text>
       ),
     },
     {

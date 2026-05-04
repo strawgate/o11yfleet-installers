@@ -947,13 +947,19 @@ function pipelineColumns(): ColumnDef<PipelineRow>[] {
       id: "category",
       header: "Type",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">{row.original.category}</span>
+        <Text size="sm" c="dimmed">
+          {row.original.category}
+        </Text>
       ),
     },
     {
       id: "name",
       header: "Name",
-      cell: ({ row }) => <span className="font-mono text-xs">{row.original.name}</span>,
+      cell: ({ row }) => (
+        <Text size="xs" ff="monospace">
+          {row.original.name}
+        </Text>
+      ),
     },
     {
       id: "health",
@@ -970,7 +976,7 @@ function pipelineColumns(): ColumnDef<PipelineRow>[] {
     {
       id: "status",
       header: "Status",
-      cell: ({ row }) => <span className="text-sm">{row.original.status ?? "—"}</span>,
+      cell: ({ row }) => <Text size="sm">{row.original.status ?? "—"}</Text>,
     },
   ];
 }

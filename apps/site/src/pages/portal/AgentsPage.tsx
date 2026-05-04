@@ -15,7 +15,7 @@ import { relTime } from "../../utils/format";
 import { agentHost, agentLastSeen, agentUid } from "../../utils/agents";
 import { buildInsightRequest, insightTarget, insightSurfaces } from "../../ai/insight-registry";
 import { useRegisterBrowserContext } from "../../ai/browser-context-react";
-import { Box, Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
+import { Anchor, Box, Button, Card, Group, Stack, Text, TextInput } from "@mantine/core";
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import { agentHealthView, agentStatusView, agentSyncView } from "./agent-view-model";
@@ -274,12 +274,14 @@ function agentColumns(configId: string, desiredHash: string | null): ColumnDef<A
       cell: ({ row }) => {
         const uid = agentUid(row.original);
         return (
-          <Link
-            className="font-mono text-xs text-foreground hover:text-primary"
+          <Anchor
+            component={Link}
             to={`/portal/agents/${configId}/${uid}`}
+            size="xs"
+            ff="monospace"
           >
             {uid}
-          </Link>
+          </Anchor>
         );
       },
     },
@@ -310,10 +312,12 @@ function agentColumns(configId: string, desiredHash: string | null): ColumnDef<A
       cell: ({ row }) => {
         const sync = agentSyncView(row.original, desiredHash);
         return (
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <Group gap="xs" wrap="wrap" miw={0}>
             <StatusBadge tone={sync.tone}>{sync.label}</StatusBadge>
-            <span className="font-mono text-xs text-muted-foreground">{sync.hashLabel}</span>
-          </div>
+            <Text size="xs" c="dimmed" ff="monospace">
+              {sync.hashLabel}
+            </Text>
+          </Group>
         );
       },
     },
@@ -321,9 +325,9 @@ function agentColumns(configId: string, desiredHash: string | null): ColumnDef<A
       id: "last_seen",
       header: "Last seen",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <Text size="sm" c="dimmed">
           {relTime(agentLastSeen(row.original))}
-        </span>
+        </Text>
       ),
     },
   ];

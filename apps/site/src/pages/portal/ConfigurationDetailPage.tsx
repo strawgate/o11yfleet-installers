@@ -37,6 +37,7 @@ import { includedFetch, pageYaml, unavailableFetch } from "../../ai/page-context
 import { EmptyState, MetricCard, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
 import {
+  Anchor,
   Badge,
   Button,
   Card,
@@ -1138,12 +1139,14 @@ function configurationAgentColumns(
       cell: ({ row }) => {
         const uid = agentUid(row.original);
         return (
-          <Link
-            className="font-mono text-xs text-foreground hover:text-primary"
+          <Anchor
+            component={Link}
             to={`/portal/agents/${configurationId ?? ""}/${uid}`}
+            size="xs"
+            ff="monospace"
           >
             {uid}
-          </Link>
+          </Anchor>
         );
       },
     },
@@ -1176,16 +1179,20 @@ function configurationAgentColumns(
       header: "Current hash",
       cell: ({ row }) => {
         const sync = agentSyncView(row.original, desiredHash);
-        return <span className="font-mono text-xs text-muted-foreground">{sync.hashLabel}</span>;
+        return (
+          <Text size="xs" c="dimmed" ff="monospace">
+            {sync.hashLabel}
+          </Text>
+        );
       },
     },
     {
       id: "last_seen",
       header: "Last seen",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <Text size="sm" c="dimmed">
           {relTime(agentLastSeen(row.original))}
-        </span>
+        </Text>
       ),
     },
   ];

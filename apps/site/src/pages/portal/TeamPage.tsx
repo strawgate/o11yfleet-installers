@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { Avatar, Group, Stack, Text } from "@mantine/core";
 import { useTeam, type TeamMember } from "@/api/hooks/portal";
 import { EmptyState, PageHeader, PageShell, StatusBadge } from "@/components/app";
 import { DataTable, type ColumnDef } from "@/components/data-table";
@@ -48,15 +49,19 @@ function teamColumns(): ColumnDef<TeamMember>[] {
       cell: ({ row }) => {
         const displayName = memberDisplayName(row.original);
         return (
-          <div className="flex items-center gap-3">
-            <span className="grid size-8 place-items-center rounded-full border border-border bg-muted font-mono text-xs text-muted-foreground">
+          <Group gap="sm" wrap="nowrap">
+            <Avatar size="sm" radius="xl">
               {initials(displayName)}
-            </span>
-            <div className="min-w-0">
-              <div className="truncate font-medium text-foreground">{displayName}</div>
-              <div className="truncate text-sm text-muted-foreground">{row.original.email}</div>
-            </div>
-          </div>
+            </Avatar>
+            <Stack gap={0} miw={0}>
+              <Text size="sm" fw={500} truncate>
+                {displayName}
+              </Text>
+              <Text size="sm" c="dimmed" truncate>
+                {row.original.email}
+              </Text>
+            </Stack>
+          </Group>
         );
       },
     },
@@ -72,9 +77,9 @@ function teamColumns(): ColumnDef<TeamMember>[] {
       id: "joined",
       header: "Joined",
       cell: ({ row }) => (
-        <span className="text-sm text-muted-foreground">
+        <Text size="sm" c="dimmed">
           {relTime(row.original["created_at"] as string | undefined)}
-        </span>
+        </Text>
       ),
     },
   ];
