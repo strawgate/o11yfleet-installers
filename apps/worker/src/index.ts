@@ -6,7 +6,7 @@ import type { SweepResult } from "./durable-objects/rpc-types.js";
 import { PENDING_DO_CONFIG_ID } from "./durable-objects/constants.js";
 export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
-import { handleV1Request } from "./routes/v1/index.js";
+import { v1App } from "./hono-app.js";
 import { handleAuthRequest, authenticate } from "./routes/auth.js";
 import { getDb } from "./db/client.js";
 import { runManifestDriftCheck } from "./jobs/manifest-drift-check.js";
@@ -439,14 +439,19 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
     return new Response("Not found", { status: 404 });
   }
 
+  // Tenant-scoped V1 routes — handled entirely by Hono (auth, CORS, dispatch)
+  if (url.pathname.startsWith("/api/v1/")) {
+    return v1App.fetch(request, env, ctx);
+  }
+
   // API routes — with auth + CORS
   if (url.pathname.startsWith("/api/")) {
     // Check Bearer token first (programmatic API access). O11YFLEET_API_BEARER_SECRET is intentionally
     // limited to bootstrap and tenant-scoped API paths, not the human admin plane.
     let hasApiSecretBearer = false;
     let oidcClaims: GitHubOIDCClaims | null = null;
-    let apiKeyTenantId: string | null = null;
-    let apiKeyJti: string | null = null;
+    let _apiKeyTenantId: string | null = null;
+    let _apiKeyJti: string | null = null;
 
     const auth = request.headers.get("Authorization");
     const token = auth?.startsWith("Bearer ") ? auth.slice(7) : null;
@@ -459,8 +464,8 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
         // Verified via HMAC-SHA256, no D1 lookup needed.
         try {
           const claim = await verifyApiKey(token, env.O11YFLEET_CLAIM_HMAC_SECRET);
-          apiKeyTenantId = claim.tenant_id;
-          apiKeyJti = claim.jti;
+          _apiKeyTenantId = claim.tenant_id;
+          _apiKeyJti = claim.jti;
         } catch (err) {
           return addSecurityHeaders(
             addCorsHeaders(
@@ -526,60 +531,6 @@ async function handleRequest(request: Request, env: Env, ctx: ExecutionContext):
           addCorsHeaders(Response.json(body, { status: 403 }), request, env),
         );
       }
-    }
-    // Tenant-scoped routes — /api/v1/*
-    else if (url.pathname.startsWith("/api/v1/")) {
-      // Resolve tenant: API key claim > session cookie > X-Tenant-Id header (with Bearer auth only)
-      let tenantId: string | null = null;
-      if (apiKeyTenantId) {
-        tenantId = apiKeyTenantId;
-      } else if (sessionAuth?.tenantId) {
-        tenantId = sessionAuth.tenantId;
-      } else if (hasApiSecretBearer) {
-        tenantId = request.headers.get("X-Tenant-Id");
-      }
-      if (!tenantId) {
-        return addSecurityHeaders(
-          addCorsHeaders(
-            Response.json({ error: "Authentication required" }, { status: 401 }),
-            request,
-            env,
-          ),
-        );
-      }
-      // Pick the actor kind based on which credential authenticated the
-      // request. The discriminated union prevents mixing user + API-key
-      // fields and maps cleanly to WorkOS's actor.type enum at the
-      // consumer boundary.
-      const { apiKeyActor, systemActor, tenantAuditContext, userActor } =
-        await import("./audit/recorder.js");
-      let v1Actor;
-      if (sessionAuth) {
-        v1Actor = userActor(request, {
-          user_id: sessionAuth.userId,
-          email: sessionAuth.email,
-          // Impersonation sessions carry the real admin id alongside
-          // the synthetic tenant user; record it so customer audit logs
-          // can attribute the action to the actual support operator.
-          impersonator_user_id: sessionAuth.isImpersonation
-            ? (sessionAuth.impersonatorUserId ?? null)
-            : null,
-        });
-      } else if (apiKeyJti) {
-        v1Actor = apiKeyActor(request, { api_key_id: apiKeyJti });
-      } else {
-        // hasApiSecretBearer + X-Tenant-Id path. No identity beyond
-        // "the bootstrap secret"; recorded as system.
-        v1Actor = systemActor(request);
-      }
-      const v1Audit = tenantAuditContext({
-        ctx,
-        env,
-        request,
-        tenant_id: tenantId,
-        actor: v1Actor,
-      });
-      resp = await handleV1Request(request, env, url, tenantId, v1Audit);
     }
     // Unknown API routes
     else {

@@ -26,6 +26,7 @@ export default defineConfig({
       "test/github-installation-token.test.ts",
       "test/github-check-runs.test.ts",
       "test/manifest-drift-check.test.ts",
+      "test/hono-app.test.ts",
     ],
     coverage: {
       provider: "v8",
@@ -48,6 +49,7 @@ export default defineConfig({
         "src/github/check-runs.ts",
         "src/github/installation-token.ts",
         "src/jobs/manifest-drift-check.ts",
+        "src/hono-app.ts",
       ],
     },
   },

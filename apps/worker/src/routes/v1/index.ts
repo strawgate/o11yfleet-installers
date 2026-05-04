@@ -1,7 +1,9 @@
 // Tenant-scoped API routes — user portal operations
 // All operations are scoped to a single tenant via authenticated session or API key
 
+import { Hono } from "hono";
 import type { Env } from "../../index.js";
+import type { AppVariables } from "../../hono-app.js";
 import {
   recordMutation,
   type AuditContext,
@@ -453,7 +455,7 @@ async function routeV1Request(
  * shared `findOwnedConfig` helper so existing handler code continues
  * to read naturally; new code should call the helper directly.
  */
-async function getOwnedConfig(
+export async function getOwnedConfig(
   env: Env,
   tenantId: string,
   configId: string,
@@ -461,7 +463,7 @@ async function getOwnedConfig(
   return findOwnedConfig(env, tenantId, configId);
 }
 
-function getDoName(tenantId: string, configId: string): string {
+export function getDoName(tenantId: string, configId: string): string {
   return `${tenantId}:${configId}`;
 }
 
@@ -1504,3 +1506,295 @@ async function handleAssignPendingDevice(
     return jsonError("Failed to assign device", 502);
   }
 }
+
+// ─── Hono Router ────────────────────────────────────────────────────
+// Typed Hono sub-router for /api/v1/* routes.
+// tenantId and audit context are resolved by middleware (set in hono-app.ts
+// variables) and extracted via c.get() inside each route handler.
+//
+// The router replaces the manual if-chain in routeV1Request() above.
+// Both entry points (handleV1Request for legacy, v1Router for Hono)
+// call the same handler functions, so behavior is identical.
+
+type V1Env = { Bindings: Env; Variables: AppVariables };
+
+export const v1Router = new Hono<V1Env>();
+
+// ─── Tenant ─────────────────────────────────────────────────────────
+
+v1Router.get("/tenant", async (c) => {
+  return handleGetTenant(c.env, c.get("tenantId"));
+});
+
+v1Router.put("/tenant", async (c) => {
+  const audit = c.get("audit");
+  const tenantId = c.get("tenantId");
+  return withAudit(
+    audit,
+    { action: "tenant.update", resource_type: "tenant", resource_id: tenantId },
+    () => handleUpdateTenant(c.req.raw, c.env, tenantId),
+  );
+});
+
+v1Router.delete("/tenant", async (c) => {
+  const audit = c.get("audit");
+  const tenantId = c.get("tenantId");
+  return withAudit(
+    audit,
+    { action: "tenant.delete", resource_type: "tenant", resource_id: tenantId },
+    () => handleDeleteTenant(c.env, tenantId),
+  );
+});
+
+// ─── Audit Logs ─────────────────────────────────────────────────────
+
+v1Router.get("/audit-logs", async (c) => {
+  return handleListAuditLogs(c.env, new URL(c.req.url), c.get("tenantId"));
+});
+
+// ─── Team ───────────────────────────────────────────────────────────
+
+v1Router.get("/team", async (c) => {
+  return handleGetTeam(c.env, c.get("tenantId"));
+});
+
+// ─── Overview ───────────────────────────────────────────────────────
+
+v1Router.get("/overview", async (c) => {
+  return handleGetOverview(c.env, c.get("tenantId"));
+});
+
+// ─── AI Guidance ────────────────────────────────────────────────────
+
+v1Router.post("/ai/guidance", async (c) => {
+  return handleTenantGuidanceRequest(c.req.raw, c.env, c.get("tenantId"));
+});
+
+v1Router.post("/ai/chat", async (c) => {
+  return handleTenantChatRequest(c.req.raw, c.env, c.get("tenantId"));
+});
+
+// ─── Configurations ─────────────────────────────────────────────────
+
+v1Router.get("/configurations", async (c) => {
+  return handleListConfigurations(c.env, c.get("tenantId"));
+});
+
+v1Router.post("/configurations", async (c) => {
+  const audit = c.get("audit");
+  return withAuditCreate(
+    audit,
+    { action: "configuration.create", resource_type: "configuration" },
+    () => handleCreateConfiguration(c.req.raw, c.env, c.get("tenantId")),
+  );
+});
+
+v1Router.get("/configurations/:id", async (c) => {
+  return handleGetConfiguration(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+v1Router.put("/configurations/:id", async (c) => {
+  const configId = c.req.param("id");
+  return withAudit(
+    c.get("audit"),
+    { action: "configuration.update", resource_type: "configuration", resource_id: configId },
+    () => handleUpdateConfiguration(c.req.raw, c.env, c.get("tenantId"), configId),
+  );
+});
+
+v1Router.delete("/configurations/:id", async (c) => {
+  const configId = c.req.param("id");
+  return withAudit(
+    c.get("audit"),
+    { action: "configuration.delete", resource_type: "configuration", resource_id: configId },
+    () => handleDeleteConfiguration(c.env, c.get("tenantId"), configId),
+  );
+});
+
+// ─── Config Versions ────────────────────────────────────────────────
+
+v1Router.post("/configurations/:id/versions", async (c) => {
+  const configId = c.req.param("id");
+  return withAuditCreate(
+    c.get("audit"),
+    {
+      action: "config_version.publish",
+      resource_type: "config_version",
+      metadata: { config_id: configId },
+    },
+    () => handleUploadVersion(c.req.raw, c.env, c.get("tenantId"), configId),
+  );
+});
+
+v1Router.get("/configurations/:id/versions", async (c) => {
+  return handleListVersions(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+v1Router.get("/configurations/:id/version-diff-latest-previous", async (c) => {
+  return handleLatestVersionDiff(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+v1Router.get("/configurations/:id/yaml", async (c) => {
+  return handleGetConfigYaml(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+// ─── Enrollment Tokens ──────────────────────────────────────────────
+
+v1Router.post("/configurations/:id/enrollment-token", async (c) => {
+  const configId = c.req.param("id");
+  return withAuditCreate(
+    c.get("audit"),
+    {
+      action: "enrollment_token.create",
+      resource_type: "enrollment_token",
+      metadata: { config_id: configId },
+    },
+    () => handleCreateEnrollmentToken(c.req.raw, c.env, c.get("tenantId"), configId),
+  );
+});
+
+v1Router.get("/configurations/:id/enrollment-tokens", async (c) => {
+  return handleListEnrollmentTokens(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+v1Router.delete("/configurations/:id/enrollment-tokens/:tokenId", async (c) => {
+  const configId = c.req.param("id");
+  const tokenId = c.req.param("tokenId");
+  return withAudit(
+    c.get("audit"),
+    {
+      action: "enrollment_token.revoke",
+      resource_type: "enrollment_token",
+      resource_id: tokenId,
+      metadata: { config_id: configId },
+    },
+    () => handleRevokeEnrollmentToken(c.env, c.get("tenantId"), configId, tokenId),
+  );
+});
+
+// ─── Agents & Stats (from DO) ───────────────────────────────────────
+
+v1Router.get("/configurations/:id/agents", async (c) => {
+  return handleListAgents(c.env, c.get("tenantId"), c.req.param("id"), new URL(c.req.url));
+});
+
+v1Router.get("/configurations/:id/agents/:agentId", async (c) => {
+  return handleGetAgent(c.env, c.get("tenantId"), c.req.param("id"), c.req.param("agentId"));
+});
+
+v1Router.get("/configurations/:id/stats", async (c) => {
+  return handleGetStats(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+v1Router.get("/configurations/:id/rollout-cohort-summary", async (c) => {
+  return handleRolloutCohortSummary(c.env, c.get("tenantId"), c.req.param("id"));
+});
+
+// ─── Rollout ────────────────────────────────────────────────────────
+
+v1Router.post("/configurations/:id/rollout", async (c) => {
+  const configId = c.req.param("id");
+  return withAudit(
+    c.get("audit"),
+    { action: "rollout.start", resource_type: "rollout", resource_id: configId },
+    () => handleRollout(c.req.raw, c.env, c.get("tenantId"), configId),
+  );
+});
+
+// ─── Admin Commands ─────────────────────────────────────────────────
+
+v1Router.post("/configurations/:id/disconnect", async (c) => {
+  const configId = c.req.param("id");
+  return withAudit(
+    c.get("audit"),
+    { action: "agents.disconnect", resource_type: "configuration", resource_id: configId },
+    () => handleDisconnect(c.env, c.get("tenantId"), configId),
+  );
+});
+
+v1Router.post("/configurations/:id/restart", async (c) => {
+  const configId = c.req.param("id");
+  return withAudit(
+    c.get("audit"),
+    { action: "agents.restart", resource_type: "configuration", resource_id: configId },
+    () => handleRestart(c.env, c.get("tenantId"), configId),
+  );
+});
+
+v1Router.post("/configurations/:id/agents/:agentId/disconnect", async (c) => {
+  const configId = c.req.param("id");
+  const instanceUid = c.req.param("agentId");
+  return withAudit(
+    c.get("audit"),
+    {
+      action: "agent.disconnect",
+      resource_type: "agent",
+      resource_id: instanceUid,
+      metadata: { config_id: configId },
+    },
+    () => handleDisconnectAgentRoute(c.env, c.get("tenantId"), configId, instanceUid),
+  );
+});
+
+v1Router.post("/configurations/:id/agents/:agentId/restart", async (c) => {
+  const configId = c.req.param("id");
+  const instanceUid = c.req.param("agentId");
+  return withAudit(
+    c.get("audit"),
+    {
+      action: "agent.restart",
+      resource_type: "agent",
+      resource_id: instanceUid,
+      metadata: { config_id: configId },
+    },
+    () => handleRestartAgentRoute(c.env, c.get("tenantId"), configId, instanceUid),
+  );
+});
+
+// ─── API Keys ───────────────────────────────────────────────────────
+
+v1Router.post("/api-keys", async (c) => {
+  return withAuditCreate(
+    c.get("audit"),
+    { action: "api_key.create", resource_type: "api_key" },
+    () => handleCreateApiKey(c.req.raw, c.env, c.get("tenantId")),
+  );
+});
+
+// ─── Pending Tokens ─────────────────────────────────────────────────
+
+v1Router.get("/pending-tokens", async (c) => {
+  return handleListPendingTokens(c.env, c.get("tenantId"));
+});
+
+v1Router.post("/pending-tokens", async (c) => {
+  return withAuditCreate(
+    c.get("audit"),
+    { action: "pending_token.create", resource_type: "pending_token" },
+    () => handleCreatePendingToken(c.req.raw, c.env, c.get("tenantId")),
+  );
+});
+
+v1Router.delete("/pending-tokens/:tokenId", async (c) => {
+  const tokenId = c.req.param("tokenId");
+  return withAudit(
+    c.get("audit"),
+    { action: "pending_token.revoke", resource_type: "pending_token", resource_id: tokenId },
+    () => handleRevokePendingToken(c.env, c.get("tenantId"), tokenId),
+  );
+});
+
+// ─── Pending Devices ────────────────────────────────────────────────
+
+v1Router.get("/pending-devices", async (c) => {
+  return handleListPendingDevices(c.env, c.get("tenantId"));
+});
+
+v1Router.post("/pending-devices/:deviceUid/assign", async (c) => {
+  const deviceUid = c.req.param("deviceUid");
+  return withAudit(
+    c.get("audit"),
+    { action: "pending_device.assign", resource_type: "pending_device", resource_id: deviceUid },
+    () => handleAssignPendingDevice(c.req.raw, c.env, c.get("tenantId"), deviceUid),
+  );
+});
