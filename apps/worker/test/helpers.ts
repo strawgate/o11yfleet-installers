@@ -372,10 +372,7 @@ export async function connectWithEnrollment(
      *
      * Signature: (instanceUid: string, doStub: DurableObjectStub) => Promise<void>
      */
-    doAction?: (
-      instanceUid: string,
-      doStub: ReturnType<typeof env.CONFIG_DO.get>,
-    ) => Promise<void>;
+    doAction?: (instanceUid: string, doStub: ReturnType<typeof env.CONFIG_DO.get>) => Promise<void>;
   } = {},
 ): Promise<{
   ws: WebSocket;

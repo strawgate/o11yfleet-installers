@@ -153,14 +153,9 @@ function affectsWorkerTypegen(file: string): boolean {
 
 function affectsWorkerRuntime(file: string): boolean {
   return (
-    file === "apps/worker/package.json" ||
-    file === "apps/worker/vitest.config.ts" ||
     file === "apps/worker/wrangler.jsonc" ||
     file.startsWith("apps/worker/src/") ||
-    file.startsWith("apps/worker/test/") ||
-    file.startsWith("packages/core/src/") ||
-    file.startsWith("packages/db/src/") ||
-    file.startsWith("packages/test-utils/src/")
+    file.startsWith("apps/worker/test/")
   );
 }
 

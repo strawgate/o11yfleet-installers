@@ -21,29 +21,29 @@
     "mutate": "stryker run"
   },
   "dependencies": {
-    "@ai-sdk/openai-compatible": "^2.0.42",
+    "@ai-sdk/openai-compatible": "^2.0.45",
     "@microlabs/otel-cf-workers": "1.0.0-rc.52",
     "@o11yfleet/core": "workspace:*",
     "@o11yfleet/db": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "ai": "^6.0.170",
+    "ai": "^6.0.174",
     "diff": "^9.0.0",
     "kysely": "^0.28.17",
     "kysely-d1": "^0.4.0",
-    "yaml": "^2.8.3",
-    "zod": "^3.25.76"
+    "yaml": "^2.8.4",
+    "zod": "^4.4.2"
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.12.0",
-    "@cloudflare/vitest-pool-workers": "^0.15.1",
-    "@cloudflare/workers-types": "^4.20250410.0",
+    "@cloudflare/vitest-pool-workers": "^0.15.2",
+    "@cloudflare/workers-types": "^4.20260503.1",
     "@o11yfleet/test-utils": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@types/node": "^22.0.0",
+    "@types/node": "^25.6.0",
     "fast-check": "^4.7.0",
-    "typescript": "^5.8.0",
-    "vitest": "^4.1.0",
-    "wrangler": "^4.86.0"
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.5",
+    "wrangler": "^4.87.0"
   }
 }

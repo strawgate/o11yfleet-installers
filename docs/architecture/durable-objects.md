@@ -22,17 +22,17 @@ its SQLite — no contention, no distributed locks.
 
 Every design decision below is driven by the relative cost of operations:
 
-| Resource             | Cost            | Notes                       |
-|----------------------|-----------------|-----------------------------|
-| DO request           | $0.15 / 1M      | Each WS message = 1 req     |
-| Duration (GB-s)      | $12.50 / 1M     | Wall-clock while active     |
-| SQLite row read      | $0.001 / 1M     | Per SELECT row returned     |
-| SQLite row write     | $1.00 / 1M      | Per INSERT/UPDATE row       |
-| KV get / `getAlarm`  | $0.20 / 1M      | Legacy KV-style reads       |
-| KV put / `setAlarm`  | $1.00 / 1M      | Legacy KV-style writes      |
-| WS attachment r/w    | FREE            | In-memory, survives hib.    |
-| `getWebSockets()`    | FREE            | Runtime memory operation    |
-| `setWebSocketAutoResponse` | FREE      | Edge ping/pong, no wake     |
+| Resource                   | Cost        | Notes                    |
+| -------------------------- | ----------- | ------------------------ |
+| DO request                 | $0.15 / 1M  | Each WS message = 1 req  |
+| Duration (GB-s)            | $12.50 / 1M | Wall-clock while active  |
+| SQLite row read            | $0.001 / 1M | Per SELECT row returned  |
+| SQLite row write           | $1.00 / 1M  | Per INSERT/UPDATE row    |
+| KV get / `getAlarm`        | $0.20 / 1M  | Legacy KV-style reads    |
+| KV put / `setAlarm`        | $1.00 / 1M  | Legacy KV-style writes   |
+| WS attachment r/w          | FREE        | In-memory, survives hib. |
+| `getWebSockets()`          | FREE        | Runtime memory operation |
+| `setWebSocketAutoResponse` | FREE        | Edge ping/pong, no wake  |
 
 **Key insight:** SQL reads are 200× cheaper than KV reads, and 1000×
 cheaper than writes. Every optimization targets write elimination.
@@ -67,7 +67,8 @@ First message, reconnect, disconnect, or generation bump. Full
 16-column UPSERT because config-do mutates fields (`generation`,
 `connected_at`, `status`) outside `processFrame` → `dirtyFields` won't
 include them. Also needed when no row exists yet. Cost: 1-3 SQL reads
-+ 1-2 SQL writes (policy/config cached).
+
+- 1-2 SQL writes (policy/config cached).
 
 The key to Tier 0 being free: `attachment.sequence_num` and
 `attachment.last_seen_at` track session-scoped state that would otherwise

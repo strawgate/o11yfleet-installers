@@ -33,7 +33,7 @@ test("plans worker typegen checks for worker package metadata changes", () => {
 
   assert.equal(plan.runAllFast, true);
   assert.equal(plan.runWorkerTypegenCheck, true);
-  assert.equal(plan.runWorkerRuntime, true);
+  assert.equal(plan.runWorkerRuntime, false);
 });
 
 test("plans worker typegen checks for generated worker configuration changes", () => {

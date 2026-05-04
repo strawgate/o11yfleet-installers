@@ -1147,7 +1147,9 @@ function summarizeTextDiff(previous: string, latest: string) {
 
   for (const part of changes) {
     // Split by newlines and filter empty trailing entries
-    const lines = part.value.split(/\r?\n/).filter((l: string, i: number, arr: string[]) => i < arr.length - 1 || l !== "");
+    const lines = part.value
+      .split(/\r?\n/)
+      .filter((l: string, i: number, arr: string[]) => i < arr.length - 1 || l !== "");
     const count = lines.length || (part.value.length > 0 ? 1 : 0);
     if (part.added) {
       addedLines += count;

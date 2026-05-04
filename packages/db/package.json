@@ -13,6 +13,6 @@
     "kysely": "^0.28.17"
   },
   "devDependencies": {
-    "typescript": "^5.8.0"
+    "typescript": "^6.0.3"
   }
 }

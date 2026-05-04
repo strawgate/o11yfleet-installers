@@ -922,7 +922,7 @@ export class FakeOpampAgent {
    * Caller is responsible for the wire format. The 0x00 opamp-go data-type
    * header byte is NOT prepended — pass exactly the bytes you want sent.
    */
-  sendBytes(bytes: ArrayBuffer | Uint8Array): void {
+  sendBytes(bytes: Uint8Array<ArrayBuffer>): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
       throw new Error("WebSocket not connected");
     }

@@ -1,4 +1,10 @@
 import { z } from "zod";
+import type {
+  $ZodIssueTooBig,
+  $ZodIssueTooSmall,
+  $ZodIssueInvalidType,
+  $ZodIssueInvalidStringFormat,
+} from "zod/v4/core";
 import type { ValidationErrorDetail } from "@o11yfleet/core/api";
 import { ApiError, parseJsonBody } from "./errors.js";
 
@@ -65,16 +71,18 @@ function detailForIssue(issue: z.ZodIssue): ValidationErrorDetail {
   switch (issue.code) {
     case z.ZodIssueCode.unrecognized_keys:
       return "unknown_field";
-    case z.ZodIssueCode.invalid_enum_value:
+    case z.ZodIssueCode.invalid_value:
       return "invalid_enum";
-    case z.ZodIssueCode.invalid_string:
-      return issue.validation === "url" ? "invalid_url" : "invalid_value";
+    case z.ZodIssueCode.invalid_format:
+      return (issue as $ZodIssueInvalidStringFormat).format === "url"
+        ? "invalid_url"
+        : "invalid_value";
     case z.ZodIssueCode.too_big:
-      return detailForTooBig(issue);
+      return detailForTooBig(issue as $ZodIssueTooBig);
     case z.ZodIssueCode.too_small:
-      return detailForTooSmall(issue);
+      return detailForTooSmall(issue as $ZodIssueTooSmall);
     case z.ZodIssueCode.invalid_type:
-      return detailForInvalidType(issue);
+      return detailForInvalidType(issue as $ZodIssueInvalidType);
     case z.ZodIssueCode.invalid_union:
       return "invalid_item";
     case z.ZodIssueCode.custom:
@@ -84,22 +92,24 @@ function detailForIssue(issue: z.ZodIssue): ValidationErrorDetail {
   }
 }
 
-function detailForTooBig(issue: z.ZodTooBigIssue): ValidationErrorDetail {
-  if (issue.type === "string") return "too_long";
-  if (issue.type === "array") return "too_many_items";
-  if (issue.type === "number") return "too_large";
+function detailForTooBig(issue: $ZodIssueTooBig): ValidationErrorDetail {
+  if (issue.origin === "string") return "too_long";
+  if (issue.origin === "array") return "too_many_items";
+  if (issue.origin === "number" || issue.origin === "int" || issue.origin === "bigint")
+    return "too_large";
   return "too_large";
 }
 
-function detailForTooSmall(issue: z.ZodTooSmallIssue): ValidationErrorDetail {
-  if (issue.type === "string") return "too_short";
-  if (issue.type === "array") return "too_few_items";
-  if (issue.type === "number") return "expected_positive_int";
+function detailForTooSmall(issue: $ZodIssueTooSmall): ValidationErrorDetail {
+  if (issue.origin === "string") return "too_short";
+  if (issue.origin === "array") return "too_few_items";
+  if (issue.origin === "number" || issue.origin === "int" || issue.origin === "bigint")
+    return "expected_positive_int";
   return "too_short";
 }
 
-function detailForInvalidType(issue: z.ZodInvalidTypeIssue): ValidationErrorDetail {
-  if (issue.received === "undefined") return "required";
+function detailForInvalidType(issue: $ZodIssueInvalidType): ValidationErrorDetail {
+  if (issue.input === undefined) return "required";
   switch (issue.expected) {
     case "array":
       return "expected_array";

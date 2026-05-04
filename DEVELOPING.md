@@ -35,6 +35,40 @@ UI, per-user API keys, progressive rollout state, and billing-provider wiring.
 | `tests/load*/`         | Load and smoke-test harnesses                             |
 | `infra/terraform/`     | Cloudflare infrastructure                                 |
 
+## Dependency Versions
+
+### TypeScript 6.x
+
+The workspace uses **TypeScript 6.0.3+** across all packages. TypeScript 6
+introduced stricter module resolution (`NodeNext`) and requires explicit
+`"types"` arrays in `tsconfig.json` when using Node.js globals like `process`
+or Node-specific modules.
+
+**Known TypeScript 6 compatibility fixes:**
+
+- `apps/cli/tsconfig.json` includes `"types": ["node"]` for Node globals
+- `apps/site/tsconfig.test.json` includes `"types": ["node", "react", "react-dom"]` for test environment
+- `packages/test-utils/src/fake-agent.ts` uses `Uint8Array<ArrayBuffer>` type for WebSocket.send() compatibility
+
+### Zod 4.x
+
+The workspace uses **Zod 4.1.1+** for runtime validation. Zod 4 introduced
+breaking API changes:
+
+**Breaking changes:**
+
+- `z.record(valueSchema)` → `z.record(z.string(), valueSchema)` (explicit key type required)
+- Issue type exports moved from `zod` to `zod/v4/core` (`$ZodIssueTooBig`, `$ZodIssueTooSmall`, `$ZodIssueInvalidType`)
+- Issue codes renamed: `invalid_enum_value` → `invalid_value`, `invalid_string` → `invalid_format`
+- Issue properties renamed: `.type` → `.origin`, `.received` → `.input`
+- `z.undefined().optional()` is invalid (produces non-JSON-Schema-compliant output)
+
+**Migration notes:**
+
+- All `z.record()` calls in `packages/core/src/ai/guidance.ts` and `packages/core/src/api/contracts.ts` use the 2-arg form
+- `apps/worker/src/shared/validation.ts` imports core issue types from `zod/v4/core` and maps renamed properties
+- AI guidance schemas removed `z.undefined().optional()` from action payloads (replaced with nullable string fields)
+
 ## First-Time Setup
 
 ### 1. Install `just`
@@ -265,6 +299,31 @@ just docs-api-check # Check API docs after route changes
 | UI (Playwright)                   | `just test-ui`            | Browser tests (Requires: `just playwright-install` and `just dev`) |
 | All fast tests                    | `just test`               | Core + worker (no live server needed)                              |
 | Coverage (lines/branches)         | `just coverage`           | Reports per package under `reports/coverage/`                      |
+
+### Worker Runtime Test Triggers
+
+The `scripts/dev-check.ts` script runs `just check` (the pre-commit hook) and
+determines which checks to run based on changed files. Worker runtime tests
+(`pnpm --filter @o11yfleet/worker test:runtime`) run only when files that
+directly affect worker runtime behavior are changed:
+
+**Runtime tests trigger for changes to:**
+
+- `apps/worker/wrangler.jsonc` (worker configuration)
+- `apps/worker/src/**` (worker source code)
+- `apps/worker/test/**` (worker test files)
+
+**Runtime tests do NOT trigger for changes to:**
+
+- `apps/worker/package.json` (dependency updates without source changes)
+- `apps/worker/vitest.config.ts` (test configuration)
+- `packages/*/src/**` (shared packages - covered by package-level unit tests)
+
+This scoping prevents slow runtime tests (~30s) from blocking fast dependency
+updates while ensuring behavioral changes are still covered. When modifying
+shared packages like `@o11yfleet/core` or `@o11yfleet/db`, rely on their
+respective unit test suites (`just test-core`, `just test-worker`) and the
+full `just ci-fast` gate before pushing.
 
 ### Coverage
 

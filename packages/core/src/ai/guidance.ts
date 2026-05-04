@@ -45,7 +45,7 @@ export const aiPageTableSchema = z.object({
   key: z.string().trim().min(1).max(120),
   label: z.string().trim().min(1).max(160),
   columns: z.array(z.string().trim().min(1).max(80)).max(16).default([]),
-  rows: z.array(z.record(aiContextScalarSchema)).max(50).default([]),
+  rows: z.array(z.record(z.string(), aiContextScalarSchema)).max(50).default([]),
   total_rows: z.number().int().min(0).optional(),
 });
 
@@ -68,7 +68,7 @@ export const aiPageContextSchema = z.object({
   route: z.string().trim().min(1).max(240),
   title: z.string().trim().min(1).max(160).optional(),
   active_tab: z.string().trim().min(1).max(120).optional(),
-  filters: z.record(aiContextScalarSchema).optional(),
+  filters: z.record(z.string(), aiContextScalarSchema).optional(),
   visible_text: z.array(z.string().trim().min(1).max(500)).max(24).default([]),
   metrics: z.array(aiPageMetricSchema).max(32).default([]),
   tables: z.array(aiPageTableSchema).max(8).default([]),
@@ -94,7 +94,7 @@ export const aiPageContextSchema = z.object({
 
 const aiGuidanceActionBaseSchema = z.object({
   label: z.string().trim().min(1).max(80),
-  payload: z.record(z.unknown()).optional(),
+  payload: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const aiGuidanceActionSchema = z.union([
@@ -106,12 +106,12 @@ export const aiGuidanceActionSchema = z.union([
     kind: z.literal("propose_config_change"),
     href: z.string().trim().max(500).optional(),
   }),
-  z.object({
-    kind: z.literal("none"),
-    label: z.string().trim().min(1).max(80),
-    href: z.undefined().optional(),
-    payload: z.undefined().optional(),
-  }),
+  z
+    .object({
+      kind: z.literal("none"),
+      label: z.string().trim().min(1).max(80),
+    })
+    .strict(),
 ]);
 
 export const aiGuidanceActionKindSchema = z.enum([
@@ -134,7 +134,7 @@ export const aiGuidanceTargetSchema = z.object({
   label: z.string().trim().min(1).max(160),
   surface: aiGuidanceSurfaceSchema,
   kind: aiGuidanceTargetKindSchema,
-  context: z.record(z.unknown()).optional(),
+  context: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const aiGuidanceItemSchema = z.object({
@@ -152,7 +152,7 @@ export const aiGuidanceRequestSchema = z
     surface: aiGuidanceSurfaceSchema,
     intent: aiGuidanceIntentSchema.default("suggest_next_action"),
     targets: z.array(aiGuidanceTargetSchema).min(1).max(32),
-    context: z.record(z.unknown()).default({}),
+    context: z.record(z.string(), z.unknown()).default({}),
     page_context: aiPageContextSchema.optional(),
     user_prompt: z.string().trim().max(1000).optional(),
   })

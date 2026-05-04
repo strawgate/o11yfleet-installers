@@ -40,6 +40,7 @@ export default defineConfig({
         "src/utils/**/*.ts",
         "src/shared/origins.ts",
         "src/shared/errors.ts",
+        "src/shared/validation.ts",
         "src/github/api.ts",
         "src/github/validate-config.ts",
         "src/github/check-runs.ts",

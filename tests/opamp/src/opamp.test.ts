@@ -2027,7 +2027,7 @@ describe("Custom Messages (§5.10)", () => {
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
     };
-    reconnected.sendBytes(appendUnknownProtobufFields(encodeFrame(helloMsg)));
+    reconnected.sendBytes(new Uint8Array(appendUnknownProtobufFields(encodeFrame(helloMsg))));
 
     const reply = await reconnected.waitForMessage(5000);
     expect(reply).toBeDefined();
@@ -2062,7 +2062,7 @@ describe("Custom Messages (§5.10)", () => {
       capabilities: AgentCapabilities.ReportsStatus,
       flags: 0,
     };
-    reconnected.sendBytes(appendUnknownProtobufFields(encodeFrame(hello)));
+    reconnected.sendBytes(new Uint8Array(appendUnknownProtobufFields(encodeFrame(hello))));
     await reconnected.waitForMessage(5000);
 
     // Normal heartbeat (no extras) — must still be processed.

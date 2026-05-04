@@ -384,8 +384,8 @@ export const agentDetailSchema = agentSchema.extend({
   is_drifted: z.boolean(),
   uptime_ms: z.number().nullable(),
   effective_config_body: z.string().nullable().optional(),
-  component_health_map: z.record(z.unknown()).nullable(),
-  available_components: z.record(z.unknown()).nullable(),
+  component_health_map: z.record(z.string(), z.unknown()).nullable(),
+  available_components: z.record(z.string(), z.unknown()).nullable(),
 });
 export type AgentDetail = z.infer<typeof agentDetailSchema>;
 
