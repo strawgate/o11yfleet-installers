@@ -62,6 +62,10 @@ export interface Env {
   O11YFLEET_EMAIL_FROM?: string;
   /** Enable OpAMP frame debug logging. Set to "1" to log decoded AgentToServer frames. */
   OPAMP_FRAME_DEBUG?: string;
+  /** When `"true"`, `typedJsonResponse` runs the schema's `safeParse` against
+   *  the outgoing payload and `console.warn`s mismatches. Off in production by
+   *  default; turn on in dev/staging to surface contract drift. */
+  O11YFLEET_RUNTIME_VALIDATION?: string;
 }
 
 function getCorsHeaders(request: Request, env: Env): Record<string, string> {

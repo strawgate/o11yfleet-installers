@@ -1,21 +1,58 @@
 import type { z } from "zod";
 
+/** Subset of `Env` that this module reads. Defined locally so `responses.ts`
+ *  doesn't need to depend on the full worker `Env` type. */
+interface RuntimeValidationEnv {
+  /** Set to `"true"` (in `wrangler.jsonc` `vars` or via `wrangler dev --var`)
+   *  to make `typedJsonResponse` parse outgoing payloads against their schema
+   *  and log mismatches. Off by default — production runs the compile-time
+   *  check only. */
+  O11YFLEET_RUNTIME_VALIDATION?: string;
+}
+
 /**
  * Create a JSON response validated against a Zod schema.
  *
  * The schema parameter enforces compile-time type safety: TypeScript verifies
  * that `data` satisfies `z.output<T>` (the validated/transformed shape).
- * At runtime, Response.json serializes the data directly — no parse overhead.
  *
- * NOTE: This is a compile-time type check only. Cloudflare Workers have no
- * `process.env`, so NODE_ENV-gated runtime validation is not straightforward.
- * TODO: Add runtime safeParse validation behind a binding-based feature flag
- * (e.g. env.RUNTIME_VALIDATION === "true") to catch contract drift in staging.
+ * When `env.O11YFLEET_RUNTIME_VALIDATION === "true"`, the schema is also
+ * applied at runtime via `safeParse`. Mismatches are logged via
+ * `console.warn` (not thrown — a worker that's already serving the response
+ * shouldn't 500 over a contract drift; the goal is observability for
+ * dev/staging). When the flag is unset, this is a zero-overhead pass-through.
+ *
+ * The `env` argument is optional so legacy call sites that don't have
+ * `env` in scope (e.g., DO query handlers that take `SqlStorage` only)
+ * keep working without modification.
  */
 export function typedJsonResponse<T extends z.ZodType>(
-  _schema: T,
+  schema: T,
   data: z.output<T>,
+  envOrInit?: RuntimeValidationEnv | ResponseInit,
   init?: ResponseInit,
 ): Response {
-  return Response.json(data, init);
+  // The third argument is overloaded: either the worker `env` (so we can
+  // read the runtime-validation flag) or a plain `ResponseInit`. Distinguish
+  // by checking for the flag field — `ResponseInit` never has it.
+  let env: RuntimeValidationEnv | undefined;
+  let resolvedInit: ResponseInit | undefined;
+  if (envOrInit && "O11YFLEET_RUNTIME_VALIDATION" in envOrInit) {
+    env = envOrInit;
+    resolvedInit = init;
+  } else {
+    resolvedInit = envOrInit as ResponseInit | undefined;
+  }
+
+  if (env?.O11YFLEET_RUNTIME_VALIDATION === "true") {
+    const result = schema.safeParse(data);
+    if (!result.success) {
+      console.warn(
+        "[typed-response] outgoing payload failed schema validation:",
+        result.error.flatten(),
+      );
+    }
+  }
+
+  return Response.json(data, resolvedInit);
 }

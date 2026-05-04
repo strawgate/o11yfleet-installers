@@ -468,7 +468,7 @@ function getDoName(tenantId: string, configId: string): string {
 async function handleGetTenant(env: Env, tenantId: string): Promise<Response> {
   const tenant = await findTenantById(env, tenantId);
   if (!tenant) return jsonError("Tenant not found", 404);
-  return typedJsonResponse(tenantSchema, tenant as Tenant);
+  return typedJsonResponse(tenantSchema, tenant as Tenant, env);
 }
 
 async function handleDeleteTenant(env: Env, tenantId: string): Promise<Response> {
@@ -581,6 +581,7 @@ async function handleCreateConfiguration(
     response: typedJsonResponse(
       createConfigurationResponseSchema,
       { id, tenant_id: tenantId, name: body.name },
+      env,
       { status: 201 },
     ),
     resource_id: id,
@@ -594,7 +595,7 @@ async function handleGetConfiguration(
 ): Promise<Response> {
   const config = await getOwnedConfig(env, tenantId, configId);
   if (!config) return jsonError("Configuration not found", 404);
-  return typedJsonResponse(configurationSchema, config as Configuration);
+  return typedJsonResponse(configurationSchema, config as Configuration, env);
 }
 
 async function handleUpdateConfiguration(
@@ -626,7 +627,7 @@ async function handleUpdateConfiguration(
     .execute();
 
   const updated = await getOwnedConfig(env, tenantId, configId);
-  return typedJsonResponse(configurationSchema, updated as Configuration);
+  return typedJsonResponse(configurationSchema, updated as Configuration, env);
 }
 
 async function handleDeleteConfiguration(
@@ -887,6 +888,7 @@ async function handleCreateEnrollmentToken(
         label: body.label ?? null,
         expires_at: expiresAt,
       },
+      env,
       { status: 201 },
     ),
     resource_id: id,
@@ -1292,7 +1294,7 @@ async function handleGetOverview(env: Env, tenantId: string): Promise<Response> 
     metrics_source: metricsSource,
     metrics_error: metricsError,
   };
-  return typedJsonResponse(overviewResponseSchema, payload);
+  return typedJsonResponse(overviewResponseSchema, payload, env);
 }
 
 // ─── Update Tenant ──────────────────────────────────────────────────
@@ -1310,7 +1312,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
   if (Object.keys(set).length === 1) {
     const tenant = await findTenantById(env, tenantId);
     if (!tenant) return jsonError("Tenant not found", 404);
-    return typedJsonResponse(tenantSchema, tenant as Tenant);
+    return typedJsonResponse(tenantSchema, tenant as Tenant, env);
   }
 
   const updated = await getDb(env.FP_DB)
@@ -1320,7 +1322,7 @@ async function handleUpdateTenant(request: Request, env: Env, tenantId: string):
     .returningAll()
     .executeTakeFirst();
   if (!updated) return jsonError("Tenant not found", 404);
-  return Response.json(updated);
+  return typedJsonResponse(tenantSchema, updated as Tenant, env);
 }
 
 // ─── Agent Detail ───────────────────────────────────────────────────

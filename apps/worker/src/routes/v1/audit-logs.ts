@@ -96,7 +96,7 @@ export async function handleListAuditLogs(env: Env, url: URL, tenantId: string):
 
   const entries: AuditLogEntry[] = slice.map(rowToEntry);
   const payload: AuditLogListResponse = { entries, next_cursor: nextCursor };
-  return typedJsonResponse(auditLogListResponseSchema, payload);
+  return typedJsonResponse(auditLogListResponseSchema, payload, env);
 }
 
 interface AuditRow {
