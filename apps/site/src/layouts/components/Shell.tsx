@@ -13,7 +13,7 @@ import {
   useComputedColorScheme,
   useMantineColorScheme,
 } from "@mantine/core";
-import { Bell, ChevronDown, Moon, Search, Sun } from "lucide-react";
+import { ChevronDown, Moon, Search, Sun } from "lucide-react";
 
 export type ShellNavSection = { sec: string };
 export type ShellNavItem = {
@@ -135,14 +135,6 @@ export function ColorSchemeToggle() {
       onClick={() => setColorScheme(isDark ? "light" : "dark")}
     >
       {isDark ? <Sun size={16} /> : <Moon size={16} />}
-    </ActionIcon>
-  );
-}
-
-export function NotificationsButton() {
-  return (
-    <ActionIcon variant="default" size="lg" aria-label="Notifications">
-      <Bell size={16} />
     </ActionIcon>
   );
 }

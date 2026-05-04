@@ -37,7 +37,6 @@ import {
   BreadcrumbSep,
   ColorSchemeToggle,
   CommandPaletteShortcut,
-  NotificationsButton,
   ProfileMenu,
   ShellNav,
   ShellSearchButton,
@@ -254,7 +253,6 @@ export default function PortalLayout() {
               Docs
             </Anchor>
             <ColorSchemeToggle />
-            <NotificationsButton />
             <ProfileMenu
               userName={userName}
               userEmail={userEmail}

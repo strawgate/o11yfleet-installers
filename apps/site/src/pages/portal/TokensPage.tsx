@@ -2,6 +2,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { Alert, Button, Code, Group, Modal, Stack, Text, TextInput } from "@mantine/core";
 import { useForm } from "@mantine/form";
+import { modals } from "@mantine/modals";
 import { notifications } from "@mantine/notifications";
 import {
   useConfigurations,
@@ -50,17 +51,34 @@ function TokenSection({ config }: { config: Configuration }) {
     }
   }
 
-  async function handleDelete(tokenId: string) {
-    try {
-      await deleteToken.mutateAsync(tokenId);
-      notifications.show({ message: "Token revoked", color: "green" });
-    } catch (err) {
-      notifications.show({
-        title: "Failed to revoke token",
-        message: err instanceof Error ? err.message : "Unknown error",
-        color: "red",
-      });
-    }
+  function handleDelete(token: EnrollmentToken): void {
+    const label = tokenLabel(token);
+    modals.openConfirmModal({
+      title: "Revoke enrollment token",
+      centered: true,
+      children: (
+        <Text size="sm">
+          Revoke <strong>{label}</strong>? Collectors using this token will be unable to enroll
+          again.
+        </Text>
+      ),
+      labels: { confirm: "Revoke", cancel: "Cancel" },
+      confirmProps: { color: "red" },
+      onConfirm: () => {
+        void (async () => {
+          try {
+            await deleteToken.mutateAsync(token.id);
+            notifications.show({ message: "Token revoked", color: "green" });
+          } catch (err) {
+            notifications.show({
+              title: "Failed to revoke token",
+              message: err instanceof Error ? err.message : "Unknown error",
+              color: "red",
+            });
+          }
+        })();
+      },
+    });
   }
 
   return (
@@ -176,7 +194,7 @@ function tokenColumns({
   onDelete,
 }: {
   deletePending: boolean;
-  onDelete: (tokenId: string) => Promise<void>;
+  onDelete: (token: EnrollmentToken) => void;
 }): ColumnDef<EnrollmentToken>[] {
   return [
     {
@@ -218,7 +236,7 @@ function tokenColumns({
             <Button
               color="red"
               size="xs"
-              onClick={() => void onDelete(row.original.id)}
+              onClick={() => onDelete(row.original)}
               disabled={deletePending}
             >
               Revoke

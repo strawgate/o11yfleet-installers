@@ -14,7 +14,6 @@ import {
   BreadcrumbSep,
   ColorSchemeToggle,
   CommandPaletteShortcut,
-  NotificationsButton,
   ProfileMenu,
   ShellNav,
   ShellSearchButton,
@@ -206,7 +205,6 @@ export default function AdminLayout() {
               Health
             </Anchor>
             <ColorSchemeToggle />
-            <NotificationsButton />
             <ProfileMenu userName={userName} userEmail={userEmail} onLogout={handleLogout} />
           </Group>
         </Group>
