@@ -10,7 +10,8 @@ import {
   RemoteConfigStatuses,
   AgentCapabilities,
   AgentToServerFlags,
-} from "../codec/types.js";
+  hasCapability,
+} from "../codec/index.js";
 import { FleetEventType, makeFleetEvent } from "../events.js";
 import type { AnyFleetEvent } from "../events.js";
 import { uint8ToHex } from "../hex.js";
@@ -386,7 +387,7 @@ export async function processFrame(
   if (
     newState.desired_config_hash &&
     !arraysEqual(newState.current_config_hash, newState.desired_config_hash) &&
-    (newState.capabilities & AgentCapabilities.AcceptsRemoteConfig) !== 0 &&
+    hasCapability(newState.capabilities, AgentCapabilities.AcceptsRemoteConfig) &&
     !isStuck
   ) {
     // C4 fix: Include config content in config_map when available

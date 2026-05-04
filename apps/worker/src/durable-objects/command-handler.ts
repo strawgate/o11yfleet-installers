@@ -3,6 +3,7 @@ import {
   prepareBroadcastMessage,
   CommandType,
   AgentCapabilities,
+  hasCapability,
 } from "@o11yfleet/core/codec";
 import type { ServerToAgent } from "@o11yfleet/core/codec";
 import { hexToUint8Array, InvalidHexError } from "@o11yfleet/core/hex";
@@ -98,7 +99,7 @@ export async function handleSetDesiredConfig(
 
     if (
       attachment.capabilities !== undefined &&
-      !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
+      !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRemoteConfig)
     ) {
       skippedNoCap++;
       continue;
@@ -184,7 +185,7 @@ export function handleRestartAgent(ctx: CommandContext, instanceUid: string): Re
   }
   if (
     attachment.capabilities !== undefined &&
-    !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+    !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRestartCommand)
   ) {
     return Response.json(
       { restarted: false, reason: "capability_not_advertised" },
@@ -216,7 +217,7 @@ export function handleRestartCommand(ctx: CommandContext): Response {
       if (!attachment) continue;
       if (
         attachment.capabilities !== undefined &&
-        !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+        !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRestartCommand)
       ) {
         skippedNoCap++;
         continue;
@@ -332,7 +333,7 @@ export async function setDesiredConfigData(
 
     if (
       attachment.capabilities !== undefined &&
-      !(attachment.capabilities & AgentCapabilities.AcceptsRemoteConfig)
+      !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRemoteConfig)
     ) {
       skippedNoCap++;
       continue;
@@ -408,7 +409,7 @@ export function restartAgentData(ctx: CommandContext, instanceUid: string): Rest
   }
   if (
     attachment.capabilities !== undefined &&
-    !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+    !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRestartCommand)
   ) {
     throw new RpcError("capability_not_advertised", 409, {
       restarted: false,
@@ -440,7 +441,7 @@ export function restartAllData(ctx: CommandContext): RestartAllResult {
       if (!attachment) continue;
       if (
         attachment.capabilities !== undefined &&
-        !(attachment.capabilities & AgentCapabilities.AcceptsRestartCommand)
+        !hasCapability(attachment.capabilities, AgentCapabilities.AcceptsRestartCommand)
       ) {
         skippedNoCap++;
         continue;

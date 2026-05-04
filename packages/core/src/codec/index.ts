@@ -28,6 +28,7 @@ export {
   CommandType,
   ConnectionSettingsStatuses,
 } from "./types.js";
+export { hasCapability } from "./capabilities.js";
 export type {
   AgentDescription,
   ComponentHealth,
