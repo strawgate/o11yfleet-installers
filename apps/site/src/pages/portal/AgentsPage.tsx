@@ -34,10 +34,7 @@ function AgentSection({
   onToggle: () => void;
 }) {
   const [filter, setFilter] = useState("");
-  // `null` = first page (the new DataTable's cursor convention).
-  // The old code used `undefined` for "no cursor"; keep the API hook's
-  // expected `string | undefined` shape internally so we don't have to
-  // touch the API client.
+  // `null` = first page (DataTable cursor convention).
   const [cursor, setCursor] = useState<string | null>(null);
   const setFilterAndResetCursor = (next: string) => {
     setFilter(next);
@@ -137,14 +134,9 @@ function AgentSection({
           ? `${visibleAgents.toLocaleString()} visible`
           : "Metrics unavailable";
 
-  // Cursor pagination shape for the new <DataTable>:
-  // - `cursor`: current page's cursor (null = first page)
-  // - `nextCursor`: cursor that fetches the next page; `undefined` when
-  //   there is no next page so the Next button stays disabled
-  // - `previousCursor`: `null` when we're not on the first page (meaning
-  //   "Prev jumps to first page"). Cursor APIs are forward-only by default;
-  //   we don't track a back-stack here, so Prev = First Page is the
-  //   honest semantics. A future improvement could maintain a stack.
+  // `nextCursor` undefined = no next page (Next button disabled).
+  // `previousCursor` null = "Prev jumps to first page"; we don't keep a
+  // back-stack so this is the honest semantics for a forward-only cursor.
   const nextCursor = agentsPage?.pagination?.has_more
     ? (agentsPage.pagination.next_cursor ?? null)
     : undefined;
