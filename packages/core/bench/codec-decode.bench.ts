@@ -7,7 +7,8 @@
  */
 import { bench, describe } from "vitest";
 import { decodeFrame, encodeFrame } from "../src/codec/framing.js";
-import { decodeAgentToServer } from "../src/codec/decoder.js";
+import { decodeAgentToServer, encodeAgentToServer } from "../src/codec/decoder.js";
+import { decodeAgentToServerMinimal } from "../src/codec/protobuf.js";
 import type { AgentToServer } from "../src/codec/types.js";
 import { makeMessages } from "./fixtures.js";
 
@@ -78,5 +79,32 @@ describe("Full Decode Pipeline (detectCodecFormat + decode)", () => {
 
   bench("decodeAgentToServer — effective config large (JSON)", () => {
     decodeAgentToServer(jsonFrames.effectiveConfigLarge);
+  });
+});
+
+describe("Minimal Decode Hot Path (Protobuf)", () => {
+  // Encode heartbeat as protobuf for minimal decode test
+  const protoHeartbeat = encodeAgentToServer(msgs.heartbeat);
+  const protoHello = encodeAgentToServer(msgs.hello);
+  const protoHealthReport = encodeAgentToServer(msgs.unhealthyWithComponents);
+
+  bench("decodeAgentToServerMinimal — heartbeat (no optionals)", () => {
+    decodeAgentToServerMinimal(protoHeartbeat);
+  });
+
+  bench("decodeAgentToServerMinimal — hello (has optionals, falls back to full)", () => {
+    decodeAgentToServerMinimal(protoHello);
+  });
+
+  bench("decodeAgentToServerMinimal — health report (has optionals)", () => {
+    decodeAgentToServerMinimal(protoHealthReport);
+  });
+
+  bench("Full decode for comparison — heartbeat", () => {
+    decodeAgentToServer(protoHeartbeat);
+  });
+
+  bench("Full decode for comparison — hello", () => {
+    decodeAgentToServer(protoHello);
   });
 });

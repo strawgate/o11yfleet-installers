@@ -1,14 +1,25 @@
 // OpAMP codec — protobuf encoding/decoding for AgentToServer and ServerToAgent messages.
 
 import type { AgentToServer, ServerToAgent } from "./types.js";
-import { decodeAgentToServerProto, encodeServerToAgentProto } from "./protobuf.js";
+import {
+  decodeAgentToServerProto,
+  safeEncodeServerToAgent,
+  encodeServerToAgentProto,
+} from "./protobuf.js";
 
 export function decodeAgentToServer(buf: ArrayBuffer): AgentToServer {
   return decodeAgentToServerProto(buf);
 }
 
+/**
+ * Encode a ServerToAgent message to protobuf bytes.
+ *
+ * Uses safeEncodeServerToAgent internally which automatically selects:
+ * - Minimal encoder for heartbeat-only messages (fast path)
+ * - Full encoder for messages with error_response, remote_config, etc.
+ */
 export function encodeServerToAgent(msg: ServerToAgent): ArrayBuffer {
-  return encodeServerToAgentProto(msg);
+  return safeEncodeServerToAgent(msg);
 }
 
 /** Test-only: expose the result of the byte-offset sniff so a regression

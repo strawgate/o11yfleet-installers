@@ -20,6 +20,7 @@ Options:
   --state-bucket NAME     R2 bucket for Terraform state. Default: gh variable or env.
   --include-zero-trust    Add Access app/policy write permission for admin Access.
   --analytics-sql-tokens  Create Analytics Engine SQL API tokens and set CLOUDFLARE_METRICS_* secrets.
+  --preview               Alias for --envs preview.
   -h, --help              Show this help.
 
 Required bootstrap env:
@@ -68,6 +69,10 @@ while [ "$#" -gt 0 ]; do
       ;;
     --analytics-sql-tokens)
       ANALYTICS_SQL_TOKENS=true
+      shift
+      ;;
+    --preview)
+      TARGET_ENVS="preview"
       shift
       ;;
     -h|--help)
@@ -286,7 +291,7 @@ log "Target environments: ${TARGET_ENVS}"
 if [ "$APPLY" = true ]; then
   for target_env in $TARGET_ENVS; do
     case "$target_env" in
-      dev|staging|prod|production) ;;
+      dev|staging|prod|production|preview) ;;
       *) die "unknown environment: ${target_env}" ;;
     esac
     gh_env="$(github_env_name "$target_env")"
@@ -316,7 +321,7 @@ fi
 
 for target_env in $TARGET_ENVS; do
   case "$target_env" in
-    dev|staging|prod|production) ;;
+    dev|staging|prod|production|preview) ;;
     *) die "unknown environment: ${target_env}" ;;
   esac
 
@@ -324,20 +329,33 @@ for target_env in $TARGET_ENVS; do
   [ "$tf_env" = "production" ] && tf_env="prod"
   gh_env="$(github_env_name "$target_env")"
 
-  env_account_id="$(tfvar_value "$tf_env" cloudflare_account_id)"
-  env_zone_id="$(tfvar_value "$tf_env" cloudflare_zone_id)"
+  # Preview uses workers.dev subdomain, no zone/DNS needed
+  if [ "$target_env" = "preview" ]; then
+    env_account_id="${CLOUDFLARE_ACCOUNT_ID:-${ACCOUNT_ID:-}}"
+    env_zone_id=""
+  else
+    env_account_id="$(tfvar_value "$tf_env" cloudflare_account_id)"
+    env_zone_id="$(tfvar_value "$tf_env" cloudflare_zone_id)"
+    [ -n "$env_zone_id" ] || env_zone_id="${CLOUDFLARE_ZONE_ID:-}"
+  fi
   [ -n "$env_account_id" ] || env_account_id="$ACCOUNT_ID"
-  [ -n "$env_zone_id" ] || env_zone_id="${CLOUDFLARE_ZONE_ID:-}"
   [ -n "$env_account_id" ] || die "missing Cloudflare account id for ${target_env}"
-  [ -n "$env_zone_id" ] || die "missing Cloudflare zone id for ${target_env}"
 
   log ""
   log "Environment: ${target_env} -> GitHub environment ${gh_env}"
   log "  account: ${env_account_id}"
-  log "  zone: ${env_zone_id}"
+  if [ -n "$env_zone_id" ]; then
+    log "  zone: ${env_zone_id}"
+  else
+    log "  zone: none (using workers.dev subdomain)"
+  fi
 
   if [ "$APPLY" = false ]; then
-    log "  would create deploy token scoped to Workers, D1, R2, Queues, DNS, Workers Routes"
+    if [ -n "$env_zone_id" ]; then
+      log "  would create deploy token scoped to Workers, D1, R2, Queues, DNS, Workers Routes"
+    else
+      log "  would create deploy token scoped to Workers, D1, R2, Queues (no DNS)"
+    fi
     log "  would create R2 state token scoped to bucket ${STATE_BUCKET}"
     log "  would write CLOUDFLARE_DEPLOY_* and TERRAFORM_STATE_R2_* secrets"
     if [ "$ANALYTICS_SQL_TOKENS" = true ]; then
@@ -357,27 +375,43 @@ for target_env in $TARGET_ENVS; do
     account_group_ids+=("$ACCOUNT_ACCESS_ID")
   fi
   account_groups="$(permission_group_objects "${account_group_ids[@]}")"
-  zone_groups="$(permission_group_objects "$ZONE_DNS_ID" "$ZONE_READ_ID" "$ZONE_WORKERS_ROUTES_ID")"
 
-  deploy_policies="$(
-    jq -n \
-      --arg account_resource "com.cloudflare.api.account.${env_account_id}" \
-      --arg zone_resource "com.cloudflare.api.account.zone.${env_zone_id}" \
-      --argjson account_groups "$account_groups" \
-      --argjson zone_groups "$zone_groups" \
-      '[
-        {
-          effect: "allow",
-          resources: {($account_resource): "*"},
-          permission_groups: $account_groups
-        },
-        {
-          effect: "allow",
-          resources: {($zone_resource): "*"},
-          permission_groups: $zone_groups
-        }
-      ]'
-  )"
+  # Build policies - preview doesn't need zone policies
+  if [ -n "$env_zone_id" ]; then
+    zone_groups="$(permission_group_objects "$ZONE_DNS_ID" "$ZONE_READ_ID" "$ZONE_WORKERS_ROUTES_ID")"
+    deploy_policies="$(
+      jq -n \
+        --arg account_resource "com.cloudflare.api.account.${env_account_id}" \
+        --arg zone_resource "com.cloudflare.api.account.zone.${env_zone_id}" \
+        --argjson account_groups "$account_groups" \
+        --argjson zone_groups "$zone_groups" \
+        '[
+          {
+            effect: "allow",
+            resources: {($account_resource): "*"},
+            permission_groups: $account_groups
+          },
+          {
+            effect: "allow",
+            resources: {($zone_resource): "*"},
+            permission_groups: $zone_groups
+          }
+        ]'
+    )"
+  else
+    deploy_policies="$(
+      jq -n \
+        --arg account_resource "com.cloudflare.api.account.${env_account_id}" \
+        --argjson account_groups "$account_groups" \
+        '[
+          {
+            effect: "allow",
+            resources: {($account_resource): "*"},
+            permission_groups: $account_groups
+          }
+        ]'
+    )"
+  fi
 
   suffix="$(date -u +%Y%m%dT%H%M%SZ)"
   deploy_response="$(create_token "o11yfleet ${target_env} deploy ${suffix}" "$deploy_policies")"
@@ -405,10 +439,20 @@ for target_env in $TARGET_ENVS; do
   [ -n "$r2_token_value" ] && [ "$r2_token_value" != "null" ] || die "Cloudflare did not return R2 token value"
   r2_secret_access_key="$(sha256_hex "$r2_token_value")"
 
+  # Set Cloudflare deploy token and account ID (workflows expect CLOUDFLARE_DEPLOY_API_TOKEN)
   set_github_secret "$gh_env" CLOUDFLARE_DEPLOY_API_TOKEN "$deploy_token"
-  set_github_secret "$gh_env" CLOUDFLARE_DEPLOY_ACCOUNT_ID "$env_account_id"
+  set_github_secret "$gh_env" CLOUDFLARE_ACCOUNT_ID "$env_account_id"
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_ACCESS_KEY_ID "$r2_access_key_id"
   set_github_secret "$gh_env" TERRAFORM_STATE_R2_SECRET_ACCESS_KEY "$r2_secret_access_key"
+
+  # Set R2 endpoint variables as GitHub environment variables
+  if [ -n "${TERRAFORM_STATE_R2_ENDPOINT:-}" ]; then
+    if [ "$APPLY" = true ]; then
+      gh variable set TERRAFORM_STATE_R2_ENDPOINT --repo "$REPO" --env "$gh_env" --body "${TERRAFORM_STATE_R2_ENDPOINT}" 2>/dev/null || true
+      gh variable set TERRAFORM_STATE_R2_REGION --repo "$REPO" --env "$gh_env" --body "${TERRAFORM_STATE_R2_REGION:-auto}" 2>/dev/null || true
+    fi
+    log "  set TERRAFORM_STATE_R2_ENDPOINT and TERRAFORM_STATE_R2_REGION variables"
+  fi
 
   # Also set repo-level secrets for workflows that don't specify an environment
   set_github_secret "" CLOUDFLARE_DEPLOY_API_TOKEN "$deploy_token"

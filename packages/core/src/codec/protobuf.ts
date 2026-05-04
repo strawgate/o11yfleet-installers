@@ -78,6 +78,460 @@ export function decodeAgentToServerProto(buf: ArrayBuffer): AgentToServer {
   return pbAgentToServerToInternal(pb);
 }
 
+/**
+ * Minimal decode for hot path - returns only core fields.
+ * Skips full type conversion of optional fields.
+ * Use this for heartbeats where you only need instance_uid, sequence_num, capabilities, flags.
+ */
+export interface MinimalDecodeResult {
+  instance_uid: Uint8Array;
+  sequence_num: number;
+  capabilities: number;
+  flags: number;
+  has_optional: boolean; // true if message has optional fields (use full decode)
+  opt_flags: number; // bitmask: bit0=description, bit1=health, bit2=config, bit3=status, bit4=disconnect, bit5=components, bit6=conn_settings
+}
+
+// Opt flag constants for routing decisions
+export const OPT_FLAG_AGENT_DESCRIPTION = 1 << 0; // field 3
+export const OPT_FLAG_HEALTH = 1 << 1; // field 5
+export const OPT_FLAG_EFFECTIVE_CONFIG = 1 << 2; // field 6
+export const OPT_FLAG_REMOTE_CONFIG_STATUS = 1 << 3; // field 7
+export const OPT_FLAG_DISCONNECT = 1 << 4; // field 9
+export const OPT_FLAG_AVAILABLE_COMPONENTS = 1 << 5; // field 14
+export const OPT_FLAG_CONNECTION_SETTINGS_STATUS = 1 << 6; // field 15
+
+/**
+ * Classify a message based on its optional fields.
+ * Used to determine if minimal decode is safe or which processing path to use.
+ */
+export type MessageKind =
+  | "heartbeat" // No optional fields - pure heartbeat
+  | "disconnect" // Only agent_disconnect - minimal decode is safe
+  | "other"; // Has other optional fields - needs full decode
+
+/**
+ * Determine if a message can be safely handled with minimal decode.
+ *
+ * Safe for minimal decode when:
+ * 1. No optional fields (pure heartbeat) - OR
+ * 2. ONLY agent_disconnect field (disconnect message) - the disconnect
+ *    message body is never read by the worker, we just check presence
+ *
+ * Unsafe - needs full decode:
+ * - agent_description (needs to update agent metadata)
+ * - health (needs to update agent status)
+ * - effective_config (needs to detect config drift)
+ * - remote_config_status (needs to process ack)
+ * - available_components (needs to store component inventory)
+ * - connection_settings_status (needs to process ack)
+ */
+export function classifyMessageKind(opt_flags: number): MessageKind {
+  // No optional fields = pure heartbeat
+  if (opt_flags === 0) return "heartbeat";
+
+  // Only disconnect flag set = disconnect message (body never read)
+  if (opt_flags === OPT_FLAG_DISCONNECT) return "disconnect";
+
+  // Has other optional fields = needs full decode
+  return "other";
+}
+
+/**
+ * Read a protobuf varint from the buffer. Returns the value and new offset.
+ * Handles multi-byte varints (values >= 128 require multiple bytes).
+ */
+function readVarint(data: Uint8Array, offset: number): { value: number; newOffset: number } {
+  let value = 0;
+  let shift = 0;
+  while (offset < data.length) {
+    const byte = data[offset++]!;
+    value |= (byte & 0x7f) << shift;
+    if ((byte & 0x80) === 0) break;
+    shift += 7;
+  }
+  return { value, newOffset: offset };
+}
+
+export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResult | null {
+  let data = new Uint8Array(buf);
+  if (data.length > 1 && data[0] === 0x00) {
+    data = data.subarray(1);
+  }
+
+  // Fast path: manually parse just the header fields
+  // Protobuf varint encoding: tags are (field_number << 3) | wire_type
+  // Field 1 (instance_uid): tag = 0x0a (1 << 3 | 2 = length-delimited)
+  // Field 2 (sequence_num): tag = 0x10 (2 << 3 | 0 = varint)
+  // Field 3 (capabilities): tag = 0x18 (3 << 3 | 0 = varint)
+  // Field 4 (flags): tag = 0x20 (4 << 3 | 0 = varint)
+
+  let offset = 0;
+  let instance_uid: Uint8Array | undefined;
+  let sequence_num = 0;
+  let capabilities = 0;
+  let flags = 0;
+  let has_optional = false;
+  let opt_flags = 0;
+
+  while (offset < data.length) {
+    const tag = data[offset++]!;
+    const wire_type = tag & 0x07;
+    const field_num = tag >> 3;
+
+    switch (field_num) {
+      case 1: // instance_uid
+        if (wire_type === 2) {
+          // length-delimited: read multi-byte varint length
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          instance_uid = data.subarray(newOff, newOff + len);
+          offset = newOff + len;
+        }
+        break;
+      case 2: // sequence_num
+        if (wire_type === 0) {
+          // varint
+          const { value, newOffset } = readVarint(data, offset);
+          sequence_num = value;
+          offset = newOffset;
+        }
+        break;
+      case 4: // capabilities
+        if (wire_type === 0) {
+          const { value, newOffset } = readVarint(data, offset);
+          capabilities = value;
+          offset = newOffset;
+        }
+        break;
+      case 10: // flags
+        if (wire_type === 0) {
+          const { value, newOffset } = readVarint(data, offset);
+          flags = value;
+          offset = newOffset;
+        }
+        break;
+      case 3: // agent_description
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 1;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      case 5: // health
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 2;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      case 6: // effective_config
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 4;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      case 7: // remote_config_status
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 8;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      case 9: // agent_disconnect
+        // Wire type 2 (length-delimited) for empty message AgentDisconnect {}
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 16;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        } else if (wire_type === 0) {
+          has_optional = true;
+          opt_flags |= 16;
+        }
+        break;
+      case 14: // available_components
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 32;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      case 15: // connection_settings_status
+        if (wire_type === 2) {
+          has_optional = true;
+          opt_flags |= 64;
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        }
+        break;
+      default:
+        // Skip unknown field
+        if (wire_type === 0) {
+          // varint: read multi-byte
+          const { newOffset } = readVarint(data, offset);
+          offset = newOffset;
+        } else if (wire_type === 2) {
+          // length-delimited: read multi-byte length
+          const { value: len, newOffset: newOff } = readVarint(data, offset);
+          offset = newOff + len;
+        } else if (wire_type === 5) {
+          offset += 4;
+        }
+        break;
+    }
+  }
+
+  if (!instance_uid) return null;
+
+  return { instance_uid, sequence_num, capabilities, flags, has_optional, opt_flags };
+}
+
+// ─── Minimal Encode: ServerToAgent for hot path ─────────────────────
+
+/**
+ * Minimal encoder for ServerToAgent (heartbeat response).
+ * Manually encodes protobuf to avoid protobuf-ts overhead.
+ *
+ * Protobuf layout for heartbeat (16-byte UID, flags=0):
+ *   [0] 0x00          - header byte (opamp-go format)
+ *   [1] 0x0a          - field 1 tag (instance_uid, length-delimited)
+ *   [2] 0x10          - length = 16
+ *   [3-18] <uid>      - 16-byte instance UID
+ *   [19] 0x38         - field 7 tag (capabilities, varint)
+ *   [20] <caps>       - capabilities
+ *   [21] 0x60         - field 12 tag (heart_beat_interval, varint)
+ *   [22+] <interval>  - interval value
+ *
+ * Note: flags (field 6) is omitted when 0 to match protobuf-ts/prost behavior.
+ */
+
+export function encodeServerToAgentMinimal(
+  instanceUid: Uint8Array,
+  flags: number,
+  capabilities: number,
+  heartBeatIntervalNs: bigint,
+): ArrayBuffer {
+  const uidLen = instanceUid.length;
+
+  // Fall back to dynamic allocation for unusual UID lengths
+  if (uidLen !== 16 && uidLen !== 32) {
+    return encodeServerToAgentMinimalDynamic(instanceUid, flags, capabilities, heartBeatIntervalNs);
+  }
+
+  // Calculate sizes
+  const capsBytes = capabilities < 0x80 ? 1 : varintSize(capabilities);
+  const intervalBytes = heartBeatIntervalNs < 0x80n ? 1 : varintSizeBigInt(heartBeatIntervalNs);
+
+  // flags is optional - omit when 0 to match protobuf-ts/prost behavior
+  // This makes output byte-for-byte identical to WASM encode
+  const hasFlags = flags !== 0;
+  const flagsBytes = hasFlags ? (flags < 0x80 ? 1 : varintSize(flags)) : 0;
+
+  // Total: header(1) + uid_field(2 + uidLen) + [flags_field] + caps_field(1 + varint) + interval_field(1 + varint)
+  const totalLen =
+    1 + 2 + uidLen + (hasFlags ? 1 + flagsBytes : 0) + 1 + capsBytes + 1 + intervalBytes;
+  const buf = new Uint8Array(totalLen);
+  let offset = 0;
+
+  // Header byte (opamp-go format)
+  buf[offset++] = 0x00;
+
+  // Field 1: instance_uid (tag 0x0a = field 1, wire type 2)
+  buf[offset++] = 0x0a; // tag
+  buf[offset++] = uidLen; // length
+  buf.set(instanceUid, offset);
+  offset += uidLen;
+
+  // Field 6: flags (optional, omit when 0)
+  if (hasFlags) {
+    buf[offset++] = 0x30; // tag
+    offset = writeVarint(buf, offset, flags);
+  }
+
+  // Field 7: capabilities (tag 0x38 = field 7, wire type 0)
+  buf[offset++] = 0x38;
+  offset = writeVarint(buf, offset, capabilities);
+
+  // Field 12: heart_beat_interval (tag 0x60 = field 12, wire type 0)
+  buf[offset++] = 0x60;
+  offset = writeVarintBigInt(buf, offset, heartBeatIntervalNs);
+
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length);
+}
+
+// ─── Encode Safety Guard ───────────────────────────────────────────────
+
+/**
+ * Check if a ServerToAgent message can be safely encoded with minimal encode.
+ *
+ * Minimal encode only supports these fields:
+ *   - instance_uid
+ *   - flags (optional, defaults to 0)
+ *   - capabilities
+ *   - heart_beat_interval
+ *
+ * If any of these fields are present, full encode is required:
+ *   - error_response
+ *   - remote_config
+ *   - connection_settings
+ *   - agent_identification
+ *   - command
+ */
+export function canUseMinimalEncode(msg: ServerToAgent): boolean {
+  return (
+    !msg.error_response &&
+    !msg.remote_config &&
+    !msg.connection_settings &&
+    !msg.agent_identification &&
+    !msg.command
+  );
+}
+
+/**
+ * Safely encode a ServerToAgent message, using minimal encode when possible.
+ *
+ * This function determines whether to use the fast minimal encoder or the
+ * full protobuf-ts encoder based on the message content.
+ *
+ * @returns ArrayBuffer encoded in opamp-go wire format
+ */
+export function safeEncodeServerToAgent(msg: ServerToAgent): ArrayBuffer {
+  // Fall back to full encode if:
+  // - Message has fields that minimal encode doesn't support, OR
+  // - heart_beat_interval is null/undefined (coercing to 0 would change semantics
+  //   from "not set" to "stop heartbeating" per OpAMP spec)
+  if (
+    !canUseMinimalEncode(msg) ||
+    msg.heart_beat_interval === null ||
+    msg.heart_beat_interval === undefined
+  ) {
+    return encodeServerToAgentProto(msg);
+  }
+
+  // Convert instance_uid to Uint8Array if needed
+  const uid =
+    msg.instance_uid instanceof Uint8Array ? msg.instance_uid : new Uint8Array(msg.instance_uid);
+
+  return encodeServerToAgentMinimal(
+    uid,
+    msg.flags ?? 0,
+    msg.capabilities ?? 0,
+    BigInt(msg.heart_beat_interval),
+  );
+}
+
+/**
+ * Fallback dynamic encoder for unusual UID lengths.
+ * Slower than template path but handles any UID size correctly.
+ */
+function encodeServerToAgentMinimalDynamic(
+  instanceUid: Uint8Array,
+  flags: number,
+  capabilities: number,
+  heartBeatIntervalNs: bigint,
+): ArrayBuffer {
+  const uidLen = instanceUid.length;
+
+  // flags is optional - omit when 0 to match protobuf-ts/prost behavior
+  const hasFlags = flags !== 0;
+  const flagsBytes = hasFlags ? varintSize(flags) : 0;
+  const capsBytes = varintSize(capabilities);
+  const intervalBytes = varintSizeBigInt(heartBeatIntervalNs);
+
+  const totalLen =
+    1 + (1 + 1 + uidLen) + (hasFlags ? 1 + flagsBytes : 0) + (1 + capsBytes) + (1 + intervalBytes);
+  const buf = new Uint8Array(totalLen);
+  let offset = 0;
+
+  buf[offset++] = 0x00;
+  buf[offset++] = 0x0a;
+  buf[offset++] = uidLen;
+  buf.set(instanceUid, offset);
+  offset += uidLen;
+
+  if (hasFlags) {
+    buf[offset++] = 0x30;
+    offset = writeVarint(buf, offset, flags);
+  }
+
+  buf[offset++] = 0x38;
+  offset = writeVarint(buf, offset, capabilities);
+  buf[offset++] = 0x60;
+  offset = writeVarintBigInt(buf, offset, heartBeatIntervalNs);
+
+  return buf.buffer.slice(buf.byteOffset, buf.byteOffset + buf.length);
+}
+
+/**
+ * Calculate the number of bytes needed to encode a number as varint.
+ */
+function varintSize(value: number): number {
+  if (value < 0) {
+    // Negative varints always use 10 bytes
+    return 10;
+  }
+  if (value < 0x80) return 1;
+  if (value < 0x4000) return 2;
+  if (value < 0x200000) return 3;
+  if (value < 0x10000000) return 4;
+  return 5;
+}
+
+/**
+ * Calculate the number of bytes needed to encode a bigint as varint.
+ */
+function varintSizeBigInt(value: bigint): number {
+  if (value < BigInt(0)) {
+    return 10;
+  }
+  if (value < BigInt(0x80)) return 1;
+  if (value < BigInt(0x4000)) return 2;
+  if (value < BigInt(0x200000)) return 3;
+  if (value < BigInt(0x10000000)) return 4;
+  if (value < BigInt(0x800000000)) return 5;
+  if (value < BigInt(0x40000000000)) return 6;
+  if (value < BigInt(0x2000000000000)) return 7;
+  if (value < BigInt(0x100000000000000)) return 8;
+  return 9;
+}
+
+/**
+ * Write a number as varint to the buffer. Returns new offset.
+ */
+function writeVarint(buf: Uint8Array, offset: number, value: number): number {
+  if (value < 0) {
+    // Handle negative numbers (zigzag encoding for sint32, direct for uint64)
+    value = value >>> 0; // Treat as unsigned
+  }
+  while (value > 0x7f) {
+    buf[offset++] = (value & 0x7f) | 0x80;
+    value = value >>> 7;
+  }
+  buf[offset++] = value & 0x7f;
+  return offset;
+}
+
+/**
+ * Write a bigint as varint to the buffer. Returns new offset.
+ */
+function writeVarintBigInt(buf: Uint8Array, offset: number, value: bigint): number {
+  if (value < BigInt(0)) {
+    value = BigInt.asUintN(64, value); // Treat as unsigned
+  }
+  while (value > BigInt(0x7f)) {
+    buf[offset++] = Number((value & BigInt(0x7f)) | BigInt(0x80));
+    value = value >> BigInt(7);
+  }
+  buf[offset++] = Number(value & BigInt(0x7f));
+  return offset;
+}
+
 function pbAgentToServerToInternal(pb: PbAgentToServer): AgentToServer {
   const result: AgentToServer = {
     instance_uid: pb.instanceUid,

@@ -7,11 +7,25 @@ export {
 export type { PrepareBroadcastMessageMeta } from "./decoder.js";
 export {
   decodeAgentToServerProto,
+  decodeAgentToServerMinimal,
   decodeServerToAgentProto,
   encodeAgentToServerProto,
   encodeServerToAgentProto,
+  encodeServerToAgentMinimal,
   isProtobufFrame,
+  classifyMessageKind,
+  canUseMinimalEncode,
+  safeEncodeServerToAgent,
+  type MessageKind,
+  OPT_FLAG_AGENT_DESCRIPTION,
+  OPT_FLAG_HEALTH,
+  OPT_FLAG_EFFECTIVE_CONFIG,
+  OPT_FLAG_REMOTE_CONFIG_STATUS,
+  OPT_FLAG_DISCONNECT,
+  OPT_FLAG_AVAILABLE_COMPONENTS,
+  OPT_FLAG_CONNECTION_SETTINGS_STATUS,
 } from "./protobuf.js";
+export type { MinimalDecodeResult } from "./protobuf.js";
 // Aliases for backward compatibility with tests (JSON framing removed in c315fc1)
 export {
   encodeAgentToServerProto as encodeFrame,
