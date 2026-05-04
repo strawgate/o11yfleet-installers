@@ -24,7 +24,7 @@ function functionBody(source: string, name: string): string {
 
 describe("UI data-source policy", () => {
   it("keeps portal overview on Analytics Engine snapshots without Config DO fan-out fallback", () => {
-    const source = readRepoFile("apps/worker/src/routes/v1/index.ts");
+    const source = readRepoFile("apps/worker/src/routes/v1/tenant.ts");
     const overview = functionBody(source, "handleGetOverview");
 
     expect(overview).not.toContain("fanOutPerDoStats");
