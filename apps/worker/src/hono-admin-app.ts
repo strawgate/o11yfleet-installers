@@ -20,54 +20,19 @@ import { adminRouter } from "./routes/admin/index.js";
 import { authenticate } from "./routes/auth.js";
 import { adminAuditContext, systemActor, userActor } from "./audit/recorder.js";
 import { verifyGitHubOIDC, looksLikeJWT, type GitHubOIDCClaims } from "./utils/oidc.js";
-import { isAllowedCorsOrigin, PRODUCTION_ORIGINS } from "./shared/origins.js";
 import { ApiError } from "./shared/errors.js";
 import { AiApiError } from "./ai/guidance.js";
+import {
+  getCorsHeadersForOrigin as getCorsHeaders,
+  addSecurityHeaders,
+  CSRF_SAFE_METHODS,
+  isTrustedOrigin,
+} from "./shared/http.js";
 
 /** Hono context variables set by admin middleware, available to all handlers. */
 export interface AdminAppVariables {
   /** Audit context for recording mutations. */
   audit: AuditContext;
-}
-
-// ─── CORS helpers ────────────────────────────────────────────────────
-
-function getCorsHeaders(origin: string, env: Env): Record<string, string> {
-  const allowed = isAllowedCorsOrigin(origin, env.ENVIRONMENT);
-  return {
-    "Access-Control-Allow-Origin": allowed ? origin : PRODUCTION_ORIGINS[0]!,
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Tenant-Id",
-    "Access-Control-Allow-Credentials": "true",
-    Vary: "Origin",
-  };
-}
-
-function addSecurityHeaders(resp: Response): Response {
-  resp.headers.set("Strict-Transport-Security", "max-age=63072000; includeSubDomains");
-  resp.headers.set("X-Content-Type-Options", "nosniff");
-  resp.headers.set("X-Frame-Options", "DENY");
-  resp.headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
-  resp.headers.set("Permissions-Policy", "camera=(), microphone=(), geolocation=()");
-  return resp;
-}
-
-// ─── CSRF helpers ───────────────────────────────────────────────────
-
-const CSRF_SAFE_METHODS = new Set(["GET", "HEAD", "OPTIONS"]);
-
-function isTrustedOrigin(request: Request, env: Env): boolean {
-  const origin = request.headers.get("Origin");
-  if (origin) return isAllowedCorsOrigin(origin, env.ENVIRONMENT);
-  const referer = request.headers.get("Referer");
-  if (referer) {
-    try {
-      return isAllowedCorsOrigin(new URL(referer).origin, env.ENVIRONMENT);
-    } catch {
-      return false;
-    }
-  }
-  return false;
 }
 
 function jsonErrorResponse(
