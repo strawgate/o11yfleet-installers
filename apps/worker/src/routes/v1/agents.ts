@@ -157,7 +157,7 @@ export async function handleRolloutCohortSummary(
 // ─── Rollout Handler ────────────────────────────────────────────────
 
 export async function handleRollout(
-  _request: Request,
+  request: Request,
   env: Env,
   tenantId: string,
   configId: string,
@@ -175,6 +175,48 @@ export async function handleRollout(
   const r2Key = `configs/sha256/${config["current_config_hash"]}.yaml`;
   const r2Obj = await env.FP_CONFIGS.get(r2Key);
   const configContent = r2Obj ? await r2Obj.text() : null;
+
+  // Fleet component compatibility gate — accepts override=true to force rollout
+  if (configContent) {
+    let override = false;
+    try {
+      const reqBody = (await request.clone().json()) as { override?: boolean };
+      override = reqBody.override ?? false;
+    } catch {
+      /* ignore malformed body */
+    }
+
+    const checkCompatResp = await stub.fetch(
+      new Request("http://internal/command/check-compatibility", {
+        method: "POST",
+        body: JSON.stringify({ yamlConfig: configContent, override }),
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    if (!checkCompatResp.ok) {
+      return new Response("Fleet compatibility check failed", { status: 502 });
+    }
+    const compat = (await checkCompatResp.json()) as {
+      compatible: boolean;
+      missingComponents?: { kind: string; name: string }[];
+      compatibleAgents?: number;
+      incompatibleAgents?: number;
+      unknownAgents?: number;
+      totalAgents?: number;
+    };
+    if (!compat.compatible) {
+      return Response.json(
+        {
+          error: "INCOMPATIBLE_FLEET",
+          message: `${compat.incompatibleAgents} of ${compat.totalAgents} connected agents lack required components. See missing_components for details.`,
+          missing_components: compat.missingComponents ?? [],
+          compatible_agents: compat.compatibleAgents ?? 0,
+          incompatible_agents: compat.incompatibleAgents ?? 0,
+        },
+        { status: 409 },
+      );
+    }
+  }
 
   const result = await stub.rpcSetDesiredConfig({
     config_hash: config["current_config_hash"],
