@@ -244,17 +244,19 @@ jobs:
       - name: Build worker bundle
         if: needs.changes.outputs.deploy == 'true' || needs.changes.outputs.workflow == 'true'
         run: |
-          # Try wrangler dry-run first; if it fails due to auth, fall back to esbuild
-          if just worker-bundle; then
-            echo "Bundle built with wrangler"
-          else
-            echo "Wrangler build failed, trying esbuild fallback..."
+          # Try wrangler dry-run first; if it fails or doesn't produce bundle, fall back to esbuild
+          just worker-bundle || true
+          # Check if wrangler created a bundle; if not, use esbuild fallback
+          if [ ! -f apps/worker/dist/index.js ] && [ ! -f apps/worker/dist/instrumented.js ]; then
+            echo "No bundle from wrangler, trying esbuild fallback..."
             mkdir -p apps/worker/dist
             cd apps/worker
-            pnpm exec esbuild src/instrumented.ts --bundle --outfile=dist/instrumented.js --format=esm --platform=browser --target=es2022 2>/dev/null || true
-            if [ -f dist/instrumented.js ]; then
+            pnpm exec esbuild src/instrumented.ts --bundle --outfile=dist/index.js --format=esm --platform=browser --target=es2022 2>/dev/null || true
+            if [ -f dist/index.js ]; then
               echo "Bundle built with esbuild fallback"
             fi
+          else
+            echo "Bundle built with wrangler"
           fi
 
       - name: "Check bundle size (Workers limit: 10MB compressed)"
