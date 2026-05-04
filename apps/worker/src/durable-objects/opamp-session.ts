@@ -55,7 +55,12 @@ export async function handleFirstMessage(
   ws: WebSocket,
   attachment: WSAttachment,
   message: ArrayBuffer,
-): Promise<{ attachment: WSAttachment; earlyReturn: boolean; agentIdentification?: Uint8Array }> {
+): Promise<{
+  attachment: WSAttachment;
+  earlyReturn: boolean;
+  agentIdentification?: Uint8Array;
+  response?: ServerToAgent;
+}> {
   if (attachment.is_enrollment) {
     try {
       // The agent sends an AgentToServer with its self-reported UID; we decode
@@ -145,6 +150,15 @@ export async function handleFirstMessage(
       return { attachment, earlyReturn: true };
     }
     ws.serializeAttachment(attachment);
+
+    // Update instance_uid to the adopted UID so that subsequent processFrame
+    // calls (in webSocketMessage) return a response with the correct UID.
+    // On reconnect, attachment.instance_uid is the random UUID from enrollment
+    // (handleFirstMessage is skipped, so it's never updated), but do_assigned_uid
+    // is correctly set to the adopted UID at acceptWebSocket time.
+    if (attachment.do_assigned_uid) {
+      attachment.instance_uid = attachment.do_assigned_uid;
+    }
   }
 
   return { attachment, earlyReturn: false };

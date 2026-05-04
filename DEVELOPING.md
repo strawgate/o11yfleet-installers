@@ -332,7 +332,7 @@ untested code will block merge. Use `just coverage` to find gaps.
 
 ### Writing Tests
 
-Tests are living documentation: they prove what code *does*, not just what
+Tests are living documentation: they prove what code _does_, not just what
 comments claim. Three questions guide what to test:
 
 1. **Is it a pure function?** → Unit test (`apps/worker/test/<module>.test.ts`,

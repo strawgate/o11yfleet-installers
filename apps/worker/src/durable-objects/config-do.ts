@@ -7,7 +7,7 @@ import {
 } from "@o11yfleet/core/codec";
 import { processFrame, defaultProcessContext } from "@o11yfleet/core/state-machine";
 import { hexToUint8Array, uint8ToHex } from "@o11yfleet/core/hex";
-import { signClaim, type AssignmentClaim } from "@o11yfleet/core/auth";
+import { signClaim, verifyClaim, type AssignmentClaim } from "@o11yfleet/core/auth";
 import { configMetricsToDoubles, FLEET_CONFIG_SNAPSHOT_INTERVAL } from "@o11yfleet/core/metrics";
 import {
   startWsMessageSpan,
@@ -226,16 +226,22 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     this.alarmScheduled = true;
   }
 
-  /** O(1) tag-based check with fallback for enrollment connections. */
+  /** O(1) tag-based check with fallback for enrollment/reconnect connections. */
   private isAgentConnected(uid: string): boolean {
-    // Fast path: tag-based O(1) lookup (covers reconnect connections)
+    // Fast path: tag-based O(1) lookup (works for reconnect connections where
+    // the WS is tagged with the claim's instance_uid, which equals the DO-assigned UID).
     if (this.ctx.getWebSockets(uid).length > 0) return true;
-    // Enrollment connections have a stale tag (UID assigned post-accept).
-    // This is rare (only until the agent's first reconnect) and only
-    // called from admin query paths, never the hot message path.
+    // Fallback: iterate all WebSockets and check attachment fields.
+    //
+    // Enrollment connections: tag is a random UUID (assigned before handleFirstMessage
+    // knows the real UID). After handleFirstMessage, attachment.instance_uid = real UID.
+    // Reconnect connections: tag is correct (from claim.instance_uid), but attachment.instance_uid
+    // may be stale (only updated during enrollment, not reconnection). We check do_assigned_uid
+    // which is always set to the tag value at acceptWebSocket time.
     for (const ws of this.ctx.getWebSockets()) {
       const att = parseAttachment(ws.deserializeAttachment());
       if (att?.instance_uid === uid) return true;
+      if (att?.do_assigned_uid === uid) return true;
     }
     return false;
   }
@@ -355,11 +361,34 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     // for security.
     const { tenant_id: tenantId, config_id: configId } = this.getMyIdentity();
 
-    // The instance UID still comes from the worker's claim verification
-    // (it's the agent's identity, not the DO's). Same for the
-    // is_enrollment flag, which is a routing signal for the agent's
-    // first frame, not a security boundary.
-    const instanceUid = request.headers.get("x-fp-instance-uid") ?? crypto.randomUUID();
+    // The instance UID comes from either:
+    // 1. The x-fp-instance-uid header (explicitly set by the agent), or
+    // 2. The verified assignment claim's instance_uid (agent reconnecting with DO-assigned UID)
+    // 3. A random UUID (enrollment - first connection before DO assigns a UID)
+    //
+    // Case 2 is critical: during reconnection, the agent has no x-fp-instance-uid header
+    // (the DO never sent one). Without extracting instance_uid from the verified claim,
+    // the WebSocket gets tagged with a random UUID, and getWebSockets(doAssignedUid) returns 0,
+    // causing isAgentConnected() to incorrectly return false.
+    let instanceUid = request.headers.get("x-fp-instance-uid");
+    if (!instanceUid) {
+      // No x-fp-instance-uid header — try to extract instance_uid from the assignment claim.
+      // Enrollment tokens have a different format and will fail verification, which is fine
+      // (we fall back to a random UUID for those cases).
+      const auth = request.headers.get("Authorization");
+      if (auth?.startsWith("Bearer ")) {
+        try {
+          const claim = await verifyClaim(auth.slice(7), this.env.O11YFLEET_CLAIM_HMAC_SECRET);
+          instanceUid = claim.instance_uid;
+        } catch {
+          // Claim verification failed (e.g., expired, tampered, or enrollment token).
+          // Fall back to random UUID — enrollment will assign a proper UID on first hello.
+        }
+      }
+      if (!instanceUid) {
+        instanceUid = crypto.randomUUID();
+      }
+    }
     const isEnrollment = request.headers.get("x-fp-enrollment") === "true";
     const isPendingDo = configId === PENDING_DO_CONFIG_ID;
     const sourceIp =
@@ -497,9 +526,15 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
       // Duplicate UID detection (OpAMP spec §3.2.1.2) — O(1) via WebSocket tags.
       // Only consider OPEN sockets — closed sockets (from prior enrollment/reconnect
       // cycles) don't count as active duplicates.
+      //
+      // Use do_assigned_uid (not instance_uid) for the tag lookup. On reconnection,
+      // instance_uid is the random UUID from enrollment (handleFirstMessage is skipped
+      // so instance_uid is never updated), but do_assigned_uid is correctly set to
+      // the adopted UID at acceptWebSocket time.
+      const tagUid = attachment.do_assigned_uid ?? attachment.instance_uid;
       if (agentMsg.sequence_num === 0) {
         const existing = this.ctx
-          .getWebSockets(attachment.instance_uid)
+          .getWebSockets(tagUid)
           .filter((s) => s.readyState === WebSocket.OPEN);
         const isDuplicate = existing.length > 1 || (existing.length === 1 && existing[0] !== ws);
         if (isDuplicate) {
