@@ -23,8 +23,8 @@ import {
   userActor,
   type AuditContext,
 } from "../audit/recorder.js";
+import { SESSION_TTL_MS, generateSessionId } from "../shared/sessions.js";
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 const OAUTH_STATE_TTL_MS = 10 * 60 * 1000;
 const OAUTH_STATE_COOKIE = "fp_oauth_state";
 const GITHUB_API_VERSION = "2026-03-10";
@@ -105,13 +105,6 @@ async function verifyPassword(password: string, stored: string): Promise<boolean
   const b = enc.encode(stored);
   if (a.byteLength !== b.byteLength) return false;
   return crypto.subtle.timingSafeEqual(a, b);
-}
-
-function generateSessionId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
 }
 
 function randomBase64url(byteLength = 32): string {

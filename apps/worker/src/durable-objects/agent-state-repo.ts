@@ -18,6 +18,15 @@ import type {
   SweepStats,
 } from "./agent-state-repo-interface.js";
 
+/** JSON.stringify with BigInt → string coercion. SQLite columns
+ *  carrying capability bitmasks decode as BigInt; the agent state JSON
+ *  needs them serialized as strings. Returns null for null/undefined input
+ *  so call sites don't need to wrap in a conditional. */
+function stringifyWithBigint(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  return JSON.stringify(value, (_k, v) => (typeof v === "bigint" ? v.toString() : v));
+}
+
 // Re-export types from the interface file for backward compatibility
 export type {
   DesiredConfig,
@@ -449,16 +458,8 @@ export function saveAgentState(sql: SqlStorage, state: AgentState): void {
     );
   }
 
-  const componentHealthMap = state.component_health_map
-    ? JSON.stringify(state.component_health_map, (_k, v) =>
-        typeof v === "bigint" ? v.toString() : v,
-      )
-    : null;
-  const availableComponents = state.available_components
-    ? JSON.stringify(state.available_components, (_k, v) =>
-        typeof v === "bigint" ? v.toString() : v,
-      )
-    : null;
+  const componentHealthMap = stringifyWithBigint(state.component_health_map);
+  const availableComponents = stringifyWithBigint(state.available_components);
 
   sql.exec(
     `INSERT INTO agents (instance_uid, tenant_id, config_id, sequence_num, generation, healthy, status, last_error, current_config_hash, effective_config_hash, last_seen_at, connected_at, agent_description, capabilities, component_health_map, available_components, config_fail_count, config_last_failed_hash)
@@ -530,13 +531,7 @@ export function updateAgentPartial(
   }
   if (dirtyFields.has("component_health_map")) {
     setClauses.push("component_health_map = ?");
-    params.push(
-      state.component_health_map
-        ? JSON.stringify(state.component_health_map, (_k, v) =>
-            typeof v === "bigint" ? v.toString() : v,
-          )
-        : null,
-    );
+    params.push(stringifyWithBigint(state.component_health_map));
   }
   if (dirtyFields.has("agent_description")) {
     setClauses.push("agent_description = ?");
@@ -544,13 +539,7 @@ export function updateAgentPartial(
   }
   if (dirtyFields.has("available_components")) {
     setClauses.push("available_components = ?");
-    params.push(
-      state.available_components
-        ? JSON.stringify(state.available_components, (_k, v) =>
-            typeof v === "bigint" ? v.toString() : v,
-          )
-        : null,
-    );
+    params.push(stringifyWithBigint(state.available_components));
   }
   if (dirtyFields.has("effective_config_hash")) {
     setClauses.push("effective_config_hash = ?");

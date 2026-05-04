@@ -1,6 +1,7 @@
 // o11yfleet Worker — main entry point
 
 export { ConfigDurableObject } from "./durable-objects/config-do.js";
+import { PENDING_DO_CONFIG_ID } from "./durable-objects/constants.js";
 export { ConfigValidationWorkflow } from "./workflows/config-validation.js";
 import { handleAdminRequest } from "./routes/admin/index.js";
 import { handleV1Request } from "./routes/v1/index.js";
@@ -683,8 +684,6 @@ async function handlePendingTokenRequest(
   token: string,
   cleanHeaders: Headers,
 ): Promise<Response> {
-  const PENDING_DO_CONFIG_ID = "__pending__";
-
   const body = token.slice("fp_pending_".length);
   const dotIdx = body.indexOf(".");
   if (dotIdx === -1) {

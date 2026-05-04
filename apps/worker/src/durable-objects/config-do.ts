@@ -47,9 +47,8 @@ import {
   SERVER_CAPABILITIES,
   ASSIGNMENT_CLAIM_TTL_SECONDS,
   STALE_AGENT_THRESHOLD_MS,
+  PENDING_DO_CONFIG_ID,
 } from "./constants.js";
-
-const PENDING_DO_CONFIG_ID = "__pending__";
 
 export interface ConfigDOEnv {
   FP_DB: D1Database;

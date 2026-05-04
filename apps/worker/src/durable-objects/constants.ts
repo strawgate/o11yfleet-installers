@@ -28,3 +28,8 @@ export const SERVER_CAPABILITIES =
   ServerCapabilities.OffersRemoteConfig |
   ServerCapabilities.AcceptsEffectiveConfig |
   ServerCapabilities.OffersConnectionSettings;
+
+/** Sentinel `config_id` for the per-tenant DO that handles pending-token
+ *  enrollments before a configuration is assigned. DO name format is
+ *  `${tenant_id}:${PENDING_DO_CONFIG_ID}`. */
+export const PENDING_DO_CONFIG_ID = "__pending__";

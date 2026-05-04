@@ -39,15 +39,7 @@ import { getDb } from "../../db/client.js";
 import { deleteTenantById, findTenantById, tenantExists } from "../../shared/db-helpers.js";
 import { currentFleetSummary, currentFleetSummaryByTenant } from "@o11yfleet/core/metrics";
 import { sendTenantApprovalEmail, isAutoApproveEnabled } from "../../shared/email.js";
-
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-
-function generateSessionId(): string {
-  const bytes = crypto.getRandomValues(new Uint8Array(32));
-  return Array.from(bytes)
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
-}
+import { SESSION_TTL_MS, generateSessionId } from "../../shared/sessions.js";
 
 // ─── Router ─────────────────────────────────────────────────────────
 
