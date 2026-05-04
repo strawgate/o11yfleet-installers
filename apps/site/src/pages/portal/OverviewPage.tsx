@@ -141,7 +141,13 @@ export default function OverviewPage() {
         }
       />
 
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(180px,1fr))]">
+      <Box
+        style={{
+          display: "grid",
+          gap: "var(--mantine-spacing-sm)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+        }}
+      >
         <MetricCard label="Configurations" value={formatMetric(view?.configurations.total)}>
           <GuidanceSlot item={configurationInsight} loading={guidance.isLoading} />
         </MetricCard>
@@ -170,7 +176,7 @@ export default function OverviewPage() {
             observation={view?.rollouts.active.observation}
           />
         ) : null}
-      </div>
+      </Box>
 
       <GuidancePanel
         title="Fleet snapshot"
@@ -286,12 +292,12 @@ function CollectorSnapshot({ config }: { config: Configuration }) {
   }
 
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <Group gap={6} wrap="wrap">
       <StatusBadge>
         {metrics.connectedAgents} / {metrics.totalAgents} connected
       </StatusBadge>
       <StatusBadge tone={healthyTone}>{metrics.healthyAgents} healthy</StatusBadge>
-    </div>
+    </Group>
   );
 }
 

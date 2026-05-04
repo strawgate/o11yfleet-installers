@@ -1,39 +1,3 @@
-@layer theme, base, components, utilities;
-
-@import "tailwindcss/theme.css" layer(theme);
-@import "tailwindcss/utilities.css" layer(utilities);
-
-/* stylelint-disable at-rule-no-unknown, scss/at-rule-no-unknown -- Tailwind v4 directives are expanded by @tailwindcss/vite. */
-@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--ui-accent);
-  --color-accent-foreground: var(--ui-accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --radius-sm: var(--radius-sm);
-  --radius-md: var(--radius);
-  --radius-lg: var(--radius-lg);
-  --radius-xl: var(--radius-xl);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-mono);
-}
-/* stylelint-enable at-rule-no-unknown, scss/at-rule-no-unknown */
-
 /* =========================================================
    O11yFleet — shared styles
    Dark-first, single accent, geometric sans + mono
@@ -83,27 +47,6 @@
   --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.02), 0 1px 2px rgba(0, 0, 0, 0.4);
   --shadow: 0 1px 0 rgba(255, 255, 255, 0.02), 0 8px 24px -8px rgba(0, 0, 0, 0.6);
   --shadow-lg: 0 1px 0 rgba(255, 255, 255, 0.04), 0 24px 48px -16px rgba(0, 0, 0, 0.7);
-
-  /* shadcn/Tailwind compatibility tokens. Keep these aliased to the existing
-     app tokens so both styling systems share one visual language. */
-  --background: var(--bg);
-  --foreground: var(--fg);
-  --card: var(--surface);
-  --card-foreground: var(--fg);
-  --popover: var(--surface);
-  --popover-foreground: var(--fg);
-  --primary: var(--accent);
-  --primary-foreground: var(--accent-fg);
-  --secondary: var(--surface-2);
-  --secondary-foreground: var(--fg);
-  --muted: var(--surface-2);
-  --muted-foreground: var(--fg-3);
-  --ui-accent: var(--surface-2);
-  --ui-accent-foreground: var(--fg);
-  --destructive: var(--err);
-  --border: var(--line);
-  --input: var(--line-2);
-  --ring: var(--accent);
 }
 
 [data-theme="light"] {

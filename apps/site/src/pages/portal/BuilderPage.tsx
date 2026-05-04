@@ -253,7 +253,6 @@ export default function BuilderPage() {
       <PrototypeBanner message="Beta — your changes are not saved between sessions yet." />
 
       <PageHeader
-        className="mt-6"
         title="Pipeline builder"
         description="Review Collector graph shape, generated YAML, and graph validation before draft saving is available."
         actions={

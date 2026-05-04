@@ -39,6 +39,7 @@ import { DataTable, type ColumnDef } from "@/components/data-table";
 import {
   Anchor,
   Badge,
+  Box,
   Button,
   Card,
   Code,
@@ -672,7 +673,13 @@ export default function ConfigurationDetailPage() {
       />
 
       {/* Stat cards */}
-      <div className="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(160px,1fr))]">
+      <Box
+        style={{
+          display: "grid",
+          gap: "var(--mantine-spacing-sm)",
+          gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))",
+        }}
+      >
         <MetricCard label="Total collectors" value={totalAgentsValue}>
           <GuidanceSlot item={agentInsight} loading={guidance.isLoading} />
         </MetricCard>
@@ -691,7 +698,7 @@ export default function ConfigurationDetailPage() {
         <MetricCard label="Tokens" value={tokenList.length.toLocaleString()}>
           <GuidanceSlot item={tokenInsight} loading={guidance.isLoading} />
         </MetricCard>
-      </div>
+      </Box>
 
       <GuidancePanel
         title="Configuration guidance"
@@ -733,7 +740,7 @@ export default function ConfigurationDetailPage() {
 
       {/* Tab panels */}
       {activeTab === "agents" && (
-        <div id="configuration-tab-agents" role="tabpanel" className="mt-6">
+        <Box id="configuration-tab-agents" role="tabpanel" mt="md">
           {agents.isLoading ? (
             <LoadingSpinner />
           ) : (
@@ -785,7 +792,7 @@ export default function ConfigurationDetailPage() {
               Next page
             </Button>
           </Group>
-        </div>
+        </Box>
       )}
 
       {activeTab === "versions" && (

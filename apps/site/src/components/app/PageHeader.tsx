@@ -5,7 +5,6 @@ interface PageHeaderProps {
   title: string;
   description?: ReactNode;
   actions?: ReactNode;
-  className?: string;
 }
 
 /**
@@ -13,11 +12,10 @@ interface PageHeaderProps {
  * description on the left; actions slot on the right that wraps to a
  * second row on narrow viewports.
  */
-export function PageHeader({ title, description, actions, className }: PageHeaderProps) {
+export function PageHeader({ title, description, actions }: PageHeaderProps) {
   return (
     <Group
       component="header"
-      className={className}
       mb="lg"
       gap="md"
       justify="space-between"
