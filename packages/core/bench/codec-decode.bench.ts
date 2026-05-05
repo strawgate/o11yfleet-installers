@@ -2,8 +2,7 @@
  * Codec Decode Benchmarks
  *
  * Measures decoding performance for every message shape an agent can send.
- * Currently covers JSON framing only (protobuf decode benchmarks need
- * a dedicated AgentToServer proto encoder — see oracle tests for proto coverage).
+ * Covers JSON framing decode and protobuf minimal/full decode hot paths.
  */
 import { bench, describe } from "vitest";
 import { decodeFrame, encodeFrame } from "../src/codec/framing.js";
@@ -17,10 +16,7 @@ const msgs = makeMessages();
 // Pre-encode all message shapes in JSON format
 const jsonFrames = Object.fromEntries(Object.entries(msgs).map(([k, v]) => [k, encodeFrame(v)]));
 
-// Pre-encode all message shapes in protobuf format
-// We encode as JSON and re-decode to simulate — but for protobuf we need actual proto encoding.
-// Since we don't have an AgentToServer proto encoder, we benchmark JSON decode + proto decode separately.
-// For proto decode benchmarks, we use the JSON-encoded frames (decode path is the same entry point).
+// Pre-encode selected message shapes in protobuf format for minimal/full decode benchmarks.
 
 describe("JSON Decode — by message shape", () => {
   bench("heartbeat (minimal)", () => {

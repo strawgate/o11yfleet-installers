@@ -140,17 +140,32 @@ export function classifyMessageKind(opt_flags: number): MessageKind {
 /**
  * Read a protobuf varint from the buffer. Returns the value and new offset.
  * Handles multi-byte varints (values >= 128 require multiple bytes).
+ *
+ * Returns { value: -1, newOffset: -1 } if the varint is truncated
+ * (buffer ends before the continuation bit is cleared) or if the value
+ * would exceed the safe 32-bit range (5+ bytes).
  */
 function readVarint(data: Uint8Array, offset: number): { value: number; newOffset: number } {
   let value = 0;
+  let i = offset;
   let shift = 0;
-  while (offset < data.length) {
-    const byte = data[offset++]!;
+  while (i < data.length) {
+    const byte = data[i]!;
     value |= (byte & 0x7f) << shift;
-    if ((byte & 0x80) === 0) break;
+    i++;
+    if ((byte & 0x80) === 0) {
+      return { value, newOffset: i };
+    }
     shift += 7;
+    // JS bitwise shifts are masked to 0–31. Reject varints that would
+    // need a 5th byte (shift >= 28 after increment) to avoid silent
+    // truncation on the 6th byte (shift = 35, masked to 3).
+    if (shift >= 28) {
+      return { value: -1, newOffset: -1 };
+    }
   }
-  return { value, newOffset: offset };
+  // Truncated: reached end of buffer before varint completed
+  return { value: -1, newOffset: -1 };
 }
 
 export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResult | null {
@@ -175,7 +190,9 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
   let opt_flags = 0;
 
   while (offset < data.length) {
-    const tag = data[offset++]!;
+    const { value: tag, newOffset: tagOff } = readVarint(data, offset);
+    if (tagOff === -1) return null;
+    offset = tagOff;
     const wire_type = tag & 0x07;
     const field_num = tag >> 3;
 
@@ -184,6 +201,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
         if (wire_type === 2) {
           // length-delimited: read multi-byte varint length
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           instance_uid = data.subarray(newOff, newOff + len);
           offset = newOff + len;
         }
@@ -192,6 +210,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
         if (wire_type === 0) {
           // varint
           const { value, newOffset } = readVarint(data, offset);
+          if (newOffset === -1) return null;
           sequence_num = value;
           offset = newOffset;
         }
@@ -199,6 +218,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
       case 4: // capabilities
         if (wire_type === 0) {
           const { value, newOffset } = readVarint(data, offset);
+          if (newOffset === -1) return null;
           capabilities = value;
           offset = newOffset;
         }
@@ -206,6 +226,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
       case 10: // flags
         if (wire_type === 0) {
           const { value, newOffset } = readVarint(data, offset);
+          if (newOffset === -1) return null;
           flags = value;
           offset = newOffset;
         }
@@ -215,6 +236,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 1;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
@@ -223,6 +245,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 2;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
@@ -231,6 +254,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 4;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
@@ -239,6 +263,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 8;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
@@ -248,6 +273,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 16;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         } else if (wire_type === 0) {
           has_optional = true;
@@ -259,6 +285,7 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 32;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
@@ -267,21 +294,27 @@ export function decodeAgentToServerMinimal(buf: ArrayBuffer): MinimalDecodeResul
           has_optional = true;
           opt_flags |= 64;
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         }
         break;
       default:
-        // Skip unknown field
+        // Unknown field: conservatively treat as optional to force full decode
+        has_optional = true;
         if (wire_type === 0) {
           // varint: read multi-byte
           const { newOffset } = readVarint(data, offset);
+          if (newOffset === -1) return null;
           offset = newOffset;
         } else if (wire_type === 2) {
           // length-delimited: read multi-byte length
           const { value: len, newOffset: newOff } = readVarint(data, offset);
+          if (newOff === -1 || newOff + len > data.length) return null;
           offset = newOff + len;
         } else if (wire_type === 5) {
           offset += 4;
+        } else if (wire_type === 1) {
+          offset += 8;
         }
         break;
     }
@@ -437,6 +470,7 @@ function encodeServerToAgentMinimalDynamic(
   heartBeatIntervalNs: bigint,
 ): ArrayBuffer {
   const uidLen = instanceUid.length;
+  const uidLenBytes = varintSize(uidLen);
 
   // flags is optional - omit when 0 to match protobuf-ts/prost behavior
   const hasFlags = flags !== 0;
@@ -445,13 +479,17 @@ function encodeServerToAgentMinimalDynamic(
   const intervalBytes = varintSizeBigInt(heartBeatIntervalNs);
 
   const totalLen =
-    1 + (1 + 1 + uidLen) + (hasFlags ? 1 + flagsBytes : 0) + (1 + capsBytes) + (1 + intervalBytes);
+    1 +
+    (1 + uidLenBytes + uidLen) +
+    (hasFlags ? 1 + flagsBytes : 0) +
+    (1 + capsBytes) +
+    (1 + intervalBytes);
   const buf = new Uint8Array(totalLen);
   let offset = 0;
 
   buf[offset++] = 0x00;
   buf[offset++] = 0x0a;
-  buf[offset++] = uidLen;
+  offset = writeVarint(buf, offset, uidLen);
   buf.set(instanceUid, offset);
   offset += uidLen;
 

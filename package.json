@@ -5,7 +5,7 @@
   "scripts": {
     "lint": "turbo lint",
     "lint:scripts": "oxlint scripts",
-    "lint:prose": "alex apps/site/src/pages/marketing/*.tsx **/*.md",
+    "lint:prose": "alex \"apps/site/src/pages/marketing/*.tsx\" \"**/*.md\"",
     "lint:type-aware": "oxlint --type-aware --ignore-pattern '.claude/**' --ignore-pattern 'infra/tfstate-worker/**' .",
     "typecheck": "turbo typecheck",
     "test": "turbo test",

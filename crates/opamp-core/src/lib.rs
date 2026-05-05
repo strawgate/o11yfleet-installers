@@ -91,6 +91,7 @@ pub fn decode_agent_to_server_zero_copy(data: &[u8]) -> Result<js_sys::Uint8Arra
         && !has_disconnect
         && !has_components
         && !has_conn_settings
+        && msg.flags == 0
         && msg.sequence_num > 0;
     let is_disconnect = has_disconnect;
     let is_health_report = has_health;
@@ -284,6 +285,8 @@ pub fn is_pure_heartbeat(data: &[u8]) -> bool {
         && msg.effective_config.is_none()
         && msg.remote_config_status.is_none()
         && msg.agent_disconnect.is_none()
+        && msg.available_components.is_none()
+        && msg.connection_settings_status.is_none()
         && msg.flags == 0
         && msg.sequence_num > 0
 }
@@ -811,6 +814,15 @@ pub fn decode_agent_to_server_combined(data: &[u8]) -> Result<js_sys::Array, JsV
     }
     if msg.remote_config_status.is_some() {
         optional_flags |= 8;
+    }
+    if msg.agent_disconnect.is_some() {
+        optional_flags |= 16;
+    }
+    if msg.available_components.is_some() {
+        optional_flags |= 32;
+    }
+    if msg.connection_settings_status.is_some() {
+        optional_flags |= 64;
     }
     combined.extend_from_slice(&optional_flags.to_be_bytes());
 

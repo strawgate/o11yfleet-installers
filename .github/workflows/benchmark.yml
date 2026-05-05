@@ -25,11 +25,6 @@ jobs:
 
       - name: Setup Node.js + pnpm
         uses: ./.github/actions/setup-node-pnpm
-        with:
-          node-version: "22"
-          pnpm-version: "9"
-          cache: "pnpm"
-          install: "true"
 
       - name: Build TypeScript worker
         run: pnpm --filter @o11yfleet/worker build
@@ -37,7 +32,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@0e0a4e49c821aad2b14e45b2e8c7428d4d3b2f3a # stable
         with:
-          targets: wasm32-wasip2
+          targets: wasm32-unknown-unknown
 
       - name: Build Rust worker
         working-directory: apps/worker-rust
@@ -53,14 +48,14 @@ jobs:
           cd apps/worker
           npx wrangler dev --port 8787 &
           sleep 10
-          curl -s http://localhost:8787/healthz || exit 1
+          curl -fsS http://localhost:8787/healthz || exit 1
 
       - name: Start Rust Worker
         run: |
           cd apps/worker-rust
           npx wrangler dev --port 8788 &
           sleep 10
-          curl -s http://localhost:8788/healthz || exit 1
+          curl -fsS http://localhost:8788/healthz || exit 1
 
       - name: Run Benchmarks
         env:
