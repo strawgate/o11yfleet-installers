@@ -41,7 +41,7 @@
   "devDependencies": {
     "@bufbuild/protobuf": "^2.12.0",
     "@cloudflare/vitest-pool-workers": "^0.15.2",
-    "@cloudflare/workers-types": "^4.20260503.1",
+    "@cloudflare/workers-types": "^4.20260505.1",
     "@o11yfleet/test-utils": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",

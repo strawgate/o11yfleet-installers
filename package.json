@@ -21,11 +21,11 @@
     "alex": "^11.0.1",
     "husky": "^9.1.7",
     "knip": "^6.11.0",
-    "oxlint": "^1.62.0",
+    "oxlint": "^0.18.1",
     "oxlint-tsgolint": "^0.22.1",
     "prettier": "^3.5.0",
     "tsx": "^4.19.0",
-    "turbo": "^2.9.8",
+    "turbo": "^2.9.9",
     "typescript": "^6.0.3",
     "wrangler": "^4.87.0",
     "write-good": "^1.0.8"
