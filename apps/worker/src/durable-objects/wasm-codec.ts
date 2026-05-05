@@ -50,7 +50,7 @@ export async function initWasmCodec(): Promise<void> {
       stats.loaded = true;
       stats.version = wasmModule.get_version();
       stats.defaultHeartbeatNs = wasmModule.get_default_heartbeat_interval_ns();
-      console.log(`[wasm-codec] initialized, version ${stats.version}`);
+      console.warn(`[wasm-codec] initialized, version ${stats.version}`);
     } catch (err) {
       wasmLoadError = err instanceof Error ? err : new Error(String(err));
       stats.loadError = wasmLoadError.message;

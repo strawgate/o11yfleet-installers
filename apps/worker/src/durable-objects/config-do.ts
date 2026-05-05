@@ -1123,7 +1123,7 @@ export class ConfigDurableObject extends DurableObject<ConfigDOEnv> {
     const { sweepExpiredPendingDevices } = await import("./agent-state-repo.js");
     const pendingSwept = sweepExpiredPendingDevices(this.ctx.storage.sql);
     if (pendingSwept > 0) {
-      console.log(`[sweep] cleaned ${pendingSwept} expired pending devices/assignments`);
+      console.warn(`[sweep] cleaned ${pendingSwept} expired pending devices/assignments`);
     }
     return result;
   }

@@ -9,7 +9,6 @@ import {
   createEnrollmentToken,
   connectWithEnrollment,
   connectWithClaim,
-  sendHello,
   waitForMsg,
   waitForClose,
   msgToBuffer,

@@ -561,7 +561,11 @@ async function handleBulkApproveTenants(
     if (user && user.email !== "") {
       emailJobs.push({
         tenantId: id,
-        promise: sendTenantApprovalEmail(env, { tenantName: user.name, tenantEmail: user.email, action: "approved" }),
+        promise: sendTenantApprovalEmail(env, {
+          tenantName: user.name,
+          tenantEmail: user.email,
+          action: "approved",
+        }),
       });
     }
   }

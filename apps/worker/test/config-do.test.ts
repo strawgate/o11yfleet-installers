@@ -1,26 +1,7 @@
 import { env } from "cloudflare:workers";
-import { describe, it, test, expect, beforeAll, beforeEach } from "vitest";
+import { describe, it, expect } from "vitest";
 import type { ConfigDurableObject } from "../src/durable-objects/config-do.js";
 import { runInDurableObject } from "cloudflare:test";
-import {
-  bootstrapSchema,
-  createTenant,
-  createConfig,
-  createEnrollmentToken,
-  connectWithEnrollment,
-  connectWithClaim,
-  sendHello,
-  waitForMsg,
-  waitForClose,
-  msgToBuffer,
-  encodeFrame,
-  decodeFrame,
-  type AssignmentClaim,
-  type ServerToAgent,
-  createRuntimeTestContext,
-} from "./helpers.js";
-import { buildDisconnect } from "@o11yfleet/test-utils";
-import { hexToUint8Array } from "@o11yfleet/core/hex";
 
 describe("Config Durable Object", () => {
   it("GET /stats returns initial stats", async () => {
