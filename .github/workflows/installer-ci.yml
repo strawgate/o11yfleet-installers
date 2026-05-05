@@ -1,0 +1,87 @@
+name: Installer CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "apps/installer/**"
+  pull_request:
+    paths:
+      - "apps/installer/**"
+
+concurrency:
+  group: installer-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test on ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            runner: ubuntu-latest
+          - os: macos
+            runner: macos-latest
+          - os: windows
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Type check
+        run: pnpm --filter @o11yfleet/installer typecheck
+
+      - name: Run tests
+        run: pnpm --filter @o11yfleet/installer test
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu'
+        with:
+          name: coverage
+          path: apps/installer/coverage/
+
+  build:
+    name: Build installer bundle
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - name: Install dependencies
+        run: pnpm install --no-frozen-lockfile
+
+      - name: Build bundle
+        run: |
+          pnpm --filter @o11yfleet/installer build
+          ls -la apps/installer/dist/
+
+      - name: Upload bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: installer-bundle
+          path: apps/installer/dist/
+          retention-days: 7
