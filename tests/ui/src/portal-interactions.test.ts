@@ -35,24 +35,43 @@ test.describe("portal interactions", () => {
     expect(runtime.errors).toEqual([]);
   });
 
-  test("ConfigurationDetailPage: switching tabs updates the active panel", async ({ page }) => {
+  test("ConfigurationDetailPage: switching tabs updates panel and URL", async ({ page }) => {
     const runtime = collectRuntimeErrors(page);
     await mockPortal(page);
     await page.goto(`${UI_URL}/portal/configurations/${CONFIG_ID}`);
 
     await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
 
-    // Default tab is "Agents". Switch through each Mantine Tab and verify
-    // the corresponding tabpanel has fresh content.
-    const tabs = ["Versions", "Rollout", "YAML", "Settings"];
-    for (const label of tabs) {
+    // Bare path redirects to the default tab.
+    await expect(page).toHaveURL(new RegExp(`/portal/configurations/${CONFIG_ID}/agents$`));
+
+    const tabPaths: Record<string, string> = {
+      Versions: "versions",
+      Rollout: "rollout",
+      YAML: "yaml",
+      Settings: "settings",
+    };
+    for (const [label, slug] of Object.entries(tabPaths)) {
       await page.getByRole("tab", { name: label }).click();
-      // The tab being active is the strongest signal that the click landed.
       await expect(page.getByRole("tab", { name: label, selected: true })).toBeVisible();
+      await expect(page).toHaveURL(new RegExp(`/portal/configurations/${CONFIG_ID}/${slug}$`));
     }
 
     // Settings tab specifically renders the Fleet actions card.
     await expect(page.getByRole("heading", { name: "Fleet actions" })).toBeVisible();
+
+    runtime.dispose();
+    expect(runtime.errors).toEqual([]);
+  });
+
+  test("ConfigurationDetailPage: deep link to /yaml activates YAML tab", async ({ page }) => {
+    const runtime = collectRuntimeErrors(page);
+    await mockPortal(page);
+    await page.goto(`${UI_URL}/portal/configurations/${CONFIG_ID}/yaml`);
+
+    await expect(page.getByRole("heading", { name: "prod-collectors" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "YAML", selected: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Desired YAML" })).toBeVisible();
 
     runtime.dispose();
     expect(runtime.errors).toEqual([]);

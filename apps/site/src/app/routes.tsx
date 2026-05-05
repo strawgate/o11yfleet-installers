@@ -77,6 +77,26 @@ const ConfigurationDetailPage = lazyPage(
   () => import("@/pages/portal/ConfigurationDetailPage"),
   "Configuration Detail",
 );
+const ConfigurationAgentsTab = lazyPage(
+  () => import("@/pages/portal/ConfigurationDetailPage/AgentsTab"),
+  "Configuration Agents",
+);
+const ConfigurationVersionsTab = lazyPage(
+  () => import("@/pages/portal/ConfigurationDetailPage/VersionsTab"),
+  "Configuration Versions",
+);
+const ConfigurationRolloutTab = lazyPage(
+  () => import("@/pages/portal/ConfigurationDetailPage/RolloutTab"),
+  "Configuration Rollout",
+);
+const ConfigurationYamlTab = lazyPage(
+  () => import("@/pages/portal/ConfigurationDetailPage/YamlTab"),
+  "Configuration YAML",
+);
+const ConfigurationSettingsTab = lazyPage(
+  () => import("@/pages/portal/ConfigurationDetailPage/SettingsTab"),
+  "Configuration Settings",
+);
 const BuilderPage = lazyPage(() => import("@/pages/portal/BuilderPage"), "Builder");
 const GettingStartedPage = lazyPage(
   () => import("@/pages/portal/GettingStartedPage"),
@@ -196,7 +216,14 @@ export function AppRoutes() {
             <Route path="config" element={<AgentDetailConfigTab />} />
           </Route>
           <Route path="configurations" element={<ConfigurationsPage />} />
-          <Route path="configurations/:id" element={<ConfigurationDetailPage />} />
+          <Route path="configurations/:id" element={<ConfigurationDetailPage />}>
+            <Route index element={<Navigate to="agents" replace />} />
+            <Route path="agents" element={<ConfigurationAgentsTab />} />
+            <Route path="versions" element={<ConfigurationVersionsTab />} />
+            <Route path="rollout" element={<ConfigurationRolloutTab />} />
+            <Route path="yaml" element={<ConfigurationYamlTab />} />
+            <Route path="settings" element={<ConfigurationSettingsTab />} />
+          </Route>
           <Route path="builder" element={<BuilderPage />} />
           <Route path="getting-started" element={<GettingStartedPage />} />
           <Route path="onboarding" element={<OnboardingPage />} />
