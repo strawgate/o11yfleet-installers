@@ -272,10 +272,12 @@ tf-validate: tf-init
 tf-init-remote env="prod":
     #!/usr/bin/env bash
     set -euo pipefail
-    : "${TFSTATE_WORKER_URL:?Set TFSTATE_WORKER_URL}"
-    : "${TFSTATE_USERNAME:?Set TFSTATE_USERNAME}"
-    : "${TFSTATE_PASSWORD:?Set TFSTATE_PASSWORD}"
+    : "${TFSTATE_WORKER_URL:?Set TFSTATE_WORKER_URL (per-environment in GitHub Actions)}"
+    : "${TFSTATE_USERNAME:?Set TFSTATE_USERNAME (per-environment in GitHub Actions)}"
+    : "${TFSTATE_PASSWORD:?Set TFSTATE_PASSWORD (per-environment in GitHub Actions)}"
     cd infra/terraform
+    # Each env has its own worker with isolated R2 bucket, so we use /states directly
+    # (no /states/{env} suffix needed - the worker is env-specific)
     terraform init -reconfigure \
         -backend-config="address=${TFSTATE_WORKER_URL%/}/states/{{env}}" \
         -backend-config="lock_address=${TFSTATE_WORKER_URL%/}/states/{{env}}/lock" \

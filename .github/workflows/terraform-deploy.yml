@@ -39,16 +39,9 @@ concurrency:
 permissions:
   contents: read
 
-# Workflow-level env holds only non-secret config. Cloud-provider
-# secrets (TFSTATE_WORKER_PASSWORD, CLOUDFLARE_API_TOKEN) are scoped at
-# job level on the plan and apply jobs only — the validate job runs
-# offline tf-validate and never needs them.
 env:
   TF_IN_AUTOMATION: "true"
   TF_INPUT: "false"
-  # tfstate-worker (Terraform HTTP backend with proper LOCK/UNLOCK on R2).
-  # See infra/tfstate-worker/ for the Worker source.
-  TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
 
 jobs:
   validate:
@@ -79,9 +72,12 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
-      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+      # Per-environment TFSTATE worker URL (isolated per environment)
+      TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_PASSWORD }}
+      # TERRAFORM_READONLY_TOKEN: Workers Read, D1 Read, R2 Read (plan only)
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_READONLY_TOKEN }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
@@ -105,9 +101,9 @@ jobs:
         run: |
           missing=()
           [ -n "$TFSTATE_WORKER_URL" ] || missing+=(TFSTATE_WORKER_URL)
-          [ -n "$TFSTATE_USERNAME" ] || missing+=(TFSTATE_WORKER_USERNAME)
-          [ -n "$TFSTATE_PASSWORD" ] || missing+=(TFSTATE_WORKER_PASSWORD)
-          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing+=(CLOUDFLARE_DEPLOY_API_TOKEN)
+          [ -n "$TFSTATE_USERNAME" ] || missing+=(TFSTATE_USERNAME)
+          [ -n "$TFSTATE_PASSWORD" ] || missing+=(TFSTATE_PASSWORD)
+          [ -n "$CLOUDFLARE_API_TOKEN" ] || missing+=(TERRAFORM_READONLY_TOKEN)
           if [ "${#missing[@]}" -gt 0 ]; then
             names="$(IFS=', '; echo "${missing[*]}")"
             if [ "${{ github.event_name }}" = "pull_request" ]; then
@@ -221,11 +217,14 @@ jobs:
       }}
     runs-on: ubicloud-standard-2-arm
     timeout-minutes: 10
-    environment: ${{ github.event_name == 'workflow_dispatch' && inputs.environment != 'prod' && inputs.environment || 'production' }}
+    environment: ${{ inputs.environment }}
     env:
-      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
-      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+      # Per-environment TFSTATE worker URL (isolated per environment)
+      TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_PASSWORD }}
+      # TERRAFORM_DEPLOY_TOKEN: Workers Write, D1 Write, R2 Write, DNS Write, Workers Routes Write (apply/deploy)
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_DEPLOY_TOKEN }}
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2

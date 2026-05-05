@@ -40,7 +40,8 @@ jobs:
       - name: Find orphaned Pages projects
         id: find
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          # TERRAFORM_DEPLOY_TOKEN: Workers Write, D1 Write, R2 Write, DNS Write, Workers Routes Write (all deploy + Pages)
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_DEPLOY_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail
@@ -102,7 +103,8 @@ jobs:
       - name: Delete orphaned Pages projects
         if: ${{ !inputs.dry_run && steps.find.outputs.orphaned_count > 0 }}
         env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_PAGES_API_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
+          # TERRAFORM_DEPLOY_TOKEN: Workers Write, D1 Write, R2 Write, DNS Write, Workers Routes Write (all deploy + Pages)
+          CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_DEPLOY_TOKEN || secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -euo pipefail

@@ -81,23 +81,27 @@ just tf-validate
 
 ## Plan
 
-Planning and applying use shared remote state via the o11yfleet-tfstate Worker
-(HTTP backend, R2-backed storage, Durable Object lock). Export Cloudflare and
-Worker backend credentials first:
+Planning and applying use remote state via tfstate workers per environment
+(HTTP backend, R2-backed storage, Durable Object lock). Export credentials first:
 
 ```bash
-export CLOUDFLARE_DEPLOY_API_TOKEN=...
-export CLOUDFLARE_DEPLOY_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
-export TFSTATE_WORKER_URL=https://o11yfleet-tfstate.o11yfleet.workers.dev
+# For plan jobs (read-only):
+export CLOUDFLARE_API_TOKEN=...  # TERRAFORM_READONLY_TOKEN
+export CLOUDFLARE_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
+
+# For apply jobs (read-write):
+export CLOUDFLARE_API_TOKEN=...  # TERRAFORM_DEPLOY_TOKEN
+export CLOUDFLARE_ACCOUNT_ID=417e8c0fd8f1a64e9f2c4845afa6dc56
+
+# tfstate worker credentials (per environment):
+export TFSTATE_WORKER_URL=https://o11yfleet-tfstate-<env>.workers.dev
 export TFSTATE_USERNAME=...
 export TFSTATE_PASSWORD=...
-
-# Tool-required conventional names.
-export CLOUDFLARE_API_TOKEN="$CLOUDFLARE_DEPLOY_API_TOKEN"
-export CLOUDFLARE_ACCOUNT_ID="$CLOUDFLARE_DEPLOY_ACCOUNT_ID"
 ```
 
-`CLOUDFLARE_DEPLOY_API_TOKEN`, `TFSTATE_USERNAME`, and `TFSTATE_PASSWORD` are
+**Secret names** (created by `scripts/bootstrap-cloudflare-credentials.ts`):
+- `TERRAFORM_READONLY_TOKEN` - Workers/D1/R2 Read for plan jobs
+- `TERRAFORM_DEPLOY_TOKEN` - Workers/D1/R2/DNS/Pages Write for deploy jobs
 credentials. Do not place them in `.tfvars` files or backend config files. The
 state backend is the o11yfleet-tfstate Worker (HTTP backend with proper
 LOCK/UNLOCK on R2) — see `../tfstate-worker/README.md` for the worker source

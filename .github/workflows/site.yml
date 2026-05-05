@@ -31,15 +31,17 @@ jobs:
   deploy:
     needs: guard-branch
     runs-on: ubicloud-standard-2-arm
-    environment: ${{ inputs.environment == 'prod' && 'production' || inputs.environment }}
+    environment: production
     env:
       TF_IN_AUTOMATION: "true"
       TF_INPUT: "false"
+      # Per-environment TFSTATE worker URL (isolated per environment)
       TFSTATE_WORKER_URL: ${{ vars.TFSTATE_WORKER_URL }}
-      TFSTATE_USERNAME: ${{ secrets.TFSTATE_WORKER_USERNAME }}
-      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_WORKER_PASSWORD }}
-      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_DEPLOY_API_TOKEN }}
-      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_DEPLOY_ACCOUNT_ID }}
+      TFSTATE_USERNAME: ${{ secrets.TFSTATE_USERNAME }}
+      TFSTATE_PASSWORD: ${{ secrets.TFSTATE_PASSWORD }}
+      # TERRAFORM_DEPLOY_TOKEN: Workers Write, D1 Write, R2 Write, DNS Write, Workers Routes Write (apply/deploy)
+      CLOUDFLARE_API_TOKEN: ${{ secrets.TERRAFORM_DEPLOY_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 

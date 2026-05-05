@@ -69,12 +69,11 @@ authoritative.
 Environment-level deployment credentials, configured separately for GitHub
 Environments `dev`, `staging`, and `production`:
 
-| Secret                                 | Purpose                                      |
-| -------------------------------------- | -------------------------------------------- |
-| `CLOUDFLARE_DEPLOY_API_TOKEN`          | Cloudflare Terraform and Wrangler deploy API |
-| `CLOUDFLARE_DEPLOY_ACCOUNT_ID`         | Cloudflare account ID for Wrangler helpers   |
-| `TERRAFORM_STATE_R2_ACCESS_KEY_ID`     | R2 S3 access key for Terraform state         |
-| `TERRAFORM_STATE_R2_SECRET_ACCESS_KEY` | R2 S3 secret key for Terraform state         |
+| Secret                     | Purpose                                     |
+| -------------------------- | ------------------------------------------- |
+| `CLOUDFLARE_ACCOUNT_ID`    | Cloudflare account ID for all operations    |
+| `TERRAFORM_DEPLOY_TOKEN`   | Cloudflare Workers/D1/R2/DNS/Pages write    |
+| `TERRAFORM_READONLY_TOKEN` | Cloudflare Workers/D1/R2 read for plan jobs |
 
 Repository-level Actions variables:
 
@@ -108,30 +107,40 @@ secret wiring by name and destination only.
 
 ### Cloudflare Credential Bootstrap
 
-Use a one-way bootstrap script for deploy credentials. Terraform should not
+Use the TypeScript bootstrap script for deploy credentials. Terraform should not
 manage the Cloudflare API tokens that Terraform itself needs to run, and it
 should not store R2 S3 secret material in state.
 
 Dry-run the target environments first:
 
 ```bash
-just cloudflare-credentials-dry-run "dev staging prod"
+npx tsx scripts/bootstrap-cloudflare-credentials.ts --envs "dev staging prod preview"
 ```
 
 Apply after exporting or sourcing a bootstrap token with `API Tokens Write`:
 
 ```bash
-just cloudflare-credentials-apply "dev staging prod"
+npx tsx scripts/bootstrap-cloudflare-credentials.ts --apply --envs "dev staging prod preview"
 ```
 
+**Flags:**
+
+- `--apply`: Create resources (dry-run by default)
+- `--envs "env1 env2"`: Space-separated environment list (default: "dev staging prod")
+- `--skip-buckets`: Skip R2 bucket creation (use existing buckets)
+- `--skip-workers`: Skip tfstate worker deployment (preview uses shared R2)
+
 The script defaults to `~/Documents/repos/cloudflare/.env` and reads
-`CLOUDFLARE_BOOTSTRAP_API_TOKEN` or `CLOUDFLARE_API_TOKEN`; it also supports
+`CLOUDFLARE_BOOTSTRAP_API_TOKEN` or `CLOUDFLARE_API_TOKEN`. It also supports
 legacy `CLOUDFLARE_EMAIL` plus `CLOUDFLARE_GLOBAL_API_KEY`/`CLOUDFLARE_API_KEY`
 bootstrap credentials. It verifies or creates the target GitHub Environments
-before creating Cloudflare tokens. It creates one Cloudflare deploy token and
-one R2 state token per environment, then writes only these GitHub Environment secret names:
-`CLOUDFLARE_DEPLOY_API_TOKEN`, `CLOUDFLARE_DEPLOY_ACCOUNT_ID`,
-`TERRAFORM_STATE_R2_ACCESS_KEY_ID`, and `TERRAFORM_STATE_R2_SECRET_ACCESS_KEY`.
+before creating Cloudflare tokens. Creates per-environment tokens with least-privilege permissions:
+
+- `TERRAFORM_READONLY_TOKEN`: Workers/D1/R2 Read (for plan jobs)
+- `TERRAFORM_DEPLOY_TOKEN`: Workers/D1/R2/DNS/Workers Routes/Pages Write (for deploy jobs)
+
+The old bash script (`scripts/bootstrap-cloudflare-credentials.sh`) is deprecated.
+Use the TypeScript version for all new bootstrap operations.
 
 The deploy token is scoped to the shared account and zone currently used by
 `dev`, `staging`, and `prod`. Because all three environments currently share the
