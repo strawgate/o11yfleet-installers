@@ -75,7 +75,7 @@ jobs:
           fi
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@4f4a5a0bb4e0a2f5a8c8e4e8c7c1e9a8c7c0e2e # v4
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v4
         with:
           name: benchmark-results
           path: |
