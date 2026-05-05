@@ -73,12 +73,15 @@ export async function withAuditCreate(
  *  if the actor is a user without admin role. API-key and system actors
  *  bypass — they're already gated by tenant scope and secret auth. */
 export function requireAdminRole(audit: AuditContext | undefined): Response | null {
-  if (!audit || audit.actor.kind !== "user" || audit.actor.role !== "admin") {
-    return new Response(JSON.stringify({ error: "Tenant admin role required" }), {
+  const deny = () =>
+    new Response(JSON.stringify({ error: "Tenant admin role required" }), {
       status: 403,
       headers: { "Content-Type": "application/json" },
     });
-  }
+
+  if (!audit) return deny();
+  if (audit.actor.kind === "user" && audit.actor.role !== "admin") return deny();
+
   return null;
 }
 

@@ -429,6 +429,7 @@ export async function getTenantsWithPrimaryUsers(
     .leftJoin("users as u", "u.tenant_id", "t.id")
     .select(["t.id", "t.name", "t.status", "u.email"])
     .where("t.id", "in", tenantIds)
+    .where("u.email", "not like", `impersonation+%@o11yfleet.local`)
     .orderBy("u.created_at", "asc")
     .execute();
 
@@ -554,23 +555,24 @@ async function handleBulkApproveTenants(
   // Batch-fetch primary users for all approved tenants (single query),
   // then send emails in parallel. Failures don't roll back approval.
   const tenantUsers = await getTenantsWithPrimaryUsers(env, approved);
-  const emailResults = await Promise.allSettled(
-    approved
-      .map((id) => tenantUsers.get(id))
-      .filter((u): u is TenantWithUser => u !== undefined && u.email !== "")
-      .map((u) =>
-        sendTenantApprovalEmail(env, {
-          tenantName: u.name,
-          tenantEmail: u.email,
-          action: "approved",
-        }),
-      ),
-  );
+  const emailJobs: { tenantId: string; promise: ReturnType<typeof sendTenantApprovalEmail> }[] = [];
+  for (const id of approved) {
+    const user = tenantUsers.get(id);
+    if (user && user.email !== "") {
+      emailJobs.push({
+        tenantId: id,
+        promise: sendTenantApprovalEmail(env, { tenantName: user.name, tenantEmail: user.email, action: "approved" }),
+      });
+    }
+  }
+
+  const emailResults = await Promise.allSettled(emailJobs.map((job) => job.promise));
 
   emailResults.forEach((result, index) => {
     if (result.status === "rejected") {
+      const job = emailJobs[index]!;
       console.error("Tenant approval email failed", {
-        tenantId: approved[index],
+        tenantId: job.tenantId,
         error: result.reason instanceof Error ? result.reason.message : String(result.reason),
       });
     }
