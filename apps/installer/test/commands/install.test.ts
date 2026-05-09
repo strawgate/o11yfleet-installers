@@ -23,7 +23,7 @@ vi.mock("node:os", async () => {
   };
 });
 
-import type { FileSystem, ProcessRunner, HttpClient, Logger, Platform } from "../../src/core/types.js";
+import type { FileSystem, ProcessRunner, HttpClient, Platform, OS } from "../../src/core/types.js";
 import { install } from "../../src/commands/install.js";
 
 class MockFS implements FileSystem {
@@ -83,7 +83,7 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
     logger: new MockLogger(),
     platform,
     homeDir: "/home/test",
-    archive: { extract: vi.fn(async (_os: any, _archive: string, destDir: string) => {
+    archive: { extract: vi.fn(async (_os: OS, _archive: string, destDir: string) => {
       fs.files.set(`${destDir}/otelcol-contrib`, "binary");
     }) },
     checksum: { verify: vi.fn(async () => true) },

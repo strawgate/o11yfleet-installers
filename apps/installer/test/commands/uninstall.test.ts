@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { FileSystem, ProcessRunner, Logger, Platform } from "../../src/core/types.js";
+import type { FileSystem, ProcessRunner, Platform } from "../../src/core/types.js";
 import { uninstall } from "../../src/commands/uninstall.js";
 
 class MockFS implements FileSystem {

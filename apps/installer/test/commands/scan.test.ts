@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi } from "vitest";
-import type { FileSystem, ProcessRunner, Logger, Platform } from "../../src/core/types.js";
+import type { FileSystem, ProcessRunner, Platform } from "../../src/core/types.js";
 import { scan } from "../../src/commands/scan.js";
 
 class MockFS implements FileSystem {
@@ -43,7 +43,7 @@ describe("scan command", () => {
     const fs = new MockFS();
     const logger = new MockLogger();
     const process = new MockProcess();
-    process.which = vi.fn(async () => null as any);
+    process.which = vi.fn(async () => null);
     const results = await scan({ fs, process, logger, platform, homeDir: "/home/test" });
     expect(results).toHaveLength(0);
   });
