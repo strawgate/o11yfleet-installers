@@ -104,6 +104,9 @@ describe("generateSystemdUnit", () => {
       installDir: "/opt/o11yfleet",
       configFile: "/opt/o11yfleet/config/otelcol.yaml",
       logFile: "/var/log/o11yfleet-collector.log",
+      userMode: false,
+      homeDir: "/root",
+      serviceUser: "o11yfleet",
     });
 
     expect(unit).toContain("[Unit]");
@@ -114,6 +117,27 @@ describe("generateSystemdUnit", () => {
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("[Install]");
     expect(unit).toContain("WantedBy=multi-user.target");
+  });
+
+  it("generates valid systemd unit for user mode", () => {
+    const unit = generateSystemdUnit({
+      name: "o11yfleet-collector",
+      displayName: "O11yFleet Collector",
+      description: "O11yFleet Collector (otelcol-contrib + OpAMP, per-user)",
+      execStart: "/home/bob/.local/share/o11yfleet/bin/otelcol-contrib",
+      user: null,
+      group: null,
+      installDir: "/home/bob/.local/share/o11yfleet",
+      configFile: "/home/bob/.local/share/o11yfleet/config/otelcol.yaml",
+      logFile: "/home/bob/.local/share/o11yfleet/logs/collector.log",
+      userMode: true,
+      homeDir: "/home/bob",
+      serviceUser: "bob",
+    });
+
+    expect(unit).toContain("User=bob");
+    expect(unit).toContain("ProtectSystem=full");
+    expect(unit).toContain("WantedBy=default.target");
   });
 });
 
@@ -129,6 +153,9 @@ describe("generateLaunchdPlist", () => {
       installDir: "/opt/o11yfleet",
       configFile: "/opt/o11yfleet/config/otelcol.yaml",
       logFile: "/var/log/o11yfleet-collector.log",
+      userMode: false,
+      homeDir: "/root",
+      serviceUser: "o11yfleet",
     });
 
     expect(plist).toContain('<?xml version="1.0" encoding="UTF-8"?>');

@@ -81,6 +81,7 @@ export interface ServiceConfig {
   logFile: string;
   userMode: boolean;
   homeDir: string;
+  serviceUser: string;
 }
 
 export interface ScanResult {

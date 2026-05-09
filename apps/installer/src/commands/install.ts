@@ -201,6 +201,7 @@ async function installService(
     logFile,
     userMode,
     homeDir,
+    serviceUser: userMode ? homeDir.split("/").pop() ?? "root" : "o11yfleet",
   };
 
   if (platform.os === "linux") {

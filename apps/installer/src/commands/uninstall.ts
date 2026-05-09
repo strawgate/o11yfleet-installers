@@ -32,10 +32,10 @@ export async function uninstall(
   // Stop and disable service
   if (platform.os === "linux") {
     await stopSystemdService(process, logger);
-    await removeSystemdService(logger);
+    await removeSystemdService(process, logger);
   } else if (platform.os === "darwin") {
     await stopLaunchdService(process, logger);
-    await removeLaunchdService(logger);
+    await removeLaunchdService(process, logger);
   } else if (platform.os === "windows") {
     await stopWindowsService(process, logger);
   }
@@ -72,14 +72,10 @@ async function stopSystemdService(process: ProcessRunner, logger: Logger): Promi
   }
 }
 
-async function removeSystemdService(logger: Logger): Promise<void> {
-  const { execSync } = await import("child_process");
-
+async function removeSystemdService(process: ProcessRunner, logger: Logger): Promise<void> {
   try {
-    execSync("sudo rm -f /etc/systemd/system/o11yfleet-collector.service", {
-      stdio: "pipe",
-    });
-    execSync("sudo systemctl daemon-reload", { stdio: "pipe" });
+    await process.exec("sudo", ["rm", "-f", "/etc/systemd/system/o11yfleet-collector.service"]);
+    await process.exec("sudo", ["systemctl", "daemon-reload"]);
     logger.info("Removed systemd service file");
   } catch {
     // Service file might not exist
@@ -95,13 +91,9 @@ async function stopLaunchdService(process: ProcessRunner, logger: Logger): Promi
   }
 }
 
-async function removeLaunchdService(logger: Logger): Promise<void> {
-  const { execSync } = await import("child_process");
-
+async function removeLaunchdService(process: ProcessRunner, logger: Logger): Promise<void> {
   try {
-    execSync("sudo rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist", {
-      stdio: "pipe",
-    });
+    await process.exec("sudo", ["rm", "-f", "/Library/LaunchDaemons/com.o11yfleet.collector.plist"]);
     logger.info("Removed launchd service file");
   } catch {
     // Service file might not exist

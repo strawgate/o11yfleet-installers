@@ -90,12 +90,8 @@ export function getTokenWarning(token: string | undefined): string | null {
  * Generate systemd service unit content for Linux.
  */
 export function generateSystemdUnit(config: ServiceConfig): string {
-  const userSection = config.userMode
-    ? `# Per-user installation (no system-wide privileges)
-User=${config.homeDir.split("/")[2]}
-`
-    : `User=${config.user}
-Group=${config.group}
+  const userSection = `User=${config.serviceUser}
+Group=${config.group ?? config.serviceUser}
 `;
 
   const wantedBy = config.userMode ? "default.target" : "multi-user.target";
