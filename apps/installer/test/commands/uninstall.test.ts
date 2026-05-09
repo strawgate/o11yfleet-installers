@@ -44,7 +44,10 @@ describe("uninstall command", () => {
     const fs = new MockFS();
     fs.dirs.add("/opt/o11yfleet");
     const logger = new MockLogger();
-    const result = await uninstall({ fs, process: new MockProcess(), logger, platform, homeDir: "/home/test" }, {});
+    const result = await uninstall(
+      { fs, process: new MockProcess(), logger, platform, homeDir: "/home/test" },
+      {},
+    );
     expect(result).toBe(true);
     expect(fs.remove).toHaveBeenCalledWith("/opt/o11yfleet");
   });
@@ -61,7 +64,9 @@ describe("uninstall command", () => {
   it("handles missing service gracefully (no crash)", async () => {
     const fs = new MockFS();
     const process = new MockProcess();
-    process.exec = vi.fn(async () => { throw new Error("Service not found"); });
+    process.exec = vi.fn(async () => {
+      throw new Error("Service not found");
+    });
     const logger = new MockLogger();
     const result = await uninstall({ fs, process, logger, platform, homeDir: "/home/test" }, {});
     expect(result).toBe(true);

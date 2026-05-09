@@ -8,7 +8,13 @@ vi.mock("node:fs", async () => {
   const actual = await vi.importActual("node:fs");
   return {
     ...actual,
-    createWriteStream: () => ({ on: () => {}, close: () => {}, destroy: () => {}, write: () => true, end: () => {} }),
+    createWriteStream: () => ({
+      on: () => {},
+      close: () => {},
+      destroy: () => {},
+      write: () => true,
+      end: () => {},
+    }),
   };
 });
 
@@ -36,7 +42,9 @@ class MockFS implements FileSystem {
   });
   writeFile = vi.fn(async (p: string, c: string) => this.files.set(p, c));
   chmod = vi.fn(async () => {});
-  mkdir = vi.fn(async (p: string) => { this.dirs.add(p); });
+  mkdir = vi.fn(async (p: string) => {
+    this.dirs.add(p);
+  });
   exists = vi.fn(async (p: string) => this.files.has(p) || this.dirs.has(p));
   remove = vi.fn(async () => {});
   listDir = vi.fn(async () => []);
@@ -66,7 +74,10 @@ class MockHttp implements HttpClient {
       headers: new Map([["content-length", "1024"]]),
       body: {
         getReader: () => ({
-          read: vi.fn().mockResolvedValueOnce({ done: false, value: Buffer.from("f") }).mockResolvedValue({ done: true }),
+          read: vi
+            .fn()
+            .mockResolvedValueOnce({ done: false, value: Buffer.from("f") })
+            .mockResolvedValue({ done: true }),
         }),
       },
     }),
@@ -83,9 +94,11 @@ function makeCtx(overrides: Record<string, unknown> = {}) {
     logger: new MockLogger(),
     platform,
     homeDir: "/home/test",
-    archive: { extract: vi.fn(async (_os: OS, _archive: string, destDir: string) => {
-      fs.files.set(`${destDir}/otelcol-contrib`, "binary");
-    }) },
+    archive: {
+      extract: vi.fn(async (_os: OS, _archive: string, destDir: string) => {
+        fs.files.set(`${destDir}/otelcol-contrib`, "binary");
+      }),
+    },
     checksum: { verify: vi.fn(async () => true) },
     tempDir: { create: vi.fn(async () => "/tmp/ci-test-dir") },
     ...overrides,
