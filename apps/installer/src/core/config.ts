@@ -90,6 +90,16 @@ export function getTokenWarning(token: string | undefined): string | null {
  * Generate systemd service unit content for Linux.
  */
 export function generateSystemdUnit(config: ServiceConfig): string {
+  const userSection = config.userMode
+    ? `# Per-user installation (no system-wide privileges)
+User=${config.homeDir.split("/")[2]}
+`
+    : `User=${config.user}
+Group=${config.group}
+`;
+
+  const wantedBy = config.userMode ? "default.target" : "multi-user.target";
+
   return `[Unit]
 Description=${config.displayName}
 Documentation=https://o11yfleet.com
@@ -98,9 +108,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${config.user}
-Group=${config.group}
-Environment=INSTANCE_UID=${config.installDir}
+${userSection}Environment=INSTANCE_UID=${config.installDir}
 ExecStart=${config.execStart}
 Restart=always
 RestartSec=5
@@ -110,13 +118,13 @@ StandardError=journal
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
+ProtectSystem=${config.userMode ? "full" : "strict"}
 ProtectHome=true
 ReadWritePaths=${config.installDir}
 PrivateTmp=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=${wantedBy}
 `;
 }
 

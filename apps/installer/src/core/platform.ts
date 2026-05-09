@@ -68,6 +68,24 @@ export function getDefaultInstallDir(os: OS): string {
 }
 
 /**
+ * Get per-user installation directory for platform.
+ * No sudo/root required when using these paths.
+ */
+export function getUserInstallDir(homeDir: string, os: OS): string {
+  switch (os) {
+    case "linux":
+      // XDG_DATA_HOME or ~/.local/share/o11yfleet
+      return `${homeDir}/.local/share/o11yfleet`;
+    case "darwin":
+      // ~/Library/Application Support/o11yfleet
+      return `${homeDir}/Library/Application Support/o11yfleet`;
+    case "windows":
+      // %LOCALAPPDATA%\o11yfleet
+      return `${homeDir}\\AppData\\Local\\o11yfleet`;
+  }
+}
+
+/**
  * Get service name for platform.
  */
 export function getServiceName(os: OS): string {
@@ -85,6 +103,22 @@ export function getServiceFilePath(os: OS): string {
       return "/Library/LaunchDaemons/com.o11yfleet.collector.plist";
     case "windows":
       return "C:\\Program Files\\O11yFleet\\o11yfleet-collector.service";
+  }
+}
+
+/**
+ * Get per-user service file path for platform.
+ * These don't require sudo/admin.
+ */
+export function getUserServiceFilePath(homeDir: string, os: OS): string {
+  switch (os) {
+    case "linux":
+      return `${homeDir}/.config/systemd/user/o11yfleet-collector.service`;
+    case "darwin":
+      return `${homeDir}/Library/LaunchAgents/com.o11yfleet.collector.plist`;
+    case "windows":
+      // Task Scheduler doesn't need a file path per se
+      return "o11yfleet-collector";
   }
 }
 

@@ -8,7 +8,7 @@
 import { parseArgs } from "util";
 import { platform, arch, homedir as getHomedir } from "os";
 import { detectPlatform } from "./core/index.js";
-import { createLogger, nodeFs, nodeProcess, nodeHttp } from "./adapters/index.js";
+import { createLogger, nodeFs, nodeProcess, nodeHttp, nodeArchiveExtractor } from "./adapters/index.js";
 import { install, scan, printScanResults, enroll, uninstall } from "./commands/index.js";
 
 const VERSION = "1.0.0";
@@ -33,6 +33,7 @@ Install Options:
   --dir <PATH>           Installation directory
   --dry-run              Download and verify only, don't install
   --skip-service         Don't install systemd/launchd service
+  --user                 Per-user install (no sudo/root required)
 
 Scan Options:
   (no options required)
@@ -137,6 +138,7 @@ async function main(): Promise<void> {
     fs: nodeFs,
     process: nodeProcess,
     http: nodeHttp,
+    archive: nodeArchiveExtractor,
     logger,
     platform: detectedPlatform,
     homeDir,
@@ -154,6 +156,7 @@ async function main(): Promise<void> {
             dir: { type: "string" },
             "dry-run": { type: "boolean" },
             "skip-service": { type: "boolean" },
+            user: { type: "boolean" },
           },
           allowPositionals: false,
         });
@@ -171,6 +174,7 @@ async function main(): Promise<void> {
           installDir: parsed.values.dir as string | undefined,
           dryRun: parsed.values["dry-run"] as boolean | undefined,
           skipService: parsed.values["skip-service"] as boolean | undefined,
+          user: parsed.values.user as boolean | undefined,
         });
 
         if (!result.success) {
