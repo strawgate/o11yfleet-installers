@@ -179,13 +179,13 @@ jobs:
 
       - name: Install bun
         run: |
-          curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.bun bash
-          echo "$HOME/.bun/bin" >> $GITHUB_PATH
+          curl -fsSL https://bun.sh/install | BUN_INSTALL=/root/.bun bash
+          echo "/root/.bun/bin" >> $GITHUB_PATH
 
       - name: Build portable binary
         run: |
-          pnpm install --no-frozen-lockfile
-          pnpm --filter @o11yfleet/installer build:binary
+          /root/.bun/bin/bun install --no-frozen-lockfile
+          /root/.bun/bin/bun run --filter @o11yfleet/installer build:binary
           ls -la apps/installer/dist/
 
       - name: Rename binary for platform
@@ -200,3 +200,69 @@ jobs:
           name: o11yinstaller-${{ matrix.os }}
           path: apps/installer/dist/o11yinstaller-${{ matrix.os }}*
           retention-days: 7
+
+  test-integration:
+    name: Integration test (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    needs: [build-binary]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux-x64
+            runner: ubuntu-latest
+          - os: linux-arm64
+            runner: ubuntu-latest
+          - os: darwin-x64
+            runner: macos-latest
+          - os: darwin-arm64
+            runner: macos-latest
+          - os: windows-x64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download binary
+        uses: actions/download-artifact@v4
+        with:
+          name: o11yinstaller-${{ matrix.os }}
+          path: ./bin/
+
+      - name: Make executable (Unix)
+        if: matrix.os != 'windows-x64'
+        run: chmod +x ./bin/o11yinstaller-${{ matrix.os }}
+
+      - name: Test --help
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          ./bin/o11yinstaller-${{ matrix.os }}${EXT} --help | grep -q "O11yFleet"
+
+      - name: Test --version
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          ./bin/o11yinstaller-${{ matrix.os }}${EXT} --version | grep -q "o11yinstaller"
+
+      - name: Test scan command (no auth needed)
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          ./bin/o11yinstaller-${{ matrix.os }}${EXT} scan --json | grep -q "collectors"
+
+      - name: Test install --dry-run (downloads collector, no service)
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          ./bin/o11yinstaller-${{ matrix.os }}${EXT} install --token fp_enroll_test_placeholder --dry-run --skip-service --json 2>&1 | grep -q "Dry run"
+
+      - name: Test enroll command help
+        shell: bash
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          ./bin/o11yinstaller-${{ matrix.os }}${EXT} enroll --help | grep -q "enroll"
