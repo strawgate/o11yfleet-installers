@@ -5,7 +5,6 @@
 import { describe, it, expect } from "vitest";
 import type { ChecksumVerifier } from "../../src/core/types.js";
 import { NodeChecksumVerifier } from "../../src/adapters/checksum.js";
-import { createHash } from "crypto";
 import { writeFileSync, unlinkSync, mkdtempSync, rmdirSync } from "fs";
 import { join } from "path";
 

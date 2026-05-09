@@ -177,6 +177,12 @@
       "rules": {
         "no-console": "off"
       }
+    },
+    {
+      "files": ["apps/installer/src/**"],
+      "rules": {
+        "no-console": "off"
+      }
     }
   ]
 }

@@ -102,7 +102,9 @@ export async function scan(ctx: ScannerContext): Promise<ScanResult[]> {
         try {
           const output = process.execSync(binPath, ["--version"]);
           version = parseVersionFromOutput(output);
-        } catch {}
+        } catch {
+          // Binary exists but --version failed; leave version as null
+        }
 
         const running = await isProcessRunning(process, basename(binPath));
 
