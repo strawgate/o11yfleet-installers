@@ -142,28 +142,4 @@ export function getAssetForVersion(version: string, platform: Platform): OTelAss
 /**
  * Build download URL for Bun runtime (used by bootstrap script).
  */
-export function getBunAsset(version: string, platform: Platform): OTelAsset {
-  const osName = platform.os === "darwin" ? "darwin" : "linux";
-  const ext = "zip";
-  const filename = `bun-${osName}-${platform.arch}.${ext}`;
 
-  return {
-    filename,
-    url: `https://github.com/oven-sh/bun/releases/download/${version}/${filename}`,
-    checksumUrl: "", // Bun doesn't have checksums.txt
-  };
-}
-
-/**
- * Get the latest Bun version from GitHub.
- * This requires a network call, so it's not truly pure,
- * but the caller can cache the result.
- */
-export const BUN_LATEST_URL = "https://api.github.com/repos/oven-sh/bun/releases/latest";
-
-/**
- * Parse GitHub API release response to get tag name.
- */
-export function parseGitHubReleaseTag(response: { tag_name?: string }): string | null {
-  return response.tag_name?.replace(/^v/, "") || null;
-}

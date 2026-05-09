@@ -186,6 +186,41 @@ ci-check name:
       *) echo "Unknown check: {{name}}" >&2; exit 1 ;;
     esac
 
+# ─── Installer Build & Release ───────────────────────────────────────────────────
+
+[group: 'build']
+build-installer:
+    @echo "Building installer bundle..."
+    pnpm --filter @o11yfleet/installer build:bundle
+    @echo "Bundle: apps/installer/dist/installer-bundle.js ($(wc -c < apps/installer/dist/installer-bundle.js) bytes)"
+
+[group: 'release']
+publish-installer version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    VERSION="{{version}}"
+    BUNDLE="apps/installer/dist/installer-bundle.js"
+    SCRIPT_DIR="apps/installer/bootstrap"
+    SITE_SCRIPTS=(
+        "apps/site/install.sh"
+        "apps/site/install.ps1"
+        "apps/site/public/install.sh"
+        "apps/site/public/install.ps1"
+    )
+    if [ ! -f "$BUNDLE" ]; then echo "Run 'just build-installer' first." >&2; exit 1; fi
+    gh release create "$VERSION" \
+        --repo strawgate/o11yfleet-installers \
+        --title "Installer $VERSION" \
+        --notes "Installer bundle + scripts for $VERSION" \
+        "$BUNDLE#installer-bundle-${VERSION}.js" \
+        "${SCRIPT_DIR}/install.sh#install.sh" \
+        "${SCRIPT_DIR}/install.ps1#install.ps1"
+    for f in "${SITE_SCRIPTS[@]}"; do
+        [ -f "$f" ] && gh release upload "$VERSION" "$f" --repo strawgate/o11yfleet-installers --clobber
+    done
+    @echo "Release $VERSION created. Assets:"
+    @gh release view "$VERSION" --repo strawgate/o11yfleet-installers --json assets --jq '.assets[].name'
+
 # ─── Build ──────────────────────────────────────────────────────────────────────
 
 [group: 'build']

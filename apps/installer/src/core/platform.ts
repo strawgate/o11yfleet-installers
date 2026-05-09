@@ -93,41 +93,9 @@ export function getServiceName(os: OS): string {
 }
 
 /**
- * Get service file path for platform.
- */
-export function getServiceFilePath(os: OS): string {
-  switch (os) {
-    case "linux":
-      return "/etc/systemd/system/o11yfleet-collector.service";
-    case "darwin":
-      return "/Library/LaunchDaemons/com.o11yfleet.collector.plist";
-    case "windows":
-      return "C:\\Program Files\\O11yFleet\\o11yfleet-collector.service";
-  }
-}
-
-/**
- * Get per-user service file path for platform.
- * These don't require sudo/admin.
- */
-export function getUserServiceFilePath(homeDir: string, os: OS): string {
-  switch (os) {
-    case "linux":
-      return `${homeDir}/.config/systemd/user/o11yfleet-collector.service`;
-    case "darwin":
-      return `${homeDir}/Library/LaunchAgents/com.o11yfleet.collector.plist`;
-    case "windows":
-      // Task Scheduler doesn't need a file path per se
-      return "o11yfleet-collector";
-  }
-}
-
-/**
  * Get system binary paths to search for existing collectors.
  */
 export function getSystemPaths(homeDir: string, os: OS): string[] {
-  const commonPaths = ["/usr/local/bin", "/usr/bin", "/opt", "/opt/homebrew/bin", homeDir];
-
   const osPaths: Record<OS, string[]> = {
     linux: ["/usr/local/bin", "/usr/bin", "/opt", "/snap/bin"],
     darwin: ["/usr/local/bin", "/usr/bin", "/opt/homebrew/bin"],
@@ -138,31 +106,7 @@ export function getSystemPaths(homeDir: string, os: OS): string[] {
     ],
   };
 
-  return [...new Set([...commonPaths, ...osPaths[os]])];
-}
-
-/**
- * Check if systemd is available (Linux only).
- */
-export function hasSystemd(os: OS): boolean {
-  return os === "linux";
-}
-
-/**
- * Check if running as root/admin.
- */
-export function isRoot(uid: number, os: OS): boolean {
-  if (os === "windows") {
-    return uid === 0;
-  }
-  return uid === 0;
-}
-
-/**
- * Get the standard user for the service.
- */
-export function getServiceUser(os: OS): string {
-  return OTEL_USER[os];
+  return [...new Set(osPaths[os])];
 }
 
 /**
