@@ -12,10 +12,13 @@
 # Installs otelcol-contrib with OpAMP extension configured to connect to O11yFleet.
 # Requires: Windows 10+ (amd64/arm64), Administrator privileges
 
+# Version (injected at release time)
+$env:INSTALLER_VERSION = if (Test-Path env:INSTALLER_VERSION) { $env:INSTALLER_VERSION } else { "latest" }
+
 param(
     [string]$Token,
 
-    [string]$Version = "0.115.0",
+    [string]$CollectorVersion = "0.115.0",
     [string]$Endpoint = "wss://api.o11yfleet.com/v1/opamp",
     [string]$InstallDir = "C:\o11yfleet",
     [switch]$Uninstall
@@ -83,14 +86,14 @@ if ($isUpgrade) {
 }
 
 # --- Download & install -----------------------------------------------
-$url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/otelcol-contrib_${Version}_windows_${arch}.tar.gz"
+$url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${CollectorVersion}/otelcol-contrib_${CollectorVersion}_windows_${arch}.tar.gz"
 $tmpDir = Join-Path $env:TEMP "o11yfleet-install"
 
 try {
     New-Item -ItemType Directory -Force -Path $tmpDir | Out-Null
     $archive = Join-Path $tmpDir "otelcol-contrib.tar.gz"
 
-    Write-Info "Downloading otelcol-contrib v${Version} for windows/${arch}..."
+    Write-Info "Downloading otelcol-contrib v${CollectorVersion} for windows/${arch}..."
     try {
         Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
     } catch {

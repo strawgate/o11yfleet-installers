@@ -4,8 +4,14 @@
 #
 # Downloads and runs the portable O11yFleet installer binary.
 # Supports: Linux (amd64/arm64), macOS (amd64/arm64), Windows
+#
+# Options:
+#   --version VERSION   Installer version to install (default: latest)
 
 set -euo pipefail
+
+# ─── Version (injected at release time) ─────────────────────────────────
+VERSION="${INSTALLER_VERSION:-latest}"
 
 # ─── Colors ────────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -63,6 +69,7 @@ main() {
   local token=""
   local command="install"
   local extra_args=()
+  local version="$VERSION"
 
   # ─── Parse args ────────────────────────────────────────────────────────
   while [ $# -gt 0 ]; do
@@ -70,6 +77,9 @@ main() {
       --token)
         token="$2"; shift 2 ;;
       --token=*)    token="${1#*=}"; shift ;;
+      --version)
+        version="$2"; shift 2 ;;
+      --version=*)  version="${1#*=}"; shift ;;
       --uninstall)  command="uninstall"; shift ;;
       --scan)       command="scan"; shift ;;
       --enroll)     command="enroll"; shift ;;
@@ -79,8 +89,15 @@ O11yFleet Collector Installer
 
 Usage:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+  curl ... | bash -s -- --version v0.0.2 --token <TOKEN>
 
 Options:
+  --token TOKEN       Enrollment token (required for install/enroll)
+  --version VERSION    Installer version to install (default: ${VERSION})
+  --uninstall          Uninstall O11yFleet collector
+  --scan              Scan for existing collectors
+  --enroll            Enroll an existing collector
+  -h, --help          Show this help
   --token TOKEN       Enrollment token (required for install/enroll)
   --uninstall          Uninstall O11yFleet collector
   --scan              Scan for existing collectors
@@ -110,7 +127,7 @@ EOF
   detect_platform
 
   # ─── Download the binary ───────────────────────────────────────────────
-  download_binary "latest"
+  download_binary "$version"
 
   # ─── Run the installer ────────────────────────────────────────────────
   info "Running installer..."

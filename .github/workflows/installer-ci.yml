@@ -295,6 +295,17 @@ jobs:
         run: ls -la dist/
 
       - name: Create Release
+        run: |
+          # Stamp version into install scripts
+          TAG="${GITHUB_REF#refs/tags/}"
+          sed "s/^VERSION=.*/VERSION=\"${TAG}\"/" scripts/install.sh > dist/install.sh
+          sed "s/\$env:INSTALLER_VERSION = .*/\$env:INSTALLER_VERSION = \"${TAG}\"/" scripts/install.ps1 > dist/install.ps1
+          chmod +x dist/install.sh dist/install.ps1
+          ls -la dist/
+        env:
+          GITHUB_REF: ${{ github.ref }}
+
+      - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           draft: false
@@ -305,7 +316,7 @@ jobs:
             dist/o11yinstaller-darwin-amd64
             dist/o11yinstaller-darwin-arm64
             dist/o11yinstaller-windows-x64.exe
-            scripts/install.sh
-            scripts/install.ps1
+            dist/install.sh
+            dist/install.ps1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
