@@ -3,7 +3,7 @@
  * No side effects - all inputs and outputs are deterministic.
  */
 
-import type { OTelConfig, ServiceConfig, OS } from "./types.js";
+import type { OTelConfig, ServiceConfig } from "./types.js";
 
 const OTEL_VERSION = "0.114.0";
 
@@ -177,40 +177,6 @@ Args=--config "${config.configFile}"
 DisplayName=${config.displayName}
 StartType=auto
 `;
-}
-
-/**
- * Build service configuration for the current platform.
- */
-export function buildServiceConfig(
-  installDir: string,
-  configFile: string,
-  logFile: string,
-  os: OS,
-): ServiceConfig {
-  const binPath =
-    os === "windows"
-      ? `${installDir}\\bin\\otelcol-contrib.exe`
-      : `${installDir}/bin/otelcol-contrib`;
-
-  const serviceName =
-    os === "windows"
-      ? "o11yfleet-collector"
-      : os === "darwin"
-        ? "com.o11yfleet.collector"
-        : "o11yfleet-collector";
-
-  return {
-    name: serviceName,
-    displayName: "O11yFleet Collector",
-    description: "O11yFleet Collector (otelcol-contrib + OpAMP)",
-    execStart: binPath,
-    user: "o11yfleet",
-    group: "o11yfleet",
-    installDir,
-    configFile,
-    logFile,
-  };
 }
 
 /**

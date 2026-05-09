@@ -8,3 +8,5 @@ export { NodeProcessRunner, nodeProcess } from "./process.js";
 export { NodeHttpClient, nodeHttp } from "./http.js";
 export { ConsoleLogger, consoleLogger, createLogger } from "./logger.js";
 export { NodeArchiveExtractor, nodeArchiveExtractor } from "./archive.js";
+export { NodeChecksumVerifier, nodeChecksumVerifier } from "./checksum.js";
+export { NodeTempDirFactory, createNodeTempDirFactory } from "./tempdir.js";

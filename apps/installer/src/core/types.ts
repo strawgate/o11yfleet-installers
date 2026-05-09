@@ -108,3 +108,11 @@ export interface UserInfo {
 export interface ArchiveExtractor {
   extract(os: OS, archivePath: string, destDir: string): Promise<void>;
 }
+
+export interface ChecksumVerifier {
+  sha256(filePath: string): Promise<string>;
+}
+
+export interface TempDirFactory {
+  create(): Promise<string>;
+}

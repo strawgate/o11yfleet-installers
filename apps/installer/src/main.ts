@@ -8,7 +8,7 @@
 import { parseArgs } from "util";
 import { platform, arch, homedir as getHomedir } from "os";
 import { detectPlatform } from "./core/index.js";
-import { createLogger, nodeFs, nodeProcess, nodeHttp, nodeArchiveExtractor } from "./adapters/index.js";
+import { createLogger, nodeFs, nodeProcess, nodeHttp, nodeArchiveExtractor, nodeChecksumVerifier, createNodeTempDirFactory } from "./adapters/index.js";
 import { install, scan, printScanResults, enroll, uninstall } from "./commands/index.js";
 
 const VERSION = "1.0.0";
@@ -139,6 +139,8 @@ async function main(): Promise<void> {
     process: nodeProcess,
     http: nodeHttp,
     archive: nodeArchiveExtractor,
+    checksum: nodeChecksumVerifier,
+    tempDir: createNodeTempDirFactory(nodeFs),
     logger,
     platform: detectedPlatform,
     homeDir,

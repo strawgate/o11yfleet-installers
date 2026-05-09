@@ -2,8 +2,7 @@
  * Install command - downloads and installs the OTel collector.
  */
 
-import { createHash } from "crypto";
-import { createReadStream, createWriteStream } from "fs";
+import { createWriteStream } from "fs";
 import type {
   FileSystem,
   ProcessRunner,
@@ -13,6 +12,8 @@ import type {
   InstallOptions,
   ServiceConfig,
   ArchiveExtractor,
+  ChecksumVerifier,
+  TempDirFactory,
 } from "../core/types.js";
 import { getDefaultInstallDir, getUserInstallDir, getOtelAsset } from "../core/index.js";
 import {
@@ -31,6 +32,8 @@ export interface InstallerContext {
   platform: Platform;
   homeDir: string;
   archive: ArchiveExtractor;
+  checksum: ChecksumVerifier;
+  tempDir: TempDirFactory;
 }
 
 export interface InstallResult {
@@ -46,7 +49,7 @@ export async function install(
   ctx: InstallerContext,
   options: InstallOptions,
 ): Promise<InstallResult> {
-  const { fs, http, logger, platform, homeDir, archive } = ctx;
+  const { fs, http, logger, platform, homeDir, archive, checksum, tempDir } = ctx;
   const installDir = options.installDir ?? (options.user ? getUserInstallDir(homeDir, platform.os) : getDefaultInstallDir(platform.os));
 
   // Validate token
@@ -77,7 +80,7 @@ export async function install(
 
   logger.info(`Downloading otelcol-contrib v${version} for ${platform.os}/${platform.arch}...`);
 
-  const tmpDir = await createTempDir(fs);
+  const tmpDir = await tempDir.create();
 
   try {
     // Download binary
@@ -93,7 +96,7 @@ export async function install(
 
     const expectedHash = await findChecksum(fs, checksumPath, asset.filename);
     if (expectedHash) {
-      const actualHash = await verifyChecksum(tarballPath);
+      const actualHash = await checksum.sha256(tarballPath);
       if (expectedHash !== actualHash) {
         logger.error(`Checksum mismatch! Expected ${expectedHash}, got ${actualHash}`);
         return { success: false, isUpgrade, message: "Checksum verification failed" };
@@ -341,13 +344,6 @@ async function installWindowsService(
   }
 }
 
-// Utility functions
-async function createTempDir(fs: FileSystem): Promise<string> {
-  const tmpDir = "/tmp/o11y-install-" + Math.random().toString(36).slice(2);
-  await fs.mkdir(tmpDir, true);
-  return tmpDir;
-}
-
 async function downloadFile(
   http: HttpClient,
   url: string,
@@ -407,17 +403,6 @@ async function findChecksum(
     // Checksum file not found - that's okay
   }
   return null;
-}
-
-async function verifyChecksum(filePath: string): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const hash = createHash("sha256");
-    const stream = createReadStream(filePath);
-
-    stream.on("data", (data) => hash.update(data));
-    stream.on("end", () => resolve(hash.digest("hex")));
-    stream.on("error", reject);
-  });
 }
 
 function formatBytes(bytes: number): string {

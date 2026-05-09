@@ -8,7 +8,6 @@ import {
   getTokenWarning,
   generateSystemdUnit,
   generateLaunchdPlist,
-  buildServiceConfig,
   createDefaultConfig,
   shouldPreserveConfig,
 } from "../../src/core/config.js";
@@ -138,44 +137,6 @@ describe("generateLaunchdPlist", () => {
     expect(plist).toContain("<key>RunAtLoad</key>");
     expect(plist).toContain("<key>KeepAlive</key>");
     expect(plist).toContain("otelcol-contrib");
-  });
-});
-
-describe("buildServiceConfig", () => {
-  it("builds config for linux", () => {
-    const config = buildServiceConfig(
-      "/opt/o11yfleet",
-      "/opt/o11yfleet/config/otelcol.yaml",
-      "/var/log/o11yfleet-collector.log",
-      "linux",
-    );
-
-    expect(config.name).toBe("o11yfleet-collector");
-    expect(config.execStart).toBe("/opt/o11yfleet/bin/otelcol-contrib");
-    expect(config.user).toBe("o11yfleet");
-  });
-
-  it("builds config for darwin", () => {
-    const config = buildServiceConfig(
-      "/opt/o11yfleet",
-      "/opt/o11yfleet/config/otelcol.yaml",
-      "/var/log/o11yfleet-collector.log",
-      "darwin",
-    );
-
-    expect(config.name).toBe("com.o11yfleet.collector");
-  });
-
-  it("builds config for windows", () => {
-    const config = buildServiceConfig(
-      "C:\\Program Files\\O11yFleet",
-      "C:\\Program Files\\O11yFleet\\config\\otelcol.yaml",
-      "C:\\Program Files\\O11yFleet\\logs\\collector.log",
-      "windows",
-    );
-
-    expect(config.name).toBe("o11yfleet-collector");
-    expect(config.execStart).toContain(".exe");
   });
 });
 
