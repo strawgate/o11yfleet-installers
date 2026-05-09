@@ -24,7 +24,10 @@ function dockerAvailable(): boolean {
   }
 }
 
-function dockerRun(image: string, script: string): { stdout: string; stderr: string; exitCode: number } {
+function dockerRun(
+  image: string,
+  script: string,
+): { stdout: string; stderr: string; exitCode: number } {
   try {
     const stdout = execFileSync(
       "docker",

@@ -8,7 +8,15 @@
 import { parseArgs } from "util";
 import { platform, arch, homedir as getHomedir } from "os";
 import { detectPlatform } from "./core/index.js";
-import { createLogger, nodeFs, nodeProcess, nodeHttp, nodeArchiveExtractor, nodeChecksumVerifier, createNodeTempDirFactory } from "./adapters/index.js";
+import {
+  createLogger,
+  nodeFs,
+  nodeProcess,
+  nodeHttp,
+  nodeArchiveExtractor,
+  nodeChecksumVerifier,
+  createNodeTempDirFactory,
+} from "./adapters/index.js";
 import { install, scan, printScanResults, enroll, uninstall } from "./commands/index.js";
 
 const VERSION = "1.0.0";

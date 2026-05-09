@@ -50,7 +50,9 @@ export async function install(
   options: InstallOptions,
 ): Promise<InstallResult> {
   const { fs, http, logger, platform, homeDir, archive, checksum, tempDir } = ctx;
-  const installDir = options.installDir ?? (options.user ? getUserInstallDir(homeDir, platform.os) : getDefaultInstallDir(platform.os));
+  const installDir =
+    options.installDir ??
+    (options.user ? getUserInstallDir(homeDir, platform.os) : getDefaultInstallDir(platform.os));
 
   // Validate token
   if (!validateToken(options.token)) {
@@ -201,7 +203,7 @@ async function installService(
     logFile,
     userMode,
     homeDir,
-    serviceUser: userMode ? homeDir.split("/").pop() ?? "root" : "o11yfleet",
+    serviceUser: userMode ? (homeDir.split("/").pop() ?? "root") : "o11yfleet",
   };
 
   if (platform.os === "linux") {
@@ -323,10 +325,7 @@ async function installMacOSService(
   }
 }
 
-async function installWindowsService(
-  logger: Logger,
-  config: ServiceConfig,
-): Promise<void> {
+async function installWindowsService(logger: Logger, config: ServiceConfig): Promise<void> {
   if (config.userMode) {
     // Per-user: use Task Scheduler instead of Windows Service
     logger.info("Installing per-user scheduled task...");

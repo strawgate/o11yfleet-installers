@@ -154,11 +154,15 @@ describe("getUserInstallDir", () => {
   });
 
   it("returns ~/Library/Application Support/o11yfleet for darwin", () => {
-    expect(getUserInstallDir("/Users/user", "darwin")).toBe("/Users/user/Library/Application Support/o11yfleet");
+    expect(getUserInstallDir("/Users/user", "darwin")).toBe(
+      "/Users/user/Library/Application Support/o11yfleet",
+    );
   });
 
   it("returns %LOCALAPPDATA%\\o11yfleet for windows", () => {
-    expect(getUserInstallDir("C:\\Users\\user", "windows")).toBe("C:\\Users\\user\\AppData\\Local\\o11yfleet");
+    expect(getUserInstallDir("C:\\Users\\user", "windows")).toBe(
+      "C:\\Users\\user\\AppData\\Local\\o11yfleet",
+    );
   });
 });
 

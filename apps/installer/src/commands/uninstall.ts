@@ -93,7 +93,11 @@ async function stopLaunchdService(process: ProcessRunner, logger: Logger): Promi
 
 async function removeLaunchdService(process: ProcessRunner, logger: Logger): Promise<void> {
   try {
-    await process.exec("sudo", ["rm", "-f", "/Library/LaunchDaemons/com.o11yfleet.collector.plist"]);
+    await process.exec("sudo", [
+      "rm",
+      "-f",
+      "/Library/LaunchDaemons/com.o11yfleet.collector.plist",
+    ]);
     logger.info("Removed launchd service file");
   } catch {
     // Service file might not exist

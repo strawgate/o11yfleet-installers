@@ -43,10 +43,13 @@ describe("enroll command", () => {
       const fs = new MockFileSystem();
       const logger = new MockLogger();
 
-      const result = await enroll({ fs, logger }, {
-        collectorPath: "/usr/bin/otelcol-contrib",
-        token: "invalid_token",
-      });
+      const result = await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/usr/bin/otelcol-contrib",
+          token: "invalid_token",
+        },
+      );
 
       expect(result).toBe(false);
       expect(logger.messages).toContainEqual({
@@ -61,10 +64,13 @@ describe("enroll command", () => {
 
       fs.files.set("/usr/bin/otelcol.yaml", "receivers:\n  otlp:\n    protocols:\n      grpc:");
 
-      const result = await enroll({ fs, logger }, {
-        collectorPath: "/usr/bin/otelcol-contrib",
-        token: "fp_enroll_abc123",
-      });
+      const result = await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/usr/bin/otelcol-contrib",
+          token: "fp_enroll_abc123",
+        },
+      );
 
       expect(result).toBe(true);
     });
@@ -78,10 +84,13 @@ describe("enroll command", () => {
       fs.files.set("/opt/otelcol.yaml", "receivers:\n  otlp:");
       fs.files.set("/opt/otelcol-contrib", "");
 
-      const result = await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_test",
-      });
+      const result = await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_test",
+        },
+      );
 
       expect(result).toBe(true);
     });
@@ -92,10 +101,13 @@ describe("enroll command", () => {
 
       fs.files.set("/opt/otelcol-contrib", "");
 
-      const result = await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_test",
-      });
+      const result = await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_test",
+        },
+      );
 
       expect(result).toBe(false);
       expect(logger.messages).toContainEqual({
@@ -113,15 +125,16 @@ describe("enroll command", () => {
       fs.files.set("/opt/otelcol.yaml", "receivers:\n  otlp:");
       fs.files.set("/opt/otelcol-contrib", "");
 
-      await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_test",
-        endpoint: "wss://custom.example.com/opamp",
-      });
-
-      const writeCall = fs.writeFile.mock.calls.find(
-        ([path]) => path === "/opt/otelcol.yaml",
+      await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_test",
+          endpoint: "wss://custom.example.com/opamp",
+        },
       );
+
+      const writeCall = fs.writeFile.mock.calls.find(([path]) => path === "/opt/otelcol.yaml");
       expect(writeCall).toBeDefined();
       const [, content] = writeCall!;
       expect(content).toContain("wss://custom.example.com/opamp");
@@ -135,14 +148,15 @@ describe("enroll command", () => {
       fs.files.set("/opt/otelcol.yaml", "receivers:\n  otlp:");
       fs.files.set("/opt/otelcol-contrib", "");
 
-      await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_secret_token",
-      });
-
-      const writeCall = fs.writeFile.mock.calls.find(
-        ([path]) => path === "/opt/otelcol.yaml",
+      await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_secret_token",
+        },
       );
+
+      const writeCall = fs.writeFile.mock.calls.find(([path]) => path === "/opt/otelcol.yaml");
       const [, content] = writeCall!;
       expect(content).toContain('Authorization: "Bearer fp_enroll_secret_token"');
     });
@@ -154,10 +168,13 @@ describe("enroll command", () => {
       fs.files.set("/opt/otelcol.yaml", "receivers:\n  otlp:");
       fs.files.set("/opt/otelcol-contrib", "");
 
-      await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_test",
-      });
+      await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_test",
+        },
+      );
 
       expect(fs.chmod).toHaveBeenCalledWith("/opt/otelcol.yaml", 0o640);
     });
@@ -169,14 +186,15 @@ describe("enroll command", () => {
       fs.files.set("/opt/otelcol.yaml", "receivers:\n  otlp:");
       fs.files.set("/opt/otelcol-contrib", "");
 
-      await enroll({ fs, logger }, {
-        collectorPath: "/opt/otelcol-contrib",
-        token: "fp_enroll_test",
-      });
-
-      const writeCall = fs.writeFile.mock.calls.find(
-        ([path]) => path === "/opt/otelcol.yaml",
+      await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/opt/otelcol-contrib",
+          token: "fp_enroll_test",
+        },
       );
+
+      const writeCall = fs.writeFile.mock.calls.find(([path]) => path === "/opt/otelcol.yaml");
       const [, content] = writeCall!;
       expect(content).toContain("wss://api.o11yfleet.com/v1/opamp");
     });
