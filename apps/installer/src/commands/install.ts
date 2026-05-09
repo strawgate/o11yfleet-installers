@@ -341,32 +341,6 @@ async function installWindowsService(
   }
 }
 
-function buildServiceConfig(installDir: string, configFile: string, logFile: string, os: string) {
-  const binPath =
-    os === "windows"
-      ? `${installDir}\\bin\\otelcol-contrib.exe`
-      : `${installDir}/bin/otelcol-contrib`;
-
-  const serviceName =
-    os === "windows"
-      ? "o11yfleet-collector"
-      : os === "darwin"
-        ? "com.o11yfleet.collector"
-        : "o11yfleet-collector";
-
-  return {
-    name: serviceName,
-    displayName: "O11yFleet Collector",
-    description: "O11yFleet Collector (otelcol-contrib + OpAMP)",
-    execStart: binPath,
-    user: "o11yfleet",
-    group: "o11yfleet",
-    installDir,
-    configFile,
-    logFile,
-  };
-}
-
 // Utility functions
 async function createTempDir(fs: FileSystem): Promise<string> {
   const tmpDir = "/tmp/o11y-install-" + Math.random().toString(36).slice(2);
