@@ -180,13 +180,13 @@ jobs:
 
       - name: Install bun
         run: |
-          curl -fsSL https://bun.sh/install | BUN_INSTALL=/root/.bun bash
-          echo "/root/.bun/bin" >> $GITHUB_PATH
+          curl -fsSL https://bun.sh/install | BUN_INSTALL=$HOME/.bun bash
+          echo "$HOME/.bun/bin" >> $GITHUB_PATH
 
       - name: Build portable binary
         run: |
-          /root/.bun/bin/bun install --no-frozen-lockfile
-          /root/.bun/bin/bun run --filter @o11yfleet/installer build:binary
+          $HOME/.bun/bin/bun install --no-frozen-lockfile
+          $HOME/.bun/bin/bun run --filter @o11yfleet/installer build:binary
           ls -la apps/installer/dist/
 
       - name: Rename binary for platform
