@@ -5,7 +5,7 @@
 
 import type { OTelConfig, ServiceConfig } from "./types.js";
 
-const OTEL_VERSION = "0.114.0";
+const OTEL_VERSION = "0.151.0";
 
 /**
  * Generate the OTel collector YAML configuration.
@@ -160,26 +160,6 @@ export function generateLaunchdPlist(config: ServiceConfig): string {
 </dict>
 </plist>
 `;
-}
-
-/**
- * Generate Windows service configuration.
- */
-export function generateWindowsServiceConfig(config: ServiceConfig): string {
-  return `[Service]
-Description=${config.displayName}
-Executable=${config.execStart}
-Args=--config "${config.configFile}"
-DisplayName=${config.displayName}
-StartType=auto
-`;
-}
-
-/**
- * Get the OTel version constant.
- */
-export function getOtelVersion(): string {
-  return OTEL_VERSION;
 }
 
 /**

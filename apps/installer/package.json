@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:bundle": "bun build src/main.ts --target=bun --outfile dist/installer-bundle.js",
     "dev": "tsx src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
