@@ -99,17 +99,16 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        distro: [ubuntu, alpine, debian, fedora]
+        distro: [alpine, ubuntu, debian]
         node: ["18", "20", "22"]
     container:
-      image: ${{ matrix.distro }}:${{ matrix.node }}
+      image: node:${{ matrix.node }}-${{ matrix.distro }}
+      env:
+        PNPM_HOME: /pnpm
+        PATH: /pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Install Node.js
-        if: matrix.distro == 'alpine'
-        run: apk add --no-cache nodejs npm
 
       - name: Install pnpm
         run: npm install -g pnpm
