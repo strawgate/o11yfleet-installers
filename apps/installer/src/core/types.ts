@@ -74,11 +74,14 @@ export interface ServiceConfig {
   displayName: string;
   description: string;
   execStart: string;
-  user: string;
-  group: string;
+  user: string | null;
+  group: string | null;
   installDir: string;
   configFile: string;
   logFile: string;
+  userMode: boolean;
+  homeDir: string;
+  serviceUser: string;
 }
 
 export interface ScanResult {
@@ -94,10 +97,23 @@ export interface InstallOptions {
   installDir?: string;
   dryRun?: boolean;
   skipService?: boolean;
+  user?: boolean;
 }
 
 export interface UserInfo {
   uid: number;
   gid: number;
   name?: string;
+}
+
+export interface ArchiveExtractor {
+  extract(os: OS, archivePath: string, destDir: string): Promise<void>;
+}
+
+export interface ChecksumVerifier {
+  sha256(filePath: string): Promise<string>;
+}
+
+export interface TempDirFactory {
+  create(): Promise<string>;
 }

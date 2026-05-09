@@ -10,6 +10,7 @@ import {
   validateInstallDir,
   getSystemPaths,
   getDefaultInstallDir,
+  getUserInstallDir,
   getServiceName,
 } from "../../src/core/platform.js";
 
@@ -144,6 +145,24 @@ describe("getDefaultInstallDir", () => {
 
   it("returns correct path for windows", () => {
     expect(getDefaultInstallDir("windows")).toBe("C:\\Program Files\\O11yFleet");
+  });
+});
+
+describe("getUserInstallDir", () => {
+  it("returns ~/.local/share/o11yfleet for linux", () => {
+    expect(getUserInstallDir("/home/user", "linux")).toBe("/home/user/.local/share/o11yfleet");
+  });
+
+  it("returns ~/Library/Application Support/o11yfleet for darwin", () => {
+    expect(getUserInstallDir("/Users/user", "darwin")).toBe(
+      "/Users/user/Library/Application Support/o11yfleet",
+    );
+  });
+
+  it("returns %LOCALAPPDATA%\\o11yfleet for windows", () => {
+    expect(getUserInstallDir("C:\\Users\\user", "windows")).toBe(
+      "C:\\Users\\user\\AppData\\Local\\o11yfleet",
+    );
   });
 });
 

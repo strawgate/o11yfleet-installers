@@ -8,7 +8,6 @@ import {
   getTokenWarning,
   generateSystemdUnit,
   generateLaunchdPlist,
-  buildServiceConfig,
   createDefaultConfig,
   shouldPreserveConfig,
 } from "../../src/core/config.js";
@@ -105,6 +104,9 @@ describe("generateSystemdUnit", () => {
       installDir: "/opt/o11yfleet",
       configFile: "/opt/o11yfleet/config/otelcol.yaml",
       logFile: "/var/log/o11yfleet-collector.log",
+      userMode: false,
+      homeDir: "/root",
+      serviceUser: "o11yfleet",
     });
 
     expect(unit).toContain("[Unit]");
@@ -115,6 +117,27 @@ describe("generateSystemdUnit", () => {
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("[Install]");
     expect(unit).toContain("WantedBy=multi-user.target");
+  });
+
+  it("generates valid systemd unit for user mode", () => {
+    const unit = generateSystemdUnit({
+      name: "o11yfleet-collector",
+      displayName: "O11yFleet Collector",
+      description: "O11yFleet Collector (otelcol-contrib + OpAMP, per-user)",
+      execStart: "/home/bob/.local/share/o11yfleet/bin/otelcol-contrib",
+      user: null,
+      group: null,
+      installDir: "/home/bob/.local/share/o11yfleet",
+      configFile: "/home/bob/.local/share/o11yfleet/config/otelcol.yaml",
+      logFile: "/home/bob/.local/share/o11yfleet/logs/collector.log",
+      userMode: true,
+      homeDir: "/home/bob",
+      serviceUser: "bob",
+    });
+
+    expect(unit).toContain("User=bob");
+    expect(unit).toContain("ProtectSystem=full");
+    expect(unit).toContain("WantedBy=default.target");
   });
 });
 
@@ -130,6 +153,9 @@ describe("generateLaunchdPlist", () => {
       installDir: "/opt/o11yfleet",
       configFile: "/opt/o11yfleet/config/otelcol.yaml",
       logFile: "/var/log/o11yfleet-collector.log",
+      userMode: false,
+      homeDir: "/root",
+      serviceUser: "o11yfleet",
     });
 
     expect(plist).toContain('<?xml version="1.0" encoding="UTF-8"?>');
@@ -138,44 +164,6 @@ describe("generateLaunchdPlist", () => {
     expect(plist).toContain("<key>RunAtLoad</key>");
     expect(plist).toContain("<key>KeepAlive</key>");
     expect(plist).toContain("otelcol-contrib");
-  });
-});
-
-describe("buildServiceConfig", () => {
-  it("builds config for linux", () => {
-    const config = buildServiceConfig(
-      "/opt/o11yfleet",
-      "/opt/o11yfleet/config/otelcol.yaml",
-      "/var/log/o11yfleet-collector.log",
-      "linux",
-    );
-
-    expect(config.name).toBe("o11yfleet-collector");
-    expect(config.execStart).toBe("/opt/o11yfleet/bin/otelcol-contrib");
-    expect(config.user).toBe("o11yfleet");
-  });
-
-  it("builds config for darwin", () => {
-    const config = buildServiceConfig(
-      "/opt/o11yfleet",
-      "/opt/o11yfleet/config/otelcol.yaml",
-      "/var/log/o11yfleet-collector.log",
-      "darwin",
-    );
-
-    expect(config.name).toBe("com.o11yfleet.collector");
-  });
-
-  it("builds config for windows", () => {
-    const config = buildServiceConfig(
-      "C:\\Program Files\\O11yFleet",
-      "C:\\Program Files\\O11yFleet\\config\\otelcol.yaml",
-      "C:\\Program Files\\O11yFleet\\logs\\collector.log",
-      "windows",
-    );
-
-    expect(config.name).toBe("o11yfleet-collector");
-    expect(config.execStart).toContain(".exe");
   });
 });
 

@@ -3,7 +3,7 @@
  * Implements the ProcessRunner interface from core/types.ts.
  */
 
-import { execSync as nodeExecSync, spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 
 export class NodeProcessRunner {
   private _uid: number;
@@ -34,19 +34,20 @@ export class NodeProcessRunner {
   }
 
   execSync(cmd: string, args?: string[]): string {
-    try {
-      const options = args ? { args } : undefined;
-      return nodeExecSync(cmd, {
-        encoding: "utf-8",
-        stdio: ["pipe", "pipe", "pipe"],
-        ...options,
-      });
-    } catch (error: unknown) {
-      if (error instanceof Error && "stderr" in error) {
-        throw new Error(`Command failed: ${(error as { stderr: string }).stderr}`);
-      }
-      throw error;
+    const result = spawnSync(cmd, args ?? [], {
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    if (result.error) {
+      throw new Error(`Command failed: ${result.error.message}`);
     }
+
+    if (result.status !== 0) {
+      throw new Error(`Command exited with code ${result.status}`);
+    }
+
+    return result.stdout ?? "";
   }
 
   currentUid(): number {

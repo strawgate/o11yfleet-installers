@@ -3,7 +3,7 @@
  * No side effects - all inputs and outputs are deterministic.
  */
 
-import type { OTelConfig, ServiceConfig, OS } from "./types.js";
+import type { OTelConfig, ServiceConfig } from "./types.js";
 
 const OTEL_VERSION = "0.114.0";
 
@@ -90,6 +90,12 @@ export function getTokenWarning(token: string | undefined): string | null {
  * Generate systemd service unit content for Linux.
  */
 export function generateSystemdUnit(config: ServiceConfig): string {
+  const userSection = `User=${config.serviceUser}
+Group=${config.group ?? config.serviceUser}
+`;
+
+  const wantedBy = config.userMode ? "default.target" : "multi-user.target";
+
   return `[Unit]
 Description=${config.displayName}
 Documentation=https://o11yfleet.com
@@ -98,9 +104,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=${config.user}
-Group=${config.group}
-Environment=INSTANCE_UID=${config.installDir}
+${userSection}Environment=INSTANCE_UID=${config.installDir}
 ExecStart=${config.execStart}
 Restart=always
 RestartSec=5
@@ -110,13 +114,13 @@ StandardError=journal
 
 # Security hardening
 NoNewPrivileges=true
-ProtectSystem=strict
+ProtectSystem=${config.userMode ? "full" : "strict"}
 ProtectHome=true
 ReadWritePaths=${config.installDir}
 PrivateTmp=true
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=${wantedBy}
 `;
 }
 
@@ -169,40 +173,6 @@ Args=--config "${config.configFile}"
 DisplayName=${config.displayName}
 StartType=auto
 `;
-}
-
-/**
- * Build service configuration for the current platform.
- */
-export function buildServiceConfig(
-  installDir: string,
-  configFile: string,
-  logFile: string,
-  os: OS,
-): ServiceConfig {
-  const binPath =
-    os === "windows"
-      ? `${installDir}\\bin\\otelcol-contrib.exe`
-      : `${installDir}/bin/otelcol-contrib`;
-
-  const serviceName =
-    os === "windows"
-      ? "o11yfleet-collector"
-      : os === "darwin"
-        ? "com.o11yfleet.collector"
-        : "o11yfleet-collector";
-
-  return {
-    name: serviceName,
-    displayName: "O11yFleet Collector",
-    description: "O11yFleet Collector (otelcol-contrib + OpAMP)",
-    execStart: binPath,
-    user: "o11yfleet",
-    group: "o11yfleet",
-    installDir,
-    configFile,
-    logFile,
-  };
 }
 
 /**
