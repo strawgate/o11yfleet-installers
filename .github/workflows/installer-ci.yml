@@ -268,6 +268,14 @@ jobs:
           if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
           ./bin/o11yinstaller-${{ matrix.os }}${EXT} enroll --help | grep -q "enroll"
 
+      - name: Test install.sh download (simulate curl | bash)
+        if: matrix.os == 'linux-x64'
+        shell: bash
+        run: |
+          curl -fsSL https://github.com/strawgate/o11yfleet-installers/releases/latest/download/install.sh -o /tmp/install.sh
+          chmod +x /tmp/install.sh
+          /tmp/install.sh --help | grep -q "O11yFleet"
+
   create-release:
     name: Create Release
     runs-on: ubuntu-latest
@@ -297,5 +305,7 @@ jobs:
             dist/o11yinstaller-darwin-amd64
             dist/o11yinstaller-darwin-arm64
             dist/o11yinstaller-windows-x64.exe
+            scripts/install.sh
+            scripts/install.ps1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
