@@ -94,15 +94,26 @@ jobs:
         run: pnpm --filter @o11yfleet/installer test
 
   test-docker:
-    name: Docker (${{ matrix.distro }})
+    name: Docker (${{ matrix.image }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        distro: [alpine, ubuntu, debian]
-        node: ["18", "20", "22"]
+        include:
+          - image: node:18-alpine
+            tag: alpine-18
+          - image: node:20-alpine
+            tag: alpine-20
+          - image: node:22-alpine
+            tag: alpine-22
+          - image: node:18-bullseye
+            tag: debian-bullseye-18
+          - image: node:20-bullseye
+            tag: debian-bullseye-20
+          - image: node:22-bullseye
+            tag: debian-bullseye-22
     container:
-      image: node:${{ matrix.node }}-${{ matrix.distro }}
+      image: ${{ matrix.image }}
       env:
         PNPM_HOME: /pnpm
         PATH: /pnpm:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
