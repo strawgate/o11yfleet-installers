@@ -153,3 +153,46 @@ jobs:
           name: installer-bundle
           path: apps/installer/dist/
           retention-days: 7
+
+  build-binary:
+    name: Build portable binary (${{ matrix.os }})
+    runs-on: ${{ matrix.runner }}
+    needs: [test]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux-x64
+            runner: ubuntu-latest
+          - os: linux-arm64
+            runner: ubuntu-latest
+          - os: darwin-x64
+            runner: macos-latest
+          - os: darwin-arm64
+            runner: macos-latest
+          - os: windows-x64
+            runner: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install bun
+        run: curl -fsSL https://bun.sh/install | bash
+
+      - name: Build portable binary
+        run: |
+          pnpm install --no-frozen-lockfile
+          pnpm --filter @o11yfleet/installer build:binary
+          ls -la apps/installer/dist/
+
+      - name: Rename binary for platform
+        run: |
+          EXT=""
+          if [ "${{ matrix.os }}" = "windows-x64" ]; then EXT=".exe"; fi
+          mv apps/installer/dist/o11yinstaller "apps/installer/dist/o11yinstaller-${{ matrix.os }}${EXT}"
+
+      - name: Upload binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: o11yinstaller-${{ matrix.os }}
+          path: apps/installer/dist/o11yinstaller-${{ matrix.os }}*
+          retention-days: 7

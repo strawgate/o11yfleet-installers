@@ -9,6 +9,7 @@
   },
   "scripts": {
     "build": "tsc",
+    "build:binary": "bun build --compile --target=bun-js ./src/main.ts -o dist/o11yinstaller",
     "dev": "tsx src/main.ts",
     "test": "vitest run",
     "test:watch": "vitest",
