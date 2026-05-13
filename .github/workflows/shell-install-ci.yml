@@ -1,0 +1,112 @@
+name: Shell Installer CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "apps/site/**"
+      - "apps/installer/src/**"
+      - "test/shell/**"
+      - ".github/workflows/shell-install-ci.yml"
+  pull_request:
+    paths:
+      - "apps/site/**"
+      - "apps/installer/src/**"
+      - "test/shell/**"
+      - ".github/workflows/shell-install-ci.yml"
+
+concurrency:
+  group: shell-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-shell:
+    name: Shell tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Ubuntu (native)
+          - os: ubuntu-latest
+            runner: ubuntu-latest
+            pkg_cmd: "sudo apt-get update && sudo apt-get install -y bats curl"
+            bats_cmd: "bats test/shell/install.bats"
+          # Debian container
+          - os: debian-bullseye
+            runner: ubuntu-latest
+            container: debian:bullseye
+            pkg_cmd: "apt-get update && apt-get install -y bats curl"
+            bats_cmd: "bats test/shell/install.bats"
+          # Debian Bookworm
+          - os: debian-bookworm
+            runner: ubuntu-latest
+            container: debian:bookworm
+            pkg_cmd: "apt-get update && apt-get install -y bats curl"
+            bats_cmd: "bats test/shell/install.bats"
+          # Fedora
+          - os: fedora
+            runner: ubuntu-latest
+            container: fedora:latest
+            pkg_cmd: "dnf install -y bats curl"
+            bats_cmd: "bats test/shell/install.bats"
+          # Alpine
+          - os: alpine
+            runner: ubuntu-latest
+            container: alpine:latest
+            pkg_cmd: "apk add bats curl"
+            bats_cmd: "bats test/shell/install.bats"
+          # macOS
+          - os: macos-latest
+            runner: macos-latest
+            pkg_cmd: "brew install bats-core"
+            bats_cmd: "bats test/shell/install.bats"
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run tests in container (Linux distros)
+        if: matrix.container != ''
+        uses: addnab/docker-run-action@v3
+        with:
+          image: ${{ matrix.container }}
+          options: |
+            --user root
+            -v ${{ github.workspace }}:/workspace
+            -w /workspace
+          run: |
+            ${{ matrix.pkg_cmd }}
+            ${{ matrix.bats_cmd }}
+
+      - name: Run tests (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          ${{ matrix.pkg_cmd }}
+          ${{ matrix.bats_cmd }}
+
+      - name: Run tests (Ubuntu)
+        if: matrix.container == '' && matrix.os == 'ubuntu-latest'
+        run: |
+          ${{ matrix.pkg_cmd }}
+          ${{ matrix.bats_cmd }}
+
+  test-shell-script-validation:
+    name: Shell script validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Validate install-lib.sh
+        run: shellcheck apps/installer/src/install-lib.sh
+
+      - name: Validate install.sh
+        run: shellcheck apps/site/install.sh
+
+      - name: Check shell script syntax
+        run: |
+          bash -n apps/installer/src/install-lib.sh
+          bash -n apps/site/install.sh

@@ -1,26 +1,6 @@
 #!/usr/bin/env bash
-# O11yFleet Collector Installer
-# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
-#
-# Installs otelcol-contrib with OpAMP extension configured to connect to O11yFleet.
-# Supports: Linux (amd64/arm64), macOS (amd64/arm64)
-#
-# Options:
-#   --token TOKEN       Enrollment token (required, starts with fp_enroll_)
-#   --version VERSION   otelcol-contrib version (default: 0.152.0)
-#   --endpoint URL      OpAMP server endpoint (default: wss://api.o11yfleet.com/v1/opamp)
-#   --dir PATH           Install directory (default: /opt/o11yfleet)
-#   --offline FILE       Use local OTel contrib file instead of downloading
-#   --uninstall          Remove O11yFleet collector and config
-#   -h, --help           Show this help
-
-set -euo pipefail
-
-# ─── Configuration ────────────────────────────────────────────────────
-OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
-OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
-INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
-OFFLINE_FILE=""
+# O11yFleet Collector Installer Library
+# Functions for installation - can be sourced for testing
 
 # ─── Colors ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -71,31 +51,6 @@ detect_package_manager() {
   echo "tar.gz"
 }
 
-# ─── Uninstall ──────────────────────────────────────────────────────
-do_uninstall() {
-  info "Uninstalling O11yFleet collector..."
-  case "$OS" in
-    linux)
-      if command -v systemctl >/dev/null 2>&1; then
-        sudo systemctl stop o11yfleet-collector 2>/dev/null || true
-        sudo systemctl disable o11yfleet-collector 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/o11yfleet-collector.service
-        sudo systemctl daemon-reload 2>/dev/null || true
-      fi
-      # Try to remove package (will fail if not installed via package manager, that's OK)
-      sudo dpkg -r otelcol-contrib 2>/dev/null || true
-      sudo rpm -e otelcol-contrib 2>/dev/null || true
-      ;;
-    darwin)
-      sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
-      sudo rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
-      ;;
-  esac
-  sudo rm -rf "$INSTALL_DIR"
-  ok "O11yFleet collector uninstalled."
-  exit 0
-}
-
 # ─── Prerequisites ────────────────────────────────────────────────────
 check_prereqs() {
   for cmd in curl tar; do
@@ -112,7 +67,7 @@ check_prereqs() {
 install_binary() {
   local tmpdir
   tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  local tarball_name filename url
 
   # If offline file specified, use it directly
   if [ -n "$OFFLINE_FILE" ]; then
@@ -141,16 +96,17 @@ install_binary() {
 
 # ─── Download binary ─────────────────────────────────────────────────
 download_binary() {
+  local tmpdir="$1"
   local tarball_name filename url
 
   case "$PKG_TYPE" in
     deb)
       tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
-      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
+      filename="$tarball_name"
       ;;
     rpm)
       tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
-      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
+      filename="$tarball_name"
       ;;
     tar.gz)
       tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
@@ -161,7 +117,7 @@ download_binary() {
   url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${filename}"
 
   info "Downloading $tarball_name (package type: $PKG_TYPE)..."
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
+  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
     || {
       # If preferred package fails, fall back to tar.gz
       if [ "$PKG_TYPE" != "tar.gz" ]; then
@@ -169,7 +125,7 @@ download_binary() {
         PKG_TYPE="tar.gz"
         tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
         url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${tarball_name}"
-        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
+        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
           || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
       else
         fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
@@ -177,7 +133,7 @@ download_binary() {
     }
 
   # Verify checksum
-  verify_checksum "$1" "$tarball_name"
+  verify_checksum "$tmpdir" "$tarball_name"
 }
 
 # ─── Verify checksum ─────────────────────────────────────────────────
@@ -393,7 +349,33 @@ PLIST
   ok "Service started: com.o11yfleet.collector"
 }
 
+# ─── Uninstall ──────────────────────────────────────────────────────
+do_uninstall() {
+  info "Uninstalling O11yFleet collector..."
+  case "$OS" in
+    linux)
+      if command -v systemctl >/dev/null 2>&1; then
+        sudo systemctl stop o11yfleet-collector 2>/dev/null || true
+        sudo systemctl disable o11yfleet-collector 2>/dev/null || true
+        sudo rm -f /etc/systemd/system/o11yfleet-collector.service
+        sudo systemctl daemon-reload 2>/dev/null || true
+      fi
+      # Try to remove package (will fail if not installed via package manager, that's OK)
+      sudo dpkg -r otelcol-contrib 2>/dev/null || true
+      sudo rpm -e otelcol-contrib 2>/dev/null || true
+      ;;
+    darwin)
+      sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+      sudo rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
+      ;;
+  esac
+  sudo rm -rf "$INSTALL_DIR"
+  ok "O11yFleet collector uninstalled."
+  exit 0
+}
+
 # ─── Parse arguments ────────────────────────────────────────────────
+# Returns token on stdout if successful
 parse_args() {
   local TOKEN=""
   local UNINSTALL=false
@@ -466,71 +448,3 @@ EOF
 
   echo "$TOKEN"
 }
-
-# ─── Main ─────────────────────────────────────────────────────────
-main() {
-  local TOKEN
-
-  echo ""
-  printf "%s\n" "${CYAN}  O11yFleet Collector Installer${NC}"
-  echo "  ──────────────────────────────"
-  echo ""
-
-  detect_platform
-
-  # Detect package manager for Linux
-  PKG_TYPE=$(detect_package_manager)
-  PKG_EXT="$PKG_TYPE"
-  info "Package manager: $PKG_TYPE"
-
-  # Parse args (exits if --uninstall)
-  TOKEN=$(parse_args "$@")
-
-  # Check prerequisites
-  check_prereqs
-
-  # Upgrade detection
-  local UPGRADE=false
-  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] || command -v otelcol-contrib >/dev/null 2>&1; then
-    UPGRADE=true
-    info "Existing installation detected — upgrading..."
-  fi
-
-  # Install binary
-  install_binary
-
-  # Instance UID persistence
-  local uid_file="$INSTALL_DIR/instance-uid"
-  if [ -f "$uid_file" ]; then
-    INSTANCE_UID="$(cat "$uid_file")"
-  else
-    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
-    echo "$INSTANCE_UID" | sudo tee "$uid_file" >/dev/null
-  fi
-
-  if [ "$UPGRADE" = false ]; then
-    write_config
-  else
-    ok "Preserving existing config at $INSTALL_DIR/config/otelcol.yaml"
-  fi
-
-  case "$OS" in
-    linux)  install_linux_service ;;
-    darwin) install_macos_service ;;
-  esac
-
-  echo ""
-  ok "O11yFleet collector is running!"
-  echo ""
-  info "The collector will appear in your dashboard within a few seconds."
-  info "View logs:"
-  case "$OS" in
-    linux)  echo "  sudo journalctl -u o11yfleet-collector -f" ;;
-    darwin) echo "  tail -f /var/log/o11yfleet-collector.log" ;;
-  esac
-  info "Uninstall:"
-  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --uninstall"
-  echo ""
-}
-
-main "$@"
