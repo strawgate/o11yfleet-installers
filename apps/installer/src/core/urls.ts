@@ -142,4 +142,3 @@ export function getAssetForVersion(version: string, platform: Platform): OTelAss
 /**
  * Build download URL for Bun runtime (used by bootstrap script).
  */
-
