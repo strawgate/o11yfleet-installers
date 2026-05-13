@@ -12,7 +12,6 @@ fail()  { printf "${RED}✗${NC} %s\n" "$*" >&2; exit 1; }
 
 # ─── Detect OS & arch ────────────────────────────────────────────────
 detect_platform() {
-  local os_arch
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   ARCH="$(uname -m)"
   case "$ARCH" in
