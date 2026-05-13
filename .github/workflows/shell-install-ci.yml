@@ -1,0 +1,120 @@
+name: Shell Installer CI
+
+on:
+  push:
+    branches: [main, "feat/**"]
+    paths:
+      - "apps/site/**"
+      - "apps/installer/src/**"
+      - "test/shell/**"
+      - ".github/workflows/shell-install-ci.yml"
+  pull_request:
+    paths:
+      - "apps/site/**"
+      - "apps/installer/src/**"
+      - "test/shell/**"
+      - ".github/workflows/shell-install-ci.yml"
+
+concurrency:
+  group: shell-install-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test-shell:
+    name: Shell tests on ${{ matrix.os }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux distributions
+          - os: ubuntu-latest
+            runner: ubuntu-latest
+            pkg_manager: deb
+          - os: debian-bullseye
+            runner: ubuntu-latest
+            container: debian:bullseye
+            pkg_manager: deb
+          - os: debian-bookworm
+            runner: ubuntu-latest
+            container: debian:bookworm
+            pkg_manager: deb
+          - os: fedora
+            runner: ubuntu-latest
+            container: fedora:latest
+            pkg_manager: rpm
+          - os: alpine
+            runner: ubuntu-latest
+            container: alpine:latest
+            pkg_manager: tar.gz  # Alpine uses apk, falls back to tar.gz
+          - os: amazonlinux
+            runner: ubuntu-latest
+            container: amazonlinux:2
+            pkg_manager: rpm
+          # macOS
+          - os: macos-latest
+            runner: macos-latest
+            pkg_manager: tar.gz  # macOS uses tar.gz
+          # ARM64 Linux
+          - os: ubuntu-arm64
+            runner: ["Ubuntu-22.04"]
+            arch: arm64
+            pkg_manager: deb
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up QEMU for ARM64
+        if: matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+        with:
+          images: arm64v8/ubuntu:22.04
+
+      - name: Run tests in container (Linux distros)
+        if: matrix.container != ''
+        uses: addnab/docker-run-action@v3
+        with:
+          image: ${{ matrix.container }}
+          options: |
+            --user root
+            -v ${{ github.workspace }}:/workspace
+            -w /workspace
+          run: |
+            apt-get update && apt-get install -y bats curl sudo
+            bats test/shell/install.bats
+        env:
+          ACTIONS_ALLOW_UNSECURE_COMMANDS: true
+
+      - name: Run tests (macOS)
+        if: matrix.os == 'macos-latest'
+        run: |
+          brew install bats-core
+          bats test/shell/install.bats
+
+      - name: Run tests (Ubuntu)
+        if: matrix.os == 'ubuntu-latest' && matrix.container == ''
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bats curl
+          bats test/shell/install.bats
+
+  test-shell-script-validation:
+    name: Shell script validation
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install shellcheck
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+
+      - name: Validate install-lib.sh
+        run: shellcheck apps/installer/src/install-lib.sh
+
+      - name: Validate install.sh
+        run: shellcheck apps/site/install.sh
+
+      - name: Check shell script syntax
+        run: |
+          bash -n apps/installer/src/install-lib.sh
+          bash -n apps/site/install.sh
