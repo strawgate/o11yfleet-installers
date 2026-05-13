@@ -2,10 +2,6 @@
 # bats-core tests for O11yFleet installer library
 # Usage: bats test/shell/install.bats
 
-# Load bats assertion libraries
-load "$HOME/node_modules/bats-support/load.bash"
-load "$HOME/node_modules/bats-assert/load.bash"
-
 # Load the install library functions
 SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
@@ -22,9 +18,8 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   
   # Output contains ANSI-colored detect_platform output + echo statements
-  # Use --partial to match anywhere in the output
-  assert_output --partial "OS=linux"
-  assert_output --partial "ARCH=arm64"
+  [[ "$output" == *"OS=linux"* ]]
+  [[ "$output" == *"ARCH="* ]]
 }
 
 @test "detect_platform: outputs platform info" {
@@ -34,7 +29,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   
   [ "$status" -eq 0 ]
-  assert_output --regexp "Detected platform: (linux|darwin)/(amd64|arm64)"
+  [[ "$output" =~ "Detected platform: "(linux|darwin)"/"(amd64|arm64) ]]
 }
 
 # ─── Package Manager Detection Tests ───────────────────────────────────
@@ -55,7 +50,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     OS="darwin"
     detect_package_manager
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
-  assert_equal "tar.gz" "$result"
+  [ "$result" = "tar.gz" ]
 }
 
 # ─── Argument Parsing Tests ───────────────────────────────────────────
@@ -116,7 +111,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     parse_args
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -ne 0 ]
-  assert_output --partial "Enrollment token required"
+  [[ "$output" == *"Enrollment token required"* ]]
 }
 
 @test "parse_args: warns about invalid token format" {
@@ -124,7 +119,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     source "$1"
     parse_args --token invalid_token 2>&1 || true
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
-  assert_output --partial "doesn't start with fp_enroll_"
+  [[ "$output" == *"doesn't start with fp_enroll_"* ]]
 }
 
 # ─── Offline Mode Tests ────────────────────────────────────────────────
@@ -140,7 +135,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" 
   
   # The error message should contain "Offline file not found"
-  assert_output --partial "Offline file not found"
+  [[ "$output" == *"Offline file not found"* ]]
 }
 
 # ─── Help Text Test ────────────────────────────────────────────────────
@@ -151,7 +146,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     parse_args --help
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
-  assert_output --partial "O11yFleet Collector Installer"
-  assert_output --partial "--token"
-  assert_output --partial "--offline"
+  [[ "$output" == *"O11yFleet Collector Installer"* ]]
+  [[ "$output" == *"--token"* ]]
+  [[ "$output" == *"--offline"* ]]
 }
