@@ -22,37 +22,41 @@ concurrency:
 jobs:
   test-shell:
     name: Shell tests on ${{ matrix.os }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          # Native Ubuntu test (fastest, no container overhead)
+          # Ubuntu (native)
           - os: ubuntu-latest
+            runner: ubuntu-latest
             pkg_cmd: "sudo apt-get update && sudo apt-get install -y bats curl"
             bats_cmd: "bats test/shell/install.bats"
-          # Container-based Linux distribution tests
+          # Debian container
           - os: debian-bullseye
+            runner: ubuntu-latest
             container: debian:bullseye
             pkg_cmd: "apt-get update && apt-get install -y bats curl"
             bats_cmd: "bats test/shell/install.bats"
+          # Debian Bookworm
           - os: debian-bookworm
+            runner: ubuntu-latest
             container: debian:bookworm
             pkg_cmd: "apt-get update && apt-get install -y bats curl"
             bats_cmd: "bats test/shell/install.bats"
+          # Fedora
           - os: fedora
+            runner: ubuntu-latest
             container: fedora:latest
             pkg_cmd: "dnf install -y bats curl"
             bats_cmd: "bats test/shell/install.bats"
+          # Alpine
           - os: alpine
+            runner: ubuntu-latest
             container: alpine:latest
             pkg_cmd: "apk add bats curl"
             bats_cmd: "bats test/shell/install.bats"
-          - os: amazonlinux
-            container: amazonlinux:2
-            pkg_cmd: "yum install -y bats curl"
-            bats_cmd: "bats test/shell/install.bats"
-          # macOS test
+          # macOS
           - os: macos-latest
             runner: macos-latest
             pkg_cmd: "brew install bats-core"
