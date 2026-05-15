@@ -59,9 +59,10 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   run bash -c '
     source "$1"
     parse_args --token fp_enroll_test123
+    echo "$TOKEN"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
-  # Should exit 0 or echo token
-  [ "$status" -eq 0 ] || [ -n "$output" ]
+  [ "$status" -eq 0 ]
+  [ "$output" = "fp_enroll_test123" ]
 }
 
 @test "parse_args: extracts --token with equals" {
@@ -69,40 +70,50 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   run bash -c '
     source "$1"
     parse_args --token=fp_enroll_test123
+    echo "$TOKEN"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "fp_enroll_test123" ]
 }
 
 @test "parse_args: extracts --version" {
   run bash -c '
     source "$1"
     parse_args --token fp_enroll_test123 --version 0.152.0
+    echo "$OTELCOL_VERSION"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "0.152.0" ]
 }
 
 @test "parse_args: extracts --endpoint" {
   run bash -c '
     source "$1"
     parse_args --token fp_enroll_test123 --endpoint wss://custom.example.com
+    echo "$OPAMP_ENDPOINT"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "wss://custom.example.com" ]
 }
 
 @test "parse_args: extracts --dir" {
   run bash -c '
     source "$1"
     parse_args --token fp_enroll_test123 --dir /custom/path
+    echo "$INSTALL_DIR"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "/custom/path" ]
 }
 
 @test "parse_args: extracts --offline" {
   run bash -c '
     source "$1"
     parse_args --token fp_enroll_test123 --offline /path/to/file.deb
+    echo "$OFFLINE_FILE"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
+  [ "$output" = "/path/to/file.deb" ]
 }
 
 @test "parse_args: fails without --token" {
@@ -119,7 +130,52 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     source "$1"
     parse_args --token invalid_token 2>&1 || true
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
-  [[ "$output" == *"doesn't start with fp_enroll_"* ]]
+  [[ "$output" == *"doesn't start with fp_enroll_ or fp_opamp_"* ]]
+}
+
+@test "parse_args: accepts fp_opamp tokens without corrupting stdout token" {
+  run bash -c '
+    source "$1"
+    parse_args --token fp_opamp_test123 2>/tmp/o11yfleet-installer-warn.log
+    echo "$TOKEN"
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "fp_opamp_test123" ]
+}
+
+@test "configure_privilege: root does not require sudo" {
+  [ "$(id -u)" -eq 0 ] || skip "root-only path is exercised in Linux container CI"
+  run bash -c '
+    source "$1"
+    configure_privilege
+    run_root sh -c "printf root-ok"
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "root-ok" ]
+}
+
+@test "ensure_instance_uid: creates install dir before writing uid" {
+  [ "$(id -u)" -eq 0 ] || skip "root-only path is exercised in Linux container CI"
+  tmp_root="$(mktemp -d)"
+  run bash -c '
+    source "$1"
+    INSTALL_DIR="$2/missing/o11yfleet"
+    configure_privilege
+    ensure_instance_uid
+    test -s "$INSTALL_DIR/instance-uid"
+    test ${#INSTANCE_UID} -eq 32
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" "$tmp_root"
+  rm -rf "$tmp_root"
+  [ "$status" -eq 0 ]
+}
+
+@test "cleanup_tmpdir: safe under nounset before temp dir exists" {
+  run bash -u -c '
+    source "$1"
+    unset INSTALLER_TMPDIR
+    cleanup_tmpdir
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  [ "$status" -eq 0 ]
 }
 
 # ─── Offline Mode Tests ────────────────────────────────────────────────

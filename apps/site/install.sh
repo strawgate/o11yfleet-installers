@@ -21,14 +21,72 @@ OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
 OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
 OFFLINE_FILE=""
+TOKEN=""
+COLLECTOR_BIN=""
+INSTALLER_TMPDIR=""
+SUDO=()
 
 # ─── Colors ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 info()  { printf "${CYAN}▸${NC} %s\n" "$*"; }
 ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
-warn()  { printf "${YELLOW}!${NC} %s\n" "$*"; }
+warn()  { printf "${YELLOW}!${NC} %s\n" "$*" >&2; }
 fail()  { printf "${RED}✗${NC} %s\n" "$*" >&2; exit 1; }
+
+configure_privilege() {
+  if [ "$(id -u)" -eq 0 ]; then
+    SUDO=()
+    return
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    fail "This script requires root or sudo. Run with: sudo bash -s -- --token ..."
+  fi
+  SUDO=(sudo)
+}
+
+run_root() {
+  "${SUDO[@]}" "$@"
+}
+
+root_command_prefix() {
+  if [ "${#SUDO[@]}" -eq 0 ]; then
+    printf ""
+  else
+    printf "sudo "
+  fi
+}
+
+cleanup_tmpdir() {
+  if [ -n "${INSTALLER_TMPDIR:-}" ] && [ -d "$INSTALLER_TMPDIR" ]; then
+    rm -rf "$INSTALLER_TMPDIR"
+  fi
+}
+
+ensure_install_dirs() {
+  run_root mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/config"
+}
+
+resolve_collector_bin() {
+  if [ -x "$INSTALL_DIR/bin/otelcol-contrib" ]; then
+    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
+  elif command -v otelcol-contrib >/dev/null 2>&1; then
+    COLLECTOR_BIN="$(command -v otelcol-contrib)"
+  else
+    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
+  fi
+}
+
+ensure_instance_uid() {
+  local uid_file="$INSTALL_DIR/instance-uid"
+  ensure_install_dirs
+  if [ -f "$uid_file" ]; then
+    INSTANCE_UID="$(cat "$uid_file")"
+  else
+    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
+    printf "%s\n" "$INSTANCE_UID" | run_root tee "$uid_file" >/dev/null
+  fi
+}
 
 # ─── Detect OS & arch ────────────────────────────────────────────────
 detect_platform() {
@@ -73,25 +131,26 @@ detect_package_manager() {
 
 # ─── Uninstall ──────────────────────────────────────────────────────
 do_uninstall() {
+  configure_privilege
   info "Uninstalling O11yFleet collector..."
   case "$OS" in
     linux)
       if command -v systemctl >/dev/null 2>&1; then
-        sudo systemctl stop o11yfleet-collector 2>/dev/null || true
-        sudo systemctl disable o11yfleet-collector 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/o11yfleet-collector.service
-        sudo systemctl daemon-reload 2>/dev/null || true
+        run_root systemctl stop o11yfleet-collector 2>/dev/null || true
+        run_root systemctl disable o11yfleet-collector 2>/dev/null || true
+        run_root rm -f /etc/systemd/system/o11yfleet-collector.service
+        run_root systemctl daemon-reload 2>/dev/null || true
       fi
       # Try to remove package (will fail if not installed via package manager, that's OK)
-      sudo dpkg -r otelcol-contrib 2>/dev/null || true
-      sudo rpm -e otelcol-contrib 2>/dev/null || true
+      run_root dpkg -r otelcol-contrib 2>/dev/null || true
+      run_root rpm -e otelcol-contrib 2>/dev/null || true
       ;;
     darwin)
-      sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
-      sudo rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
+      run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+      run_root rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
       ;;
   esac
-  sudo rm -rf "$INSTALL_DIR"
+  run_root rm -rf "$INSTALL_DIR"
   ok "O11yFleet collector uninstalled."
   exit 0
 }
@@ -101,18 +160,14 @@ check_prereqs() {
   for cmd in curl tar; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Required command not found: $cmd"
   done
-  if [ "$(id -u)" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-      fail "This script requires root or sudo. Run with: sudo bash -s -- --token ..."
-    fi
-  fi
+  configure_privilege
 }
 
 # ─── Download & install binary ────────────────────────────────────────
 install_binary() {
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  INSTALLER_TMPDIR="$(mktemp -d)"
+  local tmpdir="$INSTALLER_TMPDIR"
+  trap cleanup_tmpdir EXIT
 
   # If offline file specified, use it directly
   if [ -n "$OFFLINE_FILE" ]; then
@@ -120,7 +175,25 @@ install_binary() {
     if [ ! -f "$OFFLINE_FILE" ]; then
       fail "Offline file not found: $OFFLINE_FILE"
     fi
-    cp "$OFFLINE_FILE" "$tmpdir/otelcol-contrib.$PKG_EXT"
+    local offline_name
+    case "$OFFLINE_FILE" in
+      *.deb)
+        PKG_TYPE="deb"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
+        ;;
+      *.rpm)
+        PKG_TYPE="rpm"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
+        ;;
+      *.tar.gz)
+        PKG_TYPE="tar.gz"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+        ;;
+      *)
+        fail "Unsupported offline file type: $OFFLINE_FILE"
+        ;;
+    esac
+    cp "$OFFLINE_FILE" "$tmpdir/$offline_name"
   else
     download_binary "$tmpdir"
   fi
@@ -218,10 +291,10 @@ install_deb() {
   local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
 
   info "Installing DEB package..."
-  sudo dpkg -i "$pkg_file" \
+  run_root dpkg -i "$pkg_file" \
     || {
       warn "dpkg failed, trying to fix dependencies..."
-      sudo apt-get install -f -y
+      run_root apt-get install -f -y
     }
   ok "Installed otelcol-contrib via DEB package"
 }
@@ -232,7 +305,7 @@ install_rpm() {
   local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
 
   info "Installing RPM package..."
-  sudo rpm -ivh "$pkg_file" \
+  run_root rpm -ivh "$pkg_file" \
     || fail "RPM installation failed"
   ok "Installed otelcol-contrib via RPM package"
 }
@@ -245,9 +318,9 @@ install_tarball() {
   info "Extracting tarball..."
   tar -xzf "$tarball" -C "$tmpdir"
 
-  sudo mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
-  sudo cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
-  sudo chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
+  run_root mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
+  run_root cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
+  run_root chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
   ok "Installed otelcol-contrib to $INSTALL_DIR/bin/"
 }
 
@@ -256,7 +329,8 @@ write_config() {
   local config_file="$INSTALL_DIR/config/otelcol.yaml"
 
   info "Writing collector config..."
-  sudo tee "$config_file" >/dev/null <<YAML
+  ensure_install_dirs
+  run_root tee "$config_file" >/dev/null <<YAML
 # O11yFleet managed collector configuration
 # This collector connects to O11yFleet via OpAMP for remote management.
 # The server will push pipeline configuration updates automatically.
@@ -302,8 +376,8 @@ service:
       receivers: [otlp]
       exporters: [debug]
 YAML
-  sudo chmod 640 "$config_file"
-  sudo chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
+  run_root chmod 640 "$config_file"
+  run_root chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
   ok "Config written to $config_file"
 }
 
@@ -320,7 +394,7 @@ install_linux_service() {
 
   if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemd not found — skipping service setup. Start manually:"
-    echo "  sudo $INSTALL_DIR/bin/otelcol-contrib --config $INSTALL_DIR/config/otelcol.yaml"
+    echo "  $(root_command_prefix)${COLLECTOR_BIN} --config $INSTALL_DIR/config/otelcol.yaml"
     return
   fi
 
@@ -328,11 +402,11 @@ install_linux_service() {
 
   # Create system user if not exists
   if ! id -u o11yfleet >/dev/null 2>&1; then
-    sudo useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
+    run_root useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
   fi
-  sudo chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
+  run_root chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
 
-  sudo tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
+  run_root tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
 [Unit]
 Description=O11yFleet Collector (otelcol-contrib + OpAMP)
 Documentation=https://o11yfleet.com
@@ -343,7 +417,7 @@ Wants=network-online.target
 Type=simple
 User=o11yfleet
 Group=o11yfleet
-ExecStart=${INSTALL_DIR}/bin/otelcol-contrib --config ${INSTALL_DIR}/config/otelcol.yaml
+ExecStart=${COLLECTOR_BIN} --config ${INSTALL_DIR}/config/otelcol.yaml
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
@@ -352,9 +426,9 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 UNIT
 
-  sudo systemctl daemon-reload
-  sudo systemctl enable o11yfleet-collector
-  sudo systemctl restart o11yfleet-collector
+  run_root systemctl daemon-reload
+  run_root systemctl enable o11yfleet-collector
+  run_root systemctl restart o11yfleet-collector
   ok "Service started: o11yfleet-collector"
 }
 
@@ -363,7 +437,7 @@ install_macos_service() {
   info "Installing launchd service..."
 
   local plist="/Library/LaunchDaemons/com.o11yfleet.collector.plist"
-  sudo tee "$plist" >/dev/null <<PLIST
+  run_root tee "$plist" >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -372,7 +446,7 @@ install_macos_service() {
   <string>com.o11yfleet.collector</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${INSTALL_DIR}/bin/otelcol-contrib</string>
+    <string>${COLLECTOR_BIN}</string>
     <string>--config</string>
     <string>${INSTALL_DIR}/config/otelcol.yaml</string>
   </array>
@@ -388,14 +462,13 @@ install_macos_service() {
 </plist>
 PLIST
 
-  sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
-  sudo launchctl bootstrap system "$plist"
+  run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+  run_root launchctl bootstrap system "$plist"
   ok "Service started: com.o11yfleet.collector"
 }
 
 # ─── Parse arguments ────────────────────────────────────────────────
 parse_args() {
-  local TOKEN=""
   local UNINSTALL=false
 
   while [ $# -gt 0 ]; do
@@ -460,17 +533,15 @@ EOF
   fi
 
   case "$TOKEN" in
-    fp_enroll_*) ;;
-    *) warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?" ;;
+    fp_enroll_*|fp_opamp_*) ;;
+    *) warn "Token doesn't start with fp_enroll_ or fp_opamp_ — are you sure this is an enrollment token?" ;;
   esac
 
-  echo "$TOKEN"
+  return 0
 }
 
 # ─── Main ─────────────────────────────────────────────────────────
 main() {
-  local TOKEN
-
   echo ""
   printf "%s\n" "${CYAN}  O11yFleet Collector Installer${NC}"
   echo "  ──────────────────────────────"
@@ -480,11 +551,10 @@ main() {
 
   # Detect package manager for Linux
   PKG_TYPE=$(detect_package_manager)
-  PKG_EXT="$PKG_TYPE"
   info "Package manager: $PKG_TYPE"
 
   # Parse args (exits if --uninstall)
-  TOKEN=$(parse_args "$@")
+  parse_args "$@"
 
   # Check prerequisites
   check_prereqs
@@ -498,15 +568,11 @@ main() {
 
   # Install binary
   install_binary
+  ensure_install_dirs
+  resolve_collector_bin
 
   # Instance UID persistence
-  local uid_file="$INSTALL_DIR/instance-uid"
-  if [ -f "$uid_file" ]; then
-    INSTANCE_UID="$(cat "$uid_file")"
-  else
-    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
-    echo "$INSTANCE_UID" | sudo tee "$uid_file" >/dev/null
-  fi
+  ensure_instance_uid
 
   if [ "$UPGRADE" = false ]; then
     write_config

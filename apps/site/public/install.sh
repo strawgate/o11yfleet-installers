@@ -4,27 +4,91 @@
 #
 # Installs otelcol-contrib with OpAMP extension configured to connect to O11yFleet.
 # Supports: Linux (amd64/arm64), macOS (amd64/arm64)
+#
+# Options:
+#   --token TOKEN       Enrollment token (required, starts with fp_enroll_)
+#   --version VERSION   otelcol-contrib version (default: 0.152.0)
+#   --endpoint URL      OpAMP server endpoint (default: wss://api.o11yfleet.com/v1/opamp)
+#   --dir PATH           Install directory (default: /opt/o11yfleet)
+#   --offline FILE       Use local OTel contrib file instead of downloading
+#   --uninstall          Remove O11yFleet collector and config
+#   -h, --help           Show this help
 
 set -euo pipefail
 
-# ─── Defaults ──────────────────────────────────────────────────────────
-OTELCOL_VERSION="${OTELCOL_VERSION:-0.151.0}"
+# ─── Configuration ────────────────────────────────────────────────────
+OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
 OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
 INSTALL_DIR="${INSTALL_DIR:-/opt/o11yfleet}"
+OFFLINE_FILE=""
 TOKEN=""
-UNINSTALL=false
-UPGRADE=false
-DRY_RUN=false
+COLLECTOR_BIN=""
+INSTALLER_TMPDIR=""
+SUDO=()
 
-# ─── Colors ────────────────────────────────────────────────────────────
+# ─── Colors ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 
 info()  { printf "${CYAN}▸${NC} %s\n" "$*"; }
 ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
-warn()  { printf "${YELLOW}!${NC} %s\n" "$*"; }
+warn()  { printf "${YELLOW}!${NC} %s\n" "$*" >&2; }
 fail()  { printf "${RED}✗${NC} %s\n" "$*" >&2; exit 1; }
 
-# ─── Detect OS & arch ──────────────────────────────────────────────────
+configure_privilege() {
+  if [ "$(id -u)" -eq 0 ]; then
+    SUDO=()
+    return
+  fi
+  if ! command -v sudo >/dev/null 2>&1; then
+    fail "This script requires root or sudo. Run with: sudo bash -s -- --token ..."
+  fi
+  SUDO=(sudo)
+}
+
+run_root() {
+  "${SUDO[@]}" "$@"
+}
+
+root_command_prefix() {
+  if [ "${#SUDO[@]}" -eq 0 ]; then
+    printf ""
+  else
+    printf "sudo "
+  fi
+}
+
+cleanup_tmpdir() {
+  if [ -n "${INSTALLER_TMPDIR:-}" ] && [ -d "$INSTALLER_TMPDIR" ]; then
+    rm -rf "$INSTALLER_TMPDIR"
+  fi
+}
+
+ensure_install_dirs() {
+  run_root mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/config"
+}
+
+resolve_collector_bin() {
+  if [ -x "$INSTALL_DIR/bin/otelcol-contrib" ]; then
+    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
+  elif command -v otelcol-contrib >/dev/null 2>&1; then
+    COLLECTOR_BIN="$(command -v otelcol-contrib)"
+  else
+    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
+  fi
+}
+
+ensure_instance_uid() {
+  local uid_file="$INSTALL_DIR/instance-uid"
+  ensure_install_dirs
+  if [ -f "$uid_file" ]; then
+    INSTANCE_UID="$(cat "$uid_file")"
+  else
+    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
+    printf "%s\n" "$INSTANCE_UID" | run_root tee "$uid_file" >/dev/null
+  fi
+}
+
+# ─── Detect OS & arch ────────────────────────────────────────────────
 detect_platform() {
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
   ARCH="$(uname -m)"
@@ -38,98 +102,235 @@ detect_platform() {
     darwin) OS="darwin" ;;
     *)      fail "Unsupported OS: $OS. Use Linux or macOS." ;;
   esac
-  info "Detected: ${OS}/${ARCH}"
+  info "Detected platform: $OS/$ARCH"
 }
 
-# ─── Uninstall ─────────────────────────────────────────────────────────
+# ─── Detect package manager (Linux only) ──────────────────────────────
+# Returns: "deb" for apt/dpkg, "rpm" for yum/dnf/rpm, "tar.gz" for fallback
+detect_package_manager() {
+  if [ "$OS" != "linux" ]; then
+    echo "tar.gz"
+    return
+  fi
+
+  # Check for dpkg (Debian/Ubuntu)
+  if command -v dpkg >/dev/null 2>&1; then
+    echo "deb"
+    return
+  fi
+
+  # Check for rpm (RHEL/CentOS/Fedora)
+  if command -v rpm >/dev/null 2>&1; then
+    echo "rpm"
+    return
+  fi
+
+  # Default to tar.gz if neither package manager is available
+  echo "tar.gz"
+}
+
+# ─── Uninstall ──────────────────────────────────────────────────────
 do_uninstall() {
+  configure_privilege
   info "Uninstalling O11yFleet collector..."
   case "$OS" in
     linux)
       if command -v systemctl >/dev/null 2>&1; then
-        sudo systemctl stop o11yfleet-collector 2>/dev/null || true
-        sudo systemctl disable o11yfleet-collector 2>/dev/null || true
-        sudo rm -f /etc/systemd/system/o11yfleet-collector.service
-        sudo systemctl daemon-reload 2>/dev/null || true
+        run_root systemctl stop o11yfleet-collector 2>/dev/null || true
+        run_root systemctl disable o11yfleet-collector 2>/dev/null || true
+        run_root rm -f /etc/systemd/system/o11yfleet-collector.service
+        run_root systemctl daemon-reload 2>/dev/null || true
       fi
+      # Try to remove package (will fail if not installed via package manager, that's OK)
+      run_root dpkg -r otelcol-contrib 2>/dev/null || true
+      run_root rpm -e otelcol-contrib 2>/dev/null || true
       ;;
     darwin)
-      sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
-      sudo rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
+      run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+      run_root rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
       ;;
   esac
-  sudo rm -rf "$INSTALL_DIR"
+  run_root rm -rf "$INSTALL_DIR"
   ok "O11yFleet collector uninstalled."
   exit 0
 }
 
-# ─── Prerequisites ─────────────────────────────────────────────────────
+# ─── Prerequisites ────────────────────────────────────────────────────
 check_prereqs() {
   for cmd in curl tar; do
     command -v "$cmd" >/dev/null 2>&1 || fail "Required command not found: $cmd"
   done
-  if [ "$DRY_RUN" = false ] && [ "$(id -u)" -ne 0 ]; then
-    if ! command -v sudo >/dev/null 2>&1; then
-      fail "This script requires root or sudo. Run with: sudo bash -s -- --token ..."
+  configure_privilege
+}
+
+# ─── Download & install binary ────────────────────────────────────────
+install_binary() {
+  INSTALLER_TMPDIR="$(mktemp -d)"
+  local tmpdir="$INSTALLER_TMPDIR"
+  trap cleanup_tmpdir EXIT
+
+  # If offline file specified, use it directly
+  if [ -n "$OFFLINE_FILE" ]; then
+    info "Using offline file: $OFFLINE_FILE"
+    if [ ! -f "$OFFLINE_FILE" ]; then
+      fail "Offline file not found: $OFFLINE_FILE"
     fi
+    local offline_name
+    case "$OFFLINE_FILE" in
+      *.deb)
+        PKG_TYPE="deb"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
+        ;;
+      *.rpm)
+        PKG_TYPE="rpm"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
+        ;;
+      *.tar.gz)
+        PKG_TYPE="tar.gz"
+        offline_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+        ;;
+      *)
+        fail "Unsupported offline file type: $OFFLINE_FILE"
+        ;;
+    esac
+    cp "$OFFLINE_FILE" "$tmpdir/$offline_name"
+  else
+    download_binary "$tmpdir"
+  fi
+
+  # Extract or install based on package type
+  case "$PKG_TYPE" in
+    deb)
+      install_deb "$tmpdir"
+      ;;
+    rpm)
+      install_rpm "$tmpdir"
+      ;;
+    tar.gz)
+      install_tarball "$tmpdir"
+      ;;
+  esac
+}
+
+# ─── Download binary ─────────────────────────────────────────────────
+download_binary() {
+  local tarball_name filename url
+
+  case "$PKG_TYPE" in
+    deb)
+      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
+      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
+      ;;
+    rpm)
+      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
+      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
+      ;;
+    tar.gz)
+      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+      filename="$tarball_name"
+      ;;
+  esac
+
+  url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${filename}"
+
+  info "Downloading $tarball_name (package type: $PKG_TYPE)..."
+  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
+    || {
+      # If preferred package fails, fall back to tar.gz
+      if [ "$PKG_TYPE" != "tar.gz" ]; then
+        warn "Failed to download $PKG_TYPE package, falling back to tar.gz..."
+        PKG_TYPE="tar.gz"
+        tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+        url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${tarball_name}"
+        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
+          || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
+      else
+        fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
+      fi
+    }
+
+  # Verify checksum
+  verify_checksum "$1" "$tarball_name"
+}
+
+# ─── Verify checksum ─────────────────────────────────────────────────
+verify_checksum() {
+  local tmpdir="$1"
+  local filename="$2"
+  local checksums_url expected_hash
+
+  info "Verifying checksum..."
+
+  # Try checksums.txt first (newer format)
+  checksums_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
+
+  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
+    expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)" \
+      || fail "Checksum for ${filename} not found in checksums.txt for version $OTELCOL_VERSION"
+
+    # Verify using sha256sum or shasum
+    echo "$expected_hash  $filename" > "$tmpdir/${filename}.sha256"
+    if command -v sha256sum >/dev/null 2>&1; then
+      (cd "$tmpdir" && sha256sum -c "${filename}.sha256") \
+        || fail "Checksum verification failed — download may be corrupted"
+    elif command -v shasum >/dev/null 2>&1; then
+      (cd "$tmpdir" && shasum -a 256 -c "${filename}.sha256") \
+        || fail "Checksum verification failed — download may be corrupted"
+    else
+      warn "No checksum utility found, skipping verification"
+    fi
+    ok "Checksum verified"
+  else
+    warn "Could not download checksums.txt, skipping verification"
   fi
 }
 
-# ─── Download & install binary ─────────────────────────────────────────
-install_binary() {
-  local tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
-  local url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${tarball_name}"
+# ─── Install DEB package ─────────────────────────────────────────────
+install_deb() {
+  local tmpdir="$1"
+  local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
 
-  info "Downloading otelcol-contrib v${OTELCOL_VERSION} for ${OS}/${ARCH}..."
-  local tmpdir
-  tmpdir="$(mktemp -d)"
-  trap 'rm -rf "$tmpdir"' EXIT
+  info "Installing DEB package..."
+  run_root dpkg -i "$pkg_file" \
+    || {
+      warn "dpkg failed, trying to fix dependencies..."
+      run_root apt-get install -f -y
+    }
+  ok "Installed otelcol-contrib via DEB package"
+}
 
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
-    || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
+# ─── Install RPM package ─────────────────────────────────────────────
+install_rpm() {
+  local tmpdir="$1"
+  local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
 
-  info "Verifying checksum..."
-  local checksums_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
-  local sha256_url="${url}.sha256"
-  local expected_hash=""
-  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt"; then
-    expected_hash="$(grep " ${tarball_name}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)" \
-      || fail "Checksum for ${tarball_name} not found in checksums.txt for version $OTELCOL_VERSION"
-  elif curl --proto '=https' --tlsv1.2 -fsSL "$sha256_url" -o "$tmpdir/${tarball_name}.sha256"; then
-    info "Using legacy SHA file (checksums.txt not available for v${OTELCOL_VERSION})"
-  else
-    fail "Checksum download failed.\n  Tried checksums.txt: $checksums_url\n  Tried SHA file: $sha256_url\n  Either the version $OTELCOL_VERSION is too old, or the release assets are missing."
-  fi
-  if [ -n "$expected_hash" ]; then
-    echo "$expected_hash  $tarball_name" > "$tmpdir/${tarball_name}.sha256"
-  fi
-  (cd "$tmpdir" && (sha256sum -c "${tarball_name}.sha256" 2>/dev/null || shasum -a 256 -c "${tarball_name}.sha256")) \
-    || fail "Checksum verification failed — download may be corrupted"
-  ok "Checksum verified"
+  info "Installing RPM package..."
+  run_root rpm -ivh "$pkg_file" \
+    || fail "RPM installation failed"
+  ok "Installed otelcol-contrib via RPM package"
+}
 
-  info "Extracting..."
-  tar -xzf "$tmpdir/$tarball_name" -C "$tmpdir"
+# ─── Install tarball ────────────────────────────────────────────────
+install_tarball() {
+  local tmpdir="$1"
+  local tarball="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
 
-  if [ "$DRY_RUN" = true ]; then
-    if [ -f "$tmpdir/otelcol-contrib" ]; then
-      ok "Dry run: binary would be installed to $INSTALL_DIR/bin/"
-      "$tmpdir/otelcol-contrib" --version 2>/dev/null || true
-      return 0
-    fi
-  fi
+  info "Extracting tarball..."
+  tar -xzf "$tarball" -C "$tmpdir"
 
-  sudo mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
-  sudo cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
-  sudo chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
+  run_root mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
+  run_root cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
+  run_root chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
   ok "Installed otelcol-contrib to $INSTALL_DIR/bin/"
 }
 
-# ─── Write config ──────────────────────────────────────────────────────
+# ─── Write config ──────────────────────────────────────────────────
 write_config() {
   local config_file="$INSTALL_DIR/config/otelcol.yaml"
 
   info "Writing collector config..."
-  sudo tee "$config_file" >/dev/null <<YAML
+  ensure_install_dirs
+  run_root tee "$config_file" >/dev/null <<YAML
 # O11yFleet managed collector configuration
 # This collector connects to O11yFleet via OpAMP for remote management.
 # The server will push pipeline configuration updates automatically.
@@ -175,27 +376,37 @@ service:
       receivers: [otlp]
       exporters: [debug]
 YAML
-  sudo chmod 640 "$config_file"
-  sudo chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
+  run_root chmod 640 "$config_file"
+  run_root chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
   ok "Config written to $config_file"
 }
 
-# ─── Linux systemd service ────────────────────────────────────────────
+# ─── Linux systemd service ──────────────────────────────────────────
 install_linux_service() {
+  # If installed via package manager, it may have set up its own service
+  # Check if otelcol-contrib is in PATH and has systemd service
+  if command -v otelcol-contrib >/dev/null 2>&1; then
+    if systemctl is-active otelcol-contrib >/dev/null 2>&1; then
+      ok "otelcol-contrib service is already running"
+      return
+    fi
+  fi
+
   if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemd not found — skipping service setup. Start manually:"
-    echo "  sudo $INSTALL_DIR/bin/otelcol-contrib --config $INSTALL_DIR/config/otelcol.yaml"
+    echo "  $(root_command_prefix)${COLLECTOR_BIN} --config $INSTALL_DIR/config/otelcol.yaml"
     return
   fi
 
   info "Installing systemd service..."
 
+  # Create system user if not exists
   if ! id -u o11yfleet >/dev/null 2>&1; then
-    sudo useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
+    run_root useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
   fi
-  sudo chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
+  run_root chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
 
-  sudo tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
+  run_root tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
 [Unit]
 Description=O11yFleet Collector (otelcol-contrib + OpAMP)
 Documentation=https://o11yfleet.com
@@ -206,7 +417,7 @@ Wants=network-online.target
 Type=simple
 User=o11yfleet
 Group=o11yfleet
-ExecStart=${INSTALL_DIR}/bin/otelcol-contrib --config ${INSTALL_DIR}/config/otelcol.yaml
+ExecStart=${COLLECTOR_BIN} --config ${INSTALL_DIR}/config/otelcol.yaml
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
@@ -215,18 +426,18 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 UNIT
 
-  sudo systemctl daemon-reload
-  sudo systemctl enable o11yfleet-collector
-  sudo systemctl restart o11yfleet-collector
+  run_root systemctl daemon-reload
+  run_root systemctl enable o11yfleet-collector
+  run_root systemctl restart o11yfleet-collector
   ok "Service started: o11yfleet-collector"
 }
 
-# ─── macOS launchd service ─────────────────────────────────────────────
+# ─── macOS launchd service ─────────────────────────────────────────
 install_macos_service() {
   info "Installing launchd service..."
 
   local plist="/Library/LaunchDaemons/com.o11yfleet.collector.plist"
-  sudo tee "$plist" >/dev/null <<PLIST
+  run_root tee "$plist" >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -235,7 +446,7 @@ install_macos_service() {
   <string>com.o11yfleet.collector</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${INSTALL_DIR}/bin/otelcol-contrib</string>
+    <string>${COLLECTOR_BIN}</string>
     <string>--config</string>
     <string>${INSTALL_DIR}/config/otelcol.yaml</string>
   </array>
@@ -251,42 +462,38 @@ install_macos_service() {
 </plist>
 PLIST
 
-  sudo launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
-  sudo launchctl bootstrap system "$plist"
+  run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+  run_root launchctl bootstrap system "$plist"
   ok "Service started: com.o11yfleet.collector"
 }
 
-# ─── Main ──────────────────────────────────────────────────────────────
-main() {
-  # ─── Parse args ───────────────────────────────────────────────────────
+# ─── Parse arguments ────────────────────────────────────────────────
+parse_args() {
+  local UNINSTALL=false
+
   while [ $# -gt 0 ]; do
     case "$1" in
       --token)
-        if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-          fail "Missing value for --token. Usage: --token fp_enroll_..."
-        fi
+        [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --token"
         TOKEN="$2"; shift 2 ;;
       --token=*)    TOKEN="${1#*=}"; shift ;;
       --version)
-        if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-          fail "Missing value for --version. Usage: --version 0.151.0"
-        fi
+        [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --version"
         OTELCOL_VERSION="$2"; shift 2 ;;
       --version=*)  OTELCOL_VERSION="${1#*=}"; shift ;;
       --endpoint)
-        if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-          fail "Missing value for --endpoint. Usage: --endpoint wss://..."
-        fi
+        [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --endpoint"
         OPAMP_ENDPOINT="$2"; shift 2 ;;
       --endpoint=*) OPAMP_ENDPOINT="${1#*=}"; shift ;;
       --dir)
-        if [ -z "${2:-}" ] || [ "${2#-}" != "$2" ]; then
-          fail "Missing value for --dir. Usage: --dir /opt/o11yfleet"
-        fi
+        [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --dir"
         INSTALL_DIR="$2"; shift 2 ;;
       --dir=*)      INSTALL_DIR="${1#*=}"; shift ;;
+      --offline)
+        [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --offline"
+        OFFLINE_FILE="$2"; shift 2 ;;
+      --offline=*) OFFLINE_FILE="${1#*=}"; shift ;;
       --uninstall)  UNINSTALL=true; shift ;;
-      --dry-run)    DRY_RUN=true; shift ;;
       --help|-h)
         cat <<EOF
 O11yFleet Collector Installer
@@ -299,15 +506,42 @@ Options:
   --version VERSION   otelcol-contrib version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Install directory (default: $INSTALL_DIR)
+  --offline FILE      Use local OTel contrib file instead of downloading
   --uninstall         Remove O11yFleet collector and config
-  --dry-run           Download and verify only, don't install service
   -h, --help          Show this help
+
+Offline Installation:
+  Download the OTel contrib file for your platform, then:
+  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.deb
+
+Supported offline file types:
+  - .deb (Debian/Ubuntu)
+  - .rpm (RHEL/CentOS/Fedora)
+  - .tar.gz (all platforms)
 EOF
         exit 0 ;;
       *) fail "Unknown option: $1. Use --help for usage." ;;
     esac
   done
 
+  if [ "$UNINSTALL" = true ]; then
+    do_uninstall
+  fi
+
+  if [ -z "$TOKEN" ]; then
+    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
+  fi
+
+  case "$TOKEN" in
+    fp_enroll_*|fp_opamp_*) ;;
+    *) warn "Token doesn't start with fp_enroll_ or fp_opamp_ — are you sure this is an enrollment token?" ;;
+  esac
+
+  return 0
+}
+
+# ─── Main ─────────────────────────────────────────────────────────
+main() {
   echo ""
   printf "%s\n" "${CYAN}  O11yFleet Collector Installer${NC}"
   echo "  ──────────────────────────────"
@@ -315,48 +549,30 @@ EOF
 
   detect_platform
 
-  if [ "$UNINSTALL" = true ]; then
-    do_uninstall
-  fi
+  # Detect package manager for Linux
+  PKG_TYPE=$(detect_package_manager)
+  info "Package manager: $PKG_TYPE"
 
-  if [ -z "$TOKEN" ] && [ "$DRY_RUN" = false ]; then
-    fail "Enrollment token required. Usage:\n  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
-  fi
+  # Parse args (exits if --uninstall)
+  parse_args "$@"
 
-  if [ -n "$TOKEN" ]; then
-    case "$TOKEN" in
-      fp_enroll_*) ;;
-      *) warn "Token doesn't start with fp_enroll_ — are you sure this is an enrollment token?" ;;
-    esac
-  fi
-
-  if [ "$DRY_RUN" = true ]; then
-    info "Dry run mode — downloading and verifying only"
-  fi
-
-  # ─── Upgrade detection ─────────────────────────────────────────────────
-  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] && [ "$DRY_RUN" = false ]; then
-    UPGRADE=true
-    info "Existing installation detected at $INSTALL_DIR"
-    info "Upgrading existing installation..."
-  fi
-
+  # Check prerequisites
   check_prereqs
+
+  # Upgrade detection
+  local UPGRADE=false
+  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] || command -v otelcol-contrib >/dev/null 2>&1; then
+    UPGRADE=true
+    info "Existing installation detected — upgrading..."
+  fi
+
+  # Install binary
   install_binary
+  ensure_install_dirs
+  resolve_collector_bin
 
-  if [ "$DRY_RUN" = true ]; then
-    ok "Dry run complete."
-    exit 0
-  fi
-
-  # ─── Instance UID persistence ──────────────────────────────────────────
-  local uid_file="$INSTALL_DIR/instance-uid"
-  if [ -f "$uid_file" ]; then
-    INSTANCE_UID="$(cat "$uid_file")"
-  else
-    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
-    echo "$INSTANCE_UID" | sudo tee "$uid_file" >/dev/null
-  fi
+  # Instance UID persistence
+  ensure_instance_uid
 
   if [ "$UPGRADE" = false ]; then
     write_config

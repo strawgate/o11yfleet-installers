@@ -15,6 +15,9 @@ setup() {
   PKG_TYPE="tar.gz"
   PKG_EXT="tar.gz"
   INSTANCE_UID=""
+  COLLECTOR_BIN=""
+  INSTALLER_TMPDIR=""
+  SUDO=()
 }
 
 # Teardown after each test
