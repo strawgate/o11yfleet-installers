@@ -34,14 +34,13 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
 # ─── Package Manager Detection Tests ───────────────────────────────────
 
-@test "detect_package_manager: returns deb when dpkg is available" {
+@test "detect_package_manager: defaults managed installs to tar.gz" {
   result=$(bash -c '
     source "$1"
     OS="linux"
     detect_package_manager
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
-  # Result depends on system, just verify it returns something valid
-  [[ "$result" == "deb" || "$result" == "rpm" || "$result" == "tar.gz" ]]
+  [ "$result" = "tar.gz" ]
 }
 
 @test "detect_package_manager: returns tar.gz on macOS" {
@@ -51,6 +50,37 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     detect_package_manager
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
   [ "$result" = "tar.gz" ]
+}
+
+@test "preflight_conflicting_collector_service: fails when upstream collector service exists" {
+  run bash -c '
+    source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    printf "%s\n" "#!/usr/bin/env sh" "[ \"\$1\" = cat ] && [ \"\$2\" = otelcol-contrib.service ] && exit 0" "exit 1" > "$tmpdir/systemctl"
+    chmod +x "$tmpdir/systemctl"
+    PATH="$tmpdir:$PATH"
+    OS="linux"
+    preflight_conflicting_collector_service
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Existing OpenTelemetry Collector systemd service detected: otelcol-contrib.service"* ]]
+}
+
+@test "preflight_conflicting_collector_service: passes when no upstream collector service exists" {
+  run bash -c '
+    source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    printf "%s\n" "#!/usr/bin/env sh" "exit 1" > "$tmpdir/systemctl"
+    chmod +x "$tmpdir/systemctl"
+    PATH="$tmpdir:$PATH"
+    OS="linux"
+    preflight_conflicting_collector_service
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -eq 0 ]
 }
 
 # ─── Argument Parsing Tests ───────────────────────────────────────────
@@ -109,11 +139,11 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 @test "parse_args: extracts --offline" {
   run bash -c '
     source "$1"
-    parse_args --token fp_enroll_test123 --offline /path/to/file.deb
+    parse_args --token fp_enroll_test123 --offline /path/to/file.tar.gz
     echo "$OFFLINE_FILE"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
-  [ "$output" = "/path/to/file.deb" ]
+  [ "$output" = "/path/to/file.tar.gz" ]
 }
 
 @test "parse_args: fails without --token" {
@@ -154,6 +184,37 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$output" = "root-ok" ]
 }
 
+@test "check_prereqs: offline mode does not require curl" {
+  run bash -c '
+    source "$1"
+    configure_privilege() { :; }
+    tmpdir="$(mktemp -d)"
+    printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/tar"
+    chmod +x "$tmpdir/tar"
+    PATH="$tmpdir"
+    OFFLINE_FILE="/tmp/otelcol-contrib.tar.gz"
+    check_prereqs
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "check_prereqs: online mode requires curl" {
+  run bash -c '
+    source "$1"
+    configure_privilege() { :; }
+    tmpdir="$(mktemp -d)"
+    printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/tar"
+    chmod +x "$tmpdir/tar"
+    PATH="$tmpdir"
+    OFFLINE_FILE=""
+    check_prereqs
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Required command not found: curl"* ]]
+}
+
 @test "cleanup_tmpdir: safe under nounset before temp dir exists" {
   run bash -u -c '
     source "$1"
@@ -169,14 +230,30 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   # Set OFFLINE_FILE to a non-existent path
   run bash -c '
     source "$1"
-    OFFLINE_FILE="/nonexistent/path/file.deb"
-    PKG_TYPE="deb"
-    PKG_EXT="deb"
+    OFFLINE_FILE="/nonexistent/path/file.tar.gz"
+    PKG_TYPE="tar.gz"
+    PKG_EXT="tar.gz"
     install_binary 2>&1 || true
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" 
   
   # The error message should contain "Offline file not found"
   [[ "$output" == *"Offline file not found"* ]]
+}
+
+@test "install_binary: rejects offline deb and rpm packages" {
+  run bash -c '
+    source "$1"
+    tmpfile="$(mktemp).deb"
+    trap "rm -f \"$tmpfile\"" EXIT
+    printf "not a package" > "$tmpfile"
+    OFFLINE_FILE="$tmpfile"
+    PKG_TYPE="tar.gz"
+    install_binary
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Unsupported offline file type"* ]]
+  [[ "$output" == *"O11yFleet owns service setup"* ]]
 }
 
 # ─── Help Text Test ────────────────────────────────────────────────────

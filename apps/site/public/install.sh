@@ -10,7 +10,7 @@
 #   --version VERSION   otelcol-contrib version (default: 0.152.0)
 #   --endpoint URL      OpAMP server endpoint (default: wss://api.o11yfleet.com/v1/opamp)
 #   --dir PATH           Install directory (default: /opt/o11yfleet)
-#   --offline FILE       Use local OTel contrib file instead of downloading
+#   --offline FILE       Use local OTel contrib tarball instead of downloading
 #   --uninstall          Remove O11yFleet collector and config
 #   -h, --help           Show this help
 
@@ -24,6 +24,7 @@ OFFLINE_FILE=""
 TOKEN=""
 COLLECTOR_BIN=""
 INSTALLER_TMPDIR=""
+SERVICE_STARTED=false
 SUDO=()
 
 # ─── Colors ─────────────────────────────────────────────────────────
@@ -94,28 +95,40 @@ detect_platform() {
   info "Detected platform: $OS/$ARCH"
 }
 
-# ─── Detect package manager (Linux only) ──────────────────────────────
-# Returns: "deb" for apt/dpkg, "rpm" for yum/dnf/rpm, "tar.gz" for fallback
+# ─── Select install artifact ──────────────────────────────────────────
 detect_package_manager() {
-  if [ "$OS" != "linux" ]; then
-    echo "tar.gz"
-    return
-  fi
-
-  # Check for dpkg (Debian/Ubuntu)
-  if command -v dpkg >/dev/null 2>&1; then
-    echo "deb"
-    return
-  fi
-
-  # Check for rpm (RHEL/CentOS/Fedora)
-  if command -v rpm >/dev/null 2>&1; then
-    echo "rpm"
-    return
-  fi
-
-  # Default to tar.gz if neither package manager is available
+  # O11yFleet owns the collector service and config. The upstream deb/rpm
+  # packages also install their own service units, so the managed path uses
+  # tarballs on every platform.
   echo "tar.gz"
+}
+
+collector_service_unit_exists() {
+  local service="$1"
+
+  if command -v systemctl >/dev/null 2>&1 && systemctl cat "$service" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  local unit_dir
+  for unit_dir in /etc/systemd/system /run/systemd/system /lib/systemd/system /usr/lib/systemd/system; do
+    if [ -e "$unit_dir/$service" ]; then
+      return 0
+    fi
+  done
+
+  return 1
+}
+
+preflight_conflicting_collector_service() {
+  [ "$OS" = "linux" ] || return 0
+
+  local service
+  for service in otelcol-contrib.service otelcol.service; do
+    if collector_service_unit_exists "$service"; then
+      fail "Existing OpenTelemetry Collector systemd service detected: $service. Refusing to install O11yFleet alongside another collector service. Stop and uninstall that service first, then rerun this installer."
+    fi
+  done
 }
 
 # ─── Uninstall ──────────────────────────────────────────────────────
@@ -146,9 +159,10 @@ do_uninstall() {
 
 # ─── Prerequisites ────────────────────────────────────────────────────
 check_prereqs() {
-  for cmd in curl tar; do
-    command -v "$cmd" >/dev/null 2>&1 || fail "Required command not found: $cmd"
-  done
+  command -v tar >/dev/null 2>&1 || fail "Required command not found: tar"
+  if [ -z "$OFFLINE_FILE" ]; then
+    command -v curl >/dev/null 2>&1 || fail "Required command not found: curl"
+  fi
   configure_privilege
 }
 
@@ -166,20 +180,12 @@ install_binary() {
     fi
     local offline_name
     case "$OFFLINE_FILE" in
-      *.deb)
-        PKG_TYPE="deb"
-        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
-        ;;
-      *.rpm)
-        PKG_TYPE="rpm"
-        offline_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
-        ;;
       *.tar.gz)
         PKG_TYPE="tar.gz"
         offline_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
         ;;
       *)
-        fail "Unsupported offline file type: $OFFLINE_FILE"
+        fail "Unsupported offline file type: $OFFLINE_FILE. Use the upstream .tar.gz artifact so O11yFleet owns service setup."
         ;;
     esac
     cp "$OFFLINE_FILE" "$tmpdir/$offline_name"
@@ -189,12 +195,6 @@ install_binary() {
 
   # Extract or install based on package type
   case "$PKG_TYPE" in
-    deb)
-      install_deb "$tmpdir"
-      ;;
-    rpm)
-      install_rpm "$tmpdir"
-      ;;
     tar.gz)
       install_tarball "$tmpdir"
       ;;
@@ -206,14 +206,6 @@ download_binary() {
   local tarball_name filename url
 
   case "$PKG_TYPE" in
-    deb)
-      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
-      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
-      ;;
-    rpm)
-      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
-      filename="otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
-      ;;
     tar.gz)
       tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
       filename="$tarball_name"
@@ -226,16 +218,7 @@ download_binary() {
   curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
     || {
       # If preferred package fails, fall back to tar.gz
-      if [ "$PKG_TYPE" != "tar.gz" ]; then
-        warn "Failed to download $PKG_TYPE package, falling back to tar.gz..."
-        PKG_TYPE="tar.gz"
-        tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
-        url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${tarball_name}"
-        curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$1/$tarball_name" \
-          || fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
-      else
-        fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
-      fi
+      fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
     }
 
   # Verify checksum
@@ -272,31 +255,6 @@ verify_checksum() {
   else
     warn "Could not download checksums.txt, skipping verification"
   fi
-}
-
-# ─── Install DEB package ─────────────────────────────────────────────
-install_deb() {
-  local tmpdir="$1"
-  local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.deb"
-
-  info "Installing DEB package..."
-  run_root dpkg -i "$pkg_file" \
-    || {
-      warn "dpkg failed, trying to fix dependencies..."
-      run_root apt-get install -f -y
-    }
-  ok "Installed otelcol-contrib via DEB package"
-}
-
-# ─── Install RPM package ─────────────────────────────────────────────
-install_rpm() {
-  local tmpdir="$1"
-  local pkg_file="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_linux_${ARCH}.rpm"
-
-  info "Installing RPM package..."
-  run_root rpm -ivh "$pkg_file" \
-    || fail "RPM installation failed"
-  ok "Installed otelcol-contrib via RPM package"
 }
 
 # ─── Install tarball ────────────────────────────────────────────────
@@ -371,15 +329,6 @@ YAML
 
 # ─── Linux systemd service ──────────────────────────────────────────
 install_linux_service() {
-  # If installed via package manager, it may have set up its own service
-  # Check if otelcol-contrib is in PATH and has systemd service
-  if command -v otelcol-contrib >/dev/null 2>&1; then
-    if systemctl is-active otelcol-contrib >/dev/null 2>&1; then
-      ok "otelcol-contrib service is already running"
-      return
-    fi
-  fi
-
   if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemd not found — skipping service setup. Start manually:"
     echo "  $(root_command_prefix)${COLLECTOR_BIN} --config $INSTALL_DIR/config/otelcol.yaml"
@@ -417,6 +366,7 @@ UNIT
   run_root systemctl daemon-reload
   run_root systemctl enable o11yfleet-collector
   run_root systemctl restart o11yfleet-collector
+  SERVICE_STARTED=true
   ok "Service started: o11yfleet-collector"
 }
 
@@ -452,6 +402,7 @@ PLIST
 
   run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
   run_root launchctl bootstrap system "$plist"
+  SERVICE_STARTED=true
   ok "Service started: com.o11yfleet.collector"
 }
 
@@ -494,18 +445,16 @@ Options:
   --version VERSION   otelcol-contrib version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Install directory (default: $INSTALL_DIR)
-  --offline FILE      Use local OTel contrib file instead of downloading
+  --offline FILE      Use local OTel contrib tarball instead of downloading
   --uninstall         Remove O11yFleet collector and config
   -h, --help          Show this help
 
 Offline Installation:
   Download the OTel contrib file for your platform, then:
-  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.deb
+  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.tar.gz
 
 Supported offline file types:
-  - .deb (Debian/Ubuntu)
-  - .rpm (RHEL/CentOS/Fedora)
-  - .tar.gz (all platforms)
+  - .tar.gz
 EOF
         exit 0 ;;
       *) fail "Unknown option: $1. Use --help for usage." ;;
@@ -537,20 +486,20 @@ main() {
 
   detect_platform
 
-  # Detect package manager for Linux
+  # Select install artifact
   PKG_TYPE=$(detect_package_manager)
-  info "Package manager: $PKG_TYPE"
+  info "Install package type: $PKG_TYPE"
 
   # Parse args (exits if --uninstall)
   parse_args "$@"
 
   # Check prerequisites
   check_prereqs
+  preflight_conflicting_collector_service
 
-  # Upgrade detection
-  local UPGRADE=false
-  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] || command -v otelcol-contrib >/dev/null 2>&1; then
-    UPGRADE=true
+  # Upgrade detection is scoped to O11yFleet-managed state. An unrelated
+  # otelcol-contrib binary on PATH should not suppress writing our config.
+  if [ -f "$INSTALL_DIR/bin/otelcol-contrib" ] || [ -f "$INSTALL_DIR/config/otelcol.yaml" ]; then
     info "Existing installation detected — upgrading..."
   fi
 
@@ -559,10 +508,10 @@ main() {
   ensure_install_dirs
   resolve_collector_bin
 
-  if [ "$UPGRADE" = false ]; then
-    write_config
-  else
+  if [ -f "$INSTALL_DIR/config/otelcol.yaml" ]; then
     ok "Preserving existing config at $INSTALL_DIR/config/otelcol.yaml"
+  else
+    write_config
   fi
 
   case "$OS" in
@@ -571,14 +520,21 @@ main() {
   esac
 
   echo ""
-  ok "O11yFleet collector is running!"
+  if [ "$SERVICE_STARTED" = true ]; then
+    ok "O11yFleet collector is running!"
+  else
+    ok "O11yFleet collector installed."
+    warn "Service was not started automatically."
+  fi
   echo ""
-  info "The collector will appear in your dashboard within a few seconds."
-  info "View logs:"
-  case "$OS" in
-    linux)  echo "  sudo journalctl -u o11yfleet-collector -f" ;;
-    darwin) echo "  tail -f /var/log/o11yfleet-collector.log" ;;
-  esac
+  if [ "$SERVICE_STARTED" = true ]; then
+    info "The collector will appear in your dashboard within a few seconds."
+    info "View logs:"
+    case "$OS" in
+      linux)  echo "  sudo journalctl -u o11yfleet-collector -f" ;;
+      darwin) echo "  tail -f /var/log/o11yfleet-collector.log" ;;
+    esac
+  fi
   info "Uninstall:"
   echo "  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --uninstall"
   echo ""

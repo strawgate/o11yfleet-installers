@@ -16,6 +16,7 @@ setup() {
   PKG_EXT="tar.gz"
   COLLECTOR_BIN=""
   INSTALLER_TMPDIR=""
+  SERVICE_STARTED=false
   SUDO=()
 }
 
