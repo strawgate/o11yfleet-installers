@@ -258,7 +258,8 @@ describe("property: enrollment tokens", () => {
         const { token } = await generateEnrollmentToken({ tenant_id, config_id, secret: SECRET });
         const hash = await hashEnrollmentToken(token);
         const ok = await verifyEnrollmentTokenHash(token, hash);
-        const wrong = await verifyEnrollmentTokenHash(token, hash.slice(0, -2) + "AA");
+        const wrongHash = hash.slice(0, -1) + (hash.endsWith("A") ? "B" : "A");
+        const wrong = await verifyEnrollmentTokenHash(token, wrongHash);
         return ok === true && wrong === false;
       }),
       { numRuns: 15 },
