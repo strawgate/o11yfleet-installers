@@ -154,21 +154,6 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$output" = "root-ok" ]
 }
 
-@test "ensure_instance_uid: creates install dir before writing uid" {
-  [ "$(id -u)" -eq 0 ] || skip "root-only path is exercised in Linux container CI"
-  tmp_root="$(mktemp -d)"
-  run bash -c '
-    source "$1"
-    INSTALL_DIR="$2/missing/o11yfleet"
-    configure_privilege
-    ensure_instance_uid
-    test -s "$INSTALL_DIR/instance-uid"
-    test ${#INSTANCE_UID} -eq 32
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" "$tmp_root"
-  rm -rf "$tmp_root"
-  [ "$status" -eq 0 ]
-}
-
 @test "cleanup_tmpdir: safe under nounset before temp dir exists" {
   run bash -u -c '
     source "$1"

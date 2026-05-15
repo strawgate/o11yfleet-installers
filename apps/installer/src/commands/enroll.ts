@@ -9,7 +9,6 @@ import {
   generateOtelConfig,
   createDefaultConfig,
 } from "../core/config.js";
-import { generateUuid, isValidInstanceUid, legacyUidToUuid } from "../core/uuid.js";
 
 export interface EnrollContext {
   fs: FileSystem;
@@ -77,29 +76,8 @@ export async function enroll(ctx: EnrollContext, options: EnrollOptions): Promis
     return false;
   }
 
-  // Get or generate instance UID
-  const { dirname: getDirname } = await import("path");
-  const installDir = getDirname(configPath.split("/config/")[0] || configPath);
-  const uidFile = `${installDir}/instance-uid`;
-  let instanceUid: string;
-
-  if (await fs.exists(uidFile)) {
-    instanceUid = (await fs.readFile(uidFile)).trim();
-    if (!isValidInstanceUid(instanceUid)) {
-      instanceUid = legacyUidToUuid(instanceUid);
-      await fs.writeFile(uidFile, instanceUid);
-    }
-  } else {
-    instanceUid = generateUuid();
-    await fs.writeFile(uidFile, instanceUid);
-  }
-
   // Generate config
-  const config = createDefaultConfig(
-    token,
-    endpoint ?? "wss://api.o11yfleet.com/v1/opamp",
-    instanceUid,
-  );
+  const config = createDefaultConfig(token, endpoint ?? "wss://api.o11yfleet.com/v1/opamp");
   const configContent = generateOtelConfig(config);
 
   // Write config

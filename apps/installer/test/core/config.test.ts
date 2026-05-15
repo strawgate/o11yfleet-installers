@@ -8,6 +8,7 @@ import {
   getTokenWarning,
   generateSystemdUnit,
   generateLaunchdPlist,
+  generateOtelConfig,
   createDefaultConfig,
   shouldPreserveConfig,
 } from "../../src/core/config.js";
@@ -114,6 +115,7 @@ describe("generateSystemdUnit", () => {
     expect(unit).toContain("[Service]");
     expect(unit).toContain("User=o11yfleet");
     expect(unit).toContain("ExecStart=/opt/o11yfleet/bin/otelcol-contrib");
+    expect(unit).not.toContain("INSTANCE_UID");
     expect(unit).toContain("Restart=always");
     expect(unit).toContain("[Install]");
     expect(unit).toContain("WantedBy=multi-user.target");
@@ -136,6 +138,7 @@ describe("generateSystemdUnit", () => {
     });
 
     expect(unit).toContain("User=bob");
+    expect(unit).not.toContain("INSTANCE_UID");
     expect(unit).toContain("ProtectSystem=full");
     expect(unit).toContain("WantedBy=default.target");
   });
@@ -164,21 +167,25 @@ describe("generateLaunchdPlist", () => {
     expect(plist).toContain("<key>RunAtLoad</key>");
     expect(plist).toContain("<key>KeepAlive</key>");
     expect(plist).toContain("otelcol-contrib");
+    expect(plist).not.toContain("INSTANCE_UID");
   });
 });
 
 describe("createDefaultConfig", () => {
   it("creates config with all fields", () => {
-    const config = createDefaultConfig(
-      "fp_enroll_token",
-      "wss://api.example.com/opamp",
-      "123e4567-e89b-42d3-a456-426614174000",
-    );
+    const config = createDefaultConfig("fp_enroll_token", "wss://api.example.com/opamp");
 
     expect(config.token).toBe("fp_enroll_token");
     expect(config.endpoint).toBe("wss://api.example.com/opamp");
-    expect(config.instanceUid).toBe("123e4567-e89b-42d3-a456-426614174000");
     expect(config.version).toBeDefined();
+  });
+
+  it("does not render installer-managed instance_uid", () => {
+    const config = createDefaultConfig("fp_enroll_token", "wss://api.example.com/opamp");
+    const yaml = generateOtelConfig(config);
+
+    expect(yaml).toContain("opamp:");
+    expect(yaml).not.toContain("instance_uid");
   });
 });
 

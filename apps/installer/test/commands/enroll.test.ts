@@ -139,6 +139,11 @@ describe("enroll command", () => {
       const [, content] = writeCall!;
       expect(content).toContain("wss://custom.example.com/opamp");
       expect(content).toContain("opamp");
+      expect(content).not.toContain("instance_uid");
+      expect(fs.writeFile).not.toHaveBeenCalledWith(
+        expect.stringContaining("instance-uid"),
+        expect.any(String),
+      );
     });
 
     it("writes config with enrollment token in Authorization header", async () => {

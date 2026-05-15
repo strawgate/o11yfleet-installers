@@ -23,7 +23,6 @@ extensions:
         endpoint: ${config.endpoint}
         headers:
           Authorization: "Bearer ${config.token}"
-    instance_uid: ${config.instanceUid}
     capabilities:
       reports_effective_config: true
       reports_health: true
@@ -104,8 +103,7 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-${userSection}Environment=INSTANCE_UID=${config.installDir}
-ExecStart=${config.execStart}
+${userSection}ExecStart=${config.execStart}
 Restart=always
 RestartSec=5
 LimitNOFILE=65536
@@ -128,7 +126,6 @@ WantedBy=${wantedBy}
  * Generate launchd plist content for macOS.
  */
 export function generateLaunchdPlist(config: ServiceConfig): string {
-  const installDirEscaped = config.installDir.replace(/\//g, "\\/");
   const execStartEscaped = config.execStart.replace(/\//g, "\\/");
   const configFileEscaped = config.configFile.replace(/\//g, "\\/");
 
@@ -152,11 +149,6 @@ export function generateLaunchdPlist(config: ServiceConfig): string {
   <string>${config.logFile}</string>
   <key>StandardErrorPath</key>
   <string>${config.logFile}</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>INSTANCE_UID</key>
-    <string>${installDirEscaped}</string>
-  </dict>
 </dict>
 </plist>
 `;
@@ -165,15 +157,10 @@ export function generateLaunchdPlist(config: ServiceConfig): string {
 /**
  * Generate default config for enrollment.
  */
-export function createDefaultConfig(
-  token: string,
-  endpoint: string,
-  instanceUid: string,
-): OTelConfig {
+export function createDefaultConfig(token: string, endpoint: string): OTelConfig {
   return {
     token,
     endpoint,
-    instanceUid,
     version: OTEL_VERSION,
   };
 }

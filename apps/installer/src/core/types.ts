@@ -51,7 +51,6 @@ export interface Logger {
 export interface OTelConfig {
   token: string;
   endpoint: string;
-  instanceUid: string;
   version: string;
 }
 

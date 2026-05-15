@@ -57,17 +57,6 @@ resolve_collector_bin() {
   fi
 }
 
-ensure_instance_uid() {
-  local uid_file="$INSTALL_DIR/instance-uid"
-  ensure_install_dirs
-  if [ -f "$uid_file" ]; then
-    INSTANCE_UID="$(cat "$uid_file")"
-  else
-    INSTANCE_UID="$( (cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen) | tr -d '-' | head -c 32)"
-    printf "%s\n" "$INSTANCE_UID" | run_root tee "$uid_file" >/dev/null
-  fi
-}
-
 # ─── Detect OS & arch ────────────────────────────────────────────────
 detect_platform() {
   OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
@@ -296,7 +285,6 @@ extensions:
     server:
       ws:
         endpoint: ${OPAMP_ENDPOINT}
-    instance_uid: ${INSTANCE_UID}
     capabilities:
       reports_effective_config: true
       reports_own_metrics: true

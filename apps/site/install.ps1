@@ -123,17 +123,6 @@ try {
     }
 }
 
-# --- Instance UID (persist across re-installs) ------------------------
-$uidPath = Join-Path $InstallDir "instance-uid"
-if (Test-Path $uidPath) {
-    $uid = (Get-Content $uidPath -Raw).Trim()
-    Write-Info "Reusing existing instance UID."
-} else {
-    $uid = [guid]::NewGuid().ToString("N").Substring(0,32)
-    [System.IO.File]::WriteAllText($uidPath, $uid)
-    Write-Info "Generated new instance UID."
-}
-
 # --- Config (only written on fresh install, preserved on upgrade) -----
 $configPath = "$InstallDir\config\otelcol.yaml"
 if ($isUpgrade -and (Test-Path $configPath)) {
@@ -146,7 +135,6 @@ extensions:
     server:
       ws:
         endpoint: ${Endpoint}
-    instance_uid: ${uid}
     capabilities:
       reports_effective_config: true
       reports_own_metrics: true
