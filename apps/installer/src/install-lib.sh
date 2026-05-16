@@ -5,6 +5,16 @@
 # ─── Colors ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
 COLLECTOR_BIN="${COLLECTOR_BIN:-}"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
+SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-${OTELCOL_VERSION:-0.152.0}}"
+SUPERVISOR_CONFIG_DIR="${SUPERVISOR_CONFIG_DIR:-/etc/opampsupervisor}"
+SUPERVISOR_CONFIG_FILE="${SUPERVISOR_CONFIG_FILE:-$SUPERVISOR_CONFIG_DIR/config.yaml}"
+SUPERVISOR_COLLECTOR_CONFIG_FILE="${SUPERVISOR_COLLECTOR_CONFIG_FILE:-$SUPERVISOR_CONFIG_DIR/collector.yaml}"
+SUPERVISOR_STATE_DIR="${SUPERVISOR_STATE_DIR:-/var/lib/opampsupervisor}"
+SUPERVISOR_LOG_DIR="${SUPERVISOR_LOG_DIR:-/var/log/opampsupervisor}"
+SUPERVISOR_BIN_PATH="${SUPERVISOR_BIN_PATH:-$INSTALL_DIR/bin/opampsupervisor}"
+COLLECTOR_BIN_PATH="${COLLECTOR_BIN_PATH:-$INSTALL_DIR/bin/otelcol}"
+LEGACY_INSTALL_DIR="${LEGACY_INSTALL_DIR:-/opt/o11yfleet}"
 INSTALLER_TMPDIR="${INSTALLER_TMPDIR:-}"
 TOKEN="${TOKEN:-}"
 SERVICE_STARTED="${SERVICE_STARTED:-false}"
@@ -45,17 +55,15 @@ cleanup_tmpdir() {
 }
 
 ensure_install_dirs() {
-  run_root mkdir -p "$INSTALL_DIR" "$INSTALL_DIR/config"
+  run_root mkdir -p \
+    "$(dirname "$COLLECTOR_BIN_PATH")" \
+    "$SUPERVISOR_CONFIG_DIR" \
+    "$SUPERVISOR_STATE_DIR" \
+    "$SUPERVISOR_LOG_DIR"
 }
 
 resolve_collector_bin() {
-  if [ -x "$INSTALL_DIR/bin/otelcol-contrib" ]; then
-    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
-  elif command -v otelcol-contrib >/dev/null 2>&1; then
-    COLLECTOR_BIN="$(command -v otelcol-contrib)"
-  else
-    COLLECTOR_BIN="$INSTALL_DIR/bin/otelcol-contrib"
-  fi
+  COLLECTOR_BIN="$COLLECTOR_BIN_PATH"
 }
 
 # ─── Detect OS & arch ────────────────────────────────────────────────
@@ -77,10 +85,19 @@ detect_platform() {
 
 # ─── Select install artifact ──────────────────────────────────────────
 detect_package_manager() {
-  # O11yFleet owns the collector service and config. The upstream deb/rpm
-  # packages also install their own service units, so the managed path uses
-  # tarballs on every platform.
-  echo "tar.gz"
+  case "$OS" in
+    linux)
+      if command -v dpkg >/dev/null 2>&1; then
+        echo "deb"
+      elif command -v rpm >/dev/null 2>&1; then
+        echo "rpm"
+      else
+        echo "binary"
+      fi
+      ;;
+    darwin) echo "binary" ;;
+    *)      echo "binary" ;;
+  esac
 }
 
 collector_service_unit_exists() {
@@ -114,20 +131,77 @@ preflight_conflicting_collector_service() {
 # ─── Prerequisites ────────────────────────────────────────────────────
 check_prereqs() {
   command -v tar >/dev/null 2>&1 || fail "Required command not found: tar"
-  if [ -z "$OFFLINE_FILE" ]; then
+  if [ -z "$OFFLINE_FILE" ] || ! command -v opampsupervisor >/dev/null 2>&1; then
     command -v curl >/dev/null 2>&1 || fail "Required command not found: curl"
   fi
   configure_privilege
 }
 
-# ─── Download & install binary ────────────────────────────────────────
+# ─── Download & install supervisor and collector ───────────────────────
 install_binary() {
   INSTALLER_TMPDIR="$(mktemp -d)"
   local tmpdir="$INSTALLER_TMPDIR"
   trap cleanup_tmpdir EXIT
-  local tarball_name filename url
 
-  # If offline file specified, use it directly
+  install_supervisor "$tmpdir"
+  install_collector_binary "$tmpdir"
+}
+
+install_supervisor() {
+  local tmpdir="$1"
+  local filename url
+
+  if command -v opampsupervisor >/dev/null 2>&1; then
+    ok "Using existing opampsupervisor at $(command -v opampsupervisor)"
+    return
+  fi
+
+  filename="$(supervisor_artifact_name)"
+  url="$(supervisor_download_url "$filename")"
+
+  info "Downloading OpenTelemetry OpAMP Supervisor $SUPERVISOR_VERSION ($PKG_TYPE)..."
+  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$filename" \
+    || fail "Download failed. Check supervisor version $SUPERVISOR_VERSION exists at:\n  $url"
+
+  verify_checksum_url "$tmpdir" "$filename" "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fopampsupervisor%2Fv${SUPERVISOR_VERSION}/checksums.txt"
+
+  case "$PKG_TYPE" in
+    deb)
+      info "Installing OpAMP Supervisor DEB package..."
+      run_root dpkg -i "$tmpdir/$filename"
+      ;;
+    rpm)
+      info "Installing OpAMP Supervisor RPM package..."
+      run_root rpm -Uvh "$tmpdir/$filename"
+      ;;
+    binary)
+      info "Installing opampsupervisor binary..."
+      run_root mkdir -p "$(dirname "$SUPERVISOR_BIN_PATH")"
+      run_root cp "$tmpdir/$filename" "$SUPERVISOR_BIN_PATH"
+      run_root chmod 755 "$SUPERVISOR_BIN_PATH"
+      ;;
+    *) fail "Unsupported supervisor package type: $PKG_TYPE" ;;
+  esac
+
+  ok "Installed OpenTelemetry OpAMP Supervisor"
+}
+
+supervisor_artifact_name() {
+  case "$PKG_TYPE" in
+    deb|rpm) echo "opampsupervisor_${SUPERVISOR_VERSION}_linux_${ARCH}.${PKG_TYPE}" ;;
+    binary)  echo "opampsupervisor_${SUPERVISOR_VERSION}_${OS}_${ARCH}" ;;
+    *)       fail "Unsupported supervisor package type: $PKG_TYPE" ;;
+  esac
+}
+
+supervisor_download_url() {
+  local filename="$1"
+  echo "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fopampsupervisor%2Fv${SUPERVISOR_VERSION}/${filename}"
+}
+
+install_collector_binary() {
+  local tmpdir="$1"
+
   if [ -n "$OFFLINE_FILE" ]; then
     info "Using offline file: $OFFLINE_FILE"
     if [ ! -f "$OFFLINE_FILE" ]; then
@@ -140,44 +214,31 @@ install_binary() {
         offline_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
         ;;
       *)
-        fail "Unsupported offline file type: $OFFLINE_FILE. Use the upstream .tar.gz artifact so O11yFleet owns service setup."
+        fail "Unsupported offline file type: $OFFLINE_FILE. Use the upstream otelcol-contrib .tar.gz artifact."
         ;;
     esac
     cp "$OFFLINE_FILE" "$tmpdir/$offline_name"
   else
-    download_binary "$tmpdir"
+    download_collector_binary "$tmpdir"
   fi
 
-  # Extract or install based on package type
-  case "$PKG_TYPE" in
-    tar.gz)
-      install_tarball "$tmpdir"
-      ;;
-  esac
+  install_tarball "$tmpdir"
 }
 
-# ─── Download binary ─────────────────────────────────────────────────
-download_binary() {
+# ─── Download collector binary ───────────────────────────────────────
+download_collector_binary() {
   local tmpdir="$1"
   local tarball_name filename url
 
-  case "$PKG_TYPE" in
-    tar.gz)
-      tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
-      filename="$tarball_name"
-      ;;
-  esac
+  tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+  filename="$tarball_name"
 
   url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${filename}"
 
-  info "Downloading $tarball_name (package type: $PKG_TYPE)..."
+  info "Downloading OpenTelemetry Collector Contrib $OTELCOL_VERSION..."
   curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
-    || {
-      # If preferred package fails, fall back to tar.gz
-      fail "Download failed. Check version $OTELCOL_VERSION exists at:\n  $url"
-    }
+    || fail "Download failed. Check collector version $OTELCOL_VERSION exists at:\n  $url"
 
-  # Verify checksum
   verify_checksum "$tmpdir" "$tarball_name"
 }
 
@@ -185,32 +246,40 @@ download_binary() {
 verify_checksum() {
   local tmpdir="$1"
   local filename="$2"
-  local checksums_url expected_hash
+  local checksums_url
 
   info "Verifying checksum..."
 
-  # Try checksums.txt first (newer format)
   checksums_url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
 
-  if curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
-    expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)" \
-      || fail "Checksum for ${filename} not found in checksums.txt for version $OTELCOL_VERSION"
+  verify_checksum_url "$tmpdir" "$filename" "$checksums_url"
+}
 
-    # Verify using sha256sum or shasum
-    echo "$expected_hash  $filename" > "$tmpdir/${filename}.sha256"
-    if command -v sha256sum >/dev/null 2>&1; then
-      (cd "$tmpdir" && sha256sum -c "${filename}.sha256") \
-        || fail "Checksum verification failed — download may be corrupted"
-    elif command -v shasum >/dev/null 2>&1; then
-      (cd "$tmpdir" && shasum -a 256 -c "${filename}.sha256") \
-        || fail "Checksum verification failed — download may be corrupted"
-    else
-      warn "No checksum utility found, skipping verification"
-    fi
-    ok "Checksum verified"
-  else
+verify_checksum_url() {
+  local tmpdir="$1"
+  local filename="$2"
+  local checksums_url="$3"
+  local expected_hash
+
+  if ! curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
     warn "Could not download checksums.txt, skipping verification"
+    return
   fi
+
+  expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)"
+  [ -n "$expected_hash" ] || fail "Checksum for ${filename} not found in checksums.txt"
+
+  echo "$expected_hash  $filename" > "$tmpdir/${filename}.sha256"
+  if command -v sha256sum >/dev/null 2>&1; then
+    (cd "$tmpdir" && sha256sum -c "${filename}.sha256") \
+      || fail "Checksum verification failed — download may be corrupted"
+  elif command -v shasum >/dev/null 2>&1; then
+    (cd "$tmpdir" && shasum -a 256 -c "${filename}.sha256") \
+      || fail "Checksum verification failed — download may be corrupted"
+  else
+    warn "No checksum utility found, skipping verification"
+  fi
+  ok "Checksum verified"
 }
 
 # ─── Install tarball ────────────────────────────────────────────────
@@ -221,38 +290,20 @@ install_tarball() {
   info "Extracting tarball..."
   tar -xzf "$tarball" -C "$tmpdir"
 
-  run_root mkdir -p "$INSTALL_DIR/bin" "$INSTALL_DIR/config"
-  run_root cp "$tmpdir/otelcol-contrib" "$INSTALL_DIR/bin/otelcol-contrib"
-  run_root chmod 755 "$INSTALL_DIR/bin/otelcol-contrib"
-  ok "Installed otelcol-contrib to $INSTALL_DIR/bin/"
+  run_root mkdir -p "$(dirname "$COLLECTOR_BIN_PATH")"
+  run_root cp "$tmpdir/otelcol-contrib" "$COLLECTOR_BIN_PATH"
+  run_root chmod 755 "$COLLECTOR_BIN_PATH"
+  ok "Installed OpenTelemetry Collector Contrib as $COLLECTOR_BIN_PATH"
 }
 
 # ─── Write config ──────────────────────────────────────────────────
 write_config() {
-  local config_file="$INSTALL_DIR/config/otelcol.yaml"
-
-  info "Writing collector config..."
+  info "Writing OpAMP Supervisor config..."
   ensure_install_dirs
-  run_root tee "$config_file" >/dev/null <<YAML
-# O11yFleet managed collector configuration
-# This collector connects to O11yFleet via OpAMP for remote management.
-# The server will push pipeline configuration updates automatically.
 
-extensions:
-  opamp:
-    server:
-      ws:
-        endpoint: ${OPAMP_ENDPOINT}
-    capabilities:
-      reports_effective_config: true
-      reports_own_metrics: true
-      reports_health: true
-      reports_remote_config: true
-      accepts_remote_config: true
-      accepts_restart_command: true
-    headers:
-      Authorization: "Bearer ${TOKEN}"
-
+  run_root tee "$SUPERVISOR_COLLECTOR_CONFIG_FILE" >/dev/null <<YAML
+# Bootstrap OpenTelemetry Collector Contrib config.
+# O11yFleet sends managed configuration through the OpAMP Supervisor.
 receivers:
   otlp:
     protocols:
@@ -266,7 +317,6 @@ exporters:
     verbosity: basic
 
 service:
-  extensions: [opamp]
   pipelines:
     traces:
       receivers: [otlp]
@@ -278,113 +328,195 @@ service:
       receivers: [otlp]
       exporters: [debug]
 YAML
-  run_root chmod 640 "$config_file"
-  run_root chown o11yfleet:o11yfleet "$config_file" 2>/dev/null || true
-  ok "Config written to $config_file"
+  run_root chmod 644 "$SUPERVISOR_COLLECTOR_CONFIG_FILE"
+
+  run_root tee "$SUPERVISOR_CONFIG_FILE" >/dev/null <<YAML
+# OpenTelemetry OpAMP Supervisor configuration managed by O11yFleet.
+server:
+  endpoint: ${OPAMP_ENDPOINT}
+  headers:
+    Authorization:
+      - "Bearer ${TOKEN}"
+  tls:
+    insecure_skip_verify: false
+
+capabilities:
+  accepts_remote_config: true
+  accepts_restart_command: true
+  accepts_opamp_connection_settings: false
+  reports_effective_config: true
+  reports_own_metrics: false
+  reports_own_logs: true
+  reports_own_traces: false
+  reports_health: true
+  reports_remote_config: true
+  reports_available_components: true
+  reports_heartbeat: true
+
+agent:
+  executable: ${COLLECTOR_BIN_PATH}
+  passthrough_logs: true
+  config_files:
+    - ${SUPERVISOR_COLLECTOR_CONFIG_FILE}
+
+storage:
+  directory: ${SUPERVISOR_STATE_DIR}
+
+telemetry:
+  logs:
+    level: info
+    output_paths:
+      - ${SUPERVISOR_LOG_DIR}/opampsupervisor.log
+YAML
+
+  if [ "$OS" = "linux" ] && command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
+    run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" "$SUPERVISOR_COLLECTOR_CONFIG_FILE" 2>/dev/null || true
+    run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
+  else
+    run_root chmod 600 "$SUPERVISOR_CONFIG_FILE"
+  fi
+  ok "Supervisor config written to $SUPERVISOR_CONFIG_FILE"
 }
 
 # ─── Linux systemd service ──────────────────────────────────────────
 install_linux_service() {
+  remove_legacy_linux_service
+
   if ! command -v systemctl >/dev/null 2>&1; then
     warn "systemd not found — skipping service setup. Start manually:"
-    echo "  $(root_command_prefix)${COLLECTOR_BIN} --config $INSTALL_DIR/config/otelcol.yaml"
+    echo "  $(root_command_prefix)$(resolve_supervisor_command) --config=${SUPERVISOR_CONFIG_FILE}"
     return
   fi
 
-  info "Installing systemd service..."
-
-  # Create system user if not exists
-  if ! id -u o11yfleet >/dev/null 2>&1; then
-    run_root useradd --system --no-create-home --shell /sbin/nologin o11yfleet 2>/dev/null || true
+  if ! collector_service_unit_exists opampsupervisor.service; then
+    install_fallback_supervisor_unit
   fi
-  run_root chown -R o11yfleet:o11yfleet "$INSTALL_DIR" 2>/dev/null || true
 
-  run_root tee /etc/systemd/system/o11yfleet-collector.service >/dev/null <<UNIT
+  info "Starting opampsupervisor systemd service..."
+  run_root systemctl daemon-reload
+  run_root systemctl enable opampsupervisor
+  run_root systemctl restart opampsupervisor
+  SERVICE_STARTED=true
+  ok "Service started: opampsupervisor"
+}
+
+resolve_supervisor_command() {
+  if command -v opampsupervisor >/dev/null 2>&1; then
+    command -v opampsupervisor
+  else
+    printf "%s" "$SUPERVISOR_BIN_PATH"
+  fi
+}
+
+remove_legacy_linux_service() {
+  if command -v systemctl >/dev/null 2>&1; then
+    run_root systemctl stop o11yfleet-collector 2>/dev/null || true
+    run_root systemctl disable o11yfleet-collector 2>/dev/null || true
+    run_root rm -f /etc/systemd/system/o11yfleet-collector.service
+  fi
+}
+
+ensure_opampsupervisor_user() {
+  if ! id -u opampsupervisor >/dev/null 2>&1; then
+    run_root useradd --system --no-create-home --shell /sbin/nologin opampsupervisor 2>/dev/null || true
+  fi
+}
+
+install_fallback_supervisor_unit() {
+  ensure_opampsupervisor_user
+  run_root chown -R opampsupervisor:opampsupervisor "$SUPERVISOR_STATE_DIR" "$SUPERVISOR_LOG_DIR" 2>/dev/null || true
+  if command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
+    run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" 2>/dev/null || true
+    run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
+  fi
+
+  info "Installing opampsupervisor systemd service..."
+  run_root tee /etc/systemd/system/opampsupervisor.service >/dev/null <<UNIT
 [Unit]
-Description=O11yFleet Collector (otelcol-contrib + OpAMP)
-Documentation=https://o11yfleet.com
+Description=OpenTelemetry Collector OpAMP Supervisor
+Documentation=https://opentelemetry.io/docs/collector/management/
 After=network-online.target
 Wants=network-online.target
+AssertPathExists=${SUPERVISOR_CONFIG_FILE}
 
 [Service]
 Type=simple
-User=o11yfleet
-Group=o11yfleet
-ExecStart=${COLLECTOR_BIN} --config ${INSTALL_DIR}/config/otelcol.yaml
-Restart=always
+User=opampsupervisor
+Group=opampsupervisor
+ExecStart=$(resolve_supervisor_command) --config=${SUPERVISOR_CONFIG_FILE}
+Restart=on-failure
 RestartSec=5
 LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
 UNIT
-
-  run_root systemctl daemon-reload
-  run_root systemctl enable o11yfleet-collector
-  run_root systemctl restart o11yfleet-collector
-  SERVICE_STARTED=true
-  ok "Service started: o11yfleet-collector"
 }
 
 # ─── macOS launchd service ─────────────────────────────────────────
 install_macos_service() {
   info "Installing launchd service..."
 
-  local plist="/Library/LaunchDaemons/com.o11yfleet.collector.plist"
+  local plist="/Library/LaunchDaemons/io.opentelemetry.opampsupervisor.plist"
   run_root tee "$plist" >/dev/null <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>com.o11yfleet.collector</string>
+  <string>io.opentelemetry.opampsupervisor</string>
   <key>ProgramArguments</key>
   <array>
-    <string>${COLLECTOR_BIN}</string>
-    <string>--config</string>
-    <string>${INSTALL_DIR}/config/otelcol.yaml</string>
+    <string>$(resolve_supervisor_command)</string>
+    <string>--config=${SUPERVISOR_CONFIG_FILE}</string>
   </array>
   <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
   <true/>
   <key>StandardOutPath</key>
-  <string>/var/log/o11yfleet-collector.log</string>
+  <string>${SUPERVISOR_LOG_DIR}/opampsupervisor.log</string>
   <key>StandardErrorPath</key>
-  <string>/var/log/o11yfleet-collector.log</string>
+  <string>${SUPERVISOR_LOG_DIR}/opampsupervisor.log</string>
 </dict>
 </plist>
 PLIST
 
   run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+  run_root launchctl bootout system/io.opentelemetry.opampsupervisor 2>/dev/null || true
   run_root launchctl bootstrap system "$plist"
   SERVICE_STARTED=true
-  ok "Service started: com.o11yfleet.collector"
+  ok "Service started: io.opentelemetry.opampsupervisor"
 }
 
 # ─── Uninstall ──────────────────────────────────────────────────────
 do_uninstall() {
   configure_privilege
-  info "Uninstalling O11yFleet collector..."
+  info "Uninstalling OpenTelemetry supervisor and collector config..."
   case "$OS" in
     linux)
       if command -v systemctl >/dev/null 2>&1; then
+        run_root systemctl stop opampsupervisor 2>/dev/null || true
+        run_root systemctl disable opampsupervisor 2>/dev/null || true
         run_root systemctl stop o11yfleet-collector 2>/dev/null || true
         run_root systemctl disable o11yfleet-collector 2>/dev/null || true
+        run_root rm -f /etc/systemd/system/opampsupervisor.service
         run_root rm -f /etc/systemd/system/o11yfleet-collector.service
         run_root systemctl daemon-reload 2>/dev/null || true
       fi
-      # Try to remove package (will fail if not installed via package manager, that's OK)
-      run_root dpkg -r otelcol-contrib 2>/dev/null || true
-      run_root rpm -e otelcol-contrib 2>/dev/null || true
+      run_root dpkg -r opampsupervisor 2>/dev/null || true
+      run_root rpm -e opampsupervisor 2>/dev/null || true
       ;;
     darwin)
+      run_root launchctl bootout system/io.opentelemetry.opampsupervisor 2>/dev/null || true
       run_root launchctl bootout system/com.o11yfleet.collector 2>/dev/null || true
+      run_root rm -f /Library/LaunchDaemons/io.opentelemetry.opampsupervisor.plist
       run_root rm -f /Library/LaunchDaemons/com.o11yfleet.collector.plist
       ;;
   esac
-  run_root rm -rf "$INSTALL_DIR"
-  ok "O11yFleet collector uninstalled."
+  run_root rm -f "$COLLECTOR_BIN_PATH" "$SUPERVISOR_BIN_PATH"
+  run_root rm -rf "$SUPERVISOR_CONFIG_DIR" "$SUPERVISOR_STATE_DIR" "$SUPERVISOR_LOG_DIR" "$LEGACY_INSTALL_DIR"
+  ok "OpenTelemetry supervisor and collector config removed."
   exit 0
 }
 
@@ -400,16 +532,16 @@ parse_args() {
       --token=*)    TOKEN="${1#*=}"; shift ;;
       --version)
         [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --version"
-        OTELCOL_VERSION="$2"; shift 2 ;;
-      --version=*)  OTELCOL_VERSION="${1#*=}"; shift ;;
+        OTELCOL_VERSION="$2"; SUPERVISOR_VERSION="$2"; shift 2 ;;
+      --version=*)  OTELCOL_VERSION="${1#*=}"; SUPERVISOR_VERSION="$OTELCOL_VERSION"; shift ;;
       --endpoint)
         [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --endpoint"
         OPAMP_ENDPOINT="$2"; shift 2 ;;
       --endpoint=*) OPAMP_ENDPOINT="${1#*=}"; shift ;;
       --dir)
         [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --dir"
-        INSTALL_DIR="$2"; shift 2 ;;
-      --dir=*)      INSTALL_DIR="${1#*=}"; shift ;;
+        INSTALL_DIR="$2"; COLLECTOR_BIN_PATH="$INSTALL_DIR/bin/otelcol"; SUPERVISOR_BIN_PATH="$INSTALL_DIR/bin/opampsupervisor"; shift 2 ;;
+      --dir=*)      INSTALL_DIR="${1#*=}"; COLLECTOR_BIN_PATH="$INSTALL_DIR/bin/otelcol"; SUPERVISOR_BIN_PATH="$INSTALL_DIR/bin/opampsupervisor"; shift ;;
       --offline)
         [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --offline"
         OFFLINE_FILE="$2"; shift 2 ;;
@@ -417,22 +549,22 @@ parse_args() {
       --uninstall)  UNINSTALL=true; shift ;;
       --help|-h)
         cat <<EOF
-O11yFleet Collector Installer
+O11yFleet OpenTelemetry Supervisor Installer
 
 Usage:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
   --token TOKEN       Enrollment token (required, starts with fp_enroll_)
-  --version VERSION   otelcol-contrib version (default: $OTELCOL_VERSION)
+  --version VERSION   OpenTelemetry Collector/Supervisor version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
-  --dir PATH          Install directory (default: $INSTALL_DIR)
-  --offline FILE      Use local OTel contrib tarball instead of downloading
-  --uninstall         Remove O11yFleet collector and config
+  --dir PATH          Binary install prefix (default: $INSTALL_DIR)
+  --offline FILE      Use local OTel Collector Contrib tarball instead of downloading it
+  --uninstall         Remove supervisor, collector binary, and config
   -h, --help          Show this help
 
 Offline Installation:
-  Download the OTel contrib file for your platform, then:
+  Download the OpenTelemetry Collector Contrib tarball for your platform, then:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.tar.gz
 
 Supported offline file types:

@@ -5,6 +5,7 @@
 # Load the install library functions
 SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
 load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+load "$SCRIPT_DIR/test/shell/test_helper.bash"
 
 # ─── Platform Detection Tests ──────────────────────────────────────────
 
@@ -34,22 +35,73 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
 # ─── Package Manager Detection Tests ───────────────────────────────────
 
-@test "detect_package_manager: defaults managed installs to tar.gz" {
+@test "detect_package_manager: prefers deb packages on dpkg systems" {
   result=$(bash -c '
     source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/dpkg"
+    chmod +x "$tmpdir/dpkg"
+    PATH="$tmpdir"
     OS="linux"
     detect_package_manager
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
-  [ "$result" = "tar.gz" ]
+  [ "$result" = "deb" ]
 }
 
-@test "detect_package_manager: returns tar.gz on macOS" {
+@test "detect_package_manager: falls back to rpm packages on rpm systems" {
+  result=$(bash -c '
+    source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/rpm"
+    chmod +x "$tmpdir/rpm"
+    PATH="$tmpdir"
+    OS="linux"
+    detect_package_manager
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  [ "$result" = "rpm" ]
+}
+
+@test "detect_package_manager: uses binary fallback without dpkg or rpm" {
+  result=$(bash -c '
+    source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    PATH="$tmpdir"
+    OS="linux"
+    detect_package_manager
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  [ "$result" = "binary" ]
+}
+
+@test "detect_package_manager: returns binary on macOS" {
   result=$(bash -c '
     source "$1"
     OS="darwin"
     detect_package_manager
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
-  [ "$result" = "tar.gz" ]
+  [ "$result" = "binary" ]
+}
+
+@test "supervisor_artifact_name: builds upstream package asset names" {
+  result=$(bash -c '
+    source "$1"
+    SUPERVISOR_VERSION=0.152.0
+    OS=linux
+    ARCH=amd64
+    PKG_TYPE=deb
+    supervisor_artifact_name
+    PKG_TYPE=rpm
+    supervisor_artifact_name
+    OS=darwin
+    PKG_TYPE=binary
+    supervisor_artifact_name
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+
+  [[ "$result" == *"opampsupervisor_0.152.0_linux_amd64.deb"* ]]
+  [[ "$result" == *"opampsupervisor_0.152.0_linux_amd64.rpm"* ]]
+  [[ "$result" == *"opampsupervisor_0.152.0_darwin_amd64"* ]]
 }
 
 @test "preflight_conflicting_collector_service: fails when upstream collector service exists" {
@@ -190,7 +242,9 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     configure_privilege() { :; }
     tmpdir="$(mktemp -d)"
     printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/tar"
+    printf "%s\n" "#!/usr/bin/env sh" "exit 0" > "$tmpdir/opampsupervisor"
     chmod +x "$tmpdir/tar"
+    chmod +x "$tmpdir/opampsupervisor"
     PATH="$tmpdir"
     OFFLINE_FILE="/tmp/otelcol-contrib.tar.gz"
     check_prereqs
@@ -226,34 +280,65 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
 # ─── Offline Mode Tests ────────────────────────────────────────────────
 
-@test "install_binary: fails if offline file doesn't exist" {
+@test "install_collector_binary: fails if offline file doesn't exist" {
   # Set OFFLINE_FILE to a non-existent path
   run bash -c '
     source "$1"
     OFFLINE_FILE="/nonexistent/path/file.tar.gz"
-    PKG_TYPE="tar.gz"
-    PKG_EXT="tar.gz"
-    install_binary 2>&1 || true
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    install_collector_binary "$tmpdir" 2>&1 || true
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" 
   
   # The error message should contain "Offline file not found"
   [[ "$output" == *"Offline file not found"* ]]
 }
 
-@test "install_binary: rejects offline deb and rpm packages" {
+@test "install_collector_binary: rejects offline deb and rpm packages" {
   run bash -c '
     source "$1"
     tmpfile="$(mktemp).deb"
     trap "rm -f \"$tmpfile\"" EXIT
     printf "not a package" > "$tmpfile"
     OFFLINE_FILE="$tmpfile"
-    PKG_TYPE="tar.gz"
-    install_binary
+    tmpdir="$(mktemp -d)"
+    install_collector_binary "$tmpdir"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unsupported offline file type"* ]]
-  [[ "$output" == *"O11yFleet owns service setup"* ]]
+  [[ "$output" == *"otelcol-contrib .tar.gz"* ]]
+}
+
+@test "write_config: writes supervisor config and token-free collector bootstrap" {
+  run bash -c '
+    source "$1"
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    OS=linux
+    TOKEN=fp_opamp_test
+    OPAMP_ENDPOINT=wss://example.test/v1/opamp
+    COLLECTOR_BIN_PATH="$tmpdir/bin/otelcol"
+    SUPERVISOR_CONFIG_DIR="$tmpdir/etc/opampsupervisor"
+    SUPERVISOR_CONFIG_FILE="$SUPERVISOR_CONFIG_DIR/config.yaml"
+    SUPERVISOR_COLLECTOR_CONFIG_FILE="$SUPERVISOR_CONFIG_DIR/collector.yaml"
+    SUPERVISOR_STATE_DIR="$tmpdir/var/lib/opampsupervisor"
+    SUPERVISOR_LOG_DIR="$tmpdir/var/log/opampsupervisor"
+    SUDO=()
+    write_config >/dev/null
+    printf "%s\n" "--- supervisor ---"
+    cat "$SUPERVISOR_CONFIG_FILE"
+    printf "%s\n" "--- collector ---"
+    cat "$SUPERVISOR_COLLECTOR_CONFIG_FILE"
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"endpoint: wss://example.test/v1/opamp"* ]]
+  [[ "$output" == *"Bearer fp_opamp_test"* ]]
+  [[ "$output" == *"executable:"*"bin/otelcol"* ]]
+  [[ "$output" == *"config_files:"* ]]
+  [[ "$output" == *"receivers:"* ]]
+  [[ "$output" != *"extensions:"* ]]
 }
 
 # ─── Help Text Test ────────────────────────────────────────────────────
@@ -264,7 +349,7 @@ load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
     parse_args --help
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
   [ "$status" -eq 0 ]
-  [[ "$output" == *"O11yFleet Collector Installer"* ]]
+  [[ "$output" == *"O11yFleet OpenTelemetry Supervisor Installer"* ]]
   [[ "$output" == *"--token"* ]]
   [[ "$output" == *"--offline"* ]]
 }
