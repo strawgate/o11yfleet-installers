@@ -15,7 +15,7 @@
 param(
     [string]$Token,
 
-    [string]$Version = "0.115.0",
+    [string]$Version = "0.152.0",
     [string]$Endpoint = "wss://api.o11yfleet.com/v1/opamp",
     [string]$InstallDir = "C:\o11yfleet",
     [switch]$Uninstall
@@ -57,7 +57,16 @@ if ([string]::IsNullOrWhiteSpace($Token)) {
         "  Or:    & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token `"fp_enroll_...`"")
 }
 if (-not $Token.StartsWith("fp_enroll_")) {
-    Write-Warn "Token doesn't start with fp_enroll_ - are you sure this is an enrollment token?"
+    if (-not $Token.StartsWith("fp_opamp_")) {
+        Write-Warn "Token doesn't start with fp_enroll_ or fp_opamp_ - are you sure this is an enrollment token?"
+    }
+}
+
+foreach ($serviceName in @("otelcol-contrib", "otelcol")) {
+    $conflictingService = Get-Service -Name $serviceName -ErrorAction SilentlyContinue
+    if ($conflictingService) {
+        Write-Fail "Existing OpenTelemetry Collector service detected: $serviceName. Refusing to install O11yFleet alongside another collector service. Stop and uninstall that service first, then rerun this installer."
+    }
 }
 
 Write-Host ""
@@ -123,17 +132,6 @@ try {
     }
 }
 
-# --- Instance UID (persist across re-installs) ------------------------
-$uidPath = Join-Path $InstallDir "instance-uid"
-if (Test-Path $uidPath) {
-    $uid = (Get-Content $uidPath -Raw).Trim()
-    Write-Info "Reusing existing instance UID."
-} else {
-    $uid = [guid]::NewGuid().ToString("N").Substring(0,32)
-    [System.IO.File]::WriteAllText($uidPath, $uid)
-    Write-Info "Generated new instance UID."
-}
-
 # --- Config (only written on fresh install, preserved on upgrade) -----
 $configPath = "$InstallDir\config\otelcol.yaml"
 if ($isUpgrade -and (Test-Path $configPath)) {
@@ -146,7 +144,6 @@ extensions:
     server:
       ws:
         endpoint: ${Endpoint}
-    instance_uid: ${uid}
     capabilities:
       reports_effective_config: true
       reports_own_metrics: true

@@ -123,6 +123,19 @@ describe("install command", () => {
     expect(c.fs.mkdir).toHaveBeenCalled();
   });
 
+  it("does not write installer-managed instance UID state", async () => {
+    const c = makeCtx();
+    await install(c, { token: "fp_enroll_test_123", user: true });
+
+    expect(c.fs.writeFile).not.toHaveBeenCalledWith(
+      expect.stringContaining("instance-uid"),
+      expect.any(String),
+    );
+    const config = c.fs.files.get("/home/test/.local/share/o11yfleet/config/otelcol.yaml");
+    expect(config).toBeDefined();
+    expect(config).not.toContain("instance_uid");
+  });
+
   it("detects existing install for upgrade", async () => {
     const c = makeCtx();
     c.fs.dirs.add("/home/test/.local/share/o11yfleet/bin");

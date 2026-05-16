@@ -22,7 +22,6 @@ import {
   getTokenWarning,
   createDefaultConfig,
 } from "../core/config.js";
-import { generateUuid, isValidInstanceUid, legacyUidToUuid } from "../core/uuid.js";
 
 export interface InstallerContext {
   fs: FileSystem;
@@ -133,27 +132,12 @@ export async function install(
     );
     logger.ok(`Installed to ${binDir}`);
 
-    // Generate or read instance UID
-    const uidFile = `${installDir}/instance-uid`;
-    let instanceUid: string;
-    if (await fs.exists(uidFile)) {
-      instanceUid = (await fs.readFile(uidFile)).trim();
-      // Convert legacy format if needed
-      if (!isValidInstanceUid(instanceUid)) {
-        instanceUid = legacyUidToUuid(instanceUid);
-      }
-    } else {
-      instanceUid = generateUuid();
-      await fs.writeFile(uidFile, instanceUid);
-    }
-
     // Write config (unless upgrading and preserving)
     const configFile = `${installDir}/config/otelcol.yaml`;
     if (!isUpgrade) {
       const config = createDefaultConfig(
         options.token,
         options.endpoint ?? "wss://api.o11yfleet.com/v1/opamp",
-        instanceUid,
       );
       await fs.writeFile(configFile, generateOtelConfig(config));
       await fs.chmod(configFile, 0o640);
