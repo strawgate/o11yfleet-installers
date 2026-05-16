@@ -766,7 +766,7 @@ test.describe("AI guidance surfaces", () => {
     await expect(page.getByText("./install.sh --token")).toBeVisible();
     await page.getByRole("tab", { name: "install.sh" }).click();
     await expect(page.getByText("#!/usr/bin/env bash")).toBeVisible();
-    await expect(page.getByText("O11yFleet Collector Installer")).toBeVisible();
+    await expect(page.getByText("O11yFleet OpenTelemetry Supervisor Installer")).toBeVisible();
     runtime.dispose();
     expect(runtime.errors).toEqual([]);
   });
