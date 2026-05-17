@@ -9,7 +9,7 @@
 # Options:
 #   --token TOKEN       Enrollment token (required, starts with fp_enroll_ or fp_opamp_)
 #   --version VERSION   OpenTelemetry Collector/Supervisor version (default: 0.152.0)
-#   --endpoint URL      OpAMP server endpoint (default: wss://api.o11yfleet.com/v1/opamp)
+#   --endpoint URL      OpAMP server endpoint (default: wss://opamp.prod.o11yfleet.com/v1/opamp)
 #   --dir PATH          Binary install prefix (default: /usr/local)
 #   --offline FILE      Use local OTel Collector Contrib tarball instead of downloading it
 #   --uninstall         Remove supervisor, collector binary, and config
@@ -20,7 +20,7 @@ set -euo pipefail
 # ─── Configuration ────────────────────────────────────────────────────
 OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
 SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-$OTELCOL_VERSION}"
-OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
+OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://opamp.prod.o11yfleet.com/v1/opamp}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
 OFFLINE_FILE=""
 TOKEN=""
@@ -582,7 +582,7 @@ Usage:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
-  --token TOKEN       Enrollment token (required, starts with fp_enroll_)
+  --token TOKEN       Enrollment token (required, starts with fp_opamp_ or legacy fp_enroll_)
   --version VERSION   OpenTelemetry Collector/Supervisor version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Binary install prefix (default: $INSTALL_DIR)
@@ -607,7 +607,7 @@ EOF
   fi
 
   if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
+    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_opamp_..."
   fi
 
   case "$TOKEN" in

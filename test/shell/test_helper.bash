@@ -6,7 +6,7 @@ setup() {
   # Reset global variables to defaults
   OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
   SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-$OTELCOL_VERSION}"
-  OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://api.o11yfleet.com/v1/opamp}"
+  OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://opamp.prod.o11yfleet.com/v1/opamp}"
   INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
   OFFLINE_FILE=""
   TOKEN=""

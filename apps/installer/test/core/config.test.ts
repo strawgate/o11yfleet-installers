@@ -16,6 +16,8 @@ import { isValidUuid, isLegacyInstanceUid, legacyUidToUuid } from "../../src/cor
 
 describe("validateToken", () => {
   it("accepts valid enrollment tokens", () => {
+    expect(validateToken("fp_opamp_abc123")).toBe(true);
+    expect(validateToken("fp_opamp_test-token-123")).toBe(true);
     expect(validateToken("fp_enroll_abc123")).toBe(true);
     expect(validateToken("fp_enroll_test-token-123")).toBe(true);
   });
@@ -30,11 +32,13 @@ describe("validateToken", () => {
 
 describe("getTokenWarning", () => {
   it("returns null for valid tokens", () => {
+    expect(getTokenWarning("fp_opamp_abc123")).toBeNull();
     expect(getTokenWarning("fp_enroll_abc123")).toBeNull();
   });
 
   it("returns warning for invalid tokens", () => {
     const warning = getTokenWarning("invalid_token");
+    expect(warning).toContain("fp_opamp_");
     expect(warning).toContain("fp_enroll_");
   });
 
@@ -186,6 +190,15 @@ describe("createDefaultConfig", () => {
 
     expect(yaml).toContain("opamp:");
     expect(yaml).not.toContain("instance_uid");
+  });
+
+  it("does not render unsupported direct collector capabilities", () => {
+    const config = createDefaultConfig("fp_opamp_token", "wss://api.example.com/opamp");
+    const yaml = generateOtelConfig(config);
+
+    expect(yaml).not.toContain("reports_remote_config");
+    expect(yaml).not.toContain("accepts_remote_config");
+    expect(yaml).not.toContain("accepts_restart_command");
   });
 });
 

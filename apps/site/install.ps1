@@ -1,10 +1,10 @@
 # O11yFleet Collector Installer for Windows
 #
 # Usage (download then run - required for param() to work):
-#   irm https://downloads.o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_enroll_..."
+#   irm https://downloads.o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_opamp_..."
 #
 # One-liner via scriptblock wrapper:
-#   & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token "fp_enroll_..."
+#   & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token "fp_opamp_..."
 #
 # Uninstall:
 #   .\install.ps1 -Uninstall
@@ -16,7 +16,7 @@ param(
     [string]$Token,
 
     [string]$Version = "0.152.0",
-    [string]$Endpoint = "wss://api.o11yfleet.com/v1/opamp",
+    [string]$Endpoint = "wss://opamp.prod.o11yfleet.com/v1/opamp",
     [string]$InstallDir = "C:\o11yfleet",
     [switch]$Uninstall
 )
@@ -53,8 +53,8 @@ if ($Uninstall) {
 # --- Validate token (required for install, not for uninstall) ---------
 if ([string]::IsNullOrWhiteSpace($Token)) {
     Write-Fail ("Token is required for installation.`n" +
-        "  Usage: .\install.ps1 -Token `"fp_enroll_...`"`n" +
-        "  Or:    & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token `"fp_enroll_...`"")
+        "  Usage: .\install.ps1 -Token `"fp_opamp_...`"`n" +
+        "  Or:    & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token `"fp_opamp_...`"")
 }
 if (-not $Token.StartsWith("fp_enroll_")) {
     if (-not $Token.StartsWith("fp_opamp_")) {
@@ -144,15 +144,11 @@ extensions:
     server:
       ws:
         endpoint: ${Endpoint}
+        headers:
+          Authorization: "Bearer ${Token}"
     capabilities:
       reports_effective_config: true
-      reports_own_metrics: true
       reports_health: true
-      reports_remote_config: true
-      accepts_remote_config: true
-      accepts_restart_command: true
-    headers:
-      Authorization: "Bearer ${Token}"
 
 receivers:
   otlp:

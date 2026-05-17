@@ -176,13 +176,12 @@
   opamp:
     server:
       ws:
-        endpoint: "wss://api.o11yfleet.com/v1/opamp"
-    headers:
-      Authorization: "Bearer YOUR_TOKEN_HERE"
+        endpoint: "wss://opamp.prod.o11yfleet.com/v1/opamp"
+        headers:
+          Authorization: "Bearer YOUR_TOKEN_HERE"
     capabilities:
       reports_effective_config: true
       reports_health: true
-      accepts_remote_config: true
 
 receivers:
   otlp:
@@ -236,13 +235,12 @@ data:
       opamp:
         server:
           ws:
-            endpoint: "wss://api.o11yfleet.com/v1/opamp"
-        headers:
-          Authorization: "Bearer ${OPAMP_TOKEN}"
+            endpoint: "wss://opamp.prod.o11yfleet.com/v1/opamp"
+            headers:
+              Authorization: "Bearer ${OPAMP_TOKEN}"
         capabilities:
           reports_effective_config: true
           reports_health: true
-          accepts_remote_config: true
     receivers:
       otlp:
         protocols:
@@ -306,7 +304,7 @@ spec:
               font-size: 13px;
             "
           ><code>INFO    extensions/opamp.go:112  OpAMP extension started
-INFO    extensions/opamp.go:145  connected to O11yFleet (wss://api.o11yfleet.com/v1/opamp)
+INFO    extensions/opamp.go:145  connected to O11yFleet (wss://opamp.prod.o11yfleet.com/v1/opamp)
 INFO    extensions/opamp.go:178  enrolled successfully, received claim</code></pre>
           <p>
             Then in the O11yFleet portal, go to <strong>Agents</strong>. Your collector should

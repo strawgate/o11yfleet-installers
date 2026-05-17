@@ -35,7 +35,7 @@ Commands:
   uninstall   Remove the O11yFleet collector and service
 
 Install Options:
-  --token <TOKEN>        Enrollment token (required, starts with fp_enroll_)
+  --token <TOKEN>        Enrollment token (required, starts with fp_opamp_)
   --version <VERSION>    OTel collector version (default: 0.114.0)
   --endpoint <URL>       OpAMP server endpoint
   --dir <PATH>           Installation directory
@@ -63,13 +63,13 @@ Global Options:
 
 Examples:
   # Install with enrollment token
-  o11yinstaller install --token fp_enroll_abc123...
+  o11yinstaller install --token fp_opamp_abc123...
 
   # Scan for existing collectors
   o11yinstaller scan
 
   # Enroll existing collector
-  o11yinstaller enroll --collector /usr/bin/otelcol-contrib --token fp_enroll_...
+  o11yinstaller enroll --collector /usr/bin/otelcol-contrib --token fp_opamp_...
 
   # Uninstall
   o11yinstaller uninstall

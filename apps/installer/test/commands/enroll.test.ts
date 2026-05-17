@@ -54,11 +54,28 @@ describe("enroll command", () => {
       expect(result).toBe(false);
       expect(logger.messages).toContainEqual({
         level: "error",
-        msg: "Invalid enrollment token. Must start with 'fp_enroll_'",
+        msg: "Invalid enrollment token. Must start with 'fp_opamp_' or legacy 'fp_enroll_'",
       });
     });
 
-    it("accepts valid enrollment tokens", async () => {
+    it("accepts valid OpAMP tokens", async () => {
+      const fs = new MockFileSystem();
+      const logger = new MockLogger();
+
+      fs.files.set("/usr/bin/otelcol.yaml", "receivers:\n  otlp:\n    protocols:\n      grpc:");
+
+      const result = await enroll(
+        { fs, logger },
+        {
+          collectorPath: "/usr/bin/otelcol-contrib",
+          token: "fp_opamp_abc123",
+        },
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it("accepts legacy enrollment tokens", async () => {
       const fs = new MockFileSystem();
       const logger = new MockLogger();
 
@@ -88,7 +105,7 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_test",
+          token: "fp_opamp_test",
         },
       );
 
@@ -105,7 +122,7 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_test",
+          token: "fp_opamp_test",
         },
       );
 
@@ -129,7 +146,7 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_test",
+          token: "fp_opamp_test",
           endpoint: "wss://custom.example.com/opamp",
         },
       );
@@ -157,13 +174,13 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_secret_token",
+          token: "fp_opamp_secret_token",
         },
       );
 
       const writeCall = fs.writeFile.mock.calls.find(([path]) => path === "/opt/otelcol.yaml");
       const [, content] = writeCall!;
-      expect(content).toContain('Authorization: "Bearer fp_enroll_secret_token"');
+      expect(content).toContain('Authorization: "Bearer fp_opamp_secret_token"');
     });
 
     it("sets correct file permissions", async () => {
@@ -177,7 +194,7 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_test",
+          token: "fp_opamp_test",
         },
       );
 
@@ -195,13 +212,13 @@ describe("enroll command", () => {
         { fs, logger },
         {
           collectorPath: "/opt/otelcol-contrib",
-          token: "fp_enroll_test",
+          token: "fp_opamp_test",
         },
       );
 
       const writeCall = fs.writeFile.mock.calls.find(([path]) => path === "/opt/otelcol.yaml");
       const [, content] = writeCall!;
-      expect(content).toContain("wss://api.o11yfleet.com/v1/opamp");
+      expect(content).toContain("wss://opamp.prod.o11yfleet.com/v1/opamp");
     });
   });
 });

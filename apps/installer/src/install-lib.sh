@@ -555,7 +555,7 @@ Usage:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
-  --token TOKEN       Enrollment token (required, starts with fp_enroll_)
+  --token TOKEN       Enrollment token (required, starts with fp_opamp_ or legacy fp_enroll_)
   --version VERSION   OpenTelemetry Collector/Supervisor version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Binary install prefix (default: $INSTALL_DIR)
@@ -580,7 +580,7 @@ EOF
   fi
 
   if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
+    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_opamp_..."
   fi
 
   case "$TOKEN" in
