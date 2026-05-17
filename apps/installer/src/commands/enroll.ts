@@ -8,6 +8,7 @@ import {
   getTokenWarning,
   generateOtelConfig,
   createDefaultConfig,
+  DEFAULT_OPAMP_ENDPOINT,
 } from "../core/config.js";
 
 export interface EnrollContext {
@@ -30,7 +31,7 @@ export async function enroll(ctx: EnrollContext, options: EnrollOptions): Promis
 
   // Validate token
   if (!validateToken(token)) {
-    logger.error("Invalid enrollment token. Must start with 'fp_enroll_'");
+    logger.error("Invalid enrollment token. Must start with 'fp_opamp_' or legacy 'fp_enroll_'");
     return false;
   }
 
@@ -77,7 +78,7 @@ export async function enroll(ctx: EnrollContext, options: EnrollOptions): Promis
   }
 
   // Generate config
-  const config = createDefaultConfig(token, endpoint ?? "wss://api.o11yfleet.com/v1/opamp");
+  const config = createDefaultConfig(token, endpoint ?? DEFAULT_OPAMP_ENDPOINT);
   const configContent = generateOtelConfig(config);
 
   // Write config

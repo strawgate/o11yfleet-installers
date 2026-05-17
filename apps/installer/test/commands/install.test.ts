@@ -112,20 +112,25 @@ describe("install command", () => {
     expect(result.message).toContain("Invalid token");
   });
 
-  it("accepts valid fp_enroll_ token", async () => {
+  it("accepts valid fp_opamp_ token", async () => {
+    const result = await install(makeCtx(), { token: "fp_opamp_test_123", user: true });
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts legacy fp_enroll_ token", async () => {
     const result = await install(makeCtx(), { token: "fp_enroll_test_123", user: true });
     expect(result.success).toBe(true);
   });
 
   it("creates install directory on fresh install", async () => {
     const c = makeCtx();
-    await install(c, { token: "fp_enroll_test_123", user: true });
+    await install(c, { token: "fp_opamp_test_123", user: true });
     expect(c.fs.mkdir).toHaveBeenCalled();
   });
 
   it("does not write installer-managed instance UID state", async () => {
     const c = makeCtx();
-    await install(c, { token: "fp_enroll_test_123", user: true });
+    await install(c, { token: "fp_opamp_test_123", user: true });
 
     expect(c.fs.writeFile).not.toHaveBeenCalledWith(
       expect.stringContaining("instance-uid"),
@@ -140,7 +145,7 @@ describe("install command", () => {
     const c = makeCtx();
     c.fs.dirs.add("/home/test/.local/share/o11yfleet/bin");
     c.fs.files.set("/home/test/.local/share/o11yfleet/bin/otelcol-contrib", "existing");
-    const result = await install(c, { token: "fp_enroll_test_123", user: true });
+    const result = await install(c, { token: "fp_opamp_test_123", user: true });
     expect(result.isUpgrade).toBe(true);
   });
 });

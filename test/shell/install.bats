@@ -280,21 +280,58 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
 
 # ─── Offline Mode Tests ────────────────────────────────────────────────
 
-@test "install_collector_binary: fails if offline file doesn't exist" {
+@test "stage_install_artifacts: stages both artifacts before installing either" {
+  run bash -c '
+    source "$1"
+    stage_supervisor_artifact() { echo stage-supervisor; }
+    stage_collector_artifact() { echo stage-collector; }
+    cleanup_tmpdir() { :; }
+    stage_install_artifacts
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -eq 0 ]
+  [ "$output" = $'stage-supervisor\nstage-collector' ]
+}
+
+@test "hosted installer main flow installs collector and config before supervisor" {
+  run bash -c '
+    set -euo pipefail
+    for script in "$1/apps/site/install.sh" "$1/apps/site/public/install.sh"; do
+      stage=$(grep -n "^  stage_install_artifacts$" "$script" | tail -1 | cut -d: -f1)
+      dirs=$(grep -n "^  ensure_install_dirs$" "$script" | tail -1 | cut -d: -f1)
+      collector=$(grep -n "^  install_staged_collector$" "$script" | tail -1 | cut -d: -f1)
+      config=$(grep -n "^  write_config$" "$script" | tail -1 | cut -d: -f1)
+      supervisor=$(grep -n "^  install_staged_supervisor$" "$script" | tail -1 | cut -d: -f1)
+      harden=$(grep -n "^  harden_config_permissions$" "$script" | tail -1 | cut -d: -f1)
+      service=$(grep -n "linux)  install_linux_service" "$script" | tail -1 | cut -d: -f1)
+      [ -n "$stage$dirs$collector$config$supervisor$harden$service" ]
+      [ "$stage" -lt "$dirs" ]
+      [ "$dirs" -lt "$collector" ]
+      [ "$collector" -lt "$config" ]
+      [ "$config" -lt "$supervisor" ]
+      [ "$supervisor" -lt "$harden" ]
+      [ "$harden" -lt "$service" ]
+    done
+  ' _ "$SCRIPT_DIR"
+
+  [ "$status" -eq 0 ]
+}
+
+@test "stage_collector_artifact: fails if offline file doesn't exist" {
   # Set OFFLINE_FILE to a non-existent path
   run bash -c '
     source "$1"
     OFFLINE_FILE="/nonexistent/path/file.tar.gz"
     tmpdir="$(mktemp -d)"
     trap "rm -rf \"$tmpdir\"" EXIT
-    install_collector_binary "$tmpdir" 2>&1 || true
+    stage_collector_artifact "$tmpdir" 2>&1 || true
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" 
   
   # The error message should contain "Offline file not found"
   [[ "$output" == *"Offline file not found"* ]]
 }
 
-@test "install_collector_binary: rejects offline deb and rpm packages" {
+@test "stage_collector_artifact: rejects offline deb and rpm packages" {
   run bash -c '
     source "$1"
     tmpfile="$(mktemp).deb"
@@ -302,12 +339,34 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     printf "not a package" > "$tmpfile"
     OFFLINE_FILE="$tmpfile"
     tmpdir="$(mktemp -d)"
-    install_collector_binary "$tmpdir"
+    stage_collector_artifact "$tmpdir"
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unsupported offline file type"* ]]
   [[ "$output" == *"otelcol-contrib .tar.gz"* ]]
+}
+
+@test "stage_collector_artifact: stages offline tarball without mutating package type" {
+  run bash -c '
+    source "$1"
+    tmpfile="$(mktemp).tar.gz"
+    tmpdir="$(mktemp -d)"
+    trap "rm -f \"$tmpfile\"; rm -rf \"$tmpdir\"" EXIT
+    printf "not a real tarball" > "$tmpfile"
+    OFFLINE_FILE="$tmpfile"
+    OS=linux
+    ARCH=amd64
+    OTELCOL_VERSION=0.152.0
+    PKG_TYPE=deb
+    stage_collector_artifact "$tmpdir" >/dev/null
+    echo "pkg=$PKG_TYPE"
+    echo "staged=${STAGED_COLLECTOR_TARBALL#$tmpdir/}"
+  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"pkg=deb"* ]]
+  [[ "$output" == *"staged=otelcol-contrib_0.152.0_linux_amd64.tar.gz"* ]]
 }
 
 @test "write_config: writes supervisor config and token-free collector bootstrap" {

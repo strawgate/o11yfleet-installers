@@ -93,7 +93,7 @@ describe("parseOtelFilename", () => {
 describe("buildOpampEndpoint", () => {
   it("uses default endpoint when none provided", () => {
     const endpoint = buildOpampEndpoint();
-    expect(endpoint).toBe("wss://api.o11yfleet.com/v1/opamp");
+    expect(endpoint).toBe("wss://opamp.prod.o11yfleet.com/v1/opamp");
   });
 
   it("adds /v1/opamp path", () => {

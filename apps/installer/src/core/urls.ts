@@ -4,6 +4,7 @@
  */
 
 import type { OS, Arch, Platform, OTelAsset, ParsedOtelFilename } from "./types.js";
+import { DEFAULT_OPAMP_ENDPOINT } from "./config.js";
 
 const OTEL_RELEASES_BASE =
   "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download";
@@ -102,7 +103,11 @@ function parseArch(archStr: string): Arch | null {
  */
 export function buildOpampEndpoint(baseUrl?: string): string {
   // Remove trailing slash and ensure proper protocol
-  const base = baseUrl?.replace(/\/$/, "") || "wss://api.o11yfleet.com";
+  if (!baseUrl) {
+    return DEFAULT_OPAMP_ENDPOINT;
+  }
+
+  const base = baseUrl.replace(/\/$/, "");
 
   // Ensure wss:// or ws:// prefix
   if (!base.startsWith("ws")) {

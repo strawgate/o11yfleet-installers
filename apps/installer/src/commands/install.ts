@@ -21,6 +21,7 @@ import {
   validateToken,
   getTokenWarning,
   createDefaultConfig,
+  DEFAULT_OPAMP_ENDPOINT,
 } from "../core/config.js";
 
 export interface InstallerContext {
@@ -55,7 +56,7 @@ export async function install(
 
   // Validate token
   if (!validateToken(options.token)) {
-    logger.error("Invalid enrollment token. Must start with 'fp_enroll_'");
+    logger.error("Invalid enrollment token. Must start with 'fp_opamp_' or legacy 'fp_enroll_'");
     return { success: false, isUpgrade: false, message: "Invalid token" };
   }
 
@@ -135,10 +136,7 @@ export async function install(
     // Write config (unless upgrading and preserving)
     const configFile = `${installDir}/config/otelcol.yaml`;
     if (!isUpgrade) {
-      const config = createDefaultConfig(
-        options.token,
-        options.endpoint ?? "wss://api.o11yfleet.com/v1/opamp",
-      );
+      const config = createDefaultConfig(options.token, options.endpoint ?? DEFAULT_OPAMP_ENDPOINT);
       await fs.writeFile(configFile, generateOtelConfig(config));
       await fs.chmod(configFile, 0o640);
       logger.ok(`Config written to ${configFile}`);

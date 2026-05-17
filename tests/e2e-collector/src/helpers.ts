@@ -214,11 +214,9 @@ export function generateExtConfig(token: string): string {
           Authorization: "Bearer ${token}"
         tls:
           insecure: true
-    instance_uid: ""
     capabilities:
       reports_effective_config: true
       reports_health: true
-      reports_remote_config: true
 
 receivers:
   otlp:
@@ -263,18 +261,23 @@ export function generateSupervisorConfig(token: string): string {
   return `server:
   endpoint: "${wsEndpoint}"
   headers:
-    Authorization: "Bearer ${token}"
+    Authorization:
+      - "Bearer ${token}"
   tls:
     insecure: true
 
 capabilities:
-  reports_effective_config: true
-  reports_own_metrics: false
-  reports_health: true
-  reports_remote_config: true
   accepts_remote_config: true
   accepts_restart_command: true
-  accepts_opamp_connection_settings: true
+  accepts_opamp_connection_settings: false
+  reports_effective_config: true
+  reports_own_metrics: false
+  reports_own_logs: true
+  reports_own_traces: false
+  reports_health: true
+  reports_remote_config: true
+  reports_available_components: true
+  reports_heartbeat: true
 
 agent:
   executable: /otelcol-contrib

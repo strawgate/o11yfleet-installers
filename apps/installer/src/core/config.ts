@@ -6,6 +6,8 @@
 import type { OTelConfig, ServiceConfig } from "./types.js";
 
 const OTEL_VERSION = "0.151.0";
+export const DEFAULT_OPAMP_ENDPOINT = "wss://opamp.prod.o11yfleet.com/v1/opamp";
+const VALID_TOKEN_PREFIXES = ["fp_opamp_", "fp_enroll_"];
 
 /**
  * Generate the OTel collector YAML configuration.
@@ -63,13 +65,14 @@ service:
 
 /**
  * Validate enrollment token format.
- * Tokens should start with 'fp_enroll_'.
+ * Tokens should start with 'fp_opamp_'. Older fp_enroll_ tokens are accepted
+ * for compatibility with existing docs and generated test fixtures.
  */
 export function validateToken(token: string | undefined): boolean {
   if (!token || typeof token !== "string") {
     return false;
   }
-  return token.startsWith("fp_enroll_");
+  return VALID_TOKEN_PREFIXES.some((prefix) => token.startsWith(prefix));
 }
 
 /**
@@ -79,8 +82,8 @@ export function getTokenWarning(token: string | undefined): string | null {
   if (!token) {
     return null;
   }
-  if (!token.startsWith("fp_enroll_")) {
-    return "Token doesn't start with 'fp_enroll_' — are you sure this is an enrollment token?";
+  if (!validateToken(token)) {
+    return "Token doesn't start with 'fp_opamp_' or legacy 'fp_enroll_' - are you sure this is an enrollment token?";
   }
   return null;
 }

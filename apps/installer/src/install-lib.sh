@@ -18,6 +18,8 @@ LEGACY_INSTALL_DIR="${LEGACY_INSTALL_DIR:-/opt/o11yfleet}"
 INSTALLER_TMPDIR="${INSTALLER_TMPDIR:-}"
 TOKEN="${TOKEN:-}"
 SERVICE_STARTED="${SERVICE_STARTED:-false}"
+STAGED_SUPERVISOR_ARTIFACT=""
+STAGED_COLLECTOR_TARBALL=""
 SUDO=()
 
 info()  { printf "${CYAN}▸${NC} %s\n" "$*"; }
@@ -137,17 +139,17 @@ check_prereqs() {
   configure_privilege
 }
 
-# ─── Download & install supervisor and collector ───────────────────────
-install_binary() {
+# ─── Download supervisor and collector before mutating installation ─────
+stage_install_artifacts() {
   INSTALLER_TMPDIR="$(mktemp -d)"
   local tmpdir="$INSTALLER_TMPDIR"
   trap cleanup_tmpdir EXIT
 
-  install_supervisor "$tmpdir"
-  install_collector_binary "$tmpdir"
+  stage_supervisor_artifact "$tmpdir"
+  stage_collector_artifact "$tmpdir"
 }
 
-install_supervisor() {
+stage_supervisor_artifact() {
   local tmpdir="$1"
   local filename url
 
@@ -165,19 +167,27 @@ install_supervisor() {
 
   verify_checksum_url "$tmpdir" "$filename" "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fopampsupervisor%2Fv${SUPERVISOR_VERSION}/checksums.txt"
 
+  STAGED_SUPERVISOR_ARTIFACT="$tmpdir/$filename"
+}
+
+install_staged_supervisor() {
+  if [ -z "$STAGED_SUPERVISOR_ARTIFACT" ]; then
+    return
+  fi
+
   case "$PKG_TYPE" in
     deb)
       info "Installing OpAMP Supervisor DEB package..."
-      run_root dpkg -i "$tmpdir/$filename"
+      run_root dpkg -i "$STAGED_SUPERVISOR_ARTIFACT"
       ;;
     rpm)
       info "Installing OpAMP Supervisor RPM package..."
-      run_root rpm -Uvh "$tmpdir/$filename"
+      run_root rpm -Uvh "$STAGED_SUPERVISOR_ARTIFACT"
       ;;
     binary)
       info "Installing opampsupervisor binary..."
       run_root mkdir -p "$(dirname "$SUPERVISOR_BIN_PATH")"
-      run_root cp "$tmpdir/$filename" "$SUPERVISOR_BIN_PATH"
+      run_root cp "$STAGED_SUPERVISOR_ARTIFACT" "$SUPERVISOR_BIN_PATH"
       run_root chmod 755 "$SUPERVISOR_BIN_PATH"
       ;;
     *) fail "Unsupported supervisor package type: $PKG_TYPE" ;;
@@ -199,30 +209,32 @@ supervisor_download_url() {
   echo "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fopampsupervisor%2Fv${SUPERVISOR_VERSION}/${filename}"
 }
 
-install_collector_binary() {
+stage_collector_artifact() {
   local tmpdir="$1"
+  local tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
 
   if [ -n "$OFFLINE_FILE" ]; then
     info "Using offline file: $OFFLINE_FILE"
     if [ ! -f "$OFFLINE_FILE" ]; then
       fail "Offline file not found: $OFFLINE_FILE"
     fi
-    local offline_name
     case "$OFFLINE_FILE" in
-      *.tar.gz)
-        PKG_TYPE="tar.gz"
-        offline_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
-        ;;
+      *.tar.gz) ;;
       *)
         fail "Unsupported offline file type: $OFFLINE_FILE. Use the upstream otelcol-contrib .tar.gz artifact."
         ;;
     esac
-    cp "$OFFLINE_FILE" "$tmpdir/$offline_name"
+    cp "$OFFLINE_FILE" "$tmpdir/$tarball_name"
   else
     download_collector_binary "$tmpdir"
   fi
 
-  install_tarball "$tmpdir"
+  STAGED_COLLECTOR_TARBALL="$tmpdir/$tarball_name"
+}
+
+install_staged_collector() {
+  [ -n "$STAGED_COLLECTOR_TARBALL" ] || fail "Collector artifact was not staged"
+  install_tarball "$STAGED_COLLECTOR_TARBALL"
 }
 
 # ─── Download collector binary ───────────────────────────────────────
@@ -284,8 +296,9 @@ verify_checksum_url() {
 
 # ─── Install tarball ────────────────────────────────────────────────
 install_tarball() {
-  local tmpdir="$1"
-  local tarball="$tmpdir/otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
+  local tarball="$1"
+  local tmpdir
+  tmpdir="$(dirname "$tarball")"
 
   info "Extracting tarball..."
   tar -xzf "$tarball" -C "$tmpdir"
@@ -369,13 +382,17 @@ telemetry:
       - ${SUPERVISOR_LOG_DIR}/opampsupervisor.log
 YAML
 
+  harden_config_permissions
+  ok "Supervisor config written to $SUPERVISOR_CONFIG_FILE"
+}
+
+harden_config_permissions() {
   if [ "$OS" = "linux" ] && command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
     run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" "$SUPERVISOR_COLLECTOR_CONFIG_FILE" 2>/dev/null || true
     run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
   else
     run_root chmod 600 "$SUPERVISOR_CONFIG_FILE"
   fi
-  ok "Supervisor config written to $SUPERVISOR_CONFIG_FILE"
 }
 
 # ─── Linux systemd service ──────────────────────────────────────────
@@ -426,8 +443,7 @@ install_fallback_supervisor_unit() {
   ensure_opampsupervisor_user
   run_root chown -R opampsupervisor:opampsupervisor "$SUPERVISOR_STATE_DIR" "$SUPERVISOR_LOG_DIR" 2>/dev/null || true
   if command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
-    run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" 2>/dev/null || true
-    run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
+    harden_config_permissions
   fi
 
   info "Installing opampsupervisor systemd service..."
@@ -555,7 +571,7 @@ Usage:
   curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
-  --token TOKEN       Enrollment token (required, starts with fp_enroll_)
+  --token TOKEN       Enrollment token (required, starts with fp_opamp_ or legacy fp_enroll_)
   --version VERSION   OpenTelemetry Collector/Supervisor version (default: $OTELCOL_VERSION)
   --endpoint URL      OpAMP server endpoint (default: $OPAMP_ENDPOINT)
   --dir PATH          Binary install prefix (default: $INSTALL_DIR)
@@ -580,7 +596,7 @@ EOF
   fi
 
   if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_enroll_..."
+    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_opamp_..."
   fi
 
   case "$TOKEN" in
