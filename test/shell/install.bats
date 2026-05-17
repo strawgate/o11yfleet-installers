@@ -280,19 +280,41 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
 
 # ─── Offline Mode Tests ────────────────────────────────────────────────
 
-@test "install_binary: stages both artifacts before installing either" {
+@test "stage_install_artifacts: stages both artifacts before installing either" {
   run bash -c '
     source "$1"
     stage_supervisor_artifact() { echo stage-supervisor; }
     stage_collector_artifact() { echo stage-collector; }
-    install_staged_supervisor() { echo install-supervisor; }
-    install_staged_collector() { echo install-collector; }
     cleanup_tmpdir() { :; }
-    install_binary
+    stage_install_artifacts
   ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
 
   [ "$status" -eq 0 ]
-  [ "$output" = $'stage-supervisor\nstage-collector\ninstall-supervisor\ninstall-collector' ]
+  [ "$output" = $'stage-supervisor\nstage-collector' ]
+}
+
+@test "hosted installer main flow installs collector and config before supervisor" {
+  run bash -c '
+    set -euo pipefail
+    for script in "$1/apps/site/install.sh" "$1/apps/site/public/install.sh"; do
+      stage=$(grep -n "^  stage_install_artifacts$" "$script" | tail -1 | cut -d: -f1)
+      dirs=$(grep -n "^  ensure_install_dirs$" "$script" | tail -1 | cut -d: -f1)
+      collector=$(grep -n "^  install_staged_collector$" "$script" | tail -1 | cut -d: -f1)
+      config=$(grep -n "^  write_config$" "$script" | tail -1 | cut -d: -f1)
+      supervisor=$(grep -n "^  install_staged_supervisor$" "$script" | tail -1 | cut -d: -f1)
+      harden=$(grep -n "^  harden_config_permissions$" "$script" | tail -1 | cut -d: -f1)
+      service=$(grep -n "linux)  install_linux_service" "$script" | tail -1 | cut -d: -f1)
+      [ -n "$stage$dirs$collector$config$supervisor$harden$service" ]
+      [ "$stage" -lt "$dirs" ]
+      [ "$dirs" -lt "$collector" ]
+      [ "$collector" -lt "$config" ]
+      [ "$config" -lt "$supervisor" ]
+      [ "$supervisor" -lt "$harden" ]
+      [ "$harden" -lt "$service" ]
+    done
+  ' _ "$SCRIPT_DIR"
+
+  [ "$status" -eq 0 ]
 }
 
 @test "stage_collector_artifact: fails if offline file doesn't exist" {

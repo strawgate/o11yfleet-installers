@@ -168,16 +168,14 @@ check_prereqs() {
   configure_privilege
 }
 
-# ─── Download & install supervisor and collector ───────────────────────
-install_binary() {
+# ─── Download supervisor and collector before mutating installation ─────
+stage_install_artifacts() {
   INSTALLER_TMPDIR="$(mktemp -d)"
   local tmpdir="$INSTALLER_TMPDIR"
   trap cleanup_tmpdir EXIT
 
   stage_supervisor_artifact "$tmpdir"
   stage_collector_artifact "$tmpdir"
-  install_staged_supervisor
-  install_staged_collector
 }
 
 stage_supervisor_artifact() {
@@ -413,13 +411,17 @@ telemetry:
       - ${SUPERVISOR_LOG_DIR}/opampsupervisor.log
 YAML
 
+  harden_config_permissions
+  ok "Supervisor config written to $SUPERVISOR_CONFIG_FILE"
+}
+
+harden_config_permissions() {
   if [ "$OS" = "linux" ] && command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
     run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" "$SUPERVISOR_COLLECTOR_CONFIG_FILE" 2>/dev/null || true
     run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
   else
     run_root chmod 600 "$SUPERVISOR_CONFIG_FILE"
   fi
-  ok "Supervisor config written to $SUPERVISOR_CONFIG_FILE"
 }
 
 # ─── Linux systemd service ──────────────────────────────────────────
@@ -470,8 +472,7 @@ install_fallback_supervisor_unit() {
   ensure_opampsupervisor_user
   run_root chown -R opampsupervisor:opampsupervisor "$SUPERVISOR_STATE_DIR" "$SUPERVISOR_LOG_DIR" 2>/dev/null || true
   if command -v getent >/dev/null 2>&1 && getent group opampsupervisor >/dev/null 2>&1; then
-    run_root chown root:opampsupervisor "$SUPERVISOR_CONFIG_FILE" 2>/dev/null || true
-    run_root chmod 640 "$SUPERVISOR_CONFIG_FILE"
+    harden_config_permissions
   fi
 
   info "Installing opampsupervisor systemd service..."
@@ -660,10 +661,13 @@ main() {
     info "Existing installation detected — updating supervisor and collector config..."
   fi
 
-  install_binary
+  stage_install_artifacts
   ensure_install_dirs
+  install_staged_collector
   resolve_collector_bin
   write_config
+  install_staged_supervisor
+  harden_config_permissions
 
   case "$OS" in
     linux)  install_linux_service ;;
