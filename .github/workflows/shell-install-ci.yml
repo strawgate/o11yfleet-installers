@@ -4,14 +4,14 @@ on:
   push:
     branches: [main, "feat/**"]
     paths:
-      - "apps/site/**"
-      - "apps/installer/src/**"
+      - "apps/installer-shell/**"
+      - "apps/installer-ts/bootstrap.*"
       - "test/shell/**"
       - ".github/workflows/shell-install-ci.yml"
   pull_request:
     paths:
-      - "apps/site/**"
-      - "apps/installer/src/**"
+      - "apps/installer-shell/**"
+      - "apps/installer-ts/bootstrap.*"
       - "test/shell/**"
       - ".github/workflows/shell-install-ci.yml"
 
@@ -62,10 +62,12 @@ jobs:
             pkg_cmd: "brew install bats-core"
             bats_cmd: "bats test/shell/install.bats"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Run tests in container (Linux distros)
         if: matrix.container != ''
+        # TODO(supply-chain): third-party action, not SHA-pinned. Pin to a
+        # reviewed commit SHA (or replace with an inline `docker run`).
         uses: addnab/docker-run-action@v3
         with:
           image: ${{ matrix.container }}
@@ -93,20 +95,20 @@ jobs:
     name: Shell script validation
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Install shellcheck
         run: |
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
-      - name: Validate install-lib.sh
-        run: shellcheck apps/installer/src/install-lib.sh
+      - name: Validate shell installer
+        run: shellcheck apps/installer-shell/install.sh
 
-      - name: Validate install.sh
-        run: shellcheck apps/site/install.sh
+      - name: Validate ts/bun bootstrap
+        run: shellcheck apps/installer-ts/bootstrap.sh
 
       - name: Check shell script syntax
         run: |
-          bash -n apps/installer/src/install-lib.sh
-          bash -n apps/site/install.sh
+          bash -n apps/installer-shell/install.sh
+          bash -n apps/installer-ts/bootstrap.sh

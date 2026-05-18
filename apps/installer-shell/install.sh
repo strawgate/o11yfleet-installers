@@ -1,6 +1,36 @@
 #!/usr/bin/env bash
-# O11yFleet Collector Installer Library
-# Functions for installation - can be sourced for testing
+# O11yFleet OpenTelemetry Supervisor Installer
+# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+#
+# Installs the upstream OpenTelemetry OpAMP Supervisor service and runs
+# OpenTelemetry Collector Contrib as the supervised agent binary.
+# Supports: Linux (amd64/arm64), macOS (amd64/arm64)
+#
+# Options:
+#   --token TOKEN       Enrollment token (required, starts with fp_enroll_ or fp_opamp_)
+#   --version VERSION   OpenTelemetry Collector/Supervisor version (default: 0.152.0)
+#   --endpoint URL      OpAMP server endpoint (default: wss://opamp.prod.o11yfleet.com/v1/opamp)
+#   --dir PATH          Binary install prefix (default: /usr/local)
+#   --offline FILE      Use local OTel Collector Contrib tarball instead of downloading it
+#   --uninstall         Remove supervisor, collector binary, and config
+#   -h, --help          Show this help
+
+# Strict mode is set inside main() rather than globally so this file can be
+# sourced (e.g. by the bats tests) without aborting the caller's shell.
+
+# ─── Configuration ────────────────────────────────────────────────────
+OTELCOL_VERSION="${OTELCOL_VERSION:-0.152.0}"
+SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-$OTELCOL_VERSION}"
+OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://opamp.prod.o11yfleet.com/v1/opamp}"
+INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
+OFFLINE_FILE=""
+TOKEN=""
+COLLECTOR_BIN=""
+INSTALLER_TMPDIR=""
+SERVICE_STARTED=false
+STAGED_SUPERVISOR_ARTIFACT=""
+STAGED_COLLECTOR_TARBALL=""
+SUDO=()
 
 # ─── Colors ─────────────────────────────────────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
@@ -606,3 +636,71 @@ EOF
 
   return 0
 }
+
+
+# ─── Main ─────────────────────────────────────────────────────────
+main() {
+  set -euo pipefail
+  echo ""
+  printf "%s
+" "${CYAN}  O11yFleet OpenTelemetry Supervisor Installer${NC}"
+  echo "  ─────────────────────────────────────────────"
+  echo ""
+
+  detect_platform
+
+  # Parse args (exits if --uninstall)
+  parse_args "$@"
+
+  # Select supervisor install artifact after arguments are known.
+  PKG_TYPE=$(detect_package_manager)
+  info "Supervisor package type: $PKG_TYPE"
+
+  check_prereqs
+  preflight_conflicting_collector_service
+
+  if [ -f "$SUPERVISOR_CONFIG_FILE" ] || [ -f "$COLLECTOR_BIN_PATH" ] || [ -d "$LEGACY_INSTALL_DIR" ]; then
+    info "Existing installation detected — updating supervisor and collector config..."
+  fi
+
+  stage_install_artifacts
+  ensure_install_dirs
+  install_staged_collector
+  resolve_collector_bin
+  write_config
+  install_staged_supervisor
+  harden_config_permissions
+
+  case "$OS" in
+    linux)  install_linux_service ;;
+    darwin) install_macos_service ;;
+  esac
+
+  echo ""
+  if [ "$SERVICE_STARTED" = true ]; then
+    ok "OpenTelemetry OpAMP Supervisor is running."
+  else
+    ok "OpenTelemetry OpAMP Supervisor and Collector Contrib installed."
+    warn "Service was not started automatically."
+  fi
+  echo ""
+  if [ "$SERVICE_STARTED" = true ]; then
+    info "The collector will appear in your O11yFleet dashboard within a few seconds."
+    info "View logs:"
+    case "$OS" in
+      linux)  echo "  sudo journalctl -u opampsupervisor -f" ;;
+      darwin) echo "  tail -f ${SUPERVISOR_LOG_DIR}/opampsupervisor.log" ;;
+    esac
+  fi
+  info "Uninstall:"
+  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --uninstall"
+  echo ""
+}
+
+# Run main only when executed, not when sourced (bats sources this file to
+# unit-test individual functions). Handles `curl ... | bash` where
+# BASH_SOURCE[0] is empty, direct execution where it equals $0, and being
+# sourced where it is a non-empty path different from $0.
+if [ -z "${BASH_SOURCE[0]:-}" ] || [ "${BASH_SOURCE[0]}" = "${0}" ]; then
+  main "$@"
+fi

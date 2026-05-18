@@ -250,13 +250,6 @@ jobs:
         if: ${{ steps.target.outputs.env == 'prod' }}
         run: just tf-check-staging-readiness prod
 
-      - name: Sync installer
-        if: ${{ !contains(toJSON(github.event.commits.*.message), '[skip site]') }}
-        run: |
-          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.sh -o apps/site/public/install.sh
-          chmod +x apps/site/public/install.sh
-          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.ps1 -o apps/site/public/install.ps1
-
       - name: Build site
         if: ${{ !contains(toJSON(github.event.commits.*.message), '[skip site]') }}
         run: just site-build ${{ steps.target.outputs.env }}

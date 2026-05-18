@@ -191,33 +191,28 @@ ci-check name:
 [group: 'build']
 build-installer:
     @echo "Building installer bundle..."
-    pnpm --filter @o11yfleet/installer build:bundle
-    @echo "Bundle: apps/installer/dist/installer-bundle.js ($(wc -c < apps/installer/dist/installer-bundle.js) bytes)"
+    pnpm --filter @o11yfleet/installer-ts build:bundle
+    @echo "Bundle: apps/installer-ts/dist/installer-bundle.js ($(wc -c < apps/installer-ts/dist/installer-bundle.js) bytes)"
 
 [group: 'release']
 publish-installer version:
     #!/usr/bin/env bash
     set -euo pipefail
     VERSION="{{version}}"
-    BUNDLE="apps/installer/dist/installer-bundle.js"
-    SCRIPT_DIR="apps/installer/bootstrap"
-    SITE_SCRIPTS=(
-        "apps/site/install.sh"
-        "apps/site/install.ps1"
-        "apps/site/public/install.sh"
-        "apps/site/public/install.ps1"
-    )
+    BUNDLE="apps/installer-ts/dist/installer-bundle.js"
+    # The two installers, published as distinct, unambiguous assets:
+    #   shell installer  -> install.sh / install.ps1   (curl | bash today)
+    #   ts/bun installer -> installer-bundle + bootstrap.sh / bootstrap.ps1
     if [ ! -f "$BUNDLE" ]; then echo "Run 'just build-installer' first." >&2; exit 1; fi
     gh release create "$VERSION" \
         --repo strawgate/o11yfleet-installers \
         --title "Installer $VERSION" \
-        --notes "Installer bundle + scripts for $VERSION" \
+        --notes "Shell + TS/Bun installers for $VERSION" \
         "$BUNDLE#installer-bundle-${VERSION}.js" \
-        "${SCRIPT_DIR}/install.sh#install.sh" \
-        "${SCRIPT_DIR}/install.ps1#install.ps1"
-    for f in "${SITE_SCRIPTS[@]}"; do
-        [ -f "$f" ] && gh release upload "$VERSION" "$f" --repo strawgate/o11yfleet-installers --clobber
-    done
+        "apps/installer-ts/bootstrap.sh#bootstrap.sh" \
+        "apps/installer-ts/bootstrap.ps1#bootstrap.ps1" \
+        "apps/installer-shell/install.sh#install.sh" \
+        "apps/installer-shell/install.ps1#install.ps1"
     @echo "Release $VERSION created. Assets:"
     @gh release view "$VERSION" --repo strawgate/o11yfleet-installers --json assets --jq '.assets[].name'
 

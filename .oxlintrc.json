@@ -179,7 +179,7 @@
       }
     },
     {
-      "files": ["apps/installer/src/**"],
+      "files": ["apps/installer-ts/src/**"],
       "rules": {
         "no-console": "off"
       }
