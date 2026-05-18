@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # O11yFleet OpenTelemetry Supervisor Installer
-# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+# Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.prod.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 #
 # Installs the upstream OpenTelemetry OpAMP Supervisor service and runs
 # OpenTelemetry Collector Contrib as the supervised agent binary.
@@ -13,6 +13,7 @@
 #   --dir PATH          Binary install prefix (default: /usr/local)
 #   --offline FILE      Use local OTel Collector Contrib tarball instead of downloading it
 #   --uninstall         Remove supervisor, collector binary, and config
+#   --insecure-skip-checksum  Skip download integrity verification (NOT recommended)
 #   -h, --help          Show this help
 
 # Strict mode is set inside main() rather than globally so this file can be
@@ -24,6 +25,7 @@ SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-$OTELCOL_VERSION}"
 OPAMP_ENDPOINT="${OPAMP_ENDPOINT:-wss://opamp.prod.o11yfleet.com/v1/opamp}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
 OFFLINE_FILE=""
+SKIP_CHECKSUM="${SKIP_CHECKSUM:-false}"
 TOKEN=""
 COLLECTOR_BIN=""
 INSTALLER_TMPDIR=""
@@ -303,9 +305,13 @@ verify_checksum_url() {
   local checksums_url="$3"
   local expected_hash
 
-  if ! curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
-    warn "Could not download checksums.txt, skipping verification"
+  if [ "$SKIP_CHECKSUM" = true ]; then
+    warn "Checksum verification disabled via --insecure-skip-checksum (NOT recommended)"
     return
+  fi
+
+  if ! curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
+    fail "Could not download checksums.txt from ${checksums_url} — refusing to install an unverified binary. Re-run with --insecure-skip-checksum to override (NOT recommended)."
   fi
 
   expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)"
@@ -319,7 +325,7 @@ verify_checksum_url() {
     (cd "$tmpdir" && shasum -a 256 -c "${filename}.sha256") \
       || fail "Checksum verification failed — download may be corrupted"
   else
-    warn "No checksum utility found, skipping verification"
+    fail "No sha256 utility (sha256sum or shasum) found — cannot verify download integrity. Install one or re-run with --insecure-skip-checksum (NOT recommended)."
   fi
   ok "Checksum verified"
 }
@@ -592,13 +598,14 @@ parse_args() {
         [ -z "${2:-}" ] || [ "${2#-}" != "$2" ] && fail "Missing value for --offline"
         OFFLINE_FILE="$2"; shift 2 ;;
       --offline=*) OFFLINE_FILE="${1#*=}"; shift ;;
+      --insecure-skip-checksum) SKIP_CHECKSUM=true; shift ;;
       --uninstall)  UNINSTALL=true; shift ;;
       --help|-h)
         cat <<EOF
 O11yFleet OpenTelemetry Supervisor Installer
 
 Usage:
-  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
+  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.prod.o11yfleet.com/install.sh | bash -s -- --token <TOKEN>
 
 Options:
   --token TOKEN       Enrollment token (required, starts with fp_opamp_ or legacy fp_enroll_)
@@ -607,11 +614,12 @@ Options:
   --dir PATH          Binary install prefix (default: $INSTALL_DIR)
   --offline FILE      Use local OTel Collector Contrib tarball instead of downloading it
   --uninstall         Remove supervisor, collector binary, and config
+  --insecure-skip-checksum  Skip download integrity verification (NOT recommended)
   -h, --help          Show this help
 
 Offline Installation:
   Download the OpenTelemetry Collector Contrib tarball for your platform, then:
-  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.tar.gz
+  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.prod.o11yfleet.com/install.sh | bash -s -- --token <TOKEN> --offline /path/to/otelcol-contrib.tar.gz
 
 Supported offline file types:
   - .tar.gz
@@ -626,13 +634,25 @@ EOF
   fi
 
   if [ -z "$TOKEN" ]; then
-    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --token fp_opamp_..."
+    fail "Enrollment token required.\n  Usage: curl --proto '=https' --tlsv1.2 -fsSL https://downloads.prod.o11yfleet.com/install.sh | bash -s -- --token fp_opamp_..."
   fi
 
   case "$TOKEN" in
     fp_enroll_*|fp_opamp_*) ;;
     *) warn "Token doesn't start with fp_enroll_ or fp_opamp_ — are you sure this is an enrollment token?" ;;
   esac
+
+  # Versions are interpolated into upstream download/checksum URLs — reject
+  # anything that isn't a bare semver so a typo fails clearly rather than
+  # producing a confusing 404 (or a surprising URL).
+  OTELCOL_VERSION="${OTELCOL_VERSION#v}"
+  SUPERVISOR_VERSION="${SUPERVISOR_VERSION#v}"
+  if ! [[ "$OTELCOL_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    fail "Invalid collector version '${OTELCOL_VERSION}' — expected semver X.Y.Z (e.g. 0.152.0)"
+  fi
+  if ! [[ "$SUPERVISOR_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    fail "Invalid supervisor version '${SUPERVISOR_VERSION}' — expected semver X.Y.Z (e.g. 0.152.0)"
+  fi
 
   return 0
 }
@@ -693,7 +713,7 @@ main() {
     esac
   fi
   info "Uninstall:"
-  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.o11yfleet.com/install.sh | bash -s -- --uninstall"
+  echo "  curl --proto '=https' --tlsv1.2 -fsSL https://downloads.prod.o11yfleet.com/install.sh | bash -s -- --uninstall"
   echo ""
 }
 

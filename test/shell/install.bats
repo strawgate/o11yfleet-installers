@@ -412,3 +412,39 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   [[ "$output" == *"--token"* ]]
   [[ "$output" == *"--offline"* ]]
 }
+
+@test "parse_args: strips leading v and accepts semver --version" {
+  run bash -c '
+    source "$1"
+    parse_args --token fp_enroll_test123 --version v0.152.0
+    echo "$OTELCOL_VERSION/$SUPERVISOR_VERSION"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "0.152.0/0.152.0" ]
+}
+
+@test "parse_args: rejects non-semver --version" {
+  run bash -c '
+    source "$1"
+    parse_args --token fp_enroll_test123 --version latest 2>&1 || true
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [[ "$output" == *"Invalid collector version"* ]]
+}
+
+@test "parse_args: --insecure-skip-checksum sets SKIP_CHECKSUM" {
+  run bash -c '
+    source "$1"
+    parse_args --token fp_enroll_test123 --insecure-skip-checksum
+    echo "$SKIP_CHECKSUM"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "true" ]
+}
+
+@test "install.sh advertises the canonical downloads.prod host" {
+  run grep -c "downloads\.prod\.o11yfleet\.com" "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" -ge 5 ]
+  run grep -c "downloads\.o11yfleet\.com" "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$output" -eq 0 ]
+}
