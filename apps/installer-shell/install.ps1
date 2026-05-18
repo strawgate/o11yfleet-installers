@@ -133,7 +133,8 @@ foreach ($serviceName in @("otelcol-contrib", "otelcol")) {
 }
 
 Write-Host ""
-Write-Host "  O11yFleet Collector Installer" -ForegroundColor Cyan
+if ($UseColor) { Write-Host "  O11yFleet Collector Installer" -ForegroundColor Cyan }
+else { Write-Host "  O11yFleet Collector Installer" }
 Write-Host "  ------------------------------"
 Write-Host ""
 
@@ -198,12 +199,19 @@ try {
         }
     }
 
-    # Atomic install: stage beside the destination then rename into place
-    # so an interrupted copy can't leave a half-written executable.
+    # Atomic install: stage beside the destination then swap into place so
+    # an interrupted copy can't leave a half-written executable. On upgrade
+    # use the Win32 ReplaceFile primitive (single-call replace, preserves
+    # the destination's ACLs/attributes); plain move for a fresh install.
     $binDest = "$InstallDir\bin\otelcol-contrib.exe"
     $binTmp = "$binDest.new"
     Copy-Item "$tmpDir\otelcol-contrib.exe" $binTmp -Force
-    Move-Item $binTmp $binDest -Force
+    if (-not (Test-Path $binTmp)) { Write-Fail "Staged binary missing: $binTmp" }
+    if (Test-Path $binDest) {
+        [System.IO.File]::Replace($binTmp, $binDest, $null)
+    } else {
+        Move-Item $binTmp $binDest
+    }
     if (-not (Test-Path $binDest)) { Write-Fail "Installed binary missing: $binDest" }
     Write-Ok "Installed otelcol-contrib to $InstallDir\bin\"
 
