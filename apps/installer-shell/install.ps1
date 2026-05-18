@@ -9,6 +9,9 @@
 # The enrollment token may also be supplied via the O11Y_TOKEN environment
 # variable instead of -Token (keeps it out of shell history).
 #
+# Troubleshooting only (bypasses checksum verification, NOT recommended):
+#   .\install.ps1 -Token "fp_opamp_..." -SkipChecksum
+#
 # Uninstall:
 #   .\install.ps1 -Uninstall
 #
@@ -107,22 +110,30 @@ if ($Uninstall) {
     exit 0
 }
 
-# --- Validate token (required for install, not for uninstall) ---------
+# --- Determine upgrade state (before enforcing token input) -----------
+# On an upgrade that preserves an existing config, the enrollment token is
+# never consumed, so don't force the caller to re-supply it — this keeps
+# the advertised idempotent binary-upgrade path working unattended.
+$configPath = "$InstallDir\config\otelcol.yaml"
+$isUpgrade = Test-Path "$InstallDir\bin\otelcol-contrib.exe"
+$needsToken = -not ($isUpgrade -and (Test-Path $configPath))
+
+# --- Validate token (required for fresh install; not for uninstall or
+#     a config-preserving upgrade) ------------------------------------
 # Fall back to the O11Y_TOKEN env var so the token need not be on the
 # command line; an explicit -Token still takes precedence.
 if ([string]::IsNullOrWhiteSpace($Token) -and -not [string]::IsNullOrWhiteSpace($env:O11Y_TOKEN)) {
     $Token = $env:O11Y_TOKEN
 }
-if ([string]::IsNullOrWhiteSpace($Token)) {
+if ($needsToken -and [string]::IsNullOrWhiteSpace($Token)) {
     Write-Fail ("Token is required for installation.`n" +
         "  Usage: .\install.ps1 -Token `"fp_opamp_...`"`n" +
         "  Or:    `$env:O11Y_TOKEN = `"fp_opamp_...`"; .\install.ps1`n" +
         "  Or:    & ([scriptblock]::Create((irm https://downloads.prod.o11yfleet.com/install.ps1))) -Token `"fp_opamp_...`"")
 }
-if (-not $Token.StartsWith("fp_enroll_")) {
-    if (-not $Token.StartsWith("fp_opamp_")) {
-        Write-Warn "Token doesn't start with fp_enroll_ or fp_opamp_ - are you sure this is an enrollment token?"
-    }
+if (-not [string]::IsNullOrWhiteSpace($Token) -and
+    -not $Token.StartsWith("fp_enroll_") -and -not $Token.StartsWith("fp_opamp_")) {
+    Write-Warn "Token doesn't start with fp_enroll_ or fp_opamp_ - are you sure this is an enrollment token?"
 }
 
 foreach ($serviceName in @("otelcol-contrib", "otelcol")) {
@@ -150,7 +161,7 @@ switch ($osArch) {
 }
 
 # --- Check for existing install (idempotent upgrade) ------------------
-$isUpgrade = Test-Path "$InstallDir\bin\otelcol-contrib.exe"
+# $isUpgrade / $configPath were determined above for the token guard.
 if ($isUpgrade) {
     Write-Info "Existing installation detected - upgrading binary, preserving config."
 }
@@ -223,7 +234,6 @@ try {
 }
 
 # --- Config (only written on fresh install, preserved on upgrade) -----
-$configPath = "$InstallDir\config\otelcol.yaml"
 if ($isUpgrade -and (Test-Path $configPath)) {
     Write-Info "Preserving existing config at $configPath"
 } else {
