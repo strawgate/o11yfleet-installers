@@ -47,14 +47,29 @@ jobs:
           # Two installers, published as distinct, unambiguous assets:
           #   shell installer -> install.sh / install.ps1   (curl | bash)
           #   ts/bun installer -> installer-bundle + bootstrap.sh / bootstrap.ps1
-          # --latest so downloads-redirect's releases/latest/download/* resolves here.
-          gh release create "$VERSION" \
-            --repo strawgate/o11yfleet-installers \
-            --title "Installer $VERSION" \
-            --notes "Shell + TS/Bun installers for $VERSION" \
-            --latest \
-            "$BUNDLE#installer-bundle-${VERSION}.js" \
-            "apps/installer-ts/bootstrap.sh#bootstrap.sh" \
-            "apps/installer-ts/bootstrap.ps1#bootstrap.ps1" \
-            "apps/installer-shell/install.sh#install.sh" \
+          ASSETS=(
+            "$BUNDLE#installer-bundle-${VERSION}.js"
+            "apps/installer-ts/bootstrap.sh#bootstrap.sh"
+            "apps/installer-ts/bootstrap.ps1#bootstrap.ps1"
+            "apps/installer-shell/install.sh#install.sh"
             "apps/installer-shell/install.ps1#install.ps1"
+          )
+          REPO="strawgate/o11yfleet-installers"
+          if gh release view "$VERSION" --repo "$REPO" >/dev/null 2>&1; then
+            # Idempotent re-run: release already exists, replace its assets.
+            echo "Release $VERSION exists — re-uploading assets (--clobber)"
+            gh release upload "$VERSION" --repo "$REPO" --clobber "${ASSETS[@]}"
+          else
+            # A SemVer pre-release tag (contains a hyphen, e.g. v0.0.2-rc1)
+            # must not be marked latest — downloads-redirect serves latest.
+            case "$VERSION" in
+              *-*) RELEASE_KIND=(--prerelease) ;;
+              *)   RELEASE_KIND=(--latest) ;;
+            esac
+            gh release create "$VERSION" \
+              --repo "$REPO" \
+              --title "Installer $VERSION" \
+              --notes "Shell + TS/Bun installers for $VERSION" \
+              "${RELEASE_KIND[@]}" \
+              "${ASSETS[@]}"
+          fi
