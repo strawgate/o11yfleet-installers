@@ -448,3 +448,81 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   run grep -c "downloads\.o11yfleet\.com" "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$output" -eq 0 ]
 }
+
+@test "O11Y_TOKEN env seeds TOKEN when --token is absent" {
+  run env O11Y_TOKEN=fp_opamp_envtoken bash -c '
+    source "$1"
+    parse_args
+    echo "$TOKEN"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "fp_opamp_envtoken" ]
+}
+
+@test "--token overrides O11Y_TOKEN" {
+  run env O11Y_TOKEN=fp_opamp_envtoken bash -c '
+    source "$1"
+    parse_args --token fp_opamp_flagtoken
+    echo "$TOKEN"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "fp_opamp_flagtoken" ]
+}
+
+@test "need_cmd fails clearly for a missing command" {
+  run bash -c '
+    source "$1"
+    need_cmd this-command-does-not-exist-xyz
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Required command not found: this-command-does-not-exist-xyz"* ]]
+}
+
+@test "download() pins HTTPS/TLS and uses bounded retries" {
+  run bash -c '
+    source "$1"
+    declare -f download
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"=https"* ]]
+  [[ "$output" == *"--tlsv1.2"* ]]
+  [[ "$output" == *"--retry 3"* ]]
+  [[ "$output" == *"--connect-timeout"* ]]
+}
+
+@test "colors are disabled when stdout is not a TTY" {
+  run bash -c '
+    source "$1"
+    printf "[%s]" "$RED"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [ "$output" = "[]" ]
+}
+
+@test "on_error emits a diagnostic without exiting" {
+  run bash -c '
+    source "$1"
+    on_error 7 42
+    echo "after-trap"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"Install failed (exit 7, line 42)"* ]]
+  [[ "$output" == *"after-trap"* ]]
+}
+
+@test "install_binary_atomic installs an executable and leaves no temp file" {
+  run bash -c '
+    source "$1"
+    SUDO=()
+    workdir="$(mktemp -d)"
+    printf "#!/bin/sh\necho hi\n" > "$workdir/src.bin"
+    install_binary_atomic "$workdir/src.bin" "$workdir/sub/dest.bin"
+    [ -x "$workdir/sub/dest.bin" ] || { echo "not executable"; exit 1; }
+    [ "$(cat "$workdir/sub/dest.bin")" = "$(cat "$workdir/src.bin")" ] || { echo "content mismatch"; exit 1; }
+    ls "$workdir/sub/" | grep -q "\.tmp\." && { echo "temp file leaked"; exit 1; }
+    rm -rf "$workdir"
+    echo "atomic-ok"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"atomic-ok"* ]]
+}

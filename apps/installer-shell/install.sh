@@ -35,7 +35,13 @@ STAGED_COLLECTOR_TARBALL=""
 SUDO=()
 
 # ─── Colors ─────────────────────────────────────────────────────────
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+# Only emit ANSI when stdout is a TTY and NO_COLOR is unset, so piped or
+# journald-captured output (curl | sudo bash logs) stays escape-free.
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ]; then
+  RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'; NC='\033[0m'
+else
+  RED=''; GREEN=''; YELLOW=''; CYAN=''; NC=''
+fi
 COLLECTOR_BIN="${COLLECTOR_BIN:-}"
 INSTALL_DIR="${INSTALL_DIR:-/usr/local}"
 SUPERVISOR_VERSION="${SUPERVISOR_VERSION:-${OTELCOL_VERSION:-0.152.0}}"
@@ -48,7 +54,10 @@ SUPERVISOR_BIN_PATH="${SUPERVISOR_BIN_PATH:-$INSTALL_DIR/bin/opampsupervisor}"
 COLLECTOR_BIN_PATH="${COLLECTOR_BIN_PATH:-$INSTALL_DIR/bin/otelcol}"
 LEGACY_INSTALL_DIR="${LEGACY_INSTALL_DIR:-/opt/o11yfleet}"
 INSTALLER_TMPDIR="${INSTALLER_TMPDIR:-}"
-TOKEN="${TOKEN:-}"
+# Prefer the O11Y_TOKEN environment variable so the enrollment token need
+# not appear on the command line (where it is visible in `ps`/shell history).
+# An explicit --token still overrides this.
+TOKEN="${O11Y_TOKEN:-${TOKEN:-}}"
 SERVICE_STARTED="${SERVICE_STARTED:-false}"
 STAGED_SUPERVISOR_ARTIFACT=""
 STAGED_COLLECTOR_TARBALL=""
@@ -58,6 +67,41 @@ info()  { printf "${CYAN}▸${NC} %s\n" "$*"; }
 ok()    { printf "${GREEN}✓${NC} %s\n" "$*"; }
 warn()  { printf "${YELLOW}!${NC} %s\n" "$*" >&2; }
 fail()  { printf "${RED}✗${NC} %s\n" "$*" >&2; exit 1; }
+
+need_cmd() {
+  command -v "$1" >/dev/null 2>&1 || fail "Required command not found: $1"
+}
+
+on_error() {
+  local rc="$1" line="$2"
+  printf "${RED}✗${NC} Install failed (exit %s, line %s). No service changes are applied until the final step; re-running the same command is safe.\n" "$rc" "$line" >&2
+}
+
+# Hardened downloader: HTTPS-only, TLS 1.2+, bounded retries with backoff,
+# connect/transfer timeouts, and resume (-C -) so a dropped connection is
+# retried/resumed instead of failing the whole install. Returns curl's exit
+# code so callers can distinguish 404 (22) from transport errors.
+download() {
+  local url="$1" out="$2"
+  curl --proto '=https' --tlsv1.2 -fsSL \
+    --retry 3 --retry-connrefused --retry-delay 2 \
+    --connect-timeout 10 --max-time 600 \
+    -C - "$url" -o "$out"
+}
+
+# Atomic binary install: stage next to the destination (same filesystem),
+# set mode, then rename into place. rename(2) is atomic and safe even when
+# the target binary is currently running (the live process keeps the old
+# inode), so an interrupted install can't leave a half-written executable.
+install_binary_atomic() {
+  local src="$1" dest="$2" tmp
+  tmp="${dest}.tmp.$$"
+  run_root mkdir -p "$(dirname "$dest")"
+  run_root cp "$src" "$tmp"
+  run_root chmod 755 "$tmp"
+  run_root mv -f "$tmp" "$dest"
+  [ -x "$dest" ] || fail "Installed binary is not executable: $dest"
+}
 
 configure_privilege() {
   if [ "$(id -u)" -eq 0 ]; then
@@ -114,6 +158,21 @@ detect_platform() {
     darwin) OS="darwin" ;;
     *)      fail "Unsupported OS: $OS. Use Linux or macOS." ;;
   esac
+
+  # Under Rosetta 2 a translated x86_64 shell reports uname -m as x86_64 even
+  # on Apple Silicon, which would fetch the wrong (amd64) binary. sysctl does
+  # not lie, so prefer the native arm64 artifact when translation is detected.
+  if [ "$OS" = "darwin" ] && [ "$ARCH" = "amd64" ]; then
+    if [ "$(sysctl -n sysctl.proc_translated 2>/dev/null || echo 0)" = "1" ] \
+      || [ "$(sysctl -n hw.optional.arm64 2>/dev/null || echo 0)" = "1" ]; then
+      ARCH="arm64"
+    fi
+  fi
+
+  # Note: upstream OpenTelemetry collector/supervisor releases are static Go
+  # binaries with no separate musl build, so glibc-vs-musl detection would not
+  # change artifact selection on Alpine and is intentionally omitted.
+
   info "Detected platform: $OS/$ARCH"
 }
 
@@ -164,9 +223,9 @@ preflight_conflicting_collector_service() {
 
 # ─── Prerequisites ────────────────────────────────────────────────────
 check_prereqs() {
-  command -v tar >/dev/null 2>&1 || fail "Required command not found: tar"
+  need_cmd tar
   if [ -z "$OFFLINE_FILE" ] || ! command -v opampsupervisor >/dev/null 2>&1; then
-    command -v curl >/dev/null 2>&1 || fail "Required command not found: curl"
+    need_cmd curl
   fi
   configure_privilege
 }
@@ -183,7 +242,7 @@ stage_install_artifacts() {
 
 stage_supervisor_artifact() {
   local tmpdir="$1"
-  local filename url
+  local filename url rc=0
 
   if command -v opampsupervisor >/dev/null 2>&1; then
     ok "Using existing opampsupervisor at $(command -v opampsupervisor)"
@@ -194,8 +253,13 @@ stage_supervisor_artifact() {
   url="$(supervisor_download_url "$filename")"
 
   info "Downloading OpenTelemetry OpAMP Supervisor $SUPERVISOR_VERSION ($PKG_TYPE)..."
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$filename" \
-    || fail "Download failed. Check supervisor version $SUPERVISOR_VERSION exists at:\n  $url"
+  download "$url" "$tmpdir/$filename" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 22 ]; then
+      fail "Supervisor $SUPERVISOR_VERSION not found for $OS/$ARCH (HTTP 404) — that version or platform may be unsupported:\n  $url"
+    fi
+    fail "Network error downloading the OpAMP Supervisor (curl exit $rc):\n  $url"
+  fi
 
   verify_checksum_url "$tmpdir" "$filename" "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/cmd%2Fopampsupervisor%2Fv${SUPERVISOR_VERSION}/checksums.txt"
 
@@ -218,9 +282,7 @@ install_staged_supervisor() {
       ;;
     binary)
       info "Installing opampsupervisor binary..."
-      run_root mkdir -p "$(dirname "$SUPERVISOR_BIN_PATH")"
-      run_root cp "$STAGED_SUPERVISOR_ARTIFACT" "$SUPERVISOR_BIN_PATH"
-      run_root chmod 755 "$SUPERVISOR_BIN_PATH"
+      install_binary_atomic "$STAGED_SUPERVISOR_ARTIFACT" "$SUPERVISOR_BIN_PATH"
       ;;
     *) fail "Unsupported supervisor package type: $PKG_TYPE" ;;
   esac
@@ -272,7 +334,7 @@ install_staged_collector() {
 # ─── Download collector binary ───────────────────────────────────────
 download_collector_binary() {
   local tmpdir="$1"
-  local tarball_name filename url
+  local tarball_name filename url rc=0
 
   tarball_name="otelcol-contrib_${OTELCOL_VERSION}_${OS}_${ARCH}.tar.gz"
   filename="$tarball_name"
@@ -280,8 +342,13 @@ download_collector_binary() {
   url="https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${OTELCOL_VERSION}/${filename}"
 
   info "Downloading OpenTelemetry Collector Contrib $OTELCOL_VERSION..."
-  curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$tmpdir/$tarball_name" \
-    || fail "Download failed. Check collector version $OTELCOL_VERSION exists at:\n  $url"
+  download "$url" "$tmpdir/$tarball_name" || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    if [ "$rc" -eq 22 ]; then
+      fail "Collector $OTELCOL_VERSION not found for $OS/$ARCH (HTTP 404) — that version or platform may be unsupported:\n  $url"
+    fi
+    fail "Network error downloading the OpenTelemetry Collector (curl exit $rc):\n  $url"
+  fi
 
   verify_checksum "$tmpdir" "$tarball_name"
 }
@@ -303,29 +370,29 @@ verify_checksum_url() {
   local tmpdir="$1"
   local filename="$2"
   local checksums_url="$3"
-  local expected_hash
+  local expected_hash actual_hash=""
 
   if [ "$SKIP_CHECKSUM" = true ]; then
     warn "Checksum verification disabled via --insecure-skip-checksum (NOT recommended)"
     return
   fi
 
-  if ! curl --proto '=https' --tlsv1.2 -fsSL "$checksums_url" -o "$tmpdir/checksums.txt" 2>/dev/null; then
+  if ! download "$checksums_url" "$tmpdir/checksums.txt" 2>/dev/null; then
     fail "Could not download checksums.txt from ${checksums_url} — refusing to install an unverified binary. Re-run with --insecure-skip-checksum to override (NOT recommended)."
   fi
 
   expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)"
-  [ -n "$expected_hash" ] || fail "Checksum for ${filename} not found in checksums.txt"
+  [ -n "$expected_hash" ] || fail "Checksum for ${filename} not found in checksums.txt (expected an entry matching '${filename}')"
 
-  echo "$expected_hash  $filename" > "$tmpdir/${filename}.sha256"
   if command -v sha256sum >/dev/null 2>&1; then
-    (cd "$tmpdir" && sha256sum -c "${filename}.sha256") \
-      || fail "Checksum verification failed — download may be corrupted"
+    actual_hash="$(sha256sum "$tmpdir/$filename" | cut -d' ' -f1)"
   elif command -v shasum >/dev/null 2>&1; then
-    (cd "$tmpdir" && shasum -a 256 -c "${filename}.sha256") \
-      || fail "Checksum verification failed — download may be corrupted"
+    actual_hash="$(shasum -a 256 "$tmpdir/$filename" | cut -d' ' -f1)"
   else
     fail "No sha256 utility (sha256sum or shasum) found — cannot verify download integrity. Install one or re-run with --insecure-skip-checksum (NOT recommended)."
+  fi
+  if [ "$actual_hash" != "$expected_hash" ]; then
+    fail "Checksum mismatch for ${filename} — refusing to install a corrupted or tampered download.\n  expected: ${expected_hash}\n  actual:   ${actual_hash}"
   fi
   ok "Checksum verified"
 }
@@ -339,9 +406,7 @@ install_tarball() {
   info "Extracting tarball..."
   tar -xzf "$tarball" -C "$tmpdir"
 
-  run_root mkdir -p "$(dirname "$COLLECTOR_BIN_PATH")"
-  run_root cp "$tmpdir/otelcol-contrib" "$COLLECTOR_BIN_PATH"
-  run_root chmod 755 "$COLLECTOR_BIN_PATH"
+  install_binary_atomic "$tmpdir/otelcol-contrib" "$COLLECTOR_BIN_PATH"
   ok "Installed OpenTelemetry Collector Contrib as $COLLECTOR_BIN_PATH"
 }
 
@@ -660,7 +725,10 @@ EOF
 
 # ─── Main ─────────────────────────────────────────────────────────
 main() {
-  set -euo pipefail
+  # -E so the ERR trap is inherited by functions/subshells; on_error only
+  # adds a diagnostic line — set -e still performs the actual abort.
+  set -Eeuo pipefail
+  trap 'on_error "$?" "$LINENO"' ERR
   echo ""
   printf "%s
 " "${CYAN}  O11yFleet OpenTelemetry Supervisor Installer${NC}"
