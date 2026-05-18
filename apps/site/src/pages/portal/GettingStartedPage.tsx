@@ -26,7 +26,7 @@ import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { ErrorState } from "../../components/common/ErrorState";
 import { EmptyState, PageHeader, PageShell } from "@/components/app";
 import { configurationAgentMetrics } from "../../utils/config-stats";
-import installScriptSource from "../../../install.sh?raw";
+import installScriptSource from "../../../../installer-shell/install.sh?raw";
 import { getErrorMessage } from "@/utils/errors";
 
 const INSTALL_SH = (token: string) =>
