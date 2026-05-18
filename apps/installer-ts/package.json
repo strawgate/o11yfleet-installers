@@ -1,5 +1,5 @@
 {
-  "name": "@o11yfleet/installer",
+  "name": "@o11yfleet/installer-ts",
   "version": "1.0.0",
   "private": true,
   "type": "module",

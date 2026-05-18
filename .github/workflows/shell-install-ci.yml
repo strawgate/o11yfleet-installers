@@ -4,14 +4,14 @@ on:
   push:
     branches: [main, "feat/**"]
     paths:
-      - "apps/site/**"
-      - "apps/installer/src/**"
+      - "apps/installer-shell/**"
+      - "apps/installer-ts/bootstrap.*"
       - "test/shell/**"
       - ".github/workflows/shell-install-ci.yml"
   pull_request:
     paths:
-      - "apps/site/**"
-      - "apps/installer/src/**"
+      - "apps/installer-shell/**"
+      - "apps/installer-ts/bootstrap.*"
       - "test/shell/**"
       - ".github/workflows/shell-install-ci.yml"
 
@@ -100,13 +100,13 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y shellcheck
 
-      - name: Validate install-lib.sh
-        run: shellcheck apps/installer/src/install-lib.sh
+      - name: Validate shell installer
+        run: shellcheck apps/installer-shell/install.sh
 
-      - name: Validate install.sh
-        run: shellcheck apps/site/install.sh
+      - name: Validate ts/bun bootstrap
+        run: shellcheck apps/installer-ts/bootstrap.sh
 
       - name: Check shell script syntax
         run: |
-          bash -n apps/installer/src/install-lib.sh
-          bash -n apps/site/install.sh
+          bash -n apps/installer-shell/install.sh
+          bash -n apps/installer-ts/bootstrap.sh

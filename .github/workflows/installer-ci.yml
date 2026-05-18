@@ -4,10 +4,10 @@ on:
   push:
     branches: [main, "feat/**"]
     paths:
-      - "apps/installer/**"
+      - "apps/installer-ts/**"
   pull_request:
     paths:
-      - "apps/installer/**"
+      - "apps/installer-ts/**"
 
 concurrency:
   group: installer-${{ github.ref }}
@@ -46,17 +46,17 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Type check
-        run: pnpm --filter @o11yfleet/installer typecheck
+        run: pnpm --filter @o11yfleet/installer-ts typecheck
 
       - name: Run tests
-        run: pnpm --filter @o11yfleet/installer test
+        run: pnpm --filter @o11yfleet/installer-ts test
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         if: matrix.os == 'ubuntu'
         with:
           name: coverage
-          path: apps/installer/coverage/
+          path: apps/installer-ts/coverage/
 
   test-node-versions:
     name: Node ${{ matrix.node }} on ${{ matrix.os }}
@@ -86,10 +86,10 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Type check
-        run: pnpm --filter @o11yfleet/installer typecheck
+        run: pnpm --filter @o11yfleet/installer-ts typecheck
 
       - name: Run tests
-        run: pnpm --filter @o11yfleet/installer test
+        run: pnpm --filter @o11yfleet/installer-ts test
 
   test-docker:
     name: Docker (${{ matrix.image }})
@@ -118,10 +118,10 @@ jobs:
         run: pnpm install --no-frozen-lockfile
 
       - name: Type check
-        run: pnpm --filter @o11yfleet/installer typecheck
+        run: pnpm --filter @o11yfleet/installer-ts typecheck
 
       - name: Run tests
-        run: pnpm --filter @o11yfleet/installer test
+        run: pnpm --filter @o11yfleet/installer-ts test
 
   build:
     name: Build installer bundle
@@ -144,12 +144,12 @@ jobs:
 
       - name: Build bundle
         run: |
-          pnpm --filter @o11yfleet/installer build
-          ls -la apps/installer/dist/
+          pnpm --filter @o11yfleet/installer-ts build
+          ls -la apps/installer-ts/dist/
 
       - name: Upload bundle
         uses: actions/upload-artifact@v4
         with:
           name: installer-bundle
-          path: apps/installer/dist/
+          path: apps/installer-ts/dist/
           retention-days: 7

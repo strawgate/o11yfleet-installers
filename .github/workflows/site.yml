@@ -45,12 +45,6 @@ jobs:
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
-      - name: Sync installer from o11yfleet-installers (canonical source with CI)
-        run: |
-          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.sh -o apps/site/public/install.sh
-          chmod +x apps/site/public/install.sh
-          curl -sL https://raw.githubusercontent.com/o11yfleet/o11yfleet-installers/main/installers/install.ps1 -o apps/site/public/install.ps1
-
       - uses: ./.github/actions/setup-deploy
 
       - name: Build site

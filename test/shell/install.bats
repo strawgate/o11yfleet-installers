@@ -4,7 +4,7 @@
 
 # Load the install library functions
 SCRIPT_DIR="$(cd "$(dirname "$BATS_TEST_FILENAME")/../.." && pwd)"
-load "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+load "$SCRIPT_DIR/apps/installer-shell/install.sh"
 load "$SCRIPT_DIR/test/shell/test_helper.bash"
 
 # ─── Platform Detection Tests ──────────────────────────────────────────
@@ -16,7 +16,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     detect_platform
     echo "OS=$OS"
     echo "ARCH=$ARCH"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   
   # Output contains ANSI-colored detect_platform output + echo statements
   [[ "$output" == *"OS=linux"* ]]
@@ -27,7 +27,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   run bash -c '
     source "$1"
     detect_platform
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   
   [ "$status" -eq 0 ]
   [[ "$output" =~ "Detected platform: "(linux|darwin)"/"(amd64|arm64) ]]
@@ -45,7 +45,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir"
     OS="linux"
     detect_package_manager
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh")
   [ "$result" = "deb" ]
 }
 
@@ -59,7 +59,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir"
     OS="linux"
     detect_package_manager
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh")
   [ "$result" = "rpm" ]
 }
 
@@ -71,7 +71,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir"
     OS="linux"
     detect_package_manager
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh")
   [ "$result" = "binary" ]
 }
 
@@ -80,7 +80,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     OS="darwin"
     detect_package_manager
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh")
   [ "$result" = "binary" ]
 }
 
@@ -97,7 +97,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     OS=darwin
     PKG_TYPE=binary
     supervisor_artifact_name
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh")
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh")
 
   [[ "$result" == *"opampsupervisor_0.152.0_linux_amd64.deb"* ]]
   [[ "$result" == *"opampsupervisor_0.152.0_linux_amd64.rpm"* ]]
@@ -114,7 +114,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir:$PATH"
     OS="linux"
     preflight_conflicting_collector_service
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"Existing OpenTelemetry Collector systemd service detected: otelcol-contrib.service"* ]]
@@ -130,7 +130,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir:$PATH"
     OS="linux"
     preflight_conflicting_collector_service
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -eq 0 ]
 }
@@ -142,7 +142,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_enroll_test123
     echo "$TOKEN"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "fp_enroll_test123" ]
 }
@@ -153,7 +153,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token=fp_enroll_test123
     echo "$TOKEN"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "fp_enroll_test123" ]
 }
@@ -163,7 +163,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_enroll_test123 --version 0.152.0
     echo "$OTELCOL_VERSION"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "0.152.0" ]
 }
@@ -173,7 +173,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_enroll_test123 --endpoint wss://custom.example.com
     echo "$OPAMP_ENDPOINT"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "wss://custom.example.com" ]
 }
@@ -183,7 +183,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_enroll_test123 --dir /custom/path
     echo "$INSTALL_DIR"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "/custom/path" ]
 }
@@ -193,7 +193,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_enroll_test123 --offline /path/to/file.tar.gz
     echo "$OFFLINE_FILE"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "/path/to/file.tar.gz" ]
 }
@@ -202,7 +202,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   run bash -c '
     source "$1"
     parse_args
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -ne 0 ]
   [[ "$output" == *"Enrollment token required"* ]]
 }
@@ -211,7 +211,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   run bash -c '
     source "$1"
     parse_args --token invalid_token 2>&1 || true
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [[ "$output" == *"doesn't start with fp_enroll_ or fp_opamp_"* ]]
 }
 
@@ -220,7 +220,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     parse_args --token fp_opamp_test123 2>/tmp/o11yfleet-installer-warn.log
     echo "$TOKEN"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "fp_opamp_test123" ]
 }
@@ -231,7 +231,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     configure_privilege
     run_root sh -c "printf root-ok"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [ "$output" = "root-ok" ]
 }
@@ -248,7 +248,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir"
     OFFLINE_FILE="/tmp/otelcol-contrib.tar.gz"
     check_prereqs
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -eq 0 ]
 }
@@ -263,7 +263,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     PATH="$tmpdir"
     OFFLINE_FILE=""
     check_prereqs
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"Required command not found: curl"* ]]
@@ -274,7 +274,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     source "$1"
     unset INSTALLER_TMPDIR
     cleanup_tmpdir
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
 }
 
@@ -287,7 +287,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     stage_collector_artifact() { echo stage-collector; }
     cleanup_tmpdir() { :; }
     stage_install_artifacts
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -eq 0 ]
   [ "$output" = $'stage-supervisor\nstage-collector' ]
@@ -296,7 +296,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
 @test "hosted installer main flow installs collector and config before supervisor" {
   run bash -c '
     set -euo pipefail
-    for script in "$1/apps/site/install.sh" "$1/apps/site/public/install.sh"; do
+    for script in "$1/apps/installer-shell/install.sh"; do
       stage=$(grep -n "^  stage_install_artifacts$" "$script" | tail -1 | cut -d: -f1)
       dirs=$(grep -n "^  ensure_install_dirs$" "$script" | tail -1 | cut -d: -f1)
       collector=$(grep -n "^  install_staged_collector$" "$script" | tail -1 | cut -d: -f1)
@@ -325,7 +325,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     tmpdir="$(mktemp -d)"
     trap "rm -rf \"$tmpdir\"" EXIT
     stage_collector_artifact "$tmpdir" 2>&1 || true
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh" 
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh" 
   
   # The error message should contain "Offline file not found"
   [[ "$output" == *"Offline file not found"* ]]
@@ -340,7 +340,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     OFFLINE_FILE="$tmpfile"
     tmpdir="$(mktemp -d)"
     stage_collector_artifact "$tmpdir"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -ne 0 ]
   [[ "$output" == *"Unsupported offline file type"* ]]
@@ -362,7 +362,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     stage_collector_artifact "$tmpdir" >/dev/null
     echo "pkg=$PKG_TYPE"
     echo "staged=${STAGED_COLLECTOR_TARBALL#$tmpdir/}"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"pkg=deb"* ]]
@@ -389,7 +389,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
     cat "$SUPERVISOR_CONFIG_FILE"
     printf "%s\n" "--- collector ---"
     cat "$SUPERVISOR_COLLECTOR_CONFIG_FILE"
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
 
   [ "$status" -eq 0 ]
   [[ "$output" == *"endpoint: wss://example.test/v1/opamp"* ]]
@@ -406,7 +406,7 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   run bash -c '
     source "$1"
     parse_args --help
-  ' _ "$SCRIPT_DIR/apps/installer/src/install-lib.sh"
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
   [ "$status" -eq 0 ]
   [[ "$output" == *"O11yFleet OpenTelemetry Supervisor Installer"* ]]
   [[ "$output" == *"--token"* ]]
