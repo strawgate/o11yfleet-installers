@@ -1,10 +1,13 @@
 # O11yFleet Collector Installer for Windows
 #
 # Usage (download then run - required for param() to work):
-#   irm https://downloads.o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_opamp_..."
+#   irm https://downloads.prod.o11yfleet.com/install.ps1 -OutFile install.ps1; .\install.ps1 -Token "fp_opamp_..."
 #
 # One-liner via scriptblock wrapper:
-#   & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token "fp_opamp_..."
+#   & ([scriptblock]::Create((irm https://downloads.prod.o11yfleet.com/install.ps1))) -Token "fp_opamp_..."
+#
+# The enrollment token may also be supplied via the O11Y_TOKEN environment
+# variable instead of -Token (keeps it out of shell history).
 #
 # Uninstall:
 #   .\install.ps1 -Uninstall
@@ -18,7 +21,8 @@ param(
     [string]$Version = "0.152.0",
     [string]$Endpoint = "wss://opamp.prod.o11yfleet.com/v1/opamp",
     [string]$InstallDir = "C:\o11yfleet",
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$SkipChecksum
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,10 +30,63 @@ $ErrorActionPreference = "Stop"
 # Fix #1: Enforce TLS 1.2+ - Windows PowerShell 5.1 defaults to TLS 1.0/1.1 which GitHub rejects
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
 
-function Write-Info  { Write-Host "  -> $args" -ForegroundColor Cyan }
-function Write-Ok    { Write-Host "  OK $args" -ForegroundColor Green }
-function Write-Warn  { Write-Host "  !  $args" -ForegroundColor Yellow }
-function Write-Fail  { Write-Host "  X  $args" -ForegroundColor Red; exit 1 }
+$UseColor = [string]::IsNullOrEmpty($env:NO_COLOR)
+function Write-Color { param($Prefix, $Color)
+    if ($UseColor) { Write-Host "$Prefix $args" -ForegroundColor $Color }
+    else { Write-Host "$Prefix $args" }
+}
+function Write-Info  { Write-Color "  ->" Cyan @args }
+function Write-Ok    { Write-Color "  OK" Green @args }
+function Write-Warn  { Write-Color "  ! " Yellow @args }
+function Write-Fail  { Write-Color "  X " Red @args; exit 1 }
+
+# Hardened download: enforce a timeout and retry transient failures with
+# backoff. Windows PowerShell 5.1 lacks Invoke-WebRequest -MaximumRetryCount,
+# so the retry loop is explicit for 5.1/7 compatibility.
+function Invoke-Download {
+    param([string]$Uri, [string]$OutFile)
+    $max = 3
+    for ($i = 1; $i -le $max; $i++) {
+        try {
+            Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing -TimeoutSec 60
+            return
+        } catch {
+            if ($i -eq $max) { throw }
+            Write-Warn "Download attempt $i/$max failed: $($_.Exception.Message). Retrying..."
+            Start-Sleep -Seconds ([math]::Min(2 * $i, 10))
+        }
+    }
+}
+
+# Fail-closed SHA-256 verification against the upstream checksums file.
+# Refuses to install an unverified binary unless -SkipChecksum is given.
+function Test-Checksum {
+    param([string]$File, [string]$ChecksumsUrl, [string]$AssetName)
+    if ($SkipChecksum) {
+        Write-Warn "Checksum verification disabled via -SkipChecksum (NOT recommended)"
+        return
+    }
+    $checksumsFile = "$File.checksums.txt"
+    try {
+        Invoke-Download $ChecksumsUrl $checksumsFile
+    } catch {
+        Write-Fail "Could not download checksums.txt from $ChecksumsUrl - refusing to install an unverified binary. Re-run with -SkipChecksum to override (NOT recommended)."
+    }
+    $expected = $null
+    foreach ($line in Get-Content $checksumsFile) {
+        $parts = $line.Trim() -split '\s+'
+        if ($parts.Count -ge 2 -and $parts[-1] -eq $AssetName) { $expected = $parts[0]; break }
+    }
+    if (-not $expected) {
+        Write-Fail "Checksum for $AssetName not found in checksums.txt"
+    }
+    $actual = (Get-FileHash -Algorithm SHA256 -Path $File).Hash
+    if ($actual.ToLower() -ne $expected.ToLower()) {
+        Write-Fail ("Checksum mismatch for $AssetName - refusing to install a corrupted or tampered download.`n" +
+            "  expected: $expected`n  actual:   $actual")
+    }
+    Write-Ok "Checksum verified"
+}
 
 # --- Check admin -------------------------------------------------------
 $isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -51,10 +108,16 @@ if ($Uninstall) {
 }
 
 # --- Validate token (required for install, not for uninstall) ---------
+# Fall back to the O11Y_TOKEN env var so the token need not be on the
+# command line; an explicit -Token still takes precedence.
+if ([string]::IsNullOrWhiteSpace($Token) -and -not [string]::IsNullOrWhiteSpace($env:O11Y_TOKEN)) {
+    $Token = $env:O11Y_TOKEN
+}
 if ([string]::IsNullOrWhiteSpace($Token)) {
     Write-Fail ("Token is required for installation.`n" +
         "  Usage: .\install.ps1 -Token `"fp_opamp_...`"`n" +
-        "  Or:    & ([scriptblock]::Create((irm https://downloads.o11yfleet.com/install.ps1))) -Token `"fp_opamp_...`"")
+        "  Or:    `$env:O11Y_TOKEN = `"fp_opamp_...`"; .\install.ps1`n" +
+        "  Or:    & ([scriptblock]::Create((irm https://downloads.prod.o11yfleet.com/install.ps1))) -Token `"fp_opamp_...`"")
 }
 if (-not $Token.StartsWith("fp_enroll_")) {
     if (-not $Token.StartsWith("fp_opamp_")) {
@@ -91,8 +154,18 @@ if ($isUpgrade) {
     Write-Info "Existing installation detected - upgrading binary, preserving config."
 }
 
+# --- Validate version -------------------------------------------------
+# $Version is interpolated into the upstream download/checksum URLs; reject
+# anything that isn't a bare semver so a typo fails clearly, not with a 404.
+$Version = $Version -replace '^v', ''
+if ($Version -notmatch '^\d+\.\d+\.\d+$') {
+    Write-Fail "Invalid -Version '$Version' - expected semver X.Y.Z (e.g. 0.152.0)"
+}
+
 # --- Download & install -----------------------------------------------
-$url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/otelcol-contrib_${Version}_windows_${arch}.tar.gz"
+$assetName = "otelcol-contrib_${Version}_windows_${arch}.tar.gz"
+$url = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/${assetName}"
+$checksumsUrl = "https://github.com/open-telemetry/opentelemetry-collector-releases/releases/download/v${Version}/opentelemetry-collector-releases_otelcol-contrib_checksums.txt"
 $tmpDir = Join-Path $env:TEMP "o11yfleet-install"
 
 try {
@@ -101,10 +174,13 @@ try {
 
     Write-Info "Downloading otelcol-contrib v${Version} for windows/${arch}..."
     try {
-        Invoke-WebRequest -Uri $url -OutFile $archive -UseBasicParsing
+        Invoke-Download $url $archive
     } catch {
-        Write-Fail "Download failed: $_"
+        Write-Fail "Download failed for otelcol-contrib v${Version} (windows/${arch}). That version or platform may not exist:`n  $url"
     }
+
+    Write-Info "Verifying checksum..."
+    Test-Checksum -File $archive -ChecksumsUrl $checksumsUrl -AssetName $assetName
 
     Write-Info "Extracting..."
     tar -xzf $archive -C $tmpDir
@@ -122,7 +198,13 @@ try {
         }
     }
 
-    Copy-Item "$tmpDir\otelcol-contrib.exe" "$InstallDir\bin\otelcol-contrib.exe" -Force
+    # Atomic install: stage beside the destination then rename into place
+    # so an interrupted copy can't leave a half-written executable.
+    $binDest = "$InstallDir\bin\otelcol-contrib.exe"
+    $binTmp = "$binDest.new"
+    Copy-Item "$tmpDir\otelcol-contrib.exe" $binTmp -Force
+    Move-Item $binTmp $binDest -Force
+    if (-not (Test-Path $binDest)) { Write-Fail "Installed binary missing: $binDest" }
     Write-Ok "Installed otelcol-contrib to $InstallDir\bin\"
 
 } finally {
