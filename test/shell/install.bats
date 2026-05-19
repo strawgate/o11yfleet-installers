@@ -526,3 +526,32 @@ load "$SCRIPT_DIR/test/shell/test_helper.bash"
   [ "$status" -eq 0 ]
   [[ "$output" == *"atomic-ok"* ]]
 }
+
+@test "verify_checksum_url: per-asset checksums file, no shared-path collision" {
+  run bash -c '
+    source "$1"
+    SKIP_CHECKSUM=false
+    tmpdir="$(mktemp -d)"
+    trap "rm -rf \"$tmpdir\"" EXIT
+    printf "supervisor-bytes" > "$tmpdir/opampsupervisor_x"
+    printf "collector-bytes"  > "$tmpdir/otelcol-contrib_x.tar.gz"
+    # Stub the downloader as curl would after the fix: derive the asset from
+    # the per-asset output path and emit a valid checksums line for it.
+    download() {
+      local out="$2" f hh
+      f="$(basename "${out%.checksums}")"
+      hh="$(sha256sum "$tmpdir/$f" | cut -d" " -f1)"
+      printf "%s  %s\n" "$hh" "$f" > "$out"
+    }
+    # Same tmpdir, two assets — mirrors the supervisor then collector flow.
+    verify_checksum_url "$tmpdir" "opampsupervisor_x" "https://example/sup"
+    verify_checksum_url "$tmpdir" "otelcol-contrib_x.tar.gz" "https://example/col"
+    [ -f "$tmpdir/opampsupervisor_x.checksums" ] || { echo "MISSING supervisor checksums"; exit 1; }
+    [ -f "$tmpdir/otelcol-contrib_x.tar.gz.checksums" ] || { echo "MISSING collector checksums"; exit 1; }
+    [ ! -f "$tmpdir/checksums.txt" ] || { echo "REGRESSION: shared checksums.txt used"; exit 1; }
+    echo DONE
+  ' _ "$SCRIPT_DIR/apps/installer-shell/install.sh"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"DONE"* ]]
+  [ "$(grep -c "Checksum verified" <<<"$output")" -eq 2 ]
+}

@@ -1,0 +1,75 @@
+name: Release Artifacts
+
+# Build and publish the installer release artifacts when a version tag is
+# pushed. This repo ships installers only — it does not deploy a control
+# plane, so there is intentionally no Terraform/Cloudflare step here.
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  publish:
+    name: Build and publish installer release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "pnpm"
+
+      - uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build installer bundle
+        run: pnpm --filter @o11yfleet/installer-ts build:bundle
+
+      - name: Publish GitHub release with installer artifacts
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME}"
+          BUNDLE="apps/installer-ts/dist/installer-bundle.js"
+          if [ ! -f "$BUNDLE" ]; then
+            echo "Installer bundle not found at $BUNDLE — build step failed?" >&2
+            exit 1
+          fi
+          # Two installers, published as distinct, unambiguous assets:
+          #   shell installer -> install.sh / install.ps1   (curl | bash)
+          #   ts/bun installer -> installer-bundle + bootstrap.sh / bootstrap.ps1
+          ASSETS=(
+            "$BUNDLE#installer-bundle-${VERSION}.js"
+            "apps/installer-ts/bootstrap.sh#bootstrap.sh"
+            "apps/installer-ts/bootstrap.ps1#bootstrap.ps1"
+            "apps/installer-shell/install.sh#install.sh"
+            "apps/installer-shell/install.ps1#install.ps1"
+          )
+          REPO="strawgate/o11yfleet-installers"
+          if gh release view "$VERSION" --repo "$REPO" >/dev/null 2>&1; then
+            # Idempotent re-run: release already exists, replace its assets.
+            echo "Release $VERSION exists — re-uploading assets (--clobber)"
+            gh release upload "$VERSION" --repo "$REPO" --clobber "${ASSETS[@]}"
+          else
+            # A SemVer pre-release tag (contains a hyphen, e.g. v0.0.2-rc1)
+            # must not be marked latest — downloads-redirect serves latest.
+            case "$VERSION" in
+              *-*) RELEASE_KIND=(--prerelease) ;;
+              *)   RELEASE_KIND=(--latest) ;;
+            esac
+            gh release create "$VERSION" \
+              --repo "$REPO" \
+              --title "Installer $VERSION" \
+              --notes "Shell + TS/Bun installers for $VERSION" \
+              "${RELEASE_KIND[@]}" \
+              "${ASSETS[@]}"
+          fi
