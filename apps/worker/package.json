@@ -40,16 +40,16 @@
   },
   "devDependencies": {
     "@bufbuild/protobuf": "^2.12.0",
-    "@cloudflare/vitest-pool-workers": "^0.15.2",
-    "@cloudflare/workers-types": "^4.20260503.1",
+    "@cloudflare/vitest-pool-workers": "^0.16.6",
+    "@cloudflare/workers-types": "^4.20260519.1",
     "@o11yfleet/test-utils": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
-    "@types/node": "^25.6.0",
+    "@types/node": "^22.19.19",
     "esbuild": "^0.28.0",
-    "fast-check": "^4.7.0",
+    "fast-check": "^4.8.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.5",
-    "wrangler": "^4.87.0"
+    "wrangler": "^4.92.0"
   }
 }
