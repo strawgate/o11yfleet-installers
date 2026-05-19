@@ -377,11 +377,15 @@ verify_checksum_url() {
     return
   fi
 
-  if ! download "$checksums_url" "$tmpdir/checksums.txt" 2>/dev/null; then
+  # Per-asset path: this runs once for the supervisor and once for the
+  # collector in the same tmpdir. A shared filename would make the second
+  # download() resume (-C -) onto the first file and corrupt it.
+  local checks_file="$tmpdir/${filename}.checksums"
+  if ! download "$checksums_url" "$checks_file" 2>/dev/null; then
     fail "Could not download checksums.txt from ${checksums_url} — refusing to install an unverified binary. Re-run with --insecure-skip-checksum to override (NOT recommended)."
   fi
 
-  expected_hash="$(grep " ${filename}$" "$tmpdir/checksums.txt" | cut -d' ' -f1)"
+  expected_hash="$(grep " ${filename}$" "$checks_file" | cut -d' ' -f1)"
   [ -n "$expected_hash" ] || fail "Checksum for ${filename} not found in checksums.txt (expected an entry matching '${filename}')"
 
   if command -v sha256sum >/dev/null 2>&1; then

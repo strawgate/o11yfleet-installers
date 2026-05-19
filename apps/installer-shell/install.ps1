@@ -51,7 +51,7 @@ function Invoke-Download {
     $max = 3
     for ($i = 1; $i -le $max; $i++) {
         try {
-            Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing -TimeoutSec 60
+            Invoke-WebRequest -Uri $Uri -OutFile $OutFile -UseBasicParsing -TimeoutSec 600
             return
         } catch {
             if ($i -eq $max) { throw }
@@ -218,10 +218,16 @@ try {
     $binTmp = "$binDest.new"
     Copy-Item "$tmpDir\otelcol-contrib.exe" $binTmp -Force
     if (-not (Test-Path $binTmp)) { Write-Fail "Staged binary missing: $binTmp" }
-    if (Test-Path $binDest) {
-        [System.IO.File]::Replace($binTmp, $binDest, $null)
-    } else {
-        Move-Item $binTmp $binDest
+    try {
+        if (Test-Path $binDest) {
+            [System.IO.File]::Replace($binTmp, $binDest, $null)
+        } else {
+            Move-Item $binTmp $binDest
+        }
+    } catch {
+        Remove-Item $binTmp -Force -ErrorAction SilentlyContinue
+        Write-Fail ("Could not install the collector binary to ${binDest}: $($_.Exception.Message).`n" +
+            "  The file may be locked (service still stopping, or AV holding a handle). Retry in a moment.")
     }
     if (-not (Test-Path $binDest)) { Write-Fail "Installed binary missing: $binDest" }
     Write-Ok "Installed otelcol-contrib to $InstallDir\bin\"
