@@ -12,6 +12,6 @@
   },
   "devDependencies": {
     "@o11yfleet/core": "workspace:*",
-    "@playwright/test": "^1.52.0"
+    "@playwright/test": "^1.60.0"
   }
 }
