@@ -18,11 +18,11 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "oxlint": "^0.15.0",
-    "tsx": "^4.20.0",
+    "@types/node": "^22.19.21",
+    "oxlint": "^0.18.1",
+    "tsx": "^4.22.4",
     "typescript": "^5.8.0",
-    "vitest": "^3.0.0"
+    "vitest": "^3.2.6"
   },
   "engines": {
     "node": ">=18.0.0"
