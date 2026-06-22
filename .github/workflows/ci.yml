@@ -22,7 +22,7 @@ jobs:
       deploy: ${{ steps.filter.outputs.deploy }}
       workflow: ${{ steps.filter.outputs.workflow }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -118,7 +118,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Lint workflows
         if: needs.changes.outputs.workflow == 'true'
@@ -340,7 +340,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: pnpm/action-setup@v6
 
@@ -416,7 +416,7 @@ jobs:
       O11YFLEET_OIDC_AUDIENCE: o11yfleet
       FP_URL: http://localhost:8787
     steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
 
       - uses: pnpm/action-setup@26f6d4f2c533a43e6b5da0b4a5dd983f98f7b49a # v6.0.4
 
@@ -488,7 +488,7 @@ jobs:
       O11YFLEET_SEED_TENANT_USER_EMAIL: ${{ secrets.O11YFLEET_SEED_TENANT_USER_EMAIL }}
       O11YFLEET_SEED_TENANT_USER_PASSWORD: ${{ secrets.O11YFLEET_SEED_TENANT_USER_PASSWORD }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/setup-deploy
 

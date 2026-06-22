@@ -24,7 +24,7 @@ jobs:
       orphaned_count: ${{ steps.find.outputs.orphaned_count }}
       projects_to_delete: ${{ steps.find.outputs.projects_json }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: List open PRs with previews
         id: open-prs
