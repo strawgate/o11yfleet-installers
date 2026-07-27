@@ -41,9 +41,9 @@
     "vitest": "^4.1.5"
   },
   "dependencies": {
-    "@bufbuild/protobuf": "^2.12.0",
-    "jose": "^6.2.3",
-    "yaml": "^2.8.4",
-    "zod": "^4.4.2"
+    "@bufbuild/protobuf": "^2.13.0",
+    "jose": "^6.2.4",
+    "yaml": "^2.9.0",
+    "zod": "^4.4.3"
   }
 }
