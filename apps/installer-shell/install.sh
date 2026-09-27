@@ -463,7 +463,7 @@ capabilities:
   accepts_restart_command: true
   accepts_opamp_connection_settings: false
   reports_effective_config: true
-  reports_own_metrics: false
+  reports_own_metrics: true
   reports_own_logs: true
   reports_own_traces: false
   reports_health: true
